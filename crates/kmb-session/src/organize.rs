@@ -452,16 +452,31 @@ fn restore(path: &Path, want: &[PathBuf]) -> Result<(), String> {
     {
         let target = same_spelling(path);
         let want: Vec<PathBuf> = want.iter().map(|w| same_spelling(w)).collect();
-        let items: Vec<trash::TrashItem> = trash::os_limited::list()
-            .map_err(|e| format!("ごみ箱を読めません: {e}"))?
+        let all = trash::os_limited::list().map_err(|e| format!("ごみ箱を読めません: {e}"))?;
+        let count = all.len();
+        let (items, others): (Vec<trash::TrashItem>, Vec<trash::TrashItem>) = all
             .into_iter()
-            .filter(|i| want.contains(&same_spelling(&i.original_parent.join(&i.name))))
-            .collect();
+            .partition(|i| want.contains(&same_spelling(&i.original_parent.join(&i.name))));
         if !items
             .iter()
             .any(|i| same_spelling(&i.original_parent.join(&i.name)) == target)
         {
-            return Err(format!("{} がごみ箱に見つかりません", path.display()));
+            // 同じ名前の物が別の場所の物として入っていれば、その場所も出す(比べ方の食い違いを追えるように)
+            let name = path.file_name().unwrap_or_default();
+            let near: Vec<String> = others
+                .iter()
+                .filter(|i| i.name == name)
+                .map(|i| i.original_parent.display().to_string())
+                .collect();
+            return Err(format!(
+                "{} がごみ箱に見つかりません(ごみ箱の中 {count} 件。同じ名前の物の元の場所: {})",
+                path.display(),
+                if near.is_empty() {
+                    "なし".to_string()
+                } else {
+                    near.join("、")
+                }
+            ));
         }
         // 同じ物を何度も消していれば、いちばん新しい物だけ戻す
         let mut latest: Vec<trash::TrashItem> = Vec::new();

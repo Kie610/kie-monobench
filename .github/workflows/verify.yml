@@ -29,8 +29,6 @@ jobs:
     timeout-minutes: 150
     env:
       CARGO_TERM_COLOR: always
-      # 作業場の外に置く C++ の結果(crates/smlib-sys/build.rs の cache_dir)。下の actions/cache で残す
-      SMLIB_CACHE_DIR: ${{ github.workspace }}/../smlib-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +46,7 @@ jobs:
       - id: smlib
         uses: actions/cache/restore@v4
         with:
-          path: ${{ github.workspace }}/../smlib-cache
+          path: ${{ runner.temp }}/smlib-cache
           key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
           restore-keys: smlib-${{ runner.os }}-
 
@@ -65,6 +63,10 @@ jobs:
 
       - name: cargo xtask verify
         shell: bash
+        env:
+          # SMLib の C++ の結果(crates/smlib-sys/build.rs の cache_dir)。作業場の外に置き、上と下の
+          # actions/cache で戻して残す(actions/cache は .. を含む道を受けず、runner は job の env で使えない)
+          SMLIB_CACHE_DIR: ${{ runner.temp }}/smlib-cache
         run: |
           set -eu
           if [ "${{ github.event_name }}" = pull_request ]; then
@@ -84,7 +86,7 @@ jobs:
       - uses: actions/cache/save@v4
         if: always() && steps.smlib.outputs.cache-hit != 'true'
         with:
-          path: ${{ github.workspace }}/../smlib-cache
+          path: ${{ runner.temp }}/smlib-cache
           key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
 
       - name: ログを残す
