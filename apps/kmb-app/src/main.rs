@@ -351,7 +351,7 @@ impl eframe::App for App {
             started.elapsed().as_secs_f64() * 1000.0
         );
         // クラッシュ報告に、最近の操作と文書を残す(変わった時だけ書く)
-        kmb_session::crash::note(workspace.document());
+        kmb_session::crash::note(workspace.document(), workspace.active_component());
     }
 
     // eframe は最小化中も窓の位置(Windows では -32000)と極小の大きさをそのまま覚え、

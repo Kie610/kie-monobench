@@ -143,7 +143,7 @@ fn an_unlocked_session_marker_becomes_an_abnormal_exit_report() {
     let dead = dir.join("session-1-111.json");
     std::fs::write(
         &dead,
-        r#"{"app":"kmb-app","version":"0.1.0","pid":111,"started":5,"commands":["押し出し"],"document":{"params":[]}}"#,
+        r#"{"app":"kmb-app","version":"0.1.0","pid":111,"started":5,"commands":["押し出し"],"document":{"params":[]},"active_component":{"id":3,"name":"脚"}}"#,
     )
     .unwrap();
     let alive = dir.join("session-2-222.json");
@@ -165,6 +165,10 @@ fn an_unlocked_session_marker_becomes_an_abnormal_exit_report() {
     let r = crash::read(&data, &list[0].name).unwrap();
     assert_eq!(r["commands"][0], "押し出し");
     assert!(r["document"].is_object());
+    assert_eq!(
+        r["active_component"]["name"], "脚",
+        "作業中の部品も報告に移す"
+    );
     // フォルダの外は読めない
     assert!(crash::read(&data, "../settings.json").is_err());
     assert!(crash::read(&data, "session-2-222.json").is_err());
@@ -209,7 +213,12 @@ fn install_keeps_a_marker_with_recent_commands_until_dropped() {
     let m = marker().expect("印がある");
     // 動いている間は、異常終了として拾わない
     assert_eq!(crash::collect_abnormal_exits(&dir), 0);
-    crash::note(&doc_with("10 mm"));
+    crash::note(&doc_with("10 mm"), None);
+    // 作業中の部品が変われば、文書が同じでも書き直す(落ちた時にどの部品で作業していたかを残す)
+    crash::note(&doc_with("10 mm"), Some(7));
+    let kept: serde_json::Value =
+        serde_json::from_str(&crash::read_marker().expect("印を読める")).unwrap();
+    assert_eq!(kept["active_component"]["id"], 7, "{kept}");
     drop(guard);
     assert!(!m.exists(), "正しく終われば印を消す");
     assert!(marker().is_none());
