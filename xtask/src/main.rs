@@ -755,6 +755,7 @@ fn checks(ws: &Workspace, fork: &str, changed: &[String]) -> Done {
     let mut doc = docs::check(root, &ws.packages, &docs::Base { read: &read }, changed);
     doc.extend(board::check(root, &read));
     doc.extend(prose::check(root));
+    doc.extend(prose::check_records(root));
     let skeleton = agents::check(root);
     doc.extend(skeleton.problems);
     let mut product = products::check(root);

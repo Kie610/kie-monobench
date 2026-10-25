@@ -41,7 +41,9 @@ const DECISION_MARK: &str = "(決定: ";
 const PATENT_FIELDS: [&str; 2] = ["特許の判定", "確定度"];
 const PATENT_SECTION: &str = "特許の点検";
 /// 他のソフトの更新から採った物の断片の頭の欄(.claude/rules/adopted.md)。どれか 1 つを書いたら全部要る。
-const ADOPTED_FIELDS: [&str; 3] = ["元の項目", "意図", "仕分け"];
+const ADOPTED_FIELDS: [&str; 2] = ["意図", "仕分け"];
+/// 断片に置かない経緯の欄(どの項目から採ったか)。外の記録で断片の名前と結ぶ。
+const HISTORY_FIELDS: [&str; 1] = ["元の項目"];
 /// 「仕分け」の欄の頭に書く 4 つの分け方。
 const ADOPTED_KINDS: [&str; 4] = ["A", "B", "C", "D"];
 
@@ -106,6 +108,10 @@ pub fn parse(file: &str, text: &str) -> Result<Fragment, Vec<String>> {
             match k.trim() {
                 "日付" => date = v,
                 k if PATENT_FIELDS.contains(&k) => patent = true,
+                k if HISTORY_FIELDS.contains(&k) => errs.push(format!(
+                    "{file}: 「- {k}:」は書かない(日付と比べた一覧の番号は経緯なので、\
+                     リポジトリの外の開発の記録で断片の名前と結ぶ)"
+                )),
                 "決定" => decisions = v.split('、').map(|d| d.trim().to_string()).collect(),
                 k => {
                     if let Some(f) = ADOPTED_FIELDS.iter().find(|f| **f == k) {
@@ -580,24 +586,26 @@ mod tests {
     fn adopted_fragments_keep_the_intent_and_the_kind() {
         let head =
             |fields: &str| GOOD.replace("\n\n## 作った物", &format!("\n{fields}\n## 作った物"));
-        let ok = head(
-            "- 元の項目: 2026-10-24 k1\n- 意図: 何も残らない交差で空のボディができる\n- 仕分け: C 試験だけ\n",
-        );
+        let ok = head("- 意図: 何も残らない交差で空のボディができる\n- 仕分け: C 試験だけ\n");
         assert!(parse("2026-10-21-トレース-vrkuhk.md", &ok).is_ok());
+        let errs = parse("2026-10-21-トレース-vrkuhk.md", &head("- 意図: 困り事\n")).unwrap_err();
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].contains("adopted.md"), "{errs:?}");
         let errs = parse(
             "2026-10-21-トレース-vrkuhk.md",
-            &head("- 元の項目: 2026-10-24 k1\n"),
-        )
-        .unwrap_err();
-        assert_eq!(errs.len(), 2, "{errs:?}");
-        assert!(errs.iter().all(|e| e.contains("adopted.md")), "{errs:?}");
-        let errs = parse(
-            "2026-10-21-トレース-vrkuhk.md",
-            &head("- 元の項目: 2026-10-24 k1\n- 意図: 困り事\n- 仕分け: 作る\n"),
+            &head("- 意図: 困り事\n- 仕分け: 作る\n"),
         )
         .unwrap_err();
         assert_eq!(errs.len(), 1, "{errs:?}");
         assert!(errs[0].contains("A・B・C・D"), "{errs:?}");
+        // どの項目から採ったかは経緯なので書かない
+        let errs = parse(
+            "2026-10-21-トレース-vrkuhk.md",
+            &head("- 元の項目: 2026-10-24 k1\n- 意図: 困り事\n- 仕分け: C 試験だけ\n"),
+        )
+        .unwrap_err();
+        assert_eq!(errs.len(), 1, "{errs:?}");
+        assert!(errs[0].contains("外の開発の記録"), "{errs:?}");
     }
 
     #[test]

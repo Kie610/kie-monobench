@@ -8,6 +8,9 @@
 //!
 //! コードの区画・インラインのコード・リンクの行き先・HTML の行は見ない。表の行は語と日付だけを見る
 //! (欄の中は文でないことが多いため)。
+//!
+//! 決まりと記録の資料(policy・plan・verify・地図・用語表・docs/機能/)は常体で、測った日や特許の
+//! 満了の日のような事実の日付も書くので、決めた人と AI の名前だけを見る(`check_records`)。
 
 use std::fs;
 use std::path::Path;
@@ -21,11 +24,30 @@ pub const FILES: &[&str] = &[
     "docs/できないことと予定.md",
 ];
 
+/// 決まりと記録の資料(リポジトリの根から)。ほかに docs/機能/ の全部を見る。
+pub const RECORD_FILES: &[&str] = &[
+    "docs/policy.md",
+    "docs/plan.md",
+    "docs/verify.md",
+    "docs/地図.md",
+    "docs/用語表.md",
+    "docs/避ける形.md",
+];
+
 /// 書かない語。後ろに英数字が続く所(`Kie610` など)は数えない。
 const WORDS: &[&str] = &["Kie", "Claude", "スレッド", "コーディネーター"];
 
-/// 互換を示すために許す書き方(AI の道具の名前)。
-const ALLOWED: &[&str] = &["Claude Code", "Claude Desktop", "Claude デスクトップ"];
+/// 決まりと記録の資料で書かない語(「スレッド」は計算の用語でも使うので見ない)。
+const RECORD_WORDS: &[&str] = &["Kie", "Claude", "コーディネーター"];
+
+/// 互換を示すために許す書き方(AI の道具の名前と、画面の下の帯の字)。
+const ALLOWED: &[&str] = &[
+    "Claude Code",
+    "Claude Desktop",
+    "Claude デスクトップ",
+    "Claude 待ち受け中",
+    "Claude 操作中",
+];
 
 /// 1 文の長さの上限(字)。
 const MAX_CHARS: usize = 120;
@@ -53,6 +75,52 @@ pub fn check(root: &Path) -> Vec<String> {
     out
 }
 
+/// 決まりと記録の資料の誤り(点検: 記録の資料の経緯)。決めた人と AI の名前を書いた行を落とす。
+pub fn check_records(root: &Path) -> Vec<String> {
+    let mut files: Vec<String> = RECORD_FILES.iter().map(|f| f.to_string()).collect();
+    let mut frags: Vec<String> = fs::read_dir(root.join("docs/機能"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.ends_with(".md"))
+        .map(|n| format!("docs/機能/{n}"))
+        .collect();
+    frags.sort();
+    files.extend(frags);
+    let mut out = vec![];
+    for f in &files {
+        let Ok(text) = fs::read_to_string(root.join(f)) else {
+            continue;
+        };
+        out.extend(record_problems(f, &text));
+    }
+    out
+}
+
+/// 決まりと記録の資料 1 つの誤り。
+pub fn record_problems(file: &str, text: &str) -> Vec<String> {
+    let mut out = vec![];
+    let mut fenced = false;
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.starts_with("```") {
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        for w in names(&plain(line), RECORD_WORDS) {
+            out.push(format!(
+                "{file}:{}: 「{w}」を書かない(決めた人と経緯はリポジトリの外の開発の記録へ)",
+                i + 1
+            ));
+        }
+    }
+    out
+}
+
 /// 1 ファイルの誤り。
 pub fn problems(file: &str, text: &str) -> Vec<String> {
     let mut out = vec![];
@@ -68,7 +136,7 @@ pub fn problems(file: &str, text: &str) -> Vec<String> {
             continue;
         }
         let plain = plain(line);
-        for w in names(&plain) {
+        for w in names(&plain, WORDS) {
             out.push(format!(
                 "{file}:{n}: 「{w}」を書かない(作る側の名前と経緯は外の記録へ)"
             ));
@@ -148,12 +216,12 @@ fn plain(line: &str) -> String {
 }
 
 /// 書かない語のうち、行にある物。
-fn names(text: &str) -> Vec<&'static str> {
+fn names(text: &str, words: &[&'static str]) -> Vec<&'static str> {
     let mut rest = text.to_string();
     for a in ALLOWED {
         rest = rest.replace(a, "");
     }
-    WORDS
+    words
         .iter()
         .copied()
         .filter(|w| {
@@ -252,6 +320,17 @@ mod tests {
         assert!(p.iter().any(|m| m.contains("2026-10-21")), "{p:?}");
         assert!(problems("a.md", "Claude Code から使えます。\n").is_empty());
         assert!(!problems("a.md", "AI のスレッドが作ります。\n").is_empty());
+    }
+
+    #[test]
+    fn records_catch_names_but_not_dates_or_threads() {
+        let p = record_problems("docs/plan.md", "- 文字はゴシック体(Kie 2026-10-19)。\n");
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0].contains("「Kie」"), "{p:?}");
+        let ok = "- 網は裏のスレッドで作る。2026-10-20 の値: 1%。\n\
+                  - 下の帯は「Claude 待ち受け中」。`Kie` と Kie610/x。\n\
+                  ```\nKie\n```\n";
+        assert!(record_problems("docs/plan.md", ok).is_empty());
     }
 
     #[test]
