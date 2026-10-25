@@ -1,4 +1,4 @@
-//! Windows の exe に仮のアイコン(assets/icon.ico)を埋め込む(N7b)。
+//! Windows の exe にアプリのアイコン(kmb-ui の assets/icon.ico。上の帯の印と同じ絵)を埋め込む(N7b)。
 //!
 //! リソースのコンパイラ(rc.exe)や外の crate を使わず、.ico から .res を直に組み立てて、MSVC の
 //! リンカーに渡す(link.exe は .res をそのまま受け取る)。.res の形は Microsoft の文書
@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-const ICO: &str = "assets/icon.ico";
+const ICO: &str = "../../crates/kmb-ui/assets/icon.ico";
 /// リソースの種類(RT_ICON・RT_GROUP_ICON)
 const RT_ICON: u16 = 3;
 const RT_GROUP_ICON: u16 = 14;

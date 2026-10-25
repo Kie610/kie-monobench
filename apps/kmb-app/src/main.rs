@@ -113,9 +113,6 @@ impl Dialogs for OsDialogs {
     }
 }
 
-/// 仮のアイコン(apps/kmb-app/assets/make_icon.py で作る)。exe の分は build.rs で埋め込む
-const ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
-
 /// 起動の区切りごとの時間をログに書く(N7c。PC の実機で起動のどこが遅いかを見る)。
 struct Startup {
     began: std::time::Instant,
@@ -604,7 +601,7 @@ fn main() -> Result<(), String> {
 
 /// 窓のアイコン。読めなければ付けない(OS の既定の絵になる)。
 fn icon() -> Option<std::sync::Arc<egui::IconData>> {
-    eframe::icon_data::from_png_bytes(ICON_PNG)
+    eframe::icon_data::from_png_bytes(kmb_ui::app_icon::PNG)
         .map_err(|e| log::warn!("アイコンを読めません: {e}"))
         .ok()
         .map(std::sync::Arc::new)
