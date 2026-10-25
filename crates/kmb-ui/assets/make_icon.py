@@ -3,9 +3,9 @@
 濃い紺の角丸の地に、水色の立方体(スケッチの色)と、上の面を輪郭に沿って削る橙の経路を描く。
 大きさごとに 4 倍で描いてから縮めるので、16 px でも線がつぶれにくい。
 
-    python3 apps/kmb-app/assets/make_icon.py
+    python3 crates/kmb-ui/assets/make_icon.py
 
-icon.png(256 px、窓のアイコン)と icon.ico(16〜256 px、exe のアイコン)を書き直す。Pillow が要る。
+icon.png(256 px、窓のアイコン)と icon.ico(16〜256 px、exe のアイコンと上の帯の左上の印)を書き直す。Pillow が要る。
 """
 
 from pathlib import Path

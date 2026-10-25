@@ -34,22 +34,14 @@ impl Workspace {
         let l = theme::look(ui.ctx());
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            // 印(アプリが描く窓の帯の時は、ここを引いても窓が動く)。字の倍率で「jc」が大きくなっても
-            // 箱からはみ出さないよう、箱も字とアイコンの倍率で広げる
+            // 印(アプリが描く窓の帯の時は、ここを引いても窓が動く)。窓・exe と同じアプリのアイコンを
+            // 描く。字とアイコンの倍率で箱も広げる
             let (r, logo) = ui.allocate_exact_size(
                 egui::vec2(22.0, 22.0) * theme::band(),
                 egui::Sense::click_and_drag(),
             );
             self.title_drag(ui, &logo);
-            ui.painter()
-                .rect_filled(r, crate::theme::corner(5.0), l.pal.ink);
-            ui.painter().text(
-                r.center(),
-                egui::Align2::CENTER_CENTER,
-                "jc",
-                crate::theme::mono(11.0),
-                l.pal.chrome,
-            );
+            crate::app_icon::paint(ui, r);
             ui.add_space(6.0);
             // データパネルを出し入れ(ホームを出している間は文書へ戻ると出る)
             let data = self.win.layout.data_open;

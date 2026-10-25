@@ -6,6 +6,7 @@
 //! 操作の中身はモジュールの拡張点([`kmb_core::Extension`])に任せる。
 //! 実行ファイル(kmb-app)は、ウィンドウを開いて [`Workspace::ui`] を呼ぶだけにする。
 
+pub mod app_icon;
 mod appearance_ui;
 #[doc(hidden)]
 pub mod board;
