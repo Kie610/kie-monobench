@@ -7,6 +7,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Kie610/kie-monobench/releases/latest"><img alt="ダウンロード(Windows・Linux)" src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-Windows%20%C2%B7%20Linux-2ea44f?style=for-the-badge" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Kie610/kie-monobench/releases/latest"><img alt="最新版" src="https://img.shields.io/github/v/release/Kie610/kie-monobench?label=%E6%9C%80%E6%96%B0%E7%89%88" /></a>
+  <a href="#ライセンス"><img alt="ライセンス: MIT OR Apache-2.0" src="https://img.shields.io/badge/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9-MIT%20OR%20Apache--2.0-blue" /></a>
+</p>
+
+<p align="center">
   日本語 · <a href="README.en.md">English</a>
 </p>
 
@@ -22,7 +31,7 @@
 
 *加工の作業空間。左のセットアップの木に設計の形から作った加工が並ぶ。3D 粗取りの輪を渦巻きにつなぎ角を丸めると、経路が作り直され、安全高さ・送り高さ・トップ高さ・ボトム高さの札とともに出る。*
 
-まだ開発の途中で、配布用の実行ファイルはない。ソースから組み立てて使う。
+配る版(Windows 10・11 の x64、Linux の x86_64)は[最新版の頁](https://github.com/Kie610/kie-monobench/releases/latest)から落とし、展開してそのまま起動する(入れる手順は要らない)。署名はまだ無いので、Windows では初回に確認の窓が出ることがある。まだ開発の途中で、できないことと今後の予定は [docs/できないことと予定.md](docs/できないことと予定.md) にまとめた。ソースから組み立てる時は「組み立て」の節。
 
 画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp`(crate は今までどおり `kmb-cli`・`kmb-mcp`)。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
 
