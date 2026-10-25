@@ -336,9 +336,7 @@ pub(crate) fn show(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<A
                     item(ui, "中心だけ固定する", "", &mut out, Ask::FixCenter(true));
                 }
             }
-            if let [id] = sel.as_slice()
-                && matches!(sketch.entity(*id), Some(Entity::Line { .. }))
-            {
+            if crate::constraints_ui::align(sketch, sel, true).is_some() {
                 item(ui, "水平にする", "", &mut out, Ask::Horizontal);
                 item(ui, "垂直にする", "", &mut out, Ask::Vertical);
             }
@@ -549,14 +547,9 @@ pub(crate) fn apply(
             Some(s)
         }
         Ask::Horizontal | Ask::Vertical => {
-            let [line] = sel.as_slice() else {
-                return None;
-            };
-            let (label, k) = if ask == Ask::Horizontal {
-                ("水平", ConstraintKind::Horizontal { line: *line })
-            } else {
-                ("垂直", ConstraintKind::Vertical { line: *line })
-            };
+            let horizontal = ask == Ask::Horizontal;
+            let k = crate::constraints_ui::align(sketch, &sel, horizontal)?;
+            let label = if horizontal { "水平" } else { "垂直" };
             add_checked(editor, sketch, sol, values, label, k)
         }
         Ask::Constrain(name) => {

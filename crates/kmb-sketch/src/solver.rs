@@ -446,6 +446,14 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
                 let (p, q) = b.line(o, *line)?;
                 push(Residual::Diff(p.0, q.0));
             }
+            K::HorizontalPoints { a, b: q } => {
+                let (p, q) = (b.point(o, *a)?, b.point(o, *q)?);
+                push(Residual::Diff(p.0 + 1, q.0 + 1));
+            }
+            K::VerticalPoints { a, b: q } => {
+                let (p, q) = (b.point(o, *a)?, b.point(o, *q)?);
+                push(Residual::Diff(p.0, q.0));
+            }
             K::Parallel { a, b: l2 } => {
                 let ((p, q), (r, s)) = (b.line(o, *a)?, b.line(o, *l2)?);
                 push(Residual::Cross(p, q, r, s));

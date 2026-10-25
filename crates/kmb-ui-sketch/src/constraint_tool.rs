@@ -11,8 +11,13 @@ use kmb_sketch::{EntityId, Sketch, Solution};
 fn patterns(name: &str) -> &'static [(&'static [Kind], &'static str)] {
     use Kind::{Curve as C, Line as L, Point as P, Round as R};
     match name {
-        // 線分の向きに近い方を付ける([`resolve`])
-        constraints_ui::HV => &[(&[L], constraints_ui::HV)],
+        // 線分の向き・2 点(円は中心)の並びに近い方を付ける([`resolve`])
+        constraints_ui::HV => &[
+            (&[L], constraints_ui::HV),
+            (&[P, P], constraints_ui::HV),
+            (&[R, R], constraints_ui::HV),
+            (&[P, R], constraints_ui::HV),
+        ],
         "一致" => &[
             (&[P, P], "一致"),
             (&[P, L], "線上"),
@@ -280,6 +285,9 @@ pub(crate) fn resolve<'a>(
     match sel {
         [line] if name == constraints_ui::HV => {
             constraints_ui::horizontal_or_vertical(sketch, sol, *line).unwrap_or(name)
+        }
+        [_, _] if name == constraints_ui::HV => {
+            constraints_ui::points_horizontal_or_vertical(sketch, sol, sel).unwrap_or(name)
         }
         _ => name,
     }

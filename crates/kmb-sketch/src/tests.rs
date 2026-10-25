@@ -1451,3 +1451,34 @@ fn a_circle_tangent_to_two_sides_does_not_move_a_free_rectangle() {
         "{c:?} {r}"
     );
 }
+
+/// 点どうし・円の中心どうしを水平・垂直に並べる拘束が解け、保存の形を往復する。
+#[test]
+fn points_and_circle_centers_align() {
+    use ConstraintKind as K;
+    let mut s = Sketch::default();
+    let (c1, c2) = (s.add_point(0.0, 0.0), s.add_point(30.0, 7.0));
+    s.add_circle(c1, 5.0);
+    s.add_circle(c2, 4.0);
+    let p = s.add_point(12.0, 20.0);
+    s.add_constraint(K::Fix { point: c1 });
+    s.add_constraint(K::HorizontalPoints { a: c1, b: c2 });
+    s.add_constraint(K::VerticalPoints { a: c1, b: p });
+    let sol = solve(&s, &HashMap::new()).unwrap();
+    assert!((sol.points[&c2][1] - sol.points[&c1][1]).abs() < 1e-9);
+    assert!((sol.points[&p][0] - sol.points[&c1][0]).abs() < 1e-9);
+    // 並べる拘束は 1 つで自由度を 1 つ減らす
+    let free = solve(
+        &Sketch {
+            constraints: s.constraints[..1].to_vec(),
+            ..s.clone()
+        },
+        &HashMap::new(),
+    )
+    .unwrap();
+    assert_eq!(free.dof, sol.dof + 2);
+    let text = serde_json::to_value(&s).unwrap();
+    assert!(text.to_string().contains("\"horizontal_points\""));
+    let back: Sketch = serde_json::from_value(text).unwrap();
+    assert_eq!(back.constraints, s.constraints);
+}

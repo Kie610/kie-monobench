@@ -315,6 +315,8 @@ pub fn refs(kind: &ConstraintKind) -> Vec<EntityId> {
         | K::TangentCurve { a, b }
         | K::Curvature { a, b }
         | K::Distance { a, b, .. }
+        | K::HorizontalPoints { a, b }
+        | K::VerticalPoints { a, b }
         | K::HorizontalDistance { a, b, .. }
         | K::VerticalDistance { a, b, .. }
         | K::Angle { a, b, .. } => vec![*a, *b],

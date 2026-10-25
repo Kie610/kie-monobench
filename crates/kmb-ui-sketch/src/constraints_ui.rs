@@ -65,7 +65,7 @@ fn dim_expr(editor: &Editor, measured: String) -> String {
 /// 形の拘束(リボンの「拘束」)。名前、アイコン、選ぶもの。水平と垂直は 1 つの道具で、線分の
 /// 向きに近い方を付ける(Kie 2026-10-21)。
 pub(crate) const GEOMETRIC: [(&str, &str, &str); 15] = [
-    (HV, "hv", "線分を 1 本"),
+    (HV, "hv", "線分を 1 本か、点・円を 2 つ"),
     ("一致", "coinc", "点を 2 つ"),
     ("平行", "parallel", "線分を 2 本"),
     ("等しい", "equal", "線分を 2 本か、円を 2 つ"),
@@ -114,6 +114,54 @@ pub(crate) fn horizontal_or_vertical(
     line: EntityId,
 ) -> Option<&'static str> {
     let (p, q) = line_ends(sketch, sol, line)?;
+    Some(if (q[0] - p[0]).abs() >= (q[1] - p[1]).abs() {
+        "水平"
+    } else {
+        "垂直"
+    })
+}
+
+/// 水平・垂直に並べる 2 点: 点か円・円弧の 2 つ(円・円弧は中心の点)。ほかの選びなら `None`。
+pub(crate) fn point_pair(sketch: &Sketch, sel: &[EntityId]) -> Option<(EntityId, EntityId)> {
+    let point = |id: EntityId| match sketch.entity(id)? {
+        Entity::Point { .. } => Some(id),
+        Entity::Circle { center, .. } | Entity::Arc { center, .. } => Some(*center),
+        _ => None,
+    };
+    let [a, b] = sel else {
+        return None;
+    };
+    let (a, b) = (point(*a)?, point(*b)?);
+    (a != b).then_some((a, b))
+}
+
+/// 選んだ要素を水平(`horizontal` が偽なら垂直)にする拘束: 線分 1 本ならその線分、
+/// 点・円を 2 つなら点(円は中心)どうし。
+pub(crate) fn align(sketch: &Sketch, sel: &[EntityId], horizontal: bool) -> Option<K> {
+    if let [line] = sel {
+        matches!(sketch.entity(*line), Some(Entity::Line { .. })).then_some(())?;
+        return Some(if horizontal {
+            K::Horizontal { line: *line }
+        } else {
+            K::Vertical { line: *line }
+        });
+    }
+    let (a, b) = point_pair(sketch, sel)?;
+    Some(if horizontal {
+        K::HorizontalPoints { a, b }
+    } else {
+        K::VerticalPoints { a, b }
+    })
+}
+
+/// 2 点(円は中心)の並びに近い方(水平か垂直)の拘束の名前。横と縦が同じなら水平。
+pub(crate) fn points_horizontal_or_vertical(
+    sketch: &Sketch,
+    sol: &Solution,
+    sel: &[EntityId],
+) -> Option<&'static str> {
+    let (a, b) = point_pair(sketch, sel)?;
+    let (p, q) = (sol.points.get(&a)?, sol.points.get(&b)?);
     Some(if (q[0] - p[0]).abs() >= (q[1] - p[1]).abs() {
         "水平"
     } else {
@@ -304,6 +352,11 @@ pub(crate) fn options(
             ));
         }
         _ => {}
+    }
+    // 点どうし(円・円弧は中心)を水平・垂直に並べる
+    if let Some((a, b)) = point_pair(sketch, sel) {
+        v.push(("水平", K::HorizontalPoints { a, b }));
+        v.push(("垂直", K::VerticalPoints { a, b }));
     }
     // 寸法の道具と同じ寸法(円と点・線・円は中心から・円周の近い側から・遠い側から、
     // 中心線と点は中心線からの直径)もパネルのボタンに出す(網羅版 F2・F3)
@@ -888,8 +941,8 @@ pub(crate) fn constraint_name(k: &K) -> &'static str {
     match k {
         K::Coincident { .. } => "一致",
         K::Fix { .. } => "固定",
-        K::Horizontal { .. } => "水平",
-        K::Vertical { .. } => "垂直",
+        K::Horizontal { .. } | K::HorizontalPoints { .. } => "水平",
+        K::Vertical { .. } | K::VerticalPoints { .. } => "垂直",
         K::Parallel { .. } => "平行",
         K::Perpendicular { .. } => "直交",
         K::Equal { .. } => "等しい",

@@ -359,8 +359,8 @@ pub(crate) fn kind_word(kind: &crate::ConstraintKind) -> &'static str {
     match kind {
         K::Coincident { .. } => "一致",
         K::Fix { .. } => "固定",
-        K::Horizontal { .. } => "水平",
-        K::Vertical { .. } => "垂直",
+        K::Horizontal { .. } | K::HorizontalPoints { .. } => "水平",
+        K::Vertical { .. } | K::VerticalPoints { .. } => "垂直",
         K::Parallel { .. } => "平行",
         K::Perpendicular { .. } => "直交",
         K::Equal { .. } => "等しい",

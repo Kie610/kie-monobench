@@ -29,8 +29,8 @@ pub(crate) fn icon(sketch: &Sketch, k: &K) -> Option<&'static str> {
             Some(PatternDef::Rectangular(_)) => "linpat",
             _ => "circpat",
         },
-        K::Horizontal { .. } => "horiz",
-        K::Vertical { .. } => "vert",
+        K::Horizontal { .. } | K::HorizontalPoints { .. } => "horiz",
+        K::Vertical { .. } | K::VerticalPoints { .. } => "vert",
         K::Coincident { .. } => "coinc",
         K::Parallel { .. } => "parallel",
         K::Perpendicular { .. } => "perp",
@@ -67,7 +67,9 @@ pub(crate) fn members(sketch: &Sketch, k: &K) -> Vec<EntityId> {
             })
             .unwrap_or_default(),
         K::Horizontal { line } | K::Vertical { line } => vec![*line],
-        K::Coincident { a, b } => vec![*a, *b],
+        K::Coincident { a, b } | K::HorizontalPoints { a, b } | K::VerticalPoints { a, b } => {
+            vec![*a, *b]
+        }
         K::Fix { point } => vec![*point],
         K::Parallel { a, b }
         | K::Perpendicular { a, b }
