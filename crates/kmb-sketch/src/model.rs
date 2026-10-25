@@ -257,6 +257,16 @@ pub enum ConstraintKind {
     Vertical {
         line: EntityId,
     },
+    /// 点 a と点 b を水平に並べる(y を等しく)。円の中心どうしは中心の点で持つ
+    HorizontalPoints {
+        a: EntityId,
+        b: EntityId,
+    },
+    /// 点 a と点 b を垂直に並べる(x を等しく)
+    VerticalPoints {
+        a: EntityId,
+        b: EntityId,
+    },
     Parallel {
         a: EntityId,
         b: EntityId,

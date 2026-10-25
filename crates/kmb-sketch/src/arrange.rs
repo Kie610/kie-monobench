@@ -40,6 +40,8 @@ pub(crate) fn remap(kind: &K, m: &BTreeMap<EntityId, EntityId>) -> Option<K> {
         K::Fix { point } => K::Fix { point: g(point)? },
         K::Horizontal { line } => K::Horizontal { line: g(line)? },
         K::Vertical { line } => K::Vertical { line: g(line)? },
+        K::HorizontalPoints { a, b } => K::HorizontalPoints { a: g(a)?, b: g(b)? },
+        K::VerticalPoints { a, b } => K::VerticalPoints { a: g(a)?, b: g(b)? },
         K::Parallel { a, b } => K::Parallel { a: g(a)?, b: g(b)? },
         K::Perpendicular { a, b } => K::Perpendicular { a: g(a)?, b: g(b)? },
         K::Equal { a, b } => K::Equal { a: g(a)?, b: g(b)? },
@@ -289,7 +291,13 @@ impl Sketch {
                     b: m[line],
                     value: format!("{} deg", num_text(deg)),
                 },
-                (K::HorizontalDistance { .. } | K::VerticalDistance { .. }, true) => continue,
+                (
+                    K::HorizontalDistance { .. }
+                    | K::VerticalDistance { .. }
+                    | K::HorizontalPoints { .. }
+                    | K::VerticalPoints { .. },
+                    true,
+                ) => continue,
                 (k, _) => match remap(k, &m) {
                     Some(k) => k,
                     None => continue,
@@ -380,6 +388,8 @@ impl Sketch {
                 c.kind,
                 K::Horizontal { .. }
                     | K::Vertical { .. }
+                    | K::HorizontalPoints { .. }
+                    | K::VerticalPoints { .. }
                     | K::HorizontalDistance { .. }
                     | K::VerticalDistance { .. }
             );
@@ -390,6 +400,8 @@ impl Sketch {
                 c.kind = match c.kind {
                     K::Horizontal { line } => K::Vertical { line },
                     K::Vertical { line } => K::Horizontal { line },
+                    K::HorizontalPoints { a, b } => K::VerticalPoints { a, b },
+                    K::VerticalPoints { a, b } => K::HorizontalPoints { a, b },
                     K::HorizontalDistance { a, b, value } => K::VerticalDistance { a, b, value },
                     K::VerticalDistance { a, b, value } => K::HorizontalDistance { a, b, value },
                     k => k,

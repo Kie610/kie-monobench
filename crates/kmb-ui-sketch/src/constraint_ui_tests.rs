@@ -205,3 +205,52 @@ fn horizontal_or_vertical_follows_the_direction_of_the_line() {
     click_at(&mut h, [6.71, 2.07]);
     assert_eq!(kinds(&h), (1, 1), "横に近い線は水平");
 }
+
+#[test]
+fn horizontal_or_vertical_aligns_two_circle_centers() {
+    // 円の中心どうしにも付く(ロードマップ 1-B1): 横に近い並びは水平、縦に近い並びは垂直
+    let mut h = empty_sketch();
+    // 付けると円が動くので、2 組目は別の円 2 つ
+    let circles = [
+        ([4.0, 4.0], [5.5, 4.0]),
+        ([14.0, 6.0], [15.5, 6.0]),
+        ([4.0, 12.0], [5.5, 12.0]),
+        ([6.0, 20.0], [7.5, 20.0]),
+    ];
+    for (c, r) in circles {
+        editor(h.state_mut()).set_tool(Tool::Circle);
+        h.run();
+        click_at(&mut h, c);
+        click_at(&mut h, r);
+        press_key(&mut h, egui::Key::Escape);
+        press_key(&mut h, egui::Key::Escape);
+    }
+    editor(h.state_mut()).set_tool(Tool::Constraint("水平/垂直"));
+    h.run();
+    for (_, r) in circles {
+        click_at(&mut h, r);
+    }
+    let s = current_sketch(h.state());
+    let pairs: Vec<_> = s
+        .constraints
+        .iter()
+        .filter_map(|c| match c.kind {
+            ConstraintKind::HorizontalPoints { a, b } => Some(("水平", a, b)),
+            ConstraintKind::VerticalPoints { a, b } => Some(("垂直", a, b)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(pairs.len(), 2, "{:?}", s.constraints);
+    let names: Vec<&str> = pairs.iter().map(|p| p.0).collect();
+    assert_eq!(names, ["水平", "垂直"]);
+    let sol = solution(&h);
+    for (name, a, b) in pairs {
+        assert!(
+            matches!(s.entity(a), Some(Entity::Point { .. })),
+            "中心の点に付く"
+        );
+        let (p, q) = (sol.points[&a], sol.points[&b]);
+        let i = if name == "水平" { 1 } else { 0 };
+        assert!((p[i] - q[i]).abs() < 1e-6, "{name} {p:?} {q:?}");
+    }
+}
