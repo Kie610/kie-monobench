@@ -322,6 +322,13 @@ pub fn refs(kind: &ConstraintKind) -> Vec<EntityId> {
         | K::Angle { a, b, .. } => vec![*a, *b],
         K::Fix { point } => vec![*point],
         K::Symmetric { a, b, line } => vec![*a, *b, *line],
+        K::SymmetricPairs {
+            a1,
+            b1,
+            a2,
+            b2,
+            line,
+        } => vec![*a1, *b1, *a2, *b2, *line],
         K::Horizontal { line } | K::Vertical { line } | K::Length { line, .. } => vec![*line],
         K::PointOnLine { point, line }
         | K::Midpoint { point, line }

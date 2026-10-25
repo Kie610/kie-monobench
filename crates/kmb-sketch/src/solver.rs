@@ -529,6 +529,21 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
                 push(Residual::Dot(p1, p2, l1, l2));
                 keep(Trait::Side(p1, l1, l2));
             }
+            K::SymmetricPairs {
+                a1,
+                b1,
+                a2,
+                b2,
+                line,
+            } => {
+                let (l1, l2) = b.line(o, *line)?;
+                for (p, q) in [(a1, b1), (a2, b2)] {
+                    let (p1, p2) = (b.point(o, *p)?, b.point(o, *q)?);
+                    push(Residual::MidOnLine(p1, p2, l1, l2));
+                    push(Residual::Dot(p1, p2, l1, l2));
+                    keep(Trait::Side(p1, l1, l2));
+                }
+            }
             K::Midpoint { point, line } => {
                 let (m, (p, q)) = (b.point(o, *point)?, b.line(o, *line)?);
                 push(Residual::Mid(m, p, q, true));
@@ -1104,7 +1119,14 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
     let r = space.rank();
     let dof = x.len() - r;
 
-    // 拘束を順に足し、行の数だけ空間が広がらないものを余分な拘束とする
+    // 拘束を順に足し、行の数だけ空間が広がらないものを余分な拘束とする(重なりを許す種類は、
+    // 1 行も広がらない時だけ。[`ConstraintKind::tolerates_overlap`])
+    let overlap_ok: BTreeSet<ConstraintId> = sketch
+        .constraints
+        .iter()
+        .filter(|c| c.kind.tolerates_overlap())
+        .map(|c| c.id)
+        .collect();
     let mut redundant = Vec::new();
     let mut span = RowSpace::empty_like(&j);
     let mut i = 0;
@@ -1118,8 +1140,8 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
         let added = (i..k)
             .filter(|&row| trial.add(j.row(row).transpose()))
             .count();
-        if added < k - i
-            && let Some(id) = tag
+        if let Some(id) = tag
+            && (added == 0 || (added < k - i && !overlap_ok.contains(&id)))
         {
             redundant.push(id);
         }

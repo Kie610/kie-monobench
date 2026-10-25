@@ -452,4 +452,6 @@ mod section_tests;
 #[cfg(test)]
 mod silhouette_tests;
 #[cfg(test)]
+mod symmetric_tests;
+#[cfg(test)]
 mod tests;

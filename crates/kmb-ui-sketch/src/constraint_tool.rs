@@ -167,14 +167,13 @@ pub(crate) fn apply_multi(as_name: &str, s: &mut Sketch, sol: &Solution, sel: &[
                 return false;
             };
             let (p2, q2) = if crossed { (q2, p2) } else { (p2, q2) };
-            s.add_constraint(K::Symmetric {
-                a: p1,
-                b: p2,
-                line: axis,
-            });
-            s.add_constraint(K::Symmetric {
-                a: q1,
-                b: q2,
+            // 2 組の点の対称を 1 つの拘束にする(長方形の縦 2 辺のように一部が既に決まっていても、
+            // 新しく決める分があれば過剰にしない。10-24 t4)
+            s.add_constraint(K::SymmetricPairs {
+                a1: p1,
+                b1: p2,
+                a2: q1,
+                b2: q2,
                 line: axis,
             });
             true

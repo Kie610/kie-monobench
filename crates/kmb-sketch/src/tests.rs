@@ -968,7 +968,7 @@ fn near(a: [f64; 2], b: [f64; 2]) -> bool {
 }
 
 /// 拘束のない長方形(点 1〜4、辺 11〜14、横と縦の拘束だけ)。
-fn free_rectangle() -> Sketch {
+pub(crate) fn free_rectangle() -> Sketch {
     let mut s = rectangle("w", "h");
     s.constraints.retain(|c| {
         matches!(
