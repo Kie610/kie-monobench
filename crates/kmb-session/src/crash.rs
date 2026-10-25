@@ -232,6 +232,20 @@ pub fn note(doc: &Document, active: Option<u64>) {
     rewrite_marker(state);
 }
 
+/// 印のファイルの今の中身(試験用)。印は起動中ずっと鍵を掛けているので、Windows では別のハンドルから
+/// 読めない(バイト範囲の鍵は開き直したハンドルも締め出す)。鍵を持つハンドルを写して読む
+/// (写したハンドルは同じファイルの物なので鍵の内側)。
+#[cfg(test)]
+pub(crate) fn read_marker() -> Option<String> {
+    use std::io::Read;
+    let g = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut f = g.as_ref()?.marker.try_clone().ok()?;
+    f.rewind().ok()?;
+    let mut text = String::new();
+    f.read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
 /// 正しい終了の印。落とすと印のファイルを消す。
 pub struct Guard {
     marker_path: PathBuf,

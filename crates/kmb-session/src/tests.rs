@@ -217,7 +217,7 @@ fn install_keeps_a_marker_with_recent_commands_until_dropped() {
     // 作業中の部品が変われば、文書が同じでも書き直す(落ちた時にどの部品で作業していたかを残す)
     crash::note(&doc_with("10 mm"), Some(7));
     let kept: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&m).unwrap()).unwrap();
+        serde_json::from_str(&crash::read_marker().expect("印を読める")).unwrap();
     assert_eq!(kept["active_component"]["id"], 7, "{kept}");
     drop(guard);
     assert!(!m.exists(), "正しく終われば印を消す");
