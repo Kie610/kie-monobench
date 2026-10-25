@@ -81,6 +81,7 @@ cad.revolve_to_face	kmb-cad-revolve
 cad.sketch.auto_constrain	kmb-sketch
 cad.sketch.export_dxf	kmb-io-dxf
 cad.sketch.export_svg	kmb-io-svg
+cad.sketch.find	kmb-sketch
 cad.sketch.insert_dxf	kmb-io-dxf
 cad.sketch.insert_svg	kmb-io-svg
 cad.sketch.redefine_plane	kmb-sketch

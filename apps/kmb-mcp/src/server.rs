@@ -550,7 +550,7 @@ impl Server {
             let mut s = session.lock().unwrap_or_else(|e| e.into_inner());
             let r = f(&mut s);
             // クラッシュ報告に、最近の操作と文書を残す
-            kmb_session::crash::note(s.document());
+            kmb_session::crash::note(s.document(), s.work.active_component());
             r
         })
         .await

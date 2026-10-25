@@ -1068,6 +1068,18 @@ fn every_tool_is_known_to_the_batch() {
     }
 }
 
+/// 知らない道具の名前には、batch に入れられる近い名前を添える(入れられない道具は出さない)。
+#[test]
+fn an_unknown_tool_in_the_batch_names_the_close_ones() {
+    let e = crate::batch::parse("set_parm", json!({})).err().unwrap();
+    assert!(e.contains("近い名前: set_param"), "{e}");
+    let e = crate::batch::parse("undoo", json!({})).err().unwrap();
+    assert!(
+        !e.contains("近い名前: undo"),
+        "入れられない道具は案内しない: {e}"
+    );
+}
+
 #[test]
 fn a_screenshot_is_a_png_of_the_part_and_can_mark_faces() {
     let root = temp_root("shot");
@@ -1982,4 +1994,62 @@ fn a_mistyped_action_id_suggests_the_close_ones() {
         .run_action_at("io.exprot_stl", None, None, &json!({}), Some("a.stl"))
         .unwrap_err();
     assert!(e.message.contains("近い名前: io.export_stl"), "{e}");
+}
+
+/// スケッチの要素を条件で探す: 種類・長さで絞り、宣言に無い条件は誤りにする。
+#[test]
+fn sketch_entities_are_found_by_conditions() {
+    let root = temp_root("find");
+    let mut s = Session::new(root.clone());
+    let st = s.sample(false, false).unwrap();
+    let sketch = st["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| {
+            f["type"]
+                .as_str()
+                .is_some_and(|t| t.starts_with("cad.sketch@"))
+        })
+        .expect("見本にスケッチがある")["id"]
+        .as_u64()
+        .unwrap();
+    let find = |s: &mut Session, args: Value| -> String {
+        s.run_action_at("cad.sketch.find", None, None, &args, None)
+            .unwrap()["message"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let lines = find(&mut s, json!({"sketch": sketch, "kind": "line"}));
+    assert!(lines.contains("線分"), "{lines}");
+    assert!(!lines.contains("円弧"), "{lines}");
+    // 長さの上限が 0 なら線分は残らない
+    let none = find(
+        &mut s,
+        json!({"sketch": sketch, "kind": "line", "max_length": 0}),
+    );
+    assert!(none.contains("(0 個)"), "{none}");
+    // 宣言に無い条件・形の違う範囲は誤り
+    assert!(
+        s.run_action_at(
+            "cad.sketch.find",
+            None,
+            None,
+            &json!({"sketch": sketch, "color": 1}),
+            None
+        )
+        .is_err()
+    );
+    assert!(
+        s.run_action_at(
+            "cad.sketch.find",
+            None,
+            None,
+            &json!({"sketch": sketch, "box": [1, 2]}),
+            None
+        )
+        .is_err()
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

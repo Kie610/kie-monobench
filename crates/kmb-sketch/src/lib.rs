@@ -22,6 +22,7 @@ mod draw;
 mod draw_core;
 mod edit;
 mod ends;
+mod find;
 mod freeform;
 mod geom;
 mod import;
@@ -431,6 +432,7 @@ pub fn module() -> kmb_core::Module {
         reg.provide(shared.clone());
     })
     .with_extension(commands)
+    .with_extension(find::SketchFind)
 }
 
 #[cfg(test)]

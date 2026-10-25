@@ -1,4 +1,4 @@
-//! クラッシュ報告。パニックと異常終了ごとに、場所・逆追跡・版・最近の操作・再現用の文書を
+//! クラッシュ報告。パニックと異常終了ごとに、場所・逆追跡・版・最近の操作・再現用の文書・作業中の部品を
 //! ユーザーのデータフォルダの `crash` に JSON で残す。どこへも送らない。
 //!
 //! - パニックはフック([`install`])で、その場で報告を書く。
@@ -58,10 +58,13 @@ struct State {
     app: String,
     marker: File,
     marker_path: PathBuf,
-    /// 文書の変化を見分ける印(取り消しの数、やり直しの数、最後の操作の名前)
-    key: Option<(usize, usize, String)>,
+    /// 文書の変化を見分ける印(取り消しの数、やり直しの数、最後の操作の名前、作業中の部品)
+    key: Option<(usize, usize, String, Option<u64>)>,
     commands: Vec<String>,
     document: Option<Json>,
+    /// 作業中(アクティブ)の部品の番号と名前(文書の直下なら `None`)。開いている間だけの状態で
+    /// 文書に入らないので、別に残す(無いと、作ったボディがどの部品に入ったかを再現できない)
+    active: Option<Json>,
     /// 起動した時刻(印を書き直しても変えない)
     started: u64,
 }
@@ -108,6 +111,7 @@ fn marker_json(s: &State) -> Json {
         "noted": now_secs(),
         "commands": s.commands,
         "document": s.document,
+        "active_component": s.active,
         "log_file": crate::logging::current_file(),
     })
 }
@@ -150,6 +154,7 @@ pub fn install(data_dir: &Path, app: &str) -> Result<Guard, String> {
         key: None,
         commands: Vec::new(),
         document: None,
+        active: None,
         started: now_secs(),
     };
     rewrite_marker(&mut state);
@@ -194,6 +199,7 @@ fn on_panic(info: &std::panic::PanicHookInfo<'_>) {
     r["backtrace"] = json!(backtrace);
     r["commands"] = json!(state.commands);
     r["document"] = state.document.clone().unwrap_or(Json::Null);
+    r["active_component"] = state.active.clone().unwrap_or(Json::Null);
     r["log_file"] = json!(crate::logging::current_file());
     r["log"] = json!(crate::logging::recent());
     if let Some(p) = write_report(&state.dir, &r) {
@@ -201,9 +207,10 @@ fn on_panic(info: &std::panic::PanicHookInfo<'_>) {
     }
 }
 
-/// 文書が変わったかもしれない所で呼ぶ(画面なら毎フレームでよい)。変わっていれば、最近の
-/// 操作と文書の写しを持ち直し、印のファイルを書き直す。[`install`] の前は何もしない。
-pub fn note(doc: &Document) {
+/// 文書が変わったかもしれない所で呼ぶ(画面なら毎フレームでよい)。`active` は作業中(アクティブ)の
+/// 部品(文書の直下なら `None`)。変わっていれば、最近の操作と文書の写しと作業中の部品を持ち直し、
+/// 印のファイルを書き直す。[`install`] の前は何もしない。
+pub fn note(doc: &Document, active: Option<u64>) {
     let mut g = STATE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(state) = g.as_mut() else { return };
     let done = doc.undo_labels();
@@ -211,6 +218,7 @@ pub fn note(doc: &Document) {
         done.len(),
         doc.redo_labels().len(),
         done.last().map(|s| s.to_string()).unwrap_or_default(),
+        active,
     );
     if state.key.as_ref() == Some(&key) {
         return;
@@ -219,6 +227,8 @@ pub fn note(doc: &Document) {
     let skip = done.len().saturating_sub(RECENT_COMMANDS);
     state.commands = done[skip..].iter().map(|s| s.to_string()).collect();
     state.document = serde_json::from_str(&doc.to_json()).ok();
+    state.active =
+        active.map(|c| json!({"id": c, "name": doc.data().component(c).map(|k| k.name.clone())}));
     rewrite_marker(state);
 }
 
@@ -288,6 +298,7 @@ pub fn collect_abnormal_exits(dir: &Path) -> usize {
         r["started"] = m["started"].clone();
         r["commands"] = m["commands"].clone();
         r["document"] = m["document"].clone();
+        r["active_component"] = m["active_component"].clone();
         // その起動のログの終わり(落ちる直前に何をしていたか)
         r["log_file"] = m["log_file"].clone();
         if let Some(f) = m["log_file"].as_str() {

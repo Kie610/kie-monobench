@@ -5,7 +5,8 @@
 //!   利用者だけが読める所。Unix では 0600)。画面を閉じるか接続を切ると消す。
 //! - 1 つの接続で 1 つの要求: `{"token", "tool", "args", "roots"}` の 1 行を送り、`{"ok": 値}` か
 //!   `{"error": 理由}` の 1 行を受ける。要求は画面の 1 フレームの間に処理する(文書は画面の物)。
-//! - 合い言葉が違う要求は、理由を言わずに閉じる。
+//! - 合い言葉が違う要求は、違うことと待ち受けている画面のプロセスの番号だけを答えて閉じる(合い言葉は
+//!   言わない)。頼む側はそれと `live.json` の中身を比べ、どの鍵が古いかを言う([`call`] の誤り)。
 //! - MCP から来た要求は `roots`(AI に許したフォルダ)を添える。画面はその要求で動く操作の
 //!   ファイルの引数を、その中に限る([`crate::roots::Roots::confine_args`])。
 
@@ -351,6 +352,11 @@ fn serve(
     };
     if !same(v["token"].as_str().unwrap_or(""), token) {
         log::warn!("AI の接続: 合い言葉の違う要求を断った");
+        let _ = writeln!(
+            out,
+            "{}",
+            json!({ "error": "合い言葉が違います", "refused": "token", "pid": std::process::id() })
+        );
         return;
     }
     // 頼みの一覧は画面へ送らずここで答える(画面が固まった時こそ知りたいので)
@@ -427,16 +433,59 @@ pub fn call_confined(
     )
 }
 
+/// 入れ直す手順(つながらない誤りの終わりに添える)。
+const RETRY: &str =
+    "画面で「設定 → 一般 → AI との接続」の「AI からの接続を受ける」を入れ直してください";
+
+/// 読んだ `live.json` の出どころ(つながらない時の誤りに添える): 場所、書いた画面の番号と待ち受けの
+/// 番号、書いてからの長さ。
+fn ticket_origin(data_dir: &Path, t: &Ticket) -> String {
+    let p = ticket_path(data_dir);
+    let age = std::fs::metadata(&p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|m| m.elapsed().ok())
+        .map(|d| match d.as_secs() {
+            s if s < 120 => format!("、{s} 秒前に書いた"),
+            s if s < 7200 => format!("、{} 分前に書いた", s / 60),
+            s => format!("、{} 時間前に書いた", s / 3600),
+        })
+        .unwrap_or_default();
+    format!(
+        "{}(画面のプロセス {}、127.0.0.1:{}{age})",
+        p.display(),
+        t.pid,
+        t.port
+    )
+}
+
 fn send(data_dir: &Path, mut req: Value) -> Result<Value, String> {
     let tool = req["tool"].as_str().unwrap_or_default().to_string();
-    let t = read_ticket(data_dir).ok_or_else(|| {
-        "動いている画面が見つかりません。画面で「設定 → 一般 → AI との接続」の\
-         「AI からの接続を受ける」を入れてください(画面の無い形の道具はそのまま使えます)"
-            .to_string()
-    })?;
+    let path = ticket_path(data_dir);
+    let t = match read_ticket(data_dir) {
+        Some(t) => t,
+        None if path.exists() => {
+            return Err(format!(
+                "{} を読めません(壊れています)。{RETRY}",
+                path.display()
+            ));
+        }
+        None => {
+            return Err(format!(
+                "動いている画面が見つかりません({} がありません)。画面で「設定 → 一般 → AI との接続」の\
+                 「AI からの接続を受ける」を入れてください(画面の無い形の道具はそのまま使えます)。\
+                 入れているのに見つからない時は、画面とこの道具のデータフォルダが違います",
+                path.display()
+            ));
+        }
+    };
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], t.port));
     let mut s = TcpStream::connect_timeout(&addr, Duration::from_secs(3)).map_err(|e| {
-        format!("画面につながりません({e})。画面を閉じたか、接続を切った後かもしれません")
+        format!(
+            "画面につながりません({e})。古いのは {}: そこで待ち受けている画面がありません\
+             (画面を閉じたか落ちた後に残った物)。{RETRY}",
+            ticket_origin(data_dir, &t)
+        )
     })?;
     let _ = s.set_read_timeout(Some(
         answer_wait(&tool, &req["args"]) + Duration::from_secs(5),
@@ -447,12 +496,35 @@ fn send(data_dir: &Path, mut req: Value) -> Result<Value, String> {
     BufReader::new(s)
         .read_line(&mut line)
         .map_err(|e| format!("画面の答えを読めません: {e}"))?;
-    let v: Value = serde_json::from_str(&line)
-        .map_err(|_| "画面が答えずに閉じました(合い言葉が古いかもしれません)".to_string())?;
+    let v: Value = serde_json::from_str(&line).map_err(|_| {
+        format!(
+            "画面が答えずに閉じました(合い言葉が古いかもしれません。読んだのは {})",
+            ticket_origin(data_dir, &t)
+        )
+    })?;
+    if v["refused"] == "token" {
+        return Err(stale_token(data_dir, &t, v["pid"].as_u64()));
+    }
     match v.get("error") {
         Some(e) => Err(e.as_str().unwrap_or("失敗しました").to_string()),
         None => Ok(v.get("ok").cloned().unwrap_or(Value::Null)),
     }
+}
+
+/// 合い言葉を断られた時の誤り: `live.json` の合い言葉が古い。待ち受けている画面の番号と比べて、
+/// 別の画面の物か、同じ画面の前の接続の物かを言う。
+fn stale_token(data_dir: &Path, t: &Ticket, listening: Option<u64>) -> String {
+    let origin = ticket_origin(data_dir, t);
+    let why = match listening {
+        Some(p) if p != u64::from(t.pid) => format!(
+            "127.0.0.1:{} で待ち受けているのは別の画面(プロセス {p})です。live.json を書いた画面は\
+             閉じたか落ちて、番号だけが別の画面に使われています",
+            t.port
+        ),
+        Some(_) => "同じ画面ですが、接続を入れ直す前の合い言葉です".to_string(),
+        None => "待ち受けている画面の合い言葉と違います".to_string(),
+    };
+    format!("合い言葉が古いので断られました。古いのは {origin} の合い言葉です: {why}。{RETRY}")
 }
 
 #[cfg(test)]
@@ -515,20 +587,43 @@ mod tests {
         });
         assert_eq!(call(&d, "echo", json!({"x": 1})).unwrap(), json!({"x": 1}));
         assert_eq!(call(&d, "nope", json!({})).unwrap_err(), "nope は知らない");
-        // 合い言葉が違えば答えずに閉じる
+        // 合い言葉が違えば断り、どの鍵が古いか(live.json の場所と書いた画面)を言う
         let mut bad = l.ticket.clone();
         bad.token = new_token();
         write_ticket(&d, &bad).unwrap();
+        let e = call(&d, "echo", json!({})).unwrap_err();
+        assert!(e.contains("合い言葉が古い"), "{e}");
         assert!(
-            call(&d, "echo", json!({}))
-                .unwrap_err()
-                .contains("合い言葉")
+            e.contains("接続を入れ直す前"),
+            "同じ画面の前の合い言葉: {e}"
         );
+        assert!(e.contains(&ticket_path(&d).display().to_string()), "{e}");
+        // 別の画面が書いた live.json(番号だけ今の画面と同じ)
+        bad.pid = l.ticket.pid + 1;
+        write_ticket(&d, &bad).unwrap();
+        let e = call(&d, "echo", json!({})).unwrap_err();
+        assert!(e.contains(&format!("プロセス {}", l.ticket.pid)), "{e}");
+        assert!(e.contains("別の画面"), "{e}");
         write_ticket(&d, &l.ticket).unwrap();
         screen.join().unwrap();
         // 止めると live.json を消す
+        let port = l.ticket.port;
         drop(l);
         assert!(read_ticket(&d).is_none());
+        // 落ちた画面が残した live.json は、待ち受けが無いので古いと言う
+        std::thread::sleep(Duration::from_millis(100));
+        write_ticket(&d, &bad).unwrap();
+        let e = call(&d, "echo", json!({})).unwrap_err();
+        assert!(e.contains("待ち受けている画面がありません"), "{port}: {e}");
+        // 壊れた live.json と、無い時の探した場所
+        std::fs::write(ticket_path(&d), "{").unwrap();
+        assert!(call(&d, "echo", json!({})).unwrap_err().contains("壊れて"));
+        std::fs::remove_file(ticket_path(&d)).unwrap();
+        assert!(
+            call(&d, "echo", json!({}))
+                .unwrap_err()
+                .contains("live.json がありません")
+        );
         assert_ne!(new_token(), new_token());
         let _ = std::fs::remove_dir_all(&d);
     }

@@ -146,7 +146,19 @@ pub fn parse(tool: &str, a: Json) -> Result<Call, String> {
         "gcode" => Call::Gcode(args(tool, a)?),
         "simulate" => Call::Simulate(args(tool, a)?),
         "crash_reports" => Call::CrashReports(args(tool, a)?),
-        t => return Err(format!("知らない道具です: {t}")),
+        t => {
+            // 打ち間違いに近い、batch に入れられる道具の名前を添える(コマンド欄と同じ案内)
+            let names: Vec<String> = crate::Server::tools()
+                .into_iter()
+                .map(|(n, _)| n)
+                .filter(|n| refused(n).is_none())
+                .collect();
+            let near = kmb_session::near::near_names(t, names.iter().map(String::as_str));
+            return Err(format!(
+                "知らない道具です: {t}{}",
+                kmb_session::near::hint(&near)
+            ));
+        }
     })
 }
 
