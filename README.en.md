@@ -10,6 +10,10 @@
   <a href="README.md">日本語</a> · English
 </p>
 
+![An AI agent designs a mounting plate at a human pace, creates the machining moves, then changes the width parameter from 80 mm to 110 mm and the model and moves rebuild](docs/screenshots/demo.gif)
+
+*Example: a board mounting plate with four holes, built by an AI agent at a human pace (buttons are pressed through the MCP `app` tool; points on the drawing and typed numbers go through a virtual mouse and keyboard). The holes sit on the corners of a guide line offset 8 mm inside the outline; only the first hole gets a diameter and the others are made equal to it. The outline's width dimension is tied to a `幅` (width) parameter, so changing it from 80 mm to 110 mm moves the holes and rebuilds the drilling and outline-cutting moves.*
+
 ![The Design workspace editing the extrusion of the sample plate, previewing it in both directions](docs/screenshots/design.png)
 
 *The Design workspace: a tabbed toolbar per workspace at the top, the browser on the left, the timeline at the bottom and the edit panel on the right. Here the extrusion of the sample plate is being edited: setting the direction to both sides and typing the back distance previews the new shape in blue. The user interface is currently in Japanese only.*
