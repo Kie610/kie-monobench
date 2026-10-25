@@ -1,0 +1,98 @@
+# PR ごとに `cargo xtask verify`(SMLib)を Linux と Windows で流す(docs/verify.md の 14 節)。
+# - PR: 分かれ目から変えた crate と、それに依存する crate(`--dependents`)。検査の道具・Rust の版・
+#   cargo の設定を変えた PR は、全体(`--all`)。
+# - main へのプッシュと手で流す時: 全体(`--all`)。組み立て済みの物をここで残し、PR はそれを使う
+#   (PR の中で残した物はほかの PR から使えない)。
+name: 検査
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 分かれ目(merge-base)を求めるので履歴を全部取る
+          fetch-depth: 0
+
+      - name: Rust(rust-toolchain.toml の版)
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # 検査が落ちても残すので、戻すと残すを分ける(actions/cache は通った時だけ残す)
+      - id: smlib
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/smlib-cache
+          key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
+          restore-keys: smlib-${{ runner.os }}-
+
+      # 版は scripts/install-*.sh と docs/verify.md の 1 節にそろえる
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9.108,cargo-deny@0.19.9,cargo-hakari@0.9.39
+
+      # 字体の試験(kmb-ui の fonts.rs)が日本語の字体を使う。ubuntu には入っていないので、
+      # クラウドの作業場と同じ IPA を入れる(Windows には游ゴシックなどがある)
+      - name: 日本語の字体
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q fonts-ipafont-gothic
+
+      - name: cargo xtask verify
+        shell: bash
+        env:
+          # SMLib の C++ の結果(crates/smlib-sys/build.rs の cache_dir)。作業場の外に置き、上と下の
+          # actions/cache で戻して残す(actions/cache は .. を含む道を受けず、runner は job の env で使えない)
+          SMLIB_CACHE_DIR: ${{ runner.temp }}/smlib-cache
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            base="origin/${{ github.base_ref }}"
+            if git diff --name-only "$(git merge-base HEAD "$base")" HEAD |
+              grep -qE '^(\.github/workflows/|rust-toolchain\.toml$|\.cargo/|\.config/nextest\.toml$)'; then
+              args="--all"
+            else
+              args="--dependents --base $base"
+            fi
+          else
+            args="--all"
+          fi
+          echo "cargo xtask verify $args"
+          cargo xtask verify $args
+
+      - uses: actions/cache/save@v4
+        if: always() && steps.smlib.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/smlib-cache
+          key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
+
+      - name: ログを残す
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-${{ matrix.os }}
+          path: target/verify/
+          if-no-files-found: ignore
