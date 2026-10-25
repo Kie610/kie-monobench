@@ -186,7 +186,7 @@ const CHAMFER_DISTANCE: f64 = 0.5;
 /// 選んだ辺と、選んだ面のまわりの出っ張った辺(出っ張った辺がなければへこんだ辺)を
 /// 丸める(`round`)か面取りする。値は `radius`・`distance`(mm)で
 /// 指定でき、なければ既定の値で足す(画面は「作っている途中」にして欄で直させる)。
-fn edge_feature(cx: &Context<'_>, round: bool) -> Result<Outcome, String> {
+fn edge_feature(cx: &Context<'_>, round: bool) -> Result<Outcome, kmb_core::Problem> {
     let (target, select) = selection(cx)?;
     let value = |key: &str, default: f64| -> Result<String, String> {
         let v = cx.arg_f64(key)?.unwrap_or(default);
@@ -277,7 +277,7 @@ impl Extension for EdgeCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             FILLET_FACE => edge_feature(cx, true),
             CHAMFER_FACE => edge_feature(cx, false),

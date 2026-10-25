@@ -86,14 +86,14 @@ impl CamCommands {
         &self,
         cx: &Context<'_>,
         id: &str,
-    ) -> Result<kmb_core::Outcome, String> {
+    ) -> Result<kmb_core::Outcome, kmb_core::Problem> {
         let k: usize = id
             .strip_prefix(SHOW_STAGE)
             .and_then(|n| n.parse().ok())
             .ok_or("段の番号が読めません")?;
         let s = self.band_setup(cx).ok_or("セットアップがありません")?;
         if k > s.paths.len() {
-            return Err(format!("段 {k} はありません"));
+            return Err(format!("段 {k} はありません").into());
         }
         // 段を出すなら再生はやめる(形が重ならないように)
         *self.play.lock().unwrap_or_else(|e| e.into_inner()) = None;

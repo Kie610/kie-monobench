@@ -36,7 +36,7 @@ fn selected(cx: &Context<'_>, type_id: &str) -> Option<(FeatureId, serde_json::V
 }
 
 /// 割る平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
-fn split_plane(cx: &Context<'_>) -> Result<Outcome, String> {
+fn split_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, SPLIT).ok_or("ボディの分割を選んでいません")?;
     let plane = PlaneRef::from_choice(cx, id, "割る平面")?;
     data["plane_ref"] = serde_json::to_value(plane).map_err(|e| e.to_string())?;
@@ -47,7 +47,7 @@ fn split_plane(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 勾配の引き出し方向の平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
-fn pull_plane(cx: &Context<'_>) -> Result<Outcome, String> {
+fn pull_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, DRAFT).ok_or("勾配を選んでいません")?;
     let plane = PlaneRef::from_choice(cx, id, "引き出し方向の平面")?;
     data["plane_ref"] = serde_json::to_value(plane).map_err(|e| e.to_string())?;
@@ -58,7 +58,7 @@ fn pull_plane(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 回転の軸を、手順で選んだ値(`axis`)にする。
-fn move_axis(cx: &Context<'_>) -> Result<Outcome, String> {
+fn move_axis(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, MOVE).ok_or("移動/コピーを選んでいません")?;
     let v = cx
         .arg("axis")
@@ -129,7 +129,7 @@ impl Extension for ModifyCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             SPLIT_PLANE => split_plane(cx),
             MOVE_AXIS => move_axis(cx),

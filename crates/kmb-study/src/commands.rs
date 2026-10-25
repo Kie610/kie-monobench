@@ -507,7 +507,7 @@ impl Extension for StudyCommands {
         out
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         if id != RUN && id != CANCEL && !id.starts_with("study.view.") {
             return None;
         }
@@ -517,10 +517,14 @@ impl Extension for StudyCommands {
         Some(match id {
             RUN => {
                 let wait = cx.arg("wait").and_then(|v| v.as_bool()) == Some(true);
-                self.run_study(cx, fid, wait).map(|r| match r {
-                    Some(r) => Outcome::Message(format!("解きました: {}", r.summary)),
-                    None => Outcome::Message("計算を始めました。進み具合はパネルに出ます".into()),
-                })
+                self.run_study(cx, fid, wait)
+                    .map(|r| match r {
+                        Some(r) => Outcome::Message(format!("解きました: {}", r.summary)),
+                        None => {
+                            Outcome::Message("計算を始めました。進み具合はパネルに出ます".into())
+                        }
+                    })
+                    .map_err(Into::into)
             }
             CANCEL => {
                 if self.runner.cancel(Self::at(cx, fid)) {
@@ -560,7 +564,7 @@ impl Extension for StudyCommands {
                 if let Some(i) = tail(VIEW_QUANTITY) {
                     // 応力の 6 成分は塗る量ではない(一覧にも出さない)
                     if r.quantities.get(i).is_none_or(|q| q.role == Role::Tensor) {
-                        return Some(Err(format!("{i} 番の量は塗れません")));
+                        return Some(Err(format!("{i} 番の量は塗れません").into()));
                     }
                     let on_grid = r
                         .quantities

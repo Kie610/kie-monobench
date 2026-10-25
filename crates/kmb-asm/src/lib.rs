@@ -99,7 +99,7 @@ fn fastener_handles(cx: &Context<'_>) -> Vec<Handle> {
 
 /// 規格部品を挿す: 規格部品の機能と、穴ごとのボディの機能を足し、ボディを新しい部品にまとめる
 /// (穴のボディが部品に入っていれば、その中に。ジョイントで一緒に動く)。
-fn new_fastener(cx: &Context<'_>) -> Result<Outcome, String> {
+fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mouths: Vec<fastener::HoleMouth> = cx
         .arg("holes")
         .and_then(|v| v.as_array())
@@ -242,7 +242,7 @@ fn next_component_name(cx: &Context<'_>) -> String {
         .expect("番号はいつか空く")
 }
 
-fn new_component(cx: &Context<'_>) -> Result<Outcome, String> {
+fn new_component(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let name = cx
         .arg_str("name")
         .map(str::trim)
@@ -251,7 +251,7 @@ fn new_component(cx: &Context<'_>) -> Result<Outcome, String> {
     let roots = selected_roots(cx);
     let parent = match cx.arg("parent").and_then(|v| v.as_u64()) {
         Some(p) if cx.data.components.iter().any(|c| c.id == p) => Some(p),
-        Some(p) => return Err(format!("親にする部品 {p} がありません")),
+        Some(p) => return Err(format!("親にする部品 {p} がありません").into()),
         // 選んだボディがみな同じ部品に入っていれば、その中に作る
         None => {
             let parents: Vec<Option<u64>> = roots
@@ -676,7 +676,11 @@ fn links(cx: &Context<'_>, moving: &Part, base: Option<&Part>) -> Result<Links, 
 }
 
 /// ジョイント `j` を足す変更(前のジョイントの直し `edits` も一緒に)。
-fn insert_joint(cx: &Context<'_>, j: &Joint, mut edits: Vec<Edit>) -> Result<Outcome, String> {
+fn insert_joint(
+    cx: &Context<'_>,
+    j: &Joint,
+    mut edits: Vec<Edit>,
+) -> Result<Outcome, kmb_core::Problem> {
     let name = format!("ジョイント{}", cx.count_of(JOINT) + 1);
     log::info!(
         "{name} を作る({:?}・{:?}、動かすボディ {} 個、前のジョイント {} 個を直す)",
@@ -699,7 +703,7 @@ fn insert_joint(cx: &Context<'_>, j: &Joint, mut edits: Vec<Edit>) -> Result<Out
     })
 }
 
-fn new_joint(cx: &Context<'_>) -> Result<Outcome, String> {
+fn new_joint(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let origin: Origin = serde_json::from_value(
         cx.arg("origin")
             .cloned()
@@ -773,7 +777,7 @@ fn snap_pick_problem(
 }
 
 /// 部品 1 の原点を部品 2 の原点に合わせるジョイントを作る(種類は固定。後で変える)。
-fn new_snap_joint(cx: &Context<'_>) -> Result<Outcome, String> {
+fn new_snap_joint(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let pick = |key: &str, what: &str| -> Result<SnapPick, String> {
         let v = cx
             .arg(key)
@@ -799,7 +803,7 @@ fn new_snap_joint(cx: &Context<'_>) -> Result<Outcome, String> {
             .map_or("前のジョイント", |e| e.name.as_str());
         return Err(format!(
             "部品 1 は {name} で動く部品なので、合わせて動かせません(位置のままのジョイントでつなぐ)"
-        ));
+        ).into());
     }
     let l = links(cx, &moving, Some(&base))?;
     // 部品 2 の原点は今の位置にある: 土台を動かしている前のジョイントの動きを戻す
@@ -1145,7 +1149,7 @@ impl Extension for AsmCommands {
         })
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             NEW_COMPONENT => new_component(cx),
             NEW_JOINT => new_joint(cx),
@@ -1167,6 +1171,7 @@ impl Extension for AsmCommands {
             anim::AUTO_EXPLODE_ALL => anim::auto_explode(cx, true),
             DRAG_POSITION => position::drag_position(cx),
             MOVE_PART => position::move_target(cx, &picked_roots(cx))
+                .map_err(Into::into)
                 .and_then(|p| position::move_part(cx, p)),
             INTERFERENCE => inspect::interference_outcome(cx),
             JOINTS => Ok(Outcome::Table {

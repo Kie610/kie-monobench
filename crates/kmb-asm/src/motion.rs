@@ -13,7 +13,7 @@ pub const MOTION_STUDY: &str = "asm.motion_study";
 /// `delete` で消す、`rename` で名前を変える、`seconds` で長さを変える、`joint` があれば
 /// `drop` でスタディから外す、`remove` でステップ `step` のキーを消す、どちらも無ければステップ
 /// `step`(省くと 0)にキー `value`(省くとジョイントの今の値)を置く。
-pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn run(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut doc: MotionStudies = cx.data.section().map_err(|e| e.to_string())?;
     let len = doc.studies.len();
     let mut list = std::mem::take(&mut doc.studies);
@@ -28,7 +28,7 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
         Some(i) => i,
         None => {
             if flag("delete") {
-                return Err(format!("スタディ「{name}」はありません"));
+                return Err(format!("スタディ「{name}」はありません").into());
             }
             list.push(MotionStudy::new(name.clone()));
             list.len() - 1
@@ -73,9 +73,9 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
             None => 0,
             Some(s) if (0.0..=STUDY_STEPS as f64).contains(&s) && s.fract() == 0.0 => s as u32,
             Some(s) => {
-                return Err(format!(
-                    "ステップは 0〜{STUDY_STEPS} の整数にしてください(今 {s})"
-                ));
+                return Err(
+                    format!("ステップは 0〜{STUDY_STEPS} の整数にしてください(今 {s})").into(),
+                );
             }
         };
         if flag("drop") {
@@ -83,7 +83,7 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
             label = format!("{jname} をスタディ「{name}」から外す");
         } else if flag("remove") {
             if !study.track_mut(joint).remove_key(step) {
-                return Err(format!("{jname} のステップ {step} にキーはありません"));
+                return Err(format!("{jname} のステップ {step} にキーはありません").into());
             }
             label = format!("{jname} のキーを消す(ステップ {step})");
         } else {
@@ -106,7 +106,7 @@ fn change(
     mut doc: MotionStudies,
     label: String,
     list: Vec<MotionStudy>,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     doc.studies = list;
     Ok(Outcome::Change {
         label,

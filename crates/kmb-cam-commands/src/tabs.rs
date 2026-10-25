@@ -149,7 +149,11 @@ pub fn handles(
     }])
 }
 
-pub fn run(id: &str, cx: &Context<'_>, strategies: &[Strategy]) -> Option<Result<Outcome, String>> {
+pub fn run(
+    id: &str,
+    cx: &Context<'_>,
+    strategies: &[Strategy],
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     if id != PLACE_TABS {
         return None;
     }

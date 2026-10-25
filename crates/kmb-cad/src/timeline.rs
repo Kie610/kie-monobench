@@ -41,20 +41,24 @@ impl Extension for TimelineCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         if id != ROLL_BACK {
             return None;
         }
         let len = cx.data.features.len();
-        Some(position(cx, len).map(|rollback| {
-            let label = match rollback {
-                Some(_) => "ここまで戻す",
-                None => "最後まで進める",
-            };
-            Outcome::Change {
-                label: label.into(),
-                edits: vec![Edit::SetRollback { rollback }],
-            }
-        }))
+        Some(
+            position(cx, len)
+                .map(|rollback| {
+                    let label = match rollback {
+                        Some(_) => "ここまで戻す",
+                        None => "最後まで進める",
+                    };
+                    Outcome::Change {
+                        label: label.into(),
+                        edits: vec![Edit::SetRollback { rollback }],
+                    }
+                })
+                .map_err(Into::into),
+        )
     }
 }

@@ -414,7 +414,10 @@ impl Misses {
 /// 予告の形があれば出力に足す。
 fn with_preview(out: &mut Outputs, preview: Option<kmb_core::ToolPreview>) {
     if let Some(p) = preview {
-        out.insert(kmb_core::TOOL_PREVIEW.into(), kmb_core::Payload::to_value(&p));
+        out.insert(
+            kmb_core::TOOL_PREVIEW.into(),
+            kmb_core::Payload::to_value(&p),
+        );
     }
 }
 
@@ -1113,7 +1116,7 @@ use kmb_core::{Action, Context, Extension, Gesture, Handle, Outcome, Place};
 
 /// 選んだ平らな面を対称の平面にして、ミラーを足す(写す機能は、写せる機能のうち最後のもの。
 /// 足した後に欄でクリックして選び直せる)。
-fn mirror(cx: &Context<'_>) -> Result<Outcome, String> {
+fn mirror(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let plane = cx.picked_plane().ok_or(NEED_FACE)?;
     let d = cx
         .registry
@@ -1145,7 +1148,7 @@ fn selected_pattern(cx: &Context<'_>) -> Option<(FeatureId, serde_json::Value, &
 }
 
 /// パターンの軸を、手順で選んだ値(`axis`)にする。`second` なら直線のパターンの方向 2。
-fn pattern_axis(cx: &Context<'_>, second: bool) -> Result<Outcome, String> {
+fn pattern_axis(cx: &Context<'_>, second: bool) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data, key) = selected_pattern(cx).ok_or("円形か直線のパターンを選んでいません")?;
     let key = if second {
         if key != "direction_ref" {
@@ -1210,7 +1213,7 @@ fn copy_state(cx: &Context<'_>, id: FeatureId) -> (Option<usize>, Vec<usize>) {
 
 /// 選んでいるボディのパターン・ミラー(写しを別のボディにする印つき)の、まだボディになっていない
 /// 写し(写し 2 から。個数を増やした分を含む)に、写しのボディの機能を 1 つずつ足す。
-fn split_copies(cx: &Context<'_>) -> Result<Outcome, String> {
+fn split_copies(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, data) =
         selected_body_pattern(cx).ok_or("種類がボディのパターンかミラーを選んでいません")?;
     if data.get("separate").and_then(|v| v.as_bool()) != Some(true) {
@@ -1291,7 +1294,7 @@ fn selected_mirror(cx: &Context<'_>) -> Option<(FeatureId, Mirror)> {
 /// ミラーの対称の平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。face なら
 /// クリックした面(CLI・MCP は引数 `face` と `feature`)。面はミラーより前の形から探す
 /// (ミラーの後のボディの面を選んでも、元のボディの同じ面を使う)。
-fn mirror_plane(cx: &Context<'_>) -> Result<Outcome, String> {
+fn mirror_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut m) = selected_mirror(cx).ok_or("ミラーを選んでいません")?;
     m.plane_ref = PlaneRef::from_choice(cx, id, "対称の平面")?;
     Ok(Outcome::Change {
@@ -1386,7 +1389,7 @@ impl Extension for MirrorCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             MIRROR_ON_FACE => mirror(cx),
             PATTERN_AXIS => pattern_axis(cx, false),

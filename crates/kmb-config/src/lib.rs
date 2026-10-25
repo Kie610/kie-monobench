@@ -16,7 +16,11 @@ pub const ACTIVATE: &str = "cad.config.activate";
 /// 構成表の操作。
 pub struct ConfigCommands;
 
-fn change(cx: &Context<'_>, label: String, c: Configurations) -> Result<Outcome, String> {
+fn change(
+    cx: &Context<'_>,
+    label: String,
+    c: Configurations,
+) -> Result<Outcome, kmb_core::Problem> {
     let edit = cx.data.set_section(&c)?;
     log::info!("{label}");
     Ok(Outcome::Change {
@@ -57,7 +61,7 @@ fn suppressed_of(text: &str) -> Option<bool> {
     }
 }
 
-fn add_column(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_column(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let data = cx.data;
     let mut c = configuration::of(data);
     let col = if let Some(name) = cx.arg_str("param") {
@@ -82,7 +86,7 @@ fn add_column(cx: &Context<'_>) -> Result<Outcome, String> {
     change(cx, label, c)
 }
 
-fn add_row(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_row(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let data = cx.data;
     let mut c = configuration::of(data);
     let name = cx
@@ -91,14 +95,14 @@ fn add_row(cx: &Context<'_>) -> Result<Outcome, String> {
         .filter(|n| !n.is_empty())
         .map_or_else(|| c.free_name(), str::to_string);
     if c.row(&name).is_some() {
-        return Err(format!("構成「{name}」は既にあります"));
+        return Err(format!("構成「{name}」は既にあります").into());
     }
     let row = c.current_row(data, &name, None);
     c.rows.push(row);
     change(cx, format!("構成「{name}」を足す"), c)
 }
 
-fn set_cell(cx: &Context<'_>) -> Result<Outcome, String> {
+fn set_cell(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut c = configuration::of(cx.data);
     let row = row_name(cx, &c)?;
     let col = column_index(cx, &c)?;
@@ -129,7 +133,7 @@ fn set_cell(cx: &Context<'_>) -> Result<Outcome, String> {
     change(cx, label, c)
 }
 
-fn update_row(cx: &Context<'_>) -> Result<Outcome, String> {
+fn update_row(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut c = configuration::of(cx.data);
     let row = row_name(cx, &c)?;
     let i = c.rows.iter().position(|r| r.name == row).expect("ある");
@@ -214,12 +218,12 @@ impl Extension for ConfigCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             ADD_COLUMN => add_column(cx),
             REMOVE_COLUMN => {
                 let mut c = configuration::of(cx.data);
-                column_index(cx, &c).and_then(|i| {
+                column_index(cx, &c).map_err(Into::into).and_then(|i| {
                     let label = format!(
                         "構成表の列「{}」を外す",
                         Configurations::column_label(cx.data, &c.columns[i])
@@ -231,7 +235,7 @@ impl Extension for ConfigCommands {
             ADD_ROW => add_row(cx),
             REMOVE_ROW => {
                 let mut c = configuration::of(cx.data);
-                row_name(cx, &c).and_then(|row| {
+                row_name(cx, &c).map_err(Into::into).and_then(|row| {
                     c.rows.retain(|r| r.name != row);
                     if c.active.as_deref() == Some(row.as_str()) {
                         c.active = None;
@@ -243,15 +247,17 @@ impl Extension for ConfigCommands {
             UPDATE_ROW => update_row(cx),
             ACTIVATE => {
                 let c = &configuration::of(cx.data);
-                row_name(cx, c).and_then(|row| {
-                    // 消えた列があれば断る(何も当てない)
-                    let edits = c.activate_edits(cx.data, &row)?;
-                    log::info!("構成「{row}」を当てる");
-                    Ok(Outcome::Change {
-                        label: format!("構成「{row}」を当てる"),
-                        edits,
+                row_name(cx, c)
+                    .map_err(kmb_core::Problem::from)
+                    .and_then(|row| {
+                        // 消えた列があれば断る(何も当てない)
+                        let edits = c.activate_edits(cx.data, &row)?;
+                        log::info!("構成「{row}」を当てる");
+                        Ok(Outcome::Change {
+                            label: format!("構成「{row}」を当てる"),
+                            edits,
+                        })
                     })
-                })
             }
             _ => return None,
         })

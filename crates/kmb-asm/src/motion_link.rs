@@ -45,7 +45,7 @@ pub fn handles(cx: &Context<'_>) -> Vec<Handle> {
 /// 2 つのジョイント(`joint`・`other`)をつなぐ。タイムラインで後ろの方が前の方に連動する。
 /// `lead`・`follow` は前の方と後ろの方の動きの量(式。省くと回転は 360 deg、スライダは 10 mm)、
 /// `flip` で向きを逆にする。
-pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn run(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let id = |key: &str, what: &str| {
         cx.arg(key)
             .and_then(|v| v.as_u64())
@@ -95,7 +95,7 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
     if !matches!(j.kind, JointKind::Revolute | JointKind::Slider) {
         return Err(format!(
             "{follow_name} は動きが 2 つ以上の種類なので連動できません(タイムラインで後ろのジョイントが連動します。回転かスライダにしてください)"
-        ));
+        ).into());
     }
     if let Some(prev) = cx.data.feature(lead).and_then(|e| {
         serde_json::from_value::<Joint>(e.data.clone())
@@ -103,7 +103,7 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
             .and_then(|l| l.linked())
     }) && prev == follow
     {
-        return Err(format!("{lead_name} はもう {follow_name} に連動しています"));
+        return Err(format!("{lead_name} はもう {follow_name} に連動しています").into());
     }
     j.drive_by = DriveBy::Link;
     j.link_joint = Some(lead);

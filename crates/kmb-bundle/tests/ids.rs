@@ -168,14 +168,18 @@ fn collect(samples: &Samples) -> Collected {
     let modules = kmb_bundle::all();
     let exts = extensions(&modules);
     let mut more = exts.clone();
-    more.push(("kmb-test-clashing", Arc::new(Clashing) as Arc<dyn Extension>));
+    more.push((
+        "kmb-test-clashing",
+        Arc::new(Clashing) as Arc<dyn Extension>,
+    ));
     let mut c = Collected {
         seen: Seen::new(),
         clashing: Seen::new(),
         roles: BTreeSet::new(),
     };
     contexts(samples, &mut |label, cx| {
-        let mut acts: Vec<Vec<kmb_core::Action>> = exts.iter().map(|(_, e)| e.actions(cx)).collect();
+        let mut acts: Vec<Vec<kmb_core::Action>> =
+            exts.iter().map(|(_, e)| e.actions(cx)).collect();
         let stages: Vec<(String, String)> = exts
             .iter()
             .filter_map(|(name, e)| Some((name, e.stages(cx)?)))
@@ -309,7 +313,11 @@ impl Extension for Clashing {
         vec![a]
     }
 
-    fn run(&self, _id: &str, _cx: &Context<'_>) -> Option<Result<kmb_core::Outcome, String>> {
+    fn run(
+        &self,
+        _id: &str,
+        _cx: &Context<'_>,
+    ) -> Option<Result<kmb_core::Outcome, kmb_core::Problem>> {
         None
     }
 }

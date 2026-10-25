@@ -500,11 +500,11 @@ fn mm(v: f64) -> String {
 
 /// 光源を足す。ボディの手前の左上に置き、ボディの中心を照らす。明るさはボディの中心で約 1000 lx
 /// (既定の環境の光と同じくらい)。
-fn insert_light(cx: &Context<'_>) -> Result<Outcome, String> {
+fn insert_light(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let spot = match cx.arg_str("kind").unwrap_or("point") {
         "point" => false,
         "spot" => true,
-        k => return Err(format!("光源の種類 {k} は使えません(point か spot)")),
+        k => return Err(format!("光源の種類 {k} は使えません(point か spot)").into()),
     };
     let (lo, hi) = bodies_box(cx).unwrap_or(([-25.0; 3], [25.0; 3]));
     let c = [0, 1, 2].map(|k| (lo[k] + hi[k]) / 2.0);
@@ -585,15 +585,19 @@ fn first_width(cx: &Context<'_>, face: &Ref) -> Option<f64> {
 }
 
 /// 絵のファイルを読んで、選んだ面にデカールを貼る。
-fn insert_decal(cx: &Context<'_>) -> Result<Outcome, String> {
+fn insert_decal(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let face = decal_face(cx)?;
     let path = cx
         .file
         .map(std::path::Path::to_path_buf)
         .or_else(|| cx.arg_str("path").map(std::path::PathBuf::from))
         .ok_or("絵のファイルを選んでいません")?;
-    let bytes =
-        std::fs::read(&path).map_err(|e| format!("{} を読めません: {e}", path.display()))?;
+    let bytes = std::fs::read(&path).map_err(|e| {
+        kmb_core::Problem::new(
+            kmb_core::ProblemKind::File,
+            format!("{} を読めません: {e}", path.display()),
+        )
+    })?;
     let file = path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -658,7 +662,7 @@ impl Extension for SceneCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             LIGHT_INSERT => insert_light(cx),
             DECAL_INSERT => insert_decal(cx),

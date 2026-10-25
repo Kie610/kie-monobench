@@ -233,7 +233,7 @@ fn picture(cx: &Context<'_>, id: FeatureId) -> Option<Picture> {
 }
 
 /// 絵のファイルを読んで下絵を足す。平らな面を選んでいればその面に、ほかは XY 平面に置く。
-fn insert(cx: &Context<'_>) -> Result<Outcome, String> {
+fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let path = cx
         .file
         .map(std::path::Path::to_path_buf)
@@ -270,7 +270,7 @@ fn insert(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
-fn choose_plane(cx: &Context<'_>) -> Result<Outcome, String> {
+fn choose_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut canvas) = selected(cx).ok_or("キャンバスを選んでいません")?;
     canvas.plane = match PlaneRef::from_choice(cx, id, "キャンバスの平面")? {
         PlaneRef::OriginXy => SketchPlane::Xy,
@@ -299,7 +299,7 @@ fn point_arg(cx: &Context<'_>, key: &str) -> Result<P3, String> {
 }
 
 /// 2 点(世界の座標)とその間の本当の長さから、1 点目を動かさずに絵の幅と中心を変える。
-fn calibrate(cx: &Context<'_>) -> Result<Outcome, String> {
+fn calibrate(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut canvas) = selected(cx).ok_or("キャンバスを選んでいません")?;
     let pic = picture(cx, id).ok_or("キャンバスがまだ計算できていません")?;
     let (a, b) = (
@@ -387,7 +387,7 @@ impl Extension for CanvasCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             CANVAS_INSERT => insert(cx),
             CANVAS_PLANE => choose_plane(cx),

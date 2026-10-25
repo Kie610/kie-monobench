@@ -344,7 +344,7 @@ impl Extension for DatumCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         let insert = |what: &str, kind: &str, n: usize, data: serde_json::Value| {
             Outcome::insert(
                 &format!("{what}を作成"),
@@ -355,30 +355,36 @@ impl Extension for DatumCommands {
         };
         let json = |v: Result<serde_json::Value, serde_json::Error>| v.expect("JSON にできる");
         Some(match id {
-            ADD_DATUM_PLANE => build(cx).map(|f| {
-                insert(
-                    "作業平面",
-                    DATUM_PLANE,
-                    kmb_interchange::datum_planes(cx).len(),
-                    json(serde_json::to_value(&f)),
-                )
-            }),
-            ADD_DATUM_AXIS => build_axis(cx).map(|f| {
-                insert(
-                    "作業軸",
-                    DATUM_AXIS,
-                    kmb_interchange::datum_axes(cx, None).len(),
-                    json(serde_json::to_value(&f)),
-                )
-            }),
-            ADD_DATUM_POINT => build_point(cx).map(|f| {
-                insert(
-                    "作業点",
-                    DATUM_POINT,
-                    kmb_interchange::datum_points(cx, None).len(),
-                    json(serde_json::to_value(&f)),
-                )
-            }),
+            ADD_DATUM_PLANE => build(cx)
+                .map(|f| {
+                    insert(
+                        "作業平面",
+                        DATUM_PLANE,
+                        kmb_interchange::datum_planes(cx).len(),
+                        json(serde_json::to_value(&f)),
+                    )
+                })
+                .map_err(Into::into),
+            ADD_DATUM_AXIS => build_axis(cx)
+                .map(|f| {
+                    insert(
+                        "作業軸",
+                        DATUM_AXIS,
+                        kmb_interchange::datum_axes(cx, None).len(),
+                        json(serde_json::to_value(&f)),
+                    )
+                })
+                .map_err(Into::into),
+            ADD_DATUM_POINT => build_point(cx)
+                .map(|f| {
+                    insert(
+                        "作業点",
+                        DATUM_POINT,
+                        kmb_interchange::datum_points(cx, None).len(),
+                        json(serde_json::to_value(&f)),
+                    )
+                })
+                .map_err(Into::into),
             _ => return None,
         })
     }

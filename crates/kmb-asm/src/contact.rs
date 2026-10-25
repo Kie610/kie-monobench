@@ -244,7 +244,7 @@ fn sweep(
 /// ジョイントを今の値から `to` へ動かすと、接触セットの相手にどこで当たるか(AI・CLI が聞く。
 /// 10-20 a1)。引数 `joint`(回転かスライダのジョイントの機能の番号)・`to`(動かす先。回転は deg、
 /// スライダは mm)。形は変えない。
-pub fn reach(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn reach(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let joint = cx
         .arg("joint")
         .and_then(|v| v.as_u64())
@@ -260,9 +260,9 @@ pub fn reach(cx: &Context<'_>) -> Result<Outcome, String> {
         .find(|(j, _, _)| *j == joint)
         .ok_or_else(|| format!("{name} は動く回転かスライダのジョイントではありません"))?;
     if !d.dofs.is_empty() {
-        return Err(format!(
-            "{name} は動きが 2 つ以上あるので、当たる値を 1 つに決められません"
-        ));
+        return Err(
+            format!("{name} は動きが 2 つ以上あるので、当たる値を 1 つに決められません").into(),
+        );
     }
     let (step, unit) = if d.slide {
         (STEP_MM, "mm")
@@ -316,7 +316,7 @@ pub fn reach(cx: &Context<'_>) -> Result<Outcome, String> {
 /// 新しい接触セット。引数 `bodies`(ボディの機能の番号の並び)と `name`。`bodies` を省くと、
 /// 選んでいる面のボディと選んでいるボディ(ボディでない物は飛ばす)。
 /// 接触セットを切っていれば入れる。
-pub fn new_set(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn new_set(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let shown: Vec<FeatureId> = cx.visible_bodies().iter().map(|b| b.0).collect();
     let is_body = |id: FeatureId| {
         shown.contains(&id)
@@ -331,7 +331,7 @@ pub fn new_set(cx: &Context<'_>) -> Result<Outcome, String> {
                 .filter_map(|v| v.as_u64().map(FeatureId))
                 .collect();
             if let Some(bad) = ids.iter().find(|id| !is_body(**id)) {
-                return Err(format!("機能 {bad} は見えているボディではありません"));
+                return Err(format!("機能 {bad} は見えているボディではありません").into());
             }
             ids
         }
@@ -378,7 +378,7 @@ pub fn new_set(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 接触セット全体を入れる・切る。引数 `enabled`(省くと今の逆)。
-pub fn toggle(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn toggle(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut c: Contacts = cx.data.section().map_err(|e| e.to_string())?;
     c.enabled = cx
         .arg("enabled")

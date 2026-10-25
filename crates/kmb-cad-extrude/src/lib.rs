@@ -605,8 +605,8 @@ impl Extrude {
         if self.source == Source::Faces {
             let (feature, names) = self.face_source()?;
             let body = body_of(ctx, feature)?;
-            let fp =
-                kmb_cad::face_profile(ctx.kernel(), body, &names).map_err(EvalError::InvalidData)?;
+            let fp = kmb_cad::face_profile(ctx.kernel(), body, &names)
+                .map_err(EvalError::InvalidData)?;
             let warn = fp.approximated.then(|| {
                 "面の縁に直線と円弧でない線があるので、細かい折れ線で近い形にして押し出しました"
                     .to_string()
@@ -1098,7 +1098,7 @@ fn add_extrude(
     cx: &Context<'_>,
     sketch: FeatureId,
     regions: Vec<String>,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     let open = regions.is_empty() && open_lines(cx, sketch).is_some();
     if !open {
         chosen_profile(cx, sketch, &regions)?;
@@ -1187,7 +1187,10 @@ fn faces_profile(
 }
 
 /// 平らな面を押し出す。面のボディに結合する(距離 `distance` が負なら切り取る)。
-fn add_face_extrude(cx: &Context<'_>, faces: Vec<kmb_core::Ref>) -> Result<Outcome, String> {
+fn add_face_extrude(
+    cx: &Context<'_>,
+    faces: Vec<kmb_core::Ref>,
+) -> Result<Outcome, kmb_core::Problem> {
     let target = faces.first().map(|r| r.feature());
     let d = cx.arg_f64("distance")?.unwrap_or(DISTANCE);
     if d.abs() < 1e-6 {
@@ -1359,7 +1362,7 @@ fn selected_extrude(cx: &Context<'_>) -> Option<(FeatureId, Extrude)> {
 
 /// 押し出し `id` の範囲を、クリックした面(選んだ面、CLI・MCP は引数 `face` と `feature`)までにする。
 /// 面は押し出しより前の形から探す(結合した後のボディの面を選んでも、元の対象のボディの同じ面を使う)。
-fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, String> {
+fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut e) = selected_extrude(cx).ok_or("押し出しを選んでいません")?;
     let (pick, given) =
         kmb_cad::stop_at::stop_pick(cx).ok_or("対象の平らな面か頂点をクリックしてください")?;
@@ -1528,7 +1531,7 @@ impl Extension for ExtrudeCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             EXTRUDE_REGIONS => (|| {
                 let (id, mut e, sketch) =
@@ -1549,6 +1552,7 @@ impl Extension for ExtrudeCommands {
                         "押し出す領域(閉じた輪郭のあるスケッチ)か、ボディの平らな面を選んでいません"
                             .to_string()
                     })
+                    .map_err(Into::into)
                     .and_then(|(s, keys)| add_extrude(cx, s, keys)),
             },
             EXTRUDE_TO_FACE => extrude_to_face(cx),

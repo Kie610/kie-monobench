@@ -190,14 +190,15 @@ impl Headless {
                 format!("操作 {id} は今使えません: {why}"),
             ));
         }
-        let outcome = self.modules.extensions.run(id, &cx).map_err(|e| {
+        let outcome = self.modules.extensions.run(id, &cx).map_err(|mut e| {
             // 知らない操作なら、打ち間違いに近い ID を添える(10-24 m1)
             if self.modules.extensions.action(id, &cx).is_some() {
                 return e;
             }
             let all = self.actions(picks.selected);
             let near = crate::near::near_names(id, all.iter().map(|a| a.id.as_str()));
-            format!("{e}{}", crate::near::hint(&near))
+            e.message.push_str(&crate::near::hint(&near));
+            e
         })?;
         Ok(match outcome {
             kmb_core::Outcome::Change { label, edits } => {
@@ -232,7 +233,9 @@ impl Handled {
         match self {
             Handled::Changed(added) => Ran::Changed(added),
             Handled::Other(outcome) => match *outcome {
-                kmb_core::Outcome::Change { .. } => unreachable!("文書の変更は run_with が適用する"),
+                kmb_core::Outcome::Change { .. } => {
+                    unreachable!("文書の変更は run_with が適用する")
+                }
                 kmb_core::Outcome::File {
                     suffix,
                     contents,

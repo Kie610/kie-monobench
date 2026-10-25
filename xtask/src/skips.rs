@@ -556,7 +556,10 @@ fn h() -> u8 { return 3; } if a || b { f(1); } }\n\
         let o = |f: &str| owner(&dirs, f);
         assert_eq!(
             o("crates/kmb-sketch-solver/src/lib.rs"),
-            Some(("kmb-sketch-solver".into(), "crates/kmb-sketch-solver".into()))
+            Some((
+                "kmb-sketch-solver".into(),
+                "crates/kmb-sketch-solver".into()
+            ))
         );
         assert_eq!(
             o("crates/kmb-old/src/lib.rs"),

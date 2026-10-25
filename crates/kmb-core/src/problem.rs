@@ -1,8 +1,8 @@
 //! 誤りの種類。画面の無い道(CLI・MCP)が、誤りを文の字で見分けずに種類で扱えるようにする
 //! (CLI の終了の番号も、壊れた入力と加工の食い込みを分けて返せる)。
 //!
-//! 拡張点の操作は今も `Result<_, String>` で返す。種類は画面の無い道の入り口(kmb-session の
-//! `Headless::run`・`write_output`、CLI)で決め、文字列から作った物は [`ProblemKind::Input`] にする。
+//! 拡張点の操作([`crate::Extension::run`])は種類つきで返す。ファイル・計算・使えない場面の誤りは
+//! 操作の側で種類を書き、文字列から作った物(`?` や `.into()`)は [`ProblemKind::Input`] にする。
 
 use serde::{Deserialize, Serialize};
 
@@ -72,7 +72,7 @@ impl From<&str> for Problem {
     }
 }
 
-/// 文字列で返す所(拡張点・画面)へは文だけを渡す。
+/// 文字列で返す所(画面・機能の中の計算)へは文だけを渡す。
 impl From<Problem> for String {
     fn from(p: Problem) -> Self {
         p.message

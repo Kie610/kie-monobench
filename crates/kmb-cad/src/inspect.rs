@@ -29,7 +29,7 @@ impl Extension for InspectCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         if id != MEASURE {
             return None;
         }
@@ -40,20 +40,25 @@ impl Extension for InspectCommands {
             .or(bodies.last());
         Some(match body {
             None => Err("ボディがありません".into()),
-            Some((f, h)) => cx.kernel.mass(*h).map_err(|e| e.to_string()).map(|m| {
-                let name = cx
-                    .data
-                    .feature(*f)
-                    .map_or(String::new(), |e| e.name.clone());
-                Outcome::Message(format!(
-                    "{name}: 体積 {:.3} mm³、表面積 {:.3} mm²、外形 {:.3} × {:.3} × {:.3} mm",
-                    m.volume,
-                    m.area,
-                    m.max[0] - m.min[0],
-                    m.max[1] - m.min[1],
-                    m.max[2] - m.min[2]
-                ))
-            }),
+            Some((f, h)) => cx
+                .kernel
+                .mass(*h)
+                .map_err(|e| e.to_string())
+                .map(|m| {
+                    let name = cx
+                        .data
+                        .feature(*f)
+                        .map_or(String::new(), |e| e.name.clone());
+                    Outcome::Message(format!(
+                        "{name}: 体積 {:.3} mm³、表面積 {:.3} mm²、外形 {:.3} × {:.3} × {:.3} mm",
+                        m.volume,
+                        m.area,
+                        m.max[0] - m.min[0],
+                        m.max[1] - m.min[1],
+                        m.max[2] - m.min[2]
+                    ))
+                })
+                .map_err(Into::into),
         })
     }
 }

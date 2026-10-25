@@ -7,7 +7,7 @@ use kmb_cam_setup::{FaceMenu, Needs, Picks, Strategy};
 use kmb_cam_setup::{SetupInfo, is_rest_data};
 use kmb_core::{
     Action, BoxKind, Context, Extension, FeatureId, FeatureStatus, Field, JobReport, LineKind,
-    MarkKind, Outcome, Overlay, Place, Settings,
+    MarkKind, Outcome, Overlay, Place, Problem, ProblemKind, Settings,
 };
 use kmb_post::MachineProfile;
 use kmb_post::machines::MachineLibrary;
@@ -607,7 +607,7 @@ fn rest_tool_for(cx: &Context<'_>, rest: &[ToolKind], id: FeatureId) -> Option<u
 }
 
 /// セットアップを足す。機械は設定で選んだ機械 `machine`(設定で直した値を文書に写す)。
-fn add_setup(cx: &Context<'_>, machine: &MachineProfile) -> Result<Outcome, String> {
+fn add_setup(cx: &Context<'_>, machine: &MachineProfile) -> Result<Outcome, kmb_core::Problem> {
     let body = cx
         .visible_bodies()
         .last()
@@ -723,9 +723,9 @@ impl Picks for Here<'_, '_> {
 
 /// 選んでいるセットアップ(なければ最後のセットアップ)に、戦略 `s` の加工を足す。初めの値は
 /// 戦略が決める(工具は 1 番か、戦略が選ぶ種類の工具。ポケットは選んだ面を底にする)。
-pub(crate) fn add_operation(cx: &Context<'_>, s: &Strategy) -> Result<Outcome, String> {
+pub(crate) fn add_operation(cx: &Context<'_>, s: &Strategy) -> Result<Outcome, kmb_core::Problem> {
     if let Some(why) = why_not(cx, s) {
-        return Err(format!("{}: {why}", s.label));
+        return Err(format!("{}: {why}", s.label).into());
     }
     // 選んでいるセットアップ(またはその加工)に足す(Z5: いつも最後のセットアップに足していた)
     let setup = selected_setup(cx)
@@ -749,7 +749,11 @@ pub(crate) fn add_operation(cx: &Context<'_>, s: &Strategy) -> Result<Outcome, S
 }
 
 /// ポケット・輪郭・負荷制御粗取り `id` の後に、細い工具でその削り残しだけを削る同じ種類の加工を足す。
-fn add_rest_pocket(cx: &Context<'_>, rest: &[ToolKind], id: FeatureId) -> Result<Outcome, String> {
+fn add_rest_pocket(
+    cx: &Context<'_>,
+    rest: &[ToolKind],
+    id: FeatureId,
+) -> Result<Outcome, kmb_core::Problem> {
     let tool = rest_tool_for(cx, rest, id).ok_or("今の工具より先の細い工具がありません")?;
     let f = cx.data.feature(id).ok_or("機能がありません")?;
     let prev = f
@@ -823,7 +827,7 @@ impl CamCommands {
     }
 
     /// G-code の書き出し。
-    fn gcode(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, String> {
+    fn gcode(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
         let (g, post) = self.gcode_text(cx, &s)?;
         let minutes: f64 = s
@@ -845,7 +849,7 @@ impl CamCommands {
         })
     }
 
-    fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, String> {
+    fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
         Ok(Outcome::File {
             suffix: format!("{}-段取り.md", file_part(&s.name)),
@@ -864,7 +868,7 @@ impl CamCommands {
         setup: FeatureId,
         source: SimSource,
         show: Option<usize>,
-    ) -> Result<Outcome, String> {
+    ) -> Result<Outcome, kmb_core::Problem> {
         let mut opt = crate::SimOptions {
             stage_cells: STAGE_CELLS,
             cell: *self.sim_cell.read().expect("シミュレーションの設定の鍵"),
@@ -895,7 +899,7 @@ impl CamCommands {
             .position(|s| s.setup == setup)
             .ok_or("セットアップの計算ができていません")?;
         if let Some((id, m)) = all[i].failed.first() {
-            return Err(format!("{id} の経路ができていません: {m}"));
+            return Err(format!("{id} の経路ができていません: {m}").into());
         }
         let print = fingerprint(&all[i].paths);
         let what = match source {
@@ -937,10 +941,18 @@ impl CamCommands {
                         .iter()
                         .map(|e| (e.at, kmb_interchange::ink::mark::GOUGE, e.amount))
                         .chain(r.collisions.iter().chain(&r.fixture_hits).map(|c| {
-                            (c.event.at, kmb_interchange::ink::mark::GOUGE, c.event.amount)
+                            (
+                                c.event.at,
+                                kmb_interchange::ink::mark::GOUGE,
+                                c.event.amount,
+                            )
                         }))
                         .chain(r.machine_hits.iter().map(|h| {
-                            (h.event.at, kmb_interchange::ink::mark::GOUGE, h.event.amount)
+                            (
+                                h.event.at,
+                                kmb_interchange::ink::mark::GOUGE,
+                                h.event.amount,
+                            )
                         }))
                         .chain(
                             r.leftovers
@@ -1432,17 +1444,21 @@ impl Extension for CamCommands {
             .or_else(|| self.commands.iter().find_map(|c| c.handles(id, cx)))
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         // 何も選んでいなければ(CLI・MCP で省いた時)、最初のセットアップ
+        // セットアップが無い・選んでいない時は、今の文脈では使えない操作
+        let unavailable = |m: &str| Problem::new(ProblemKind::Unavailable, m);
         let need_setup = || match cx.selected {
-            Some(_) => selected_setup(cx).ok_or_else(|| "セットアップを選んでいません".to_string()),
+            Some(_) => {
+                selected_setup(cx).ok_or_else(|| unavailable("セットアップを選んでいません"))
+            }
             None => cx
                 .data
                 .features
                 .iter()
                 .find(|f| f.type_id == SETUP)
                 .map(|f| f.id)
-                .ok_or_else(|| "セットアップがありません".to_string()),
+                .ok_or_else(|| unavailable("セットアップがありません")),
         };
         if let Some(r) = crate::picks::run(id, cx, &self.strategies) {
             return Some(r);

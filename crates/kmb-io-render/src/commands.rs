@@ -386,7 +386,7 @@ fn png_frames(frames: &[Rgba]) -> Vec<(String, Vec<u8>)> {
         .collect()
 }
 
-fn gltf(cx: &Context<'_>) -> Result<Outcome, String> {
+fn gltf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut bodies = Vec::new();
     let mut triangles = 0;
     for (name, id, h) in named_bodies(cx, false)? {
@@ -430,7 +430,7 @@ fn gltf(cx: &Context<'_>) -> Result<Outcome, String> {
     })
 }
 
-fn still(cx: &Context<'_>) -> Result<Outcome, String> {
+fn still(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (scene, _) = render_scene(cx, true)?;
     // 誤りがデカールだけなら、その分を除いて描き、除いたことを知らせる
     let skipped = decal_errors(cx);
@@ -534,7 +534,7 @@ fn scene_with_args(cx: &Context<'_>) -> Result<Scene, String> {
     Scene::from_json(cx.args, &scene(cx.data, cx.registry))
 }
 
-fn turntable(cx: &Context<'_>) -> Result<Outcome, String> {
+fn turntable(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let format = video_format(cx)?;
     let (scene, _) = render_scene(cx, false)?;
     let s = scene_with_args(cx)?;
@@ -603,7 +603,7 @@ impl Extension for RenderCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             crate::appearance::APPEARANCE => Some(crate::appearance::run(cx)),
             EXPORT_GLTF => Some(gltf(cx)),

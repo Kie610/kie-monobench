@@ -11,7 +11,9 @@
 use crate::commands::{add_operation, last_setup, last_tools, selected_setup};
 use crate::{SETUP, ToolLibrary};
 use kmb_cam_setup::Strategy;
-use kmb_core::{Action, Context, Edit, FeatureId, Input, Outcome, Place, Settings};
+use kmb_core::{
+    Action, Context, Edit, FeatureId, Input, Outcome, Place, Problem, ProblemKind, Settings,
+};
 use serde_json::{Map, Value as Json, json};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -316,11 +318,15 @@ impl Reuse {
     }
 
     /// テンプレート `name` を読む。
-    pub fn load_template(&self, name: &str) -> Result<Template, String> {
+    pub fn load_template(&self, name: &str) -> Result<Template, Problem> {
         let p = self.template_path(name)?;
-        let s = std::fs::read_to_string(&p)
-            .map_err(|e| format!("{} を読めません: {e}", p.display()))?;
-        serde_json::from_str(&s).map_err(|e| format!("{} を読めません: {e}", p.display()))
+        let s = std::fs::read_to_string(&p).map_err(|e| {
+            Problem::new(
+                ProblemKind::File,
+                format!("{} を読めません: {e}", p.display()),
+            )
+        })?;
+        Ok(serde_json::from_str(&s).map_err(|e| format!("{} を読めません: {e}", p.display()))?)
     }
 
     /// 選んでいる加工をテンプレート `name` として書く。書いたファイルを返す。
@@ -328,7 +334,7 @@ impl Reuse {
         &self,
         cx: &Context<'_>,
         name: &str,
-    ) -> Result<(PathBuf, usize, bool), String> {
+    ) -> Result<(PathBuf, usize, bool), Problem> {
         let ops = chosen_operations(cx);
         if ops.is_empty() {
             return Err("テンプレートにする加工を選んでいません".into());
@@ -349,16 +355,26 @@ impl Reuse {
         };
         let path = self.template_path(&file)?;
         if let Some(d) = path.parent() {
-            std::fs::create_dir_all(d).map_err(|e| format!("{} を作れません: {e}", d.display()))?;
+            std::fs::create_dir_all(d).map_err(|e| {
+                Problem::new(
+                    ProblemKind::File,
+                    format!("{} を作れません: {e}", d.display()),
+                )
+            })?;
         }
         let existed = path.exists();
         let text = serde_json::to_string_pretty(&t).expect("JSON にできる");
-        std::fs::write(&path, text).map_err(|e| format!("{} に書けません: {e}", path.display()))?;
+        std::fs::write(&path, text).map_err(|e| {
+            Problem::new(
+                ProblemKind::File,
+                format!("{} に書けません: {e}", path.display()),
+            )
+        })?;
         Ok((path, ops.len(), existed))
     }
 
     /// テンプレート `name` の加工を、選んでいるセットアップ(なければ最後のセットアップ)に足す。
-    fn use_template(&self, cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
+    fn use_template(&self, cx: &Context<'_>, name: &str) -> Result<Outcome, kmb_core::Problem> {
         let t = self.load_template(name)?;
         let setup = selected_setup(cx)
             .or_else(|| last_setup(cx))
@@ -387,10 +403,12 @@ impl Reuse {
             let fresh = match add_operation(cx, kind) {
                 Ok(Outcome::Change { edits, .. }) => match edits.into_iter().next() {
                     Some(Edit::Insert { data, .. }) => data,
-                    _ => return Err(format!("「{}」を足せません", op.name)),
+                    _ => return Err(format!("「{}」を足せません", op.name).into()),
                 },
-                Ok(_) => return Err(format!("「{}」を足せません", op.name)),
-                Err(e) => return Err(format!("テンプレートの「{}」を足せません: {e}", op.name)),
+                Ok(_) => return Err(format!("「{}」を足せません", op.name).into()),
+                Err(e) => {
+                    return Err(format!("テンプレートの「{}」を足せません: {e}", op.name).into());
+                }
             };
             let mut saved = without(&op.data, &DOCUMENT_KEYS);
             // ライブラリにない工具の番号は、足す時の選び方(種類で選ぶ)に任せる
@@ -417,7 +435,7 @@ impl Reuse {
             });
         }
         if edits.is_empty() {
-            return Err(format!("テンプレート「{name}」に加工がありません"));
+            return Err(format!("テンプレート「{name}」に加工がありません").into());
         }
         Ok(Outcome::Change {
             label: format!("テンプレート「{name}」から作成"),
@@ -532,18 +550,27 @@ impl Reuse {
         v
     }
 
-    pub(crate) fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    pub(crate) fn run(
+        &self,
+        id: &str,
+        cx: &Context<'_>,
+    ) -> Option<Result<Outcome, kmb_core::Problem>> {
         if let Some(name) = id.strip_prefix(USE_TEMPLATE) {
             return Some(self.use_template(cx, name));
         }
         if let Some(name) = id.strip_prefix(DELETE_TEMPLATE) {
-            return Some(self.template_path(name).and_then(|p| {
-                std::fs::remove_file(&p)
-                    .map_err(|e| format!("{} を消せません: {e}", p.display()))?;
+            return Some((|| {
+                let p = self.template_path(name)?;
+                std::fs::remove_file(&p).map_err(|e| {
+                    Problem::new(
+                        ProblemKind::File,
+                        format!("{} を消せません: {e}", p.display()),
+                    )
+                })?;
                 Ok(Outcome::Message(format!(
                     "テンプレート「{name}」を消しました"
                 )))
-            }));
+            })());
         }
         Some(match id {
             SAVE_TEMPLATE => {
@@ -609,18 +636,21 @@ impl Reuse {
                     info: json!({"kinds": n}),
                 })
             }
-            IMPORT_DEFAULTS => (|| {
+            IMPORT_DEFAULTS => (|| -> Result<Outcome, Problem> {
                 let p = cx.file.ok_or("読み込むファイルを選んでいません")?;
-                let s = std::fs::read_to_string(p)
-                    .map_err(|e| format!("{} を読めません: {e}", p.display()))?;
+                let s = std::fs::read_to_string(p).map_err(|e| {
+                    Problem::new(
+                        ProblemKind::File,
+                        format!("{} を読めません: {e}", p.display()),
+                    )
+                })?;
                 let v: Json = serde_json::from_str(&s)
                     .map_err(|e| format!("{} を読めません: {e}", p.display()))?;
                 let format = v.get("format").and_then(|f| f.as_str());
                 if format != Some(DEFAULTS_FORMAT) && format != Some(OLD_DEFAULTS_FORMAT) {
-                    return Err(format!(
-                        "{} は加工の既定のファイルではありません",
-                        p.display()
-                    ));
+                    return Err(
+                        format!("{} は加工の既定のファイルではありません", p.display()).into(),
+                    );
                 }
                 let new = v.get("defaults").cloned().unwrap_or(json!({}));
                 let mut all = self.defaults.read().expect("既定の鍵").clone();

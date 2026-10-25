@@ -147,7 +147,7 @@ pub fn run(
     cx: &Context<'_>,
     info: Option<&SetupInfo>,
     all: &[Strategy],
-) -> Option<Result<Outcome, String>> {
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     if id != PLACE_ENTRY && id != AUTO_ENTRY {
         return None;
     }
