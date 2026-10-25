@@ -44,7 +44,9 @@ jobs:
         with:
           cache-on-failure: true
 
-      - uses: actions/cache@v4
+      # 検査が落ちても残すので、戻すと残すを分ける(actions/cache は通った時だけ残す)
+      - id: smlib
+        uses: actions/cache/restore@v4
         with:
           path: ${{ github.workspace }}/../smlib-cache
           key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
@@ -78,6 +80,12 @@ jobs:
           fi
           echo "cargo xtask verify $args"
           cargo xtask verify $args
+
+      - uses: actions/cache/save@v4
+        if: always() && steps.smlib.outputs.cache-hit != 'true'
+        with:
+          path: ${{ github.workspace }}/../smlib-cache
+          key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
 
       - name: ログを残す
         if: failure()
