@@ -18,7 +18,13 @@ fn registry() -> Registry {
     r
 }
 
-fn extrude(profile: FeatureId, distance: &str, direction: Direction, op: Operation, target: Option<FeatureId>) -> Extrude {
+fn extrude(
+    profile: FeatureId,
+    distance: &str,
+    direction: Direction,
+    op: Operation,
+    target: Option<FeatureId>,
+) -> Extrude {
     Extrude {
         profile: Some(profile),
         distance: distance.into(),
@@ -49,11 +55,19 @@ fn plate() -> Plate {
     let mut s = SketchBuilder::new(SketchPlane::Xy);
     rect(&mut s, 0.0, 0.0, 40.0, 30.0);
     let sk = b.feature(kmb_sketch::SKETCH, "板の形", s.build());
-    let plate = b.feature(EXTRUDE, "板", extrude(sk, "t", Direction::Normal, Operation::New, None));
+    let plate = b.feature(
+        EXTRUDE,
+        "板",
+        extrude(sk, "t", Direction::Normal, Operation::New, None),
+    );
     let mut s = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
     rect(&mut s, 10.0, 10.0, 20.0, 10.0);
     let sk = b.feature(kmb_sketch::SKETCH, "ポケットの輪郭", s.build());
-    let pocket = b.feature(EXTRUDE, "ポケット", extrude(sk, "d", Direction::Reverse, Operation::Cut, Some(plate)));
+    let pocket = b.feature(
+        EXTRUDE,
+        "ポケット",
+        extrude(sk, "d", Direction::Reverse, Operation::Cut, Some(plate)),
+    );
     Plate { b, plate, pocket }
 }
 
@@ -74,7 +88,10 @@ fn sketch_on(b: &mut DocBuilder, datum: FeatureId) -> FeatureId {
 }
 
 fn status(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> FeatureStatus {
-    doc.recompute(&registry(), k).feature(id).cloned().expect("機能の結果")
+    doc.recompute(&registry(), k)
+        .feature(id)
+        .cloned()
+        .expect("機能の結果")
 }
 
 fn datum(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> Plane {
@@ -93,16 +110,29 @@ fn point(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> [f64; 3] {
     match status(doc, k, id) {
         FeatureStatus::Ok { outputs, .. } => {
             let pts = Points::from_value(&outputs["points"]).expect("点");
-            pts.plane.to_world(*pts.points.values().next().expect("点が 1 つ"))
+            pts.plane
+                .to_world(*pts.points.values().next().expect("点が 1 つ"))
         }
         other => panic!("{other:?}"),
     }
 }
 
 fn set_param(doc: &mut Document, name: &str, expr: &str) {
-    let id = doc.data().params.iter().find(|p| p.name == name).expect("パラメータ").id;
-    doc.apply(Transaction::new(name, vec![kmb_core::Op::SetParamExpr { id, expr: expr.into() }]))
-        .unwrap();
+    let id = doc
+        .data()
+        .params
+        .iter()
+        .find(|p| p.name == name)
+        .expect("パラメータ")
+        .id;
+    doc.apply(Transaction::new(
+        name,
+        vec![kmb_core::Op::SetParamExpr {
+            id,
+            expr: expr.into(),
+        }],
+    ))
+    .unwrap();
 }
 
 fn near(a: [f64; 3], b: [f64; 3]) -> bool {
@@ -113,7 +143,10 @@ fn near(a: [f64; 3], b: [f64; 3]) -> bool {
 fn a_sketch_on_a_datum_plane_follows_the_face_it_floats_over() {
     let k = SmlibKernel::new();
     let mut p = plate();
-    let top = Base::Face { feature: p.plate, face: format!("f{}:end", p.plate.0) };
+    let top = Base::Face {
+        feature: p.plate,
+        face: format!("f{}:end", p.plate.0),
+    };
     let d = p.b.feature(DATUM_PLANE, "作業平面1", offset(top, "5 mm"));
     let sk = sketch_on(&mut p.b, d);
     let mut doc = p.b.finish("板");
@@ -141,11 +174,22 @@ fn a_datum_plane_stops_instead_of_moving_to_another_face_when_its_face_is_gone()
     let faces = k.faces(body).unwrap();
     let floor = faces
         .iter()
-        .find(|f| f.planar.is_some_and(|q| q.normal[2] > 0.9 && (q.point[2] - 6.0).abs() < 1e-6))
-        .unwrap_or_else(|| panic!("ポケットの底: {:?}", faces.iter().map(|f| &f.name).collect::<Vec<_>>()))
+        .find(|f| {
+            f.planar
+                .is_some_and(|q| q.normal[2] > 0.9 && (q.point[2] - 6.0).abs() < 1e-6)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "ポケットの底: {:?}",
+                faces.iter().map(|f| &f.name).collect::<Vec<_>>()
+            )
+        })
         .name
         .clone();
-    let base = Base::Face { feature: p.pocket, face: floor.clone() };
+    let base = Base::Face {
+        feature: p.pocket,
+        face: floor.clone(),
+    };
     let d = p.b.feature(DATUM_PLANE, "作業平面1", offset(base, "1 mm"));
     let sk = sketch_on(&mut p.b, d);
     let mut doc = p.b.finish("板");
@@ -157,8 +201,14 @@ fn a_datum_plane_stops_instead_of_moving_to_another_face_when_its_face_is_gone()
         other => panic!("止まらずに {other:?}"),
     }
     // その上のスケッチも計算しない(別の平面に描かない)。ポケットとほかの機能は計算を続ける
-    assert!(matches!(status(&mut doc, &k, sk), FeatureStatus::Blocked { .. } | FeatureStatus::Error { .. }));
-    assert!(matches!(status(&mut doc, &k, p.pocket), FeatureStatus::Ok { .. }));
+    assert!(matches!(
+        status(&mut doc, &k, sk),
+        FeatureStatus::Blocked { .. } | FeatureStatus::Error { .. }
+    ));
+    assert!(matches!(
+        status(&mut doc, &k, p.pocket),
+        FeatureStatus::Ok { .. }
+    ));
 }
 
 #[test]
@@ -166,20 +216,33 @@ fn a_negative_distance_keeps_the_sketch_x_direction() {
     let k = SmlibKernel::new();
     for face in ["end", "start"] {
         let mut p = plate();
-        let base = Base::Face { feature: p.plate, face: format!("f{}:{face}", p.plate.0) };
-        let up = p.b.feature(DATUM_PLANE, "浮かせる", offset(base.clone(), "3 mm"));
+        let base = Base::Face {
+            feature: p.plate,
+            face: format!("f{}:{face}", p.plate.0),
+        };
+        let up =
+            p.b.feature(DATUM_PLANE, "浮かせる", offset(base.clone(), "3 mm"));
         let down = p.b.feature(DATUM_PLANE, "沈める", offset(base, "-3 mm"));
         let on_up = sketch_on(&mut p.b, up);
         let on_down = sketch_on(&mut p.b, down);
         let mut doc = p.b.finish("板");
         let (a, b) = (datum(&mut doc, &k, up), datum(&mut doc, &k, down));
-        assert!(near(a.x_axis, b.x_axis) && near(a.y_axis, b.y_axis), "{face}: {a:?} {b:?}");
+        assert!(
+            near(a.x_axis, b.x_axis) && near(a.y_axis, b.y_axis),
+            "{face}: {a:?} {b:?}"
+        );
         // 原点は法線に沿って 6 mm 離れ、スケッチの (5, 0) の点は同じ向きにずれる
         let n = a.normal();
         let gap = kmb_core::kernel::sub(a.origin, b.origin);
-        assert!(near(gap, kmb_core::kernel::scale(n, 6.0)), "{face}: {gap:?}");
+        assert!(
+            near(gap, kmb_core::kernel::scale(n, 6.0)),
+            "{face}: {gap:?}"
+        );
         let (pu, pd) = (point(&mut doc, &k, on_up), point(&mut doc, &k, on_down));
-        assert!(near(kmb_core::kernel::sub(pu, pd), gap), "{face}: {pu:?} {pd:?}");
+        assert!(
+            near(kmb_core::kernel::sub(pu, pd), gap),
+            "{face}: {pu:?} {pd:?}"
+        );
     }
 }
 
@@ -187,11 +250,19 @@ fn a_negative_distance_keeps_the_sketch_x_direction() {
 fn the_other_ways_make_the_plane_or_say_why_not() {
     let k = SmlibKernel::new();
     let mut p = plate();
-    let face = |n: &str| Base::Face { feature: p.plate, face: format!("f{}:{n}", p.plate.0) };
+    let face = |n: &str| Base::Face {
+        feature: p.plate,
+        face: format!("f{}:{n}", p.plate.0),
+    };
     let mid = p.b.feature(
         DATUM_PLANE,
         "中間",
-        DatumPlaneFeature { method: Method::Midplane, base: Some(face("end")), other: Some(face("start")), ..Default::default() },
+        DatumPlaneFeature {
+            method: Method::Midplane,
+            base: Some(face("end")),
+            other: Some(face("start")),
+            ..Default::default()
+        },
     );
     let tilted = p.b.feature(
         DATUM_PLANE,
@@ -208,18 +279,308 @@ fn the_other_ways_make_the_plane_or_say_why_not() {
     let three = p.b.feature(
         DATUM_PLANE,
         "3 点",
-        DatumPlaneFeature { method: Method::ThreePoints, points: vec![at([0.0, 0.0, 1.0]), at([1.0, 0.0, 1.0]), at([0.0, 1.0, 1.0])], ..Default::default() },
+        DatumPlaneFeature {
+            method: Method::ThreePoints,
+            points: vec![
+                at([0.0, 0.0, 1.0]),
+                at([1.0, 0.0, 1.0]),
+                at([0.0, 1.0, 1.0]),
+            ],
+            ..Default::default()
+        },
     );
     let line = p.b.feature(
         DATUM_PLANE,
         "一直線",
-        DatumPlaneFeature { method: Method::ThreePoints, points: vec![at([0.0; 3]), at([1.0, 0.0, 0.0]), at([2.0, 0.0, 0.0])], ..Default::default() },
+        DatumPlaneFeature {
+            method: Method::ThreePoints,
+            points: vec![at([0.0; 3]), at([1.0, 0.0, 0.0]), at([2.0, 0.0, 0.0])],
+            ..Default::default()
+        },
     );
     let mut doc = p.b.finish("板");
     assert!((datum(&mut doc, &k, mid).origin[2] - 5.0).abs() < 1e-6);
     let t = datum(&mut doc, &k, tilted);
-    assert!(near(t.x_axis, [1.0, 0.0, 0.0]) && near(t.normal(), [0.0, -1.0, 0.0]), "{t:?}");
+    assert!(
+        near(t.x_axis, [1.0, 0.0, 0.0]) && near(t.normal(), [0.0, -1.0, 0.0]),
+        "{t:?}"
+    );
     let p3 = datum(&mut doc, &k, three);
-    assert!(near(p3.origin, [0.0, 0.0, 1.0]) && near(p3.normal(), [0.0, 0.0, 1.0]), "{p3:?}");
-    assert!(matches!(status(&mut doc, &k, line), FeatureStatus::Error { message } if message.contains("一直線")));
+    assert!(
+        near(p3.origin, [0.0, 0.0, 1.0]) && near(p3.normal(), [0.0, 0.0, 1.0]),
+        "{p3:?}"
+    );
+    assert!(
+        matches!(status(&mut doc, &k, line), FeatureStatus::Error { message } if message.contains("一直線"))
+    );
+}
+
+fn output_of<T: Payload>(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> T {
+    match status(doc, k, id) {
+        FeatureStatus::Ok { outputs, .. } => {
+            T::from_value(&outputs[kmb_interchange::DATUM_OUTPUT]).expect("作業軸か作業点")
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+fn body_handle(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> kmb_core::ShapeHandle {
+    match status(doc, k, id) {
+        FeatureStatus::Ok { outputs, .. } => match outputs["body"] {
+            kmb_core::Value::Shape(h) => h,
+            _ => panic!("ボディ"),
+        },
+        other => panic!("{other:?}"),
+    }
+}
+
+/// 板の上面と、ある側面の境目の辺(両側の面の名前)。
+fn top_edge(doc: &mut Document, k: &dyn Kernel, plate: FeatureId) -> [String; 2] {
+    let body = body_handle(doc, k, plate);
+    let top = format!("f{}:end", plate.0);
+    k.edges(body)
+        .unwrap()
+        .into_iter()
+        .find(|e| e.faces.contains(&top))
+        .expect("上面の辺")
+        .faces
+}
+
+#[test]
+fn a_datum_axis_on_an_edge_follows_the_size_and_turns_a_body() {
+    use kmb_cad_datum::{AxisMethod, DATUM_AXIS, DatumAxisFeature, axis::EdgeRef};
+    let k = SmlibKernel::new();
+    let mut p = plate();
+    let mut probe = plate().b.finish("確かめ");
+    let faces = top_edge(&mut probe, &k, p.plate);
+    let edge = p.b.feature(
+        DATUM_AXIS,
+        "作業軸1",
+        DatumAxisFeature {
+            method: AxisMethod::Edge,
+            edge: Some(EdgeRef {
+                feature: p.plate,
+                faces,
+            }),
+            ..Default::default()
+        },
+    );
+    // 原点の YZ 平面と ZX 平面の交わりは Z 軸。それで板を 90° 回す
+    let z = p.b.feature(
+        DATUM_AXIS,
+        "作業軸2",
+        DatumAxisFeature {
+            method: AxisMethod::TwoPlanes,
+            base: Some(Base::Yz),
+            other: Some(Base::Zx),
+            ..Default::default()
+        },
+    );
+    let parallel = p.b.feature(
+        DATUM_AXIS,
+        "平行",
+        DatumAxisFeature {
+            method: AxisMethod::TwoPlanes,
+            base: Some(Base::Xy),
+            other: Some(Base::Xy),
+            ..Default::default()
+        },
+    );
+    let turn = p.b.feature(
+        kmb_cad_modify::MOVE,
+        "回す",
+        serde_json::json!({"body": p.pocket, "mode": "rotate", "axis_ref": {"kind": "datum", "feature": z.0}, "angle": "90 deg"}),
+    );
+    let mut doc = p.b.finish("板");
+    let a: kmb_interchange::DatumAxis = output_of(&mut doc, &k, edge);
+    assert!((a.at[2] - 10.0).abs() < 1e-6, "{a:?}");
+    let zaxis: kmb_interchange::DatumAxis = output_of(&mut doc, &k, z);
+    assert!(
+        near(zaxis.at, [0.0; 3]) && (zaxis.dir[2].abs() - 1.0).abs() < 1e-9,
+        "{zaxis:?}"
+    );
+    assert!(
+        matches!(status(&mut doc, &k, parallel), FeatureStatus::Error { message } if message.contains("平行"))
+    );
+    // 板(x 0〜40、y 0〜30)を Z のまわりに 90° 回すと x -30〜0、y 0〜40(向きは軸の向きの右ねじ)
+    let (lo, hi) = k.bounds(body_handle(&mut doc, &k, turn)).unwrap();
+    let s = zaxis.dir[2].signum();
+    let (want_lo, want_hi) = if s > 0.0 {
+        ([-30.0, 0.0], [0.0, 40.0])
+    } else {
+        ([0.0, -40.0], [30.0, 0.0])
+    };
+    assert!(
+        (0..2).all(|i| (lo[i] - want_lo[i]).abs() < 1e-3 && (hi[i] - want_hi[i]).abs() < 1e-3),
+        "{lo:?} {hi:?}"
+    );
+    // 板を厚くすると、辺の作業軸も上がる
+    set_param(&mut doc, "t", "12 mm");
+    let a2: kmb_interchange::DatumAxis = output_of(&mut doc, &k, edge);
+    assert!((a2.at[2] - 12.0).abs() < 1e-6, "{a2:?}");
+}
+
+#[test]
+fn datum_points_make_axes_and_planes_and_follow_the_corner() {
+    use kmb_cad_datum::{AxisMethod, DATUM_AXIS, DATUM_POINT, DatumAxisFeature, DatumPointFeature};
+    let k = SmlibKernel::new();
+    let mut p = plate();
+    // 上面の角(z = t)を 1 つ取る
+    let mut probe = plate().b.finish("確かめ");
+    let body = body_handle(&mut probe, &k, p.plate);
+    let corner = kmb_core::vertices(&k, body)
+        .into_iter()
+        .find(|v| (v.at[2] - 10.0).abs() < 1e-6 && v.at[0].abs() < 1e-6 && v.at[1].abs() < 1e-6)
+        .expect("上面の角 (0, 0, 10)");
+    let on_corner = p.b.feature(
+        DATUM_POINT,
+        "作業点1",
+        DatumPointFeature {
+            point: Point::Vertex {
+                feature: p.plate,
+                vertex: corner.name.clone(),
+            },
+        },
+    );
+    let at = p.b.feature(
+        DATUM_POINT,
+        "作業点2",
+        DatumPointFeature {
+            point: Point::At {
+                at: [10.0, 0.0, 0.0],
+            },
+        },
+    );
+    let third = p.b.feature(
+        DATUM_POINT,
+        "作業点3",
+        DatumPointFeature {
+            point: Point::At {
+                at: [0.0, 10.0, 0.0],
+            },
+        },
+    );
+    let axis = p.b.feature(
+        DATUM_AXIS,
+        "2 点",
+        DatumAxisFeature {
+            method: AxisMethod::TwoPoints,
+            points: vec![
+                Point::Datum { feature: at },
+                Point::Datum { feature: on_corner },
+            ],
+            ..Default::default()
+        },
+    );
+    let same = p.b.feature(
+        DATUM_AXIS,
+        "重なる 2 点",
+        DatumAxisFeature {
+            method: AxisMethod::TwoPoints,
+            points: vec![Point::Datum { feature: at }, Point::Datum { feature: at }],
+            ..Default::default()
+        },
+    );
+    let plane = p.b.feature(
+        DATUM_PLANE,
+        "3 点",
+        DatumPlaneFeature {
+            method: Method::ThreePoints,
+            points: vec![
+                Point::Datum { feature: on_corner },
+                Point::Datum { feature: at },
+                Point::Datum { feature: third },
+            ],
+            ..Default::default()
+        },
+    );
+    let mut doc = p.b.finish("板");
+    let c: kmb_interchange::DatumPoint = output_of(&mut doc, &k, on_corner);
+    assert!(near(c.at, [0.0, 0.0, 10.0]), "{c:?}");
+    let a: kmb_interchange::DatumAxis = output_of(&mut doc, &k, axis);
+    assert!(near(a.at, [10.0, 0.0, 0.0]), "{a:?}");
+    let len = 200.0f64.sqrt();
+    assert!(near(a.dir, [-10.0 / len, 0.0, 10.0 / len]), "{a:?}");
+    assert!(
+        matches!(status(&mut doc, &k, same), FeatureStatus::Error { message } if message.contains("重なって"))
+    );
+    assert!(near(datum(&mut doc, &k, plane).origin, [0.0, 0.0, 10.0]));
+    // 板を厚くすると、角の作業点と、それを使う作業軸・作業平面が付いて来る
+    set_param(&mut doc, "t", "12 mm");
+    let c2: kmb_interchange::DatumPoint = output_of(&mut doc, &k, on_corner);
+    assert!(near(c2.at, [0.0, 0.0, 12.0]), "{c2:?}");
+    assert!(near(datum(&mut doc, &k, plane).origin, [0.0, 0.0, 12.0]));
+}
+
+#[test]
+fn a_cylinder_gives_its_axis_and_its_circle_gives_a_center() {
+    use kmb_cad_datum::{
+        AxisMethod, DATUM_AXIS, DATUM_POINT, DatumAxisFeature, DatumPointFeature, axis::FaceRef,
+    };
+    let k = SmlibKernel::new();
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(SketchPlane::Xy);
+    let c = s.fixed_point(5.0, 7.0);
+    s.circle(c, "6 mm", 3.0);
+    let sk = b.feature(kmb_sketch::SKETCH, "円", s.build());
+    let rod = b.feature(
+        EXTRUDE,
+        "棒",
+        extrude(sk, "20 mm", Direction::Normal, Operation::New, None),
+    );
+    let mut probe = {
+        let mut b2 = DocBuilder::new();
+        let mut s = SketchBuilder::new(SketchPlane::Xy);
+        let c = s.fixed_point(5.0, 7.0);
+        s.circle(c, "6 mm", 3.0);
+        let sk = b2.feature(kmb_sketch::SKETCH, "円", s.build());
+        b2.feature(
+            EXTRUDE,
+            "棒",
+            extrude(sk, "20 mm", Direction::Normal, Operation::New, None),
+        );
+        b2.finish("確かめ")
+    };
+    let body = body_handle(&mut probe, &k, rod);
+    let arc = k
+        .arc_edges(body)
+        .unwrap()
+        .into_iter()
+        .next()
+        .expect("円の辺");
+    let axis = b.feature(
+        DATUM_AXIS,
+        "円筒の軸",
+        DatumAxisFeature {
+            method: AxisMethod::Cylinder,
+            face: Some(FaceRef {
+                feature: rod,
+                face: arc.faces[1].clone(),
+            }),
+            ..Default::default()
+        },
+    );
+    let center = b.feature(
+        DATUM_POINT,
+        "中心",
+        DatumPointFeature {
+            point: Point::Center {
+                feature: rod,
+                faces: arc.faces.clone(),
+            },
+        },
+    );
+    let mut doc = b.finish("棒");
+    let a: kmb_interchange::DatumAxis = output_of(&mut doc, &k, axis);
+    assert!(
+        (a.at[0] - 5.0).abs() < 1e-6
+            && (a.at[1] - 7.0).abs() < 1e-6
+            && (a.dir[2].abs() - 1.0).abs() < 1e-9,
+        "{a:?}"
+    );
+    let p: kmb_interchange::DatumPoint = output_of(&mut doc, &k, center);
+    assert!(
+        (p.at[0] - 5.0).abs() < 1e-6 && (p.at[1] - 7.0).abs() < 1e-6,
+        "{p:?}"
+    );
 }

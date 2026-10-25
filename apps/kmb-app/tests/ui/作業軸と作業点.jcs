@@ -1,0 +1,26 @@
+# 作業軸と作業点: 板の上面の向かい合う角を 2 つ選んで構築のまとまりから作業軸を押すと、2 点を通る作業軸が
+# 灰色の線で出る。角を 1 つ選んで作業点を押すと、その角に作業点が灰色の点で出る。
+#! sample part
+#! size 1280x800
+
+click "構築 ▾"
+shot 構築の一覧
+key Escape
+pick f8:end|f8:side:e5|f8:side:e6
+pick f8:end|f8:side:e7|f8:side:e8 ctrl
+click "構築 ▾"
+click "作業軸"
+wait
+expect "作業軸1" exists
+key Enter
+pick f8:end|f8:side:e5|f8:side:e6
+click "構築 ▾"
+click "作業点"
+wait
+expect "作業点1" exists
+key Enter
+wait
+click "そのほかの機能"
+expect "作業軸1" exists
+expect "作業点1" exists
+shot 作業軸と作業点

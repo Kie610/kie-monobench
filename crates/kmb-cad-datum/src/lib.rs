@@ -1,20 +1,28 @@
-//! 作業平面(`cad.datum_plane@1`)。面・平面から浮かせる、軸のまわりに傾ける、2 つの平らな面の
-//! 真ん中、3 点を通る、の 4 つの作り方を 1 つの機能で持ち、出力 [`DATUM_OUTPUT`] に平面の形
-//! ([`DatumPlane`])を出す。スケッチはこの平面の上に描ける(`SketchPlane::Datum`)。
+//! 作業平面(`cad.datum_plane@1`)・作業軸(`cad.datum_axis@1`)・作業点(`cad.datum_point@1`)。
+//! 作業平面は面・平面から浮かせる、軸のまわりに傾ける、2 つの平らな面の真ん中、3 点を通る、の 4 つの
+//! 作り方を 1 つの機能で持ち、出力 [`DATUM_OUTPUT`] に平面の形([`DatumPlane`])を出す。スケッチは
+//! この平面の上に描ける(`SketchPlane::Datum`)。作業軸([`axis`])は回転・パターン・移動の軸に、
+//! 作業点([`point`])は作業平面の 3 点と作業軸の 2 点に使える。
 //!
 //! 元の面・辺・角は名前で指すので、寸法を変えても付いて来る。元が消えたら別の面に付け替えず、
 //! この機能を理由つきの誤りにする(その上のスケッチも誤りになる)。X・Y の向きは元の平面のまま
 //! (浮かせる距離が負でも入れ替えない)。
+pub mod axis;
 mod commands;
+pub mod point;
 
 use kmb_cad::*;
 use kmb_core::kernel::{self as k, P3, Plane};
-use kmb_core::{EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, Payload, Registry};
+use kmb_core::{
+    EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, Payload, Registry,
+};
 use kmb_interchange::{DATUM_OUTPUT, DatumPlane};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-pub use commands::{ADD_DATUM_PLANE, DatumCommands};
+pub use axis::{AxisMethod, DATUM_AXIS, DatumAxisFeature};
+pub use commands::{ADD_DATUM_AXIS, ADD_DATUM_PLANE, ADD_DATUM_POINT, DatumCommands};
+pub use point::{DATUM_POINT, DatumPointFeature};
 
 pub const DATUM_PLANE: &str = "cad.datum_plane@1";
 
@@ -48,12 +56,17 @@ pub enum Base {
     Yz,
     Zx,
     /// 機能 `feature` のボディの平らな面 `face`
-    Face { feature: FeatureId, face: String },
+    Face {
+        feature: FeatureId,
+        face: String,
+    },
     /// 別の作業平面
-    Datum { feature: FeatureId },
+    Datum {
+        feature: FeatureId,
+    },
 }
 
-const BASES: &[(&str, &str)] = &[
+pub(crate) const BASES: &[(&str, &str)] = &[
     ("xy", "原点の XY 平面"),
     ("yz", "原点の YZ 平面"),
     ("zx", "原点の ZX 平面"),
@@ -75,7 +88,7 @@ pub enum Axis {
     },
 }
 
-/// 3 点の 1 つ。
+/// 点(作業平面の 3 点・作業軸の 2 点・作業点)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Point {
@@ -83,6 +96,71 @@ pub enum Point {
     Vertex { feature: FeatureId, vertex: String },
     /// 座標(mm)
     At { at: P3 },
+    /// ボディの円の辺(両側の面の名前)の中心
+    Center {
+        feature: FeatureId,
+        faces: [String; 2],
+    },
+    /// 作業点
+    Datum { feature: FeatureId },
+}
+
+impl Point {
+    fn input(&self) -> Option<InputRef> {
+        match self {
+            Point::Vertex { feature, .. } | Point::Center { feature, .. } => {
+                Some(output(*feature, "body"))
+            }
+            Point::Datum { feature } => Some(output(*feature, DATUM_OUTPUT)),
+            Point::At { .. } => None,
+        }
+    }
+
+    /// 世界座標の位置。元が消えたら別の物に付け替えず誤りにする。
+    pub(crate) fn resolve(&self, ctx: &EvalCtx<'_>) -> Result<P3, EvalError> {
+        match self {
+            Point::At { at } => Ok(*at),
+            Point::Vertex { feature, vertex } => {
+                let body = body_of(ctx, *feature)?;
+                kmb_core::vertices(ctx.kernel(), body)
+                    .into_iter()
+                    .find(|v| &v.name == vertex)
+                    .map(|v| v.at)
+                    .ok_or_else(|| {
+                        EvalError::InvalidData(format!(
+                            "点にした角 {vertex} が見つかりません(寸法を変えて角が無くなりました)。点を選び直してください"
+                        ))
+                    })
+            }
+            Point::Center { feature, faces } => {
+                let body = body_of(ctx, *feature)?;
+                let same = |f: &[String; 2]| f == faces || (f[0] == faces[1] && f[1] == faces[0]);
+                ctx.kernel()
+                    .arc_edges(body)
+                    .map_err(kernel_err)?
+                    .into_iter()
+                    .find(|e| same(&e.faces))
+                    .and_then(|e| e.arc)
+                    .map(|a| a.center)
+                    .ok_or_else(|| {
+                        EvalError::InvalidData(format!(
+                            "点にした円の辺(面 {} の境目)が見つかりません。点を選び直してください",
+                            faces.join("・")
+                        ))
+                    })
+            }
+            Point::Datum { feature } => kmb_interchange::datum_point(ctx, *feature),
+        }
+    }
+}
+
+/// 点の入力を `add` に足す(同じ物は 1 回)。
+pub(crate) fn point_inputs(points: &[Point], v: &mut Vec<InputRef>) {
+    for i in points.iter().filter_map(Point::input) {
+        if !v.contains(&i) {
+            v.push(i);
+        }
+    }
 }
 
 /// 作業平面。例: `{"method": "offset", "base": {"kind": "face", "feature": 2, "face": "f2:end"},
@@ -138,7 +216,7 @@ impl Exprs for DatumPlaneFeature {
     }
 }
 
-fn need<T>(v: &Option<T>, what: &str) -> Result<T, EvalError>
+pub(crate) fn need<T>(v: &Option<T>, what: &str) -> Result<T, EvalError>
 where
     T: Clone,
 {
@@ -147,7 +225,7 @@ where
 }
 
 impl Base {
-    fn input(&self) -> Option<InputRef> {
+    pub(crate) fn input(&self) -> Option<InputRef> {
         match self {
             Base::Face { feature, .. } => Some(output(*feature, "body")),
             Base::Datum { feature } => Some(output(*feature, DATUM_OUTPUT)),
@@ -156,7 +234,7 @@ impl Base {
     }
 
     /// 平面と、画面に描く四角(平面の座標の最小・最大)の目安。
-    fn resolve(&self, ctx: &EvalCtx<'_>) -> Result<(Plane, [[f64; 2]; 2]), EvalError> {
+    pub(crate) fn resolve(&self, ctx: &EvalCtx<'_>) -> Result<(Plane, [[f64; 2]; 2]), EvalError> {
         let origin_rect = [[0.0, 0.0], [ORIGIN_SIZE, ORIGIN_SIZE]];
         Ok(match self {
             Base::Xy => (Plane::XY, origin_rect),
@@ -185,9 +263,14 @@ impl Base {
                 (plane, rect_of(&plane, &box_corners(lo, hi)))
             }
             Base::Datum { feature } => {
-                let d = DatumPlane::from_value(ctx.output(*feature, DATUM_OUTPUT)?).ok_or_else(|| {
-                    EvalError::InvalidData(format!("機能 {} は作業平面ではありません", feature.0))
-                })?;
+                let d = DatumPlane::from_value(ctx.output(*feature, DATUM_OUTPUT)?).ok_or_else(
+                    || {
+                        EvalError::InvalidData(format!(
+                            "機能 {} は作業平面ではありません",
+                            feature.0
+                        ))
+                    },
+                )?;
                 (d.plane, d.rect)
             }
         })
@@ -221,7 +304,10 @@ fn rect_of(plane: &Plane, pts: &[P3]) -> [[f64; 2]; 2] {
         }
     }
     let pad = ((r[1][0] - r[0][0]).max(r[1][1] - r[0][1]) * 0.1).max(2.0);
-    [[r[0][0] - pad, r[0][1] - pad], [r[1][0] + pad, r[1][1] + pad]]
+    [
+        [r[0][0] - pad, r[0][1] - pad],
+        [r[1][0] + pad, r[1][1] + pad],
+    ]
 }
 
 /// `p` を、`at` を通る向き `dir`(長さ 1)の軸のまわりに `t` rad 回す(右ねじ)。
@@ -262,24 +348,6 @@ impl DatumPlaneFeature {
         })
     }
 
-    fn point(&self, ctx: &EvalCtx<'_>, p: &Point) -> Result<P3, EvalError> {
-        match p {
-            Point::At { at } => Ok(*at),
-            Point::Vertex { feature, vertex } => {
-                let body = body_of(ctx, *feature)?;
-                kmb_core::vertices(ctx.kernel(), body)
-                    .into_iter()
-                    .find(|v| &v.name == vertex)
-                    .map(|v| v.at)
-                    .ok_or_else(|| {
-                        EvalError::InvalidData(format!(
-                            "作業平面の点にした角 {vertex} が見つかりません。点を選び直してください"
-                        ))
-                    })
-            }
-        }
-    }
-
     /// 作業平面と、画面に描く四角。
     pub fn plane(&self, ctx: &EvalCtx<'_>) -> Result<DatumPlane, EvalError> {
         let (plane, rect) = match self.method {
@@ -307,10 +375,15 @@ impl DatumPlaneFeature {
                     y_axis: rotate_vec(p.y_axis, dir, t),
                 };
                 // 四角は元の四角の角を回した物から取り直す
-                let corners: Vec<P3> = [rect[0], [rect[1][0], rect[0][1]], rect[1], [rect[0][0], rect[1][1]]]
-                    .iter()
-                    .map(|uv| rotate(p.to_world(*uv), at, dir, t))
-                    .collect();
+                let corners: Vec<P3> = [
+                    rect[0],
+                    [rect[1][0], rect[0][1]],
+                    rect[1],
+                    [rect[0][0], rect[1][1]],
+                ]
+                .iter()
+                .map(|uv| rotate(p.to_world(*uv), at, dir, t))
+                .collect();
                 (turned, rect_of(&turned, &corners))
             }
             Method::Midplane => {
@@ -319,7 +392,8 @@ impl DatumPlaneFeature {
                 let (na, nb) = (a.normal(), b.normal());
                 if k::dot(k::cross(na, nb), k::cross(na, nb)) > 1e-12 {
                     return Err(EvalError::InvalidData(
-                        "中間平面の 2 つの面が平行ではありません。平行な 2 つの面を選んでください".into(),
+                        "中間平面の 2 つの面が平行ではありません。平行な 2 つの面を選んでください"
+                            .into(),
                     ));
                 }
                 let d = k::dot(k::sub(b.origin, a.origin), na);
@@ -344,7 +418,7 @@ impl DatumPlaneFeature {
                 let p: Vec<P3> = self
                     .points
                     .iter()
-                    .map(|q| self.point(ctx, q))
+                    .map(|q| q.resolve(ctx))
                     .collect::<Result<_, _>>()?;
                 let (u, v) = (k::sub(p[1], p[0]), k::sub(p[2], p[0]));
                 let n = k::cross(u, v);
@@ -388,15 +462,11 @@ impl Feature for DatumPlaneFeature {
         {
             add(output(*feature, "body"));
         }
-        if self.method == Method::ThreePoints {
-            for p in &self.points {
-                if let Point::Vertex { feature, .. } = p {
-                    add(output(*feature, "body"));
-                }
-            }
-        }
         for i in expr_refs(self)? {
             add(i);
+        }
+        if self.method == Method::ThreePoints {
+            point_inputs(&self.points, &mut v);
         }
         Ok(v)
     }
@@ -447,6 +517,8 @@ pub fn register(reg: &mut Registry) {
             .template(json!({"method": "offset", "base": {"kind": "xy"}, "distance": "10 mm"})),
         |d| Ok(Box::new(parse::<DatumPlaneFeature>(d)?)),
     );
+    axis::register(reg);
+    point::register(reg);
 }
 
 /// この crate の名乗り(登録する種類と操作)。組み立て(kmb-bundle)が 1 回だけ並べる。

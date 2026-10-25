@@ -1,6 +1,6 @@
 //! 軸の選び方の共通部: 原点の X・Y・Z 軸と、スケッチの線と、ボディの辺(回転、円形・直線の
 //! パターン、移動が使う)。軸を選ぶ間は原点の軸と見えているスケッチの線とボディの
-//! まっすぐな辺・円の辺をクリックで選べる(円の辺はその円の軸。穴やボスの軸のまわりに並べる)。
+//! まっすぐな辺・円の辺と作業軸をクリックで選べる(円の辺はその円の軸。穴やボスの軸のまわりに並べる)。
 use crate::output;
 use kmb_core::kernel::{self as k, P3};
 use kmb_core::{
@@ -34,11 +34,15 @@ pub enum AxisRef {
         feature: FeatureId,
         faces: [String; 2],
     },
+    /// 作業軸の機能 `feature`(kmb-cad-datum)。作業軸を作れなかった時は、別の軸に替えず誤りにする
+    Datum {
+        feature: FeatureId,
+    },
 }
 
-/// 軸の欄の選択肢(`Vector` の名前は機能ごと)。`edge` は軸を選ぶ手順でボディの辺をクリックした時
-/// だけ入るので、欄では隠す(`Field::hide_choice`)。
-pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 6] {
+/// 軸の欄の選択肢(`Vector` の名前は機能ごと)。`edge` と `datum` は軸を選ぶ手順でボディの辺か作業軸を
+/// クリックした時だけ入るので、欄では隠す(`Field::hide_choice`)。
+pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 7] {
     [
         ("vector", vector),
         ("origin_x", "原点の X 軸"),
@@ -46,6 +50,7 @@ pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 
         ("origin_z", "原点の Z 軸"),
         ("line", "スケッチの線(クリックで選ぶ)"),
         ("edge", "ボディの辺"),
+        ("datum", "作業軸"),
     ]
 }
 
@@ -61,6 +66,7 @@ impl AxisRef {
                 sketch: Some(s), ..
             } => vec![output(*s, "points")],
             AxisRef::Edge { feature, .. } => vec![output(*feature, "body")],
+            AxisRef::Datum { feature } => vec![output(*feature, kmb_interchange::DATUM_OUTPUT)],
             _ => Vec::new(),
         }
     }
@@ -94,11 +100,25 @@ impl AxisRef {
                     ))
                 })?
             }
+            AxisRef::Datum { feature } => kmb_interchange::datum_axis(ctx, feature)?,
         }))
     }
 
     /// 軸を選ぶ手順で選んだ値([`axis_choices`] の値)から。
     pub fn from_choice(v: &serde_json::Value, cx: &Context<'_>) -> Result<Self, String> {
+        if let Some(n) = v.get("datum") {
+            let feature = n
+                .as_u64()
+                .map(FeatureId)
+                .ok_or("datum に作業軸の機能の番号を指定します")?;
+            if kmb_interchange::datum_axes(cx, None)
+                .iter()
+                .all(|(f, ..)| *f != feature)
+            {
+                return Err(format!("機能 {} は作業軸ではありません", feature.0));
+            }
+            return Ok(AxisRef::Datum { feature });
+        }
         if let Some(edge) = v.get("edge") {
             let faces: [String; 2] = serde_json::from_value(edge.clone())
                 .map_err(|_| "edge は辺の両側の面の名前 2 つで指定します")?;
@@ -154,6 +174,19 @@ pub fn edge_axis(
     line_of(e)
 }
 
+/// 機能 `feature` のボディの、両側の面が `faces` の辺が円の辺か。
+pub fn is_arc_edge(cx: &Context<'_>, feature: FeatureId, faces: &[String; 2]) -> bool {
+    let Some(kmb_core::Value::Shape(shape)) = cx.output(feature, "body") else {
+        return false;
+    };
+    cx.kernel.arc_edges(*shape).is_ok_and(|es| {
+        es.iter().any(|e| {
+            (e.faces[0] == faces[0] && e.faces[1] == faces[1])
+                || (e.faces[0] == faces[1] && e.faces[1] == faces[0])
+        })
+    })
+}
+
 /// 辺を軸にした時の通る点と向き([`edge_axis`])。
 fn line_of(e: &kmb_core::EdgeInfo) -> Option<(P3, P3)> {
     if let Some(a) = &e.arc {
@@ -186,6 +219,13 @@ fn edge_outline(e: &kmb_core::EdgeInfo) -> Vec<P3> {
             )
         })
         .collect()
+}
+
+/// 画面の計算済みの結果から、作業軸 `feature` の通る点と向き(まだ計算できていなければ `None`)。
+pub fn datum_axis_now(cx: &Context<'_>, feature: FeatureId) -> Option<(P3, P3)> {
+    let d =
+        kmb_interchange::DatumAxis::from_value(cx.output(feature, kmb_interchange::DATUM_OUTPUT)?)?;
+    Some((d.at, d.dir))
 }
 
 /// 原点の X・Y・Z 軸(`i` = 0・1・2)の通る点と向き。
@@ -243,7 +283,8 @@ pub fn sketch_lines(cx: &Context<'_>, sketch: FeatureId) -> Vec<(u64, PointId, P
 
 /// 軸を選ぶ手順の候補: 原点の X・Y・Z 軸(値 `"x"` など)と、機能 `before` より前の、隠していない
 /// スケッチの線(値 `{"sketch": 番号, "line": 線の番号}`。隠したスケッチは画面が外す)と、その時に
-/// 見えているボディのまっすぐな辺・円の辺(値 `{"feature": 番号, "edge": [面, 面]}`)。
+/// 見えているボディのまっすぐな辺・円の辺(値 `{"feature": 番号, "edge": [面, 面]}`)と、`before` より前の
+/// 作業軸(値 `{"datum": 番号}`)。
 /// `skip` のスケッチの線は入れない(回転の輪郭のスケッチなど、呼ぶ側が別の値で出すもの)。
 /// `normal` があれば、それに平行な軸(輪郭の平面に垂直な軸)は入れない。
 pub fn axis_choices(
@@ -330,5 +371,14 @@ pub fn axis_choices_where(
             });
         }
     }
+    // 作業軸
+    let axes = kmb_interchange::datum_axes(cx, until);
+    v.extend(
+        kmb_interchange::datum_axis_choices(cx, until)
+            .into_iter()
+            .zip(axes)
+            .filter(|(_, (_, _, d))| usable(d.at, d.dir))
+            .map(|(c, _)| c),
+    );
     v
 }
