@@ -127,6 +127,7 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ("消えたテスト", "xtask/src/skips.rs", "pub fn removed("),
     ("待ちの時間切れ", "xtask/src/skips.rs", "fn wait_loops("),
     ("資料", "xtask/src/docs.rs", "pub fn check("),
+    ("使う人向けの資料", "xtask/src/prose.rs", "pub fn check("),
     (
         "採用分の仕分け",
         "xtask/src/docs.rs",
