@@ -1,9 +1,9 @@
 <h1 align="center">kieMonoBench</h1>
 
 <p align="center">
-  <strong>設計したモデルをそのまま加工へ回せる、Rust のパラメトリック 3D CAD・CAM。</strong><br />
-  スケッチに拘束と寸法を付けて形を作り、同じタイムラインで加工の経路まで作る。寸法を変えると形も経路も作り直される。
-  画面・コマンド(CLI)・AI(MCP)のどれからも同じ操作ができる。
+  <strong>設計したモデルをそのまま加工に使える、Rust 製のパラメトリック 3D CAD・CAM です。</strong><br />
+  スケッチに拘束と寸法を付けて形を作り、同じタイムラインでツールパスまで作ります。寸法を変えると、形もツールパスも作り直されます。
+  画面・コマンド(CLI)・AI(MCP)のどれからも、同じ操作ができます。
 </p>
 
 <p align="center">
@@ -19,53 +19,62 @@
   日本語 · <a href="README.en.md">English</a>
 </p>
 
-![AI のエージェントが人と同じ速さで取付け板を設計し、削る動きを作り、パラメータの幅を 80 mm から 110 mm に変えて形と削る動きを作り直すところ](docs/screenshots/demo.gif)
+![AI のエージェントが取付け板を設計してツールパスを作り、パラメータ「幅」を 80 mm から 110 mm に変えて作り直すところ](docs/screenshots/demo.gif)
 
-*用例: 穴が 4 つある基板の取付け板。AI のエージェントが、人と同じ速さで画面を操作して作る(ボタンは MCP の `app` の道具で押し、図の上の点と寸法の数字は仮想のマウスとキーで打つ)。穴の位置は外形を 8 mm 内側へずらした補助線の角に置き、径は 1 つ目だけ打って残りは「等しい」でそろえる。外形の横の寸法をパラメータ「幅」につないでおくと、幅を 80 mm から 110 mm に変えた時に、穴の位置も穴あけと外周の削る動きも作り直される。*
+*穴が 4 つある基板の取付け板を、AI のエージェントが画面を操作して作る様子です。外形の横の寸法をパラメータ「幅」につないであるので、幅を 80 mm から 110 mm に変えると、穴の位置とツールパスも作り直されます。*
 
-![設計の作業空間で、見本の板の押し出しを編集し、両方向に伸ばす予告を出したところ](docs/screenshots/design.png)
+![設計の作業空間で、見本の板の押し出しを編集しているところ](docs/screenshots/design.png)
 
-*設計の作業空間。上に作業空間ごとのツールバー、左にブラウザ、下にタイムライン、右に編集パネル。見本の板の押し出しを開き、方向を「両方向」にして裏側の距離を打つと、変えた後の形が青く予告される。*
+*設計の作業空間です。上に作業空間ごとのツールバー、左にブラウザ、下にタイムライン、右に編集パネルがあります。押し出しの方向を「両方向」にすると、変えた後の形が青くプレビューされます。*
 
-![加工の作業空間で、3D 粗取りの欄を直しながら経路を予告しているところ](docs/screenshots/machining.png)
+![加工の作業空間で、3D 粗取りの欄を直しながらツールパスをプレビューしているところ](docs/screenshots/machining.png)
 
-*加工の作業空間。左のセットアップの木に設計の形から作った加工が並ぶ。3D 粗取りの輪を渦巻きにつなぎ角を丸めると、経路が作り直され、安全高さ・送り高さ・トップ高さ・ボトム高さの札とともに出る。*
+*加工の作業空間です。左のセットアップの木に、設計の形から作った加工が並びます。3D 粗取りの欄を直すとツールパスが作り直され、安全高さ・送り高さ・トップ高さ・ボトム高さの札と一緒に表示されます。*
 
-配る版(Windows 10・11 の x64、Linux の x86_64)は[最新版の頁](https://github.com/Kie610/kie-monobench/releases/latest)から落とし、展開してそのまま起動する(入れる手順は要らない)。署名はまだ無いので、Windows では初回に確認の窓が出ることがある。まだ開発の途中で、できないことと今後の予定は [docs/できないことと予定.md](docs/できないことと予定.md) にまとめた。ソースから組み立てる時は「組み立て」の節。
+## ダウンロード
 
-画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp`(crate は今までどおり `kmb-cli`・`kmb-mcp`)。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
+Windows 10・11(x64)と Linux(x86_64)向けのアプリを、[最新のリリース](https://github.com/Kie610/kie-monobench/releases/latest)からダウンロードできます。展開すればそのまま起動でき、インストールは要りません。
 
-## 何ができるか
+アプリにはまだ署名がありません。Windows では、初めて起動した時に警告のダイアログが出ることがあります。
 
-- **スケッチ**: 線分・長方形・円・円弧・長穴・多角形・楕円・スプライン・円錐曲線・文字。拘束と寸法で決め、寸法はパラメータの式で書ける。3D スケッチと下絵(キャンバス)もある。
-- **形を作る**: 押し出し・回転・穴とねじ・スイープ・ロフト・フィレット・面取り・シェル・ブーリアン・ボディの分割・移動とコピー・面のオフセット・パターン・ミラー。すべてタイムラインに並び、あとから直せる。
-- **パラメータと構成**: 単位つきの式(mm・in など)、パラメータの表、構成表(寸法の組を切り替える)。
-- **組立**: 部品、ジョイント、剛性グループ、モーション スタディ、接触セット、干渉の確かめ、規格部品、部品表、ほかのファイルをリンクで挿入。
-- **加工(CAM)**: セットアップ(ストック・原点・固定具)、2D の加工(負荷制御粗取り・ポケット・フェイス・輪郭・スロット・彫刻・V 彫り・面取り・ねじ切り・穴あけ)、3D の加工(3D 粗取り・走査線・等高線・スキャロップ・ペンシル・渦巻き・放射状ほか)、レーザー。複数の工具を使い、細い工具で残りを削る。
-- **確かめる**: 削るシミュレーション(食い込み・削り残し・ホルダーの当たり)、書き出した G-code を読み直して削る確かめ、加工指示書(Markdown・HTML)。
-- **レンダリングとアニメーション**: 外観・光源・デカール、静止画と回す動画、分解とジョイントの動きの動画。
-- **解析**: 強度と熱、流れと空力。
-- **ファイルと版**: 文書はローカルの JSON で、ネットを使わない。保存のたびに版が残り、前の版と見比べて戻せる。
-- **画面・CLI・MCP**: 同じ操作の宣言と確かめを通る。操作と道具の一覧は [docs/入出力.md](docs/入出力.md)(登録から生成)。
+まだ開発の途中です。できないことと今後の予定は [docs/できないことと予定.md](docs/できないことと予定.md) にあります。
 
-## 対応する機械と形式
+画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp` です。文書の拡張子は `.kmb` で、中身は JSON です。前の仮の名前 `jisaku-cadcam` のデータフォルダは最初の起動で引き継ぎ、拡張子が `.json` の文書もそのまま開けます。
+
+## できること
+
+| 分野 | できること |
+|---|---|
+| スケッチ | 線分・長方形・円・円弧・長穴・多角形・楕円・スプライン・円錐曲線・文字を描き、拘束と寸法で決めます。寸法はパラメータの式で書けます。3D スケッチと下絵(キャンバス)もあります |
+| 形を作る | 押し出し・回転・穴とねじ・スイープ・ロフト・フィレット・面取り・シェル・ブーリアン・ボディの分割・移動とコピー・面のオフセット・パターン・ミラーがあります。どれもタイムラインに並び、後から直せます |
+| パラメータと構成 | 単位つきの式(mm・in など)、パラメータの表、寸法の組を切り替える構成表があります |
+| 組立 | 部品、ジョイント、剛性グループ、モーション スタディ、接触セット、干渉の確認、規格部品、部品表があり、ほかのファイルをリンクで挿入できます |
+| 加工(CAM) | セットアップでストック・原点・固定具を決めます。2D の加工は負荷制御粗取り・ポケット・フェイス・輪郭・スロット・彫刻・V 彫り・面取り・ねじ切り・穴あけ、3D の加工は 3D 粗取り・走査線・等高線・スキャロップ・ペンシル・渦巻き・放射状などです。レーザー加工もできます |
+| 複数の工具 | 複数の工具を使えます。前の工具が届かなかった所は、細い工具で削れます |
+| 確かめる | 切削シミュレーションで、食い込み・削り残し・ホルダーの当たりを調べられます。書き出した G-code を読み直して削る確認と、加工指示書(Markdown・HTML)の書き出しもできます |
+| レンダリングとアニメーション | 外観・光源・デカールを付け、静止画と回転する動画、分解とジョイントの動きの動画を書き出せます |
+| 解析 | 強度と熱、流れと空力を解けます |
+| ファイルと版 | 文書はローカルの JSON で、ネットワークを使いません。保存のたびに版が残り、前の版と見比べて戻せます |
+| 画面・CLI・MCP | どれも同じ操作の宣言と確認を通ります。操作と道具の一覧は [docs/入出力.md](docs/入出力.md) にあります |
+
+## 対応する機械とファイル形式
 
 | 種類 | 対応 |
 |---|---|
-| 機械(G-code のポスト) | Carvera Air(既定)、汎用 3 軸(Fanuc 系・Grbl 系)、SCULPFUN G20(ガルバノのレーザー)。WASM のポストのプラグインも足せる |
+| 機械(G-code のポスト) | Carvera Air(既定)、汎用 3 軸(Fanuc 系・Grbl 系)、SCULPFUN G20(ガルバノのレーザー)。WASM のポストのプラグインも足せます |
 | 読み込み | STEP、DXF、SVG、画像(下絵) |
 | 書き出し | STEP、STL、3MF、glTF(.glb)、今の視点の DXF・SVG、PNG と動画、G-code、加工指示書、部品表の CSV |
-| 文書 | JSON(版を 1 つずつ移して読む。新しい版の文書は読まずに止める) |
+| 文書 | JSON。古い形式は 1 段ずつ変換して読みます。新しい形式の文書は読まずに止めます |
 
-加工の核は機械に依存せず、機械ごとの違いはマシンライブラリとポストに閉じている。
+加工の核は機械に依存しません。機械ごとの違いは、マシンライブラリとポストだけにあります。
 
-## 組み立て
+## ソースからビルドする
 
-要る物:
+ビルドには次の物が要ります。
 
-- Rust(版は `rust-toolchain.toml` で決まり、rustup が自動で入れる)
-- C++17 のコンパイラ(Windows は Visual Studio 2022 の MSVC、Linux は g++)。形状カーネル SMLib(`third_party/usd-brep`)を組み立てるため。CMake は要らない。初回は 4 コアで 3〜8 分かかる
-- Linux で画面を動かすには、窓と描画の部品(X11 か Wayland、Vulkan のドライバ)
+- Rust が要ります。版は `rust-toolchain.toml` で決まっていて、rustup が自動で入れます。
+- C++17 のコンパイラが要ります。Windows は Visual Studio 2022 の MSVC、Linux は g++ です。形状カーネル SMLib(`third_party/usd-brep`)のビルドに使います。CMake は要りません。初回のビルドには、4 コアで 3〜8 分かかります。
+- Linux で画面を動かす場合は、X11 か Wayland と、Vulkan のドライバが要ります。
 
 ```sh
 cargo run --release -p kmb-app -- --sample   # 見本の部品と加工で画面を開く
@@ -74,54 +83,85 @@ cargo run --release -p kmb-cli -- --help     # コマンド(kmb)の一覧
 cargo xtask verify                          # 変えた crate のテストと点検
 ```
 
-形状カーネルの既定は SMLib。環境変数 `JC_KERNEL=truck` で truck に替えられる。SMLib を入れずに組み立てる時は、アプリを `--no-default-features` で組み立てる(truck だけになる)。
-検査の手順とログの決まりは [docs/verify.md](docs/verify.md)。
+形状カーネルの既定は SMLib です。環境変数 `JC_KERNEL=truck` で truck に替えられます。SMLib を入れずにビルドする時は、アプリを `--no-default-features` でビルドします。この場合のカーネルは truck だけです。
 
-## 使い方の入口
+検査の手順とログの決まりは [docs/verify.md](docs/verify.md) にあります。
 
-- **画面**: 引数なしで起動すると開始画面が出て、見本と「はじめての手順」(見本を開いてから G-code を書き出すまで)がある。操作の流れは [docs/使い方.md](docs/使い方.md)。
-- **コマンド(`kmb`)**: 文書を作る・パラメータを変える・機能を足す・書き出す・G-code を作る・削ってみる。画面のボタンと同じ操作は `kmb actions` で一覧し、`kmb run` で動かす。
+## 使い始める
 
-  ```sh
-  kmb sample --cam cam.kmb        # 見本の部品と加工の文書を作る
-  kmb param set cam.kmb width "60 mm"
-  kmb gcode cam.kmb cam.nc        # Carvera Air 向けの G-code
-  kmb sim cam.kmb                 # 食い込みと削り残しを調べる
-  kmb export cam.kmb part.step
-  ```
+### 画面
 
-- **AI(MCP)**: `kmb-mcp` は標準入出力で動く MCP サーバ。読み書きできるのは作業フォルダ(`--root`)と `--allow` のフォルダだけ。画面の設定で「AI との接続」を入れると、動いている画面の文書も操作できる。
+引数なしで起動すると開始画面が出ます。開始画面には見本と「はじめての手順」があり、見本を開いてから G-code を書き出すまでを順に試せます。操作の流れは [docs/使い方.md](docs/使い方.md) にあります。
 
-  ```json
-  { "mcpServers": { "kiemonobench": {
-    "command": "<リポジトリの場所>/target/release/kmb-mcp",
-    "args": ["--root", "<読み書きを許すフォルダ>"] } } }
-  ```
+### コマンド(`kmb`)
 
-  前の名前(コマンド `jc`、MCP の `kmb-mcp`)から移る時: MCP の設定の `command` を `.../kmb-mcp`(Windows は `kmb-mcp.exe`)に書き換え、台本などで `jc` と打っていた所を `kmb` にする。前の名前の実行ファイルはもう作られないので、`target/release` に残った `jc`・`kmb-mcp` は古いまま止まる(消してよい)。設定の鍵(上の `kiemonobench`)はそのままでよい。ログのファイルの頭は `kmb-cli-`・`kmb-mcp-` になる。
+文書を作る、パラメータを変える、機能を足す、ファイルを書き出す、G-code を作る、削ってみる、といった操作ができます。画面のボタンと同じ操作は `kmb actions` で一覧でき、`kmb run` で実行できます。
 
-- **ポストのプラグイン**: WASM のコンポーネント(インタフェースは `crates/kmb-plugin-host/wit/post.wit`)。ファイル・ネットワーク・時計には触れられない。見本は `plugins/post-example/`。
+```sh
+kmb sample --cam cam.kmb        # 見本の部品と加工の文書を作る
+kmb param set cam.kmb width "60 mm"
+kmb gcode cam.kmb cam.nc        # Carvera Air 向けの G-code
+kmb sim cam.kmb                 # 食い込みと削り残しを調べる
+kmb export cam.kmb part.step
+```
 
-実機で削る前に、必ずシミュレーション、Z を浮かせた空運転、ワックスや MDF での試し削りの順に確かめる。
+### AI(MCP)
+
+`kmb-mcp` は標準入出力で動く MCP サーバです。読み書きできるのは、作業フォルダ(`--root`)と `--allow` で許したフォルダだけです。画面の設定で「AI との接続」を入れると、動いている画面の文書も操作できます。
+
+```json
+{ "mcpServers": { "kiemonobench": {
+  "command": "<リポジトリの場所>/target/release/kmb-mcp",
+  "args": ["--root", "<読み書きを許すフォルダ>"] } } }
+```
+
+前の名前(コマンド `jc`、MCP サーバ `jc-mcp`)から移る時は、次の 2 つを直してください。
+
+1. MCP の設定の `command` を `.../kmb-mcp`(Windows は `kmb-mcp.exe`)に書き換えます。
+2. スクリプトで `jc` と打っていた所を `kmb` にします。
+
+設定のキー(上の `kiemonobench`)は変えなくてかまいません。前の名前の実行ファイルはもうビルドされないので、`target/release` に残った `jc` と `jc-mcp` は消してかまいません。ログのファイル名の先頭は `kmb-cli-` と `kmb-mcp-` です。
+
+### ポストのプラグイン
+
+ポストは WASM のコンポーネントとして足せます。インタフェースは `crates/kmb-plugin-host/wit/post.wit` です。プラグインはファイル・ネットワーク・時計に触れられません。見本は `plugins/post-example/` にあります。
+
+### 実機で削る前に
+
+実機で削る前に、必ず次の順で確かめてください。シミュレーション、Z を浮かせた空運転、ワックスや MDF での試し削りの順です。
 
 ## 開発に加わる
 
-Issue と PR の出し方は [CONTRIBUTING.md](CONTRIBUTING.md)、脆弱性の知らせ方は [SECURITY.md](SECURITY.md)、振る舞いは [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+| 知りたいこと | 資料 |
+|---|---|
+| Issue と PR の出し方 | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| 脆弱性の知らせ方 | [SECURITY.md](SECURITY.md) |
+| 参加する人の振る舞い | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) |
+| 思想・構造・入出力の約束・見た目と作業の決まり | [AGENTS.md](AGENTS.md) と [.claude/rules/](.claude/rules/) |
+| どこに何があるか | [docs/地図.md](docs/地図.md) |
+| 方針・段階と設計 | [docs/policy.md](docs/policy.md)、[docs/plan.md](docs/plan.md) |
+| 画面の言葉 | [docs/用語表.md](docs/用語表.md) |
+| 機能ごとの記録 | [docs/機能/](docs/機能/) |
 
-思想・構造・入出力の約束・見た目と作業の決まりは [AGENTS.md](AGENTS.md)、分野の細かい決まりは [.claude/rules/](.claude/rules/)、どこに何があるかは [docs/地図.md](docs/地図.md)。方針は [docs/policy.md](docs/policy.md)、段階と設計は [docs/plan.md](docs/plan.md)、画面の言葉は [docs/用語表.md](docs/用語表.md)、機能ごとの記録は [docs/機能/](docs/機能/)。
-
-決まりは `cargo xtask verify` の点検で守る。GPL・LGPL・AGPL の依存とコードは使わない。ほかのソフトのコードは写さない。特許のある操作の形は作らない([docs/避ける形.md](docs/避ける形.md))。
+決まりは `cargo xtask verify` の点検で守ります。GPL・LGPL・AGPL の依存とコードは使いません。ほかのソフトのコードは写しません。特許のある操作の形は作りません。作らない形は [docs/避ける形.md](docs/避ける形.md) にあります。
 
 ## ライセンス
 
-MIT([LICENSE-MIT](LICENSE-MIT))か Apache-2.0([LICENSE-APACHE](LICENSE-APACHE))の、使う人が選ぶ方。著作権者の表記は「kieMonoBench contributors」。同梱する他のソフトとデータは、それぞれの許諾に従う(下)。
+MIT([LICENSE-MIT](LICENSE-MIT))と Apache-2.0([LICENSE-APACHE](LICENSE-APACHE))のどちらかを、使う人が選べます。著作権者の表記は「kieMonoBench contributors」です。同梱する他のソフトとデータは、それぞれのライセンスに従います。
 
-このソフトは独立に作っており、機械や CAD・CAM の製品の作り手とは関係がない。機械・ファイル形式・ソフトの名前はそれぞれの持ち主の商標で、互換を示すためだけに書いている。
+このソフトは独立に作っています。機械や CAD・CAM の製品の作り手とは関係がありません。機械・ファイル形式・ソフトの名前はそれぞれの持ち主の商標で、互換を示すためだけに書いています。
 
 ### 同梱する他のソフトとデータ
 
-- `third_party/usd-brep/`: NVIDIA usd-brep 1.0.0 の SMLib と SM_API(Apache-2.0、Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES。全文は `third_party/usd-brep/LICENSE`)。
-- `third_party/smlibpy-patches/`: smlibpy(Copyright (c) 2026 AWV Informatik AG、MIT。全文は `third_party/smlibpy-patches/LICENSE`)の SMLib の修正 2 つ。`crates/kmb-kernel-smlib/shim/jc_step.cpp` の STEP の書き出しも smlibpy の書き出しを元にしている。
-- `third_party/truck-shapeops/`: truck-shapeops 0.4.0(Apache-2.0、Copyright (c) RICOS Co. Ltd.。全文は `third_party/truck-shapeops/LICENSE`)を直した写し。予備の形状カーネル truck のブーリアンに当てる。
-- `crates/kmb-text/fonts/` の `futural.jhf` と `rowmans.jhf`: Hershey フォントのデータ。The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc. 許諾の全文は `crates/kmb-text/fonts/HERSHEY-LICENSE.txt`。
-- 出どころと更新の手順は [third_party/README.md](third_party/README.md)。
+| 置き場 | 中身とライセンス |
+|---|---|
+| `third_party/usd-brep/` | NVIDIA usd-brep 1.0.0 の SMLib と SM_API。Apache-2.0、Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES。全文は `third_party/usd-brep/LICENSE` |
+| `third_party/smlibpy-patches/` | smlibpy の SMLib の修正 2 つ。MIT、Copyright (c) 2026 AWV Informatik AG。全文は `third_party/smlibpy-patches/LICENSE`。`crates/kmb-kernel-smlib/shim/jc_step.cpp` の STEP の書き出しも、smlibpy の書き出しを元にしています |
+| `third_party/truck-shapeops/` | truck-shapeops 0.4.0 を直した写し。予備の形状カーネル truck のブーリアンに使います。Apache-2.0、Copyright (c) RICOS Co. Ltd.。全文は `third_party/truck-shapeops/LICENSE` |
+| `crates/kmb-text/fonts/` の `futural.jhf` と `rowmans.jhf` | Hershey フォントのデータ。全文は `crates/kmb-text/fonts/HERSHEY-LICENSE.txt` |
+
+Hershey フォントの許諾が求める表記は次のとおりです。
+
+> The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc.
+
+出どころと更新の手順は [third_party/README.md](third_party/README.md) にあります。

@@ -98,7 +98,7 @@ How to test and the logging rules are in [docs/verify.md](docs/verify.md) (in Ja
     "args": ["--root", "<folder the AI may read and write>"] } } }
   ```
 
-  Moving from the earlier names (CLI `jc`, MCP server `kmb-mcp`): change `command` in your MCP settings to `.../kmb-mcp` (`kmb-mcp.exe` on Windows), and replace `jc` with `kmb` in your scripts. The old executables are no longer built, so a `jc` or `kmb-mcp` left in `target/release` stays out of date (you can delete it). The settings key (`kiemonobench` above) can stay. Log files now start with `kmb-cli-` and `kmb-mcp-`.
+  Moving from the earlier names (CLI `jc`, MCP server `jc-mcp`): change `command` in your MCP settings to `.../kmb-mcp` (`kmb-mcp.exe` on Windows), and replace `jc` with `kmb` in your scripts. The old executables are no longer built, so a `jc` or `jc-mcp` left in `target/release` stays out of date (you can delete it). The settings key (`kiemonobench` above) can stay. Log files now start with `kmb-cli-` and `kmb-mcp-`.
 
 - **Post processor plugins:** WASM components (interface in `crates/kmb-plugin-host/wit/post.wit`). Plugins get no access to files, the network or the clock. An example is in `plugins/post-example/`.
 

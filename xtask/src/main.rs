@@ -63,6 +63,7 @@ mod jobs;
 mod layers;
 mod licenses;
 mod products;
+mod prose;
 mod release;
 mod skips;
 mod source;
@@ -753,6 +754,7 @@ fn checks(ws: &Workspace, fork: &str, changed: &[String]) -> Done {
     let read = |f: &str| git_show(fork, f);
     let mut doc = docs::check(root, &ws.packages, &docs::Base { read: &read }, changed);
     doc.extend(board::check(root, &read));
+    doc.extend(prose::check(root));
     let skeleton = agents::check(root);
     doc.extend(skeleton.problems);
     let mut product = products::check(root);
