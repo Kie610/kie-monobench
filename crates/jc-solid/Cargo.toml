@@ -1,0 +1,40 @@
+[package]
+name = "jc-solid"
+description = "CAD の機能を全部通した試験(試験だけの crate。ほかの crate からは使わない)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cad"
+
+[dependencies]
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-look.workspace = true
+jc-core.workspace = true
+jc-sketch.workspace = true
+jc-cad.workspace = true
+jc-cad-extrude.workspace = true
+jc-cad-revolve.workspace = true
+jc-cad-sweep.workspace = true
+jc-cad-boolean.workspace = true
+jc-cad-hole.workspace = true
+jc-cad-pattern.workspace = true
+jc-cad-modify.workspace = true
+jc-asm.workspace = true
+jc-interchange.workspace = true
+jc-cad-edge.workspace = true
+jc-cad-import-step.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-samples.workspace = true
+jc-text.workspace = true
+jc-kernel-truck.workspace = true
+jc-kernel-smlib.workspace = true
+jc-contract.workspace = true
+
+[lints]
+workspace = true

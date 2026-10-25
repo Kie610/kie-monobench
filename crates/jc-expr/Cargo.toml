@@ -1,0 +1,20 @@
+[package]
+name = "jc-expr"
+description = "パラメータ式の構文解析と、単位つきの評価"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "core"
+
+[dependencies]
+serde.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

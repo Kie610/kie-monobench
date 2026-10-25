@@ -1,0 +1,36 @@
+# レンダリングのシーンの設定に、環境とカメラの欄がある。
+# 前は環境の種類・背景(環境か透明)・大きさだけだった。縦横比を 1:1 にすると、ビューに正方形の枠が
+# 出て枠の外が暗くなり、キャンバス内レンダリングは枠の中に描く。背景を単色にすると、床は影だけになる。
+#! sample box
+
+click ~"作業空間:"
+click "レンダリング"
+shot レンダリングの作業空間
+
+click "シーンの設定"
+shot シーンの設定を開いた所
+expect "明るさ(lx)" exists
+expect "環境の回転(°)" exists
+expect "グラウンド面" exists
+expect "焦点距離(mm)" exists
+expect "露出(EV)" exists
+expect "被写界深度" exists
+expect "背景の色" missing
+select "背景" "単色"
+expect "背景の色" exists
+type "焦点距離(mm)" 80
+# 縦横比の既定はカスタム(前の版と同じく幅と高さで決める)
+expect "静止画の高さ(画素)" exists
+select "縦横比" "1:1 正方形"
+expect "縦横比" = "1:1 正方形"
+# 高さは幅と縦横比で決まるので、カスタムの時だけ出す
+expect "静止画の高さ(画素)" missing
+shot シーンの設定
+click "Close window"
+
+# 縦横比の枠の中にキャンバス内レンダリング
+click "キャンバス内レンダリング"
+until ~"描いています" 120s
+wait 30
+shot キャンバス内レンダリングを1対1の枠で
+click "キャンバス内レンダリング"

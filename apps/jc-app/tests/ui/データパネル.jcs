@@ -1,0 +1,33 @@
+# データパネル(モデル管理の画面の段 3)。前は設計の画面から別のデザインを探す所が無く、ホームへ
+# 戻るか「リンクで挿入…」のファイルの窓で選んだ。今は上の帯の左端の「データパネル」で左いっぱいに
+# 一覧を出す。デザインの行を押すと版と「開く」「現在のデザインに挿入」が広がり、行を 3D のビューへ
+# 引いて離してもリンクで挿入する。
+#! project
+#! size 1280x800
+
+expect "すべての場所" missing
+click "データパネル"
+until "すべての場所" exists 10s
+click "棚"
+until "台座" exists 30s
+expect "部品" exists
+shot データパネル
+# 天板を押すと広がる。「現在のデザインに挿入」でリンクで挿入し、OK で決める
+click "天板"
+until "現在のデザインに挿入" exists 10s
+shot 広げた
+click "現在のデザインに挿入"
+wait
+until "~天板.json を読み込みました" exists 10s
+click ~OK
+wait
+# 台座の行を 3D のビューへ引いて離す
+drag "台座" 500 100
+wait
+until "~台座.json を読み込みました" exists 10s
+shot ビューへ引いて挿入
+click ~OK
+wait
+# 閉じると消える(上の帯の左端のボタンでまた出せる)
+click "データパネルを閉じる"
+expect "すべての場所" missing

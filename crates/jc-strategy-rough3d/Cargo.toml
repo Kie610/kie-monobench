@@ -1,0 +1,28 @@
+[package]
+name = "jc-strategy-rough3d"
+description = "3D の荒削り(等高線ごとのオフセットの輪)と平らな所の仕上げ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-core.workspace = true
+jc-cam-tool.workspace = true
+jc-cam-dropcutter.workspace = true
+jc-cam-geom.workspace = true
+jc-cam-setup.workspace = true
+jc-toolpath.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-sim.workspace = true
+
+[lints]
+workspace = true

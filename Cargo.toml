@@ -1,0 +1,216 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+# 当てる写し(下の [patch.crates-io])。ワークスペースの検査・層の決まりの外に置く
+exclude = ["third_party/truck-shapeops"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.89"
+
+[workspace.dependencies]
+encoding_rs = "0.8"
+jc-expr = { path = "crates/jc-expr" }
+jc-core = { path = "crates/jc-core" }
+jc-contract = { path = "crates/jc-contract" }
+jc-sketch = { path = "crates/jc-sketch" }
+jc-sketch-3d = { path = "crates/jc-sketch-3d" }
+jc-sketch-solver = { path = "crates/jc-sketch-solver" }
+jc-text = { path = "crates/jc-text" }
+jc-io-dxf = { path = "crates/jc-io-dxf" }
+jc-io-svg = { path = "crates/jc-io-svg" }
+jc-format = { path = "crates/jc-format" }
+jc-image = { path = "crates/jc-image" }
+jc-look = { path = "crates/jc-look" }
+jc-ui = { path = "crates/jc-ui" }
+jc-ui-sketch = { path = "crates/jc-ui-sketch" }
+jc-ui-tools = { path = "crates/jc-ui-tools" }
+jc-ui-text = { path = "crates/jc-ui-text" }
+jc-ui-library = { path = "crates/jc-ui-library" }
+jc-ui-view3d = { path = "crates/jc-ui-view3d" }
+jc-measure = { path = "crates/jc-measure" }
+jc-fea = { path = "crates/jc-fea" }
+jc-flow = { path = "crates/jc-flow" }
+jc-study = { path = "crates/jc-study" }
+jc-render = { path = "crates/jc-render" }
+jc-kernel-truck = { path = "crates/jc-kernel-truck" }
+jc-kernel-smlib = { path = "crates/jc-kernel-smlib" }
+smlib-sys = { path = "crates/smlib-sys" }
+jc-solid = { path = "crates/jc-solid" }
+jc-cad = { path = "crates/jc-cad" }
+jc-interchange = { path = "crates/jc-interchange" }
+jc-cad-extrude = { path = "crates/jc-cad-extrude" }
+jc-cad-revolve = { path = "crates/jc-cad-revolve" }
+jc-cad-sweep = { path = "crates/jc-cad-sweep" }
+jc-cad-boolean = { path = "crates/jc-cad-boolean" }
+jc-cad-hole = { path = "crates/jc-cad-hole" }
+jc-cad-pattern = { path = "crates/jc-cad-pattern" }
+jc-cad-modify = { path = "crates/jc-cad-modify" }
+jc-asm = { path = "crates/jc-asm" }
+jc-cad-edge = { path = "crates/jc-cad-edge" }
+jc-cad-import-step = { path = "crates/jc-cad-import-step" }
+jc-sketch-canvas = { path = "crates/jc-sketch-canvas" }
+jc-scene = { path = "crates/jc-scene" }
+jc-config = { path = "crates/jc-config" }
+jc-io-stl = { path = "crates/jc-io-stl" }
+jc-io-view = { path = "crates/jc-io-view" }
+jc-io-render = { path = "crates/jc-io-render" }
+jc-cam-tool = { path = "crates/jc-cam-tool" }
+jc-cam-geom = { path = "crates/jc-cam-geom" }
+jc-cam-setup = { path = "crates/jc-cam-setup" }
+jc-toolpath = { path = "crates/jc-toolpath" }
+jc-toolpath-fit = { path = "crates/jc-toolpath-fit" }
+jc-toolpath-moves = { path = "crates/jc-toolpath-moves" }
+jc-strategy-pencil = { path = "crates/jc-strategy-pencil" }
+jc-strategy-face = { path = "crates/jc-strategy-face" }
+jc-strategy-raster3d = { path = "crates/jc-strategy-raster3d" }
+jc-strategy-waterline = { path = "crates/jc-strategy-waterline" }
+jc-cam-dropcutter = { path = "crates/jc-cam-dropcutter" }
+jc-strategy-rough3d = { path = "crates/jc-strategy-rough3d" }
+jc-strategy-contour2d = { path = "crates/jc-strategy-contour2d" }
+jc-strategy-chamfer = { path = "crates/jc-strategy-chamfer" }
+jc-strategy-engrave = { path = "crates/jc-strategy-engrave" }
+jc-strategy-laser = { path = "crates/jc-strategy-laser" }
+jc-strategy-pocket2d = { path = "crates/jc-strategy-pocket2d" }
+jc-strategy-adaptive2d = { path = "crates/jc-strategy-adaptive2d" }
+jc-strategy-drill = { path = "crates/jc-strategy-drill" }
+jc-post = { path = "crates/jc-post" }
+jc-post-carvera-air = { path = "crates/jc-post-carvera-air" }
+jc-gcode-read = { path = "crates/jc-gcode-read" }
+jc-plugin-host = { path = "crates/jc-plugin-host" }
+jc-sim = { path = "crates/jc-sim" }
+jc-cam-commands = { path = "crates/jc-cam-commands" }
+jc-cam-program = { path = "crates/jc-cam-program" }
+jc-bundle = { path = "crates/jc-bundle", default-features = false }
+jc-samples = { path = "crates/jc-samples" }
+jc-session = { path = "crates/jc-session" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+miniz_oxide = "0.9.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
+crc32fast = "1.5.2"
+# 下絵の絵(PNG・JPEG・BMP)の読み書き。eframe 経由で既に Cargo.lock にある
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp"] }
+log = "0.4.34"
+# 輪郭のフォントの字の形(jc-text)。egui の epaint と同じ版
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+clap = { version = "4.6.7", features = ["derive"] }
+proptest = "1.12.0"
+nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
+egui = "0.36.2"
+egui-wgpu = { version = "0.36.2", default-features = false }
+bytemuck = { version = "1.25.2", features = ["derive"] }
+eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland", "persistence"] }
+rfd = "0.17.2"
+egui_kittest = "0.36.2"
+# 画面の部品の一覧(AccessKit の木)を読む(jc-ui の drive。MIT OR Apache-2.0)
+accesskit_consumer = "0.35.0"
+# 画面の部品を並べる(Unity 式のドッキング。MIT)
+egui_dock = { version = "0.21.1", features = ["serde"] }
+cc = { version = "1.2", features = ["parallel"] }
+truck-modeling = "0.6.0"
+truck-shapeops = "0.4.0"
+# 既定の "vtk"(VTK 形式の読み書き)は使わない。入れると古い quick-xml・lz4_flex(既知の脆弱性あり)が入る
+truck-meshalgo = { version = "0.4.0", default-features = false, features = ["analyzers", "filters", "tessellation"] }
+truck-stepio = "0.3.0"
+truck-topology = "0.6.0"
+cavalier_contours = "0.9.0"
+i_overlay = { version = "9.1.0", default-features = false }
+insta = "1.49.0"
+rmcp = { version = "3.5.1", default-features = false, features = ["server", "macros", "transport-io"] }
+schemars = "1.2.2"
+wasmtime = { version = "49.0.4", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "anyhow"] }
+tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread", "io-std", "io-util"] }
+
+# 自前の crate もデバッグ情報は行番号だけ。panic とクラッシュ報告のファイル名・行・関数名は残り、
+# デバッガで変数の値が見られないだけ。target が約 4 割小さくなり、一から作る時間が約 3 割縮む
+# (2026-10-17 測定、Kie の判断。docs/verify.md の 8 節)。デバッガで変数を見たい時だけ、
+# `CARGO_PROFILE_DEV_DEBUG=full` を付けて組み立てる
+[profile.dev]
+debug = "line-tables-only"
+
+# truck のブーリアンは最適化なしだと遅いので、依存先は開発ビルドでも最適化する
+[profile.dev.package."*"]
+opt-level = 2
+# 依存先の詳しいデバッグ情報は使わない(行番号だけ残す)。テストの実行ファイルが小さくなり、リンクが速くなる
+debug = "line-tables-only"
+
+# シミュレーションは格子を細かく回すので、開発ビルドでも最適化する
+[profile.dev.package.jc-sim]
+opt-level = 2
+
+# 光線追跡と動画のコマは最適化なしだと何十倍も遅い
+[profile.dev.package.jc-render]
+opt-level = 2
+
+[profile.dev.package.jc-io-render]
+opt-level = 2
+
+[profile.dev.package.jc-strategy-raster3d]
+opt-level = 2
+
+[profile.dev.package.jc-strategy-waterline]
+opt-level = 2
+
+[profile.dev.package.jc-cam-dropcutter]
+opt-level = 2
+
+[profile.dev.package.jc-strategy-adaptive2d]
+opt-level = 2
+
+[profile.dev.package.jc-strategy-pencil]
+opt-level = 2
+
+[profile.dev.package.jc-strategy-rough3d]
+opt-level = 2
+
+[profile.dev.package.jc-toolpath-fit]
+opt-level = 2
+
+# 加工の試験で時間の大半を使う所(工具の形、加工領域、経路のつなぎ。つなぎは jc-toolpath-moves)。どれも小さい crate なので、
+# 最適化してもコンパイルはほとんど延びない(2026-10-17 測定。docs/verify.md の 6 節)
+[profile.dev.package.jc-cam-tool]
+opt-level = 2
+
+[profile.dev.package.jc-cam-geom]
+opt-level = 2
+
+[profile.dev.package.jc-toolpath-moves]
+opt-level = 2
+
+[profile.dev.package.jc-toolpath]
+opt-level = 2
+
+# 削った所の空振りを省く計算(高さの格子に工具を押す)。加工の見本と台本の時間の多くを使う
+[profile.dev.package.jc-cam-program]
+opt-level = 2
+
+# 流れの格子の計算は最適化なしだと 20 倍ほど遅く、試験が長くなる
+[profile.dev.package.jc-flow]
+opt-level = 2
+
+# 四面体の網づくりと代数的マルチグリッドは最適化なしだと 10 倍以上遅く、曲面の検算が長くなる
+[profile.dev.package.jc-fea]
+opt-level = 2
+
+# 結果の見せ方(断面・流線・帯の切り分け)はコマを送るたびに作るので、最適化なしだと再生が重い
+[profile.dev.package.jc-study]
+opt-level = 2
+
+# truck のカーネルでの試験(`JC_KERNEL=truck`)が約 3 割速くなる(2026-10-15 測定)
+[profile.dev.package.jc-kernel-truck]
+opt-level = 2
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+# truck-shapeops 0.4.0 の内外の数え方の誤り(空洞・裏返した道具)を直した写し(2026-10-20 Kie)。
+# 中身と外す時の手順は third_party/README.md の「truck-shapeops/」
+[patch.crates-io]
+truck-shapeops = { path = "third_party/truck-shapeops" }
+
+[profile.dev.package.jc-sketch-solver]
+opt-level = 2

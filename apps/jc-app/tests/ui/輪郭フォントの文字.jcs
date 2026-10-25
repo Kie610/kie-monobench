@@ -1,0 +1,28 @@
+# 輪郭のフォントの文字: 見本の部品のボスの上の面に文字を置き、設定欄の「フォント」の
+# 一覧から PC のフォント(ここでは試験の日本語のフォント)を選んで、日本語の名入れ「自作の名入れ」を打つ。
+# 打った字の形は文書に入る(計算はフォントを読まない)。1 本線のフォントは前と同じく既定。
+#! sample part
+#! fonts
+
+pick f12:end
+click "作成 ▾"
+click "面に文字"
+wait
+until "文字1" exists
+# 作った文字は編集パネルで開いている
+until "combobox:フォント" exists
+shot 1本線の文字
+click "combobox:フォント"
+type "名前で絞る" "jp"
+click "JC Test JP Regular"
+wait
+type "文字" "自作の名入れ"
+wait
+expect "フォント" = "JC Test JP Regular"
+expect "~字「" missing
+shot 日本語の名入れ
+# Enter で決めても、打ち足した字の形は入る(形の無い字の知らせが出ない)
+type "文字" "自作の名入れ口" enter
+wait
+expect "~字「" missing
+expect "文字がありません" missing

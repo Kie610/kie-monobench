@@ -1,0 +1,26 @@
+# 選ぶ欄の送り(Kie 2026-10-21): 作る手順で 1 つ選ぶと次の欄へ進み、1 つ目の欄に複数を選ぶ時は Ctrl を
+# 押しながら選ぶ。フィレット・面取りは面も選べ、面のまわりの辺が対象になる。
+#! sample part
+
+shot 前
+
+# 回転: Ctrl で押した領域は足して待ち、修飾なしで押すと Enter を待たずに軸を選ぶ手順へ進む
+click "回転"
+expect ~"回転 回す領域" exists
+pick "候補:板の輪郭 の領域 1" ctrl
+expect ~"回転 回す領域" exists
+shot 回転-Ctrlで1つ目
+pick "候補:板の輪郭 の領域 2"
+expect ~"回転 回転軸にする線" exists
+shot 回転-軸の手順
+pick "候補:線 6"
+expect ~"回転 マウスを回して角度" exists
+key Escape
+
+# フィレット: ボスの上面を 1 回押すと、まわりの辺(円の縁)に掛けて半径の欄へ進む
+click "フィレット"
+expect ~"辺か面をクリック" exists
+pick f12:end
+expect ~"選択セット 1(面 1" exists
+shot フィレット-面
+key Escape

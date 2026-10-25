@@ -1,0 +1,44 @@
+name: 不具合 / Bug report
+description: 思った通りに動かない / Something does not work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: 手順 / Steps to reproduce
+      description: 何をどの順に押したか。見本の文書(--sample)で起きるならそう書く / What you did, in order. Say so if it happens with the sample document (--sample)
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した結果 / Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の結果 / Actual result
+      description: 画面の写真や誤りの文があれば貼る / Paste screenshots or error messages if you have them
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版 / Version
+      description: コミット(git rev-parse --short HEAD)か配った版 / Commit (git rev-parse --short HEAD) or release
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Windows 11 / Ubuntu 24.04 ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ / Logs
+      description: Windows は %APPDATA% の下のアプリのフォルダの logs、Linux は ~/.local/share の下。G-code の誤りは題に「G-code」を入れる / Windows - the logs folder of the app under %APPDATA%; Linux - under ~/.local/share. Put "G-code" in the title for wrong G-code
+      render: text

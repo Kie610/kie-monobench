@@ -1,0 +1,55 @@
+# truck-shapeops 0.4.0(crates.io)の写し。jisaku-cadcam がワークスペースの [patch.crates-io] で当てる。
+# 変えた所は third_party/README.md の「truck-shapeops/」。例と開発用の依存は外した。
+[package]
+edition = "2021"
+name = "truck-shapeops"
+version = "0.4.0"
+build = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = "Provides boolean operations to Solid"
+homepage = "https://github.com/ricosjp/truck"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/ricosjp/truck"
+
+[lib]
+name = "truck_shapeops"
+path = "src/lib.rs"
+
+[dependencies.derive_more]
+version = "0.99.18"
+
+[dependencies.itertools]
+version = "0.13.0"
+
+[dependencies.rustc-hash]
+version = "2.0.0"
+
+[dependencies.truck-base]
+version = "0.5.0"
+
+[dependencies.truck-geometry]
+version = "0.5.0"
+
+[dependencies.truck-geotrait]
+version = "0.4.0"
+
+[dependencies.truck-meshalgo]
+version = "0.4.0"
+# jisaku-cadcam: 既定の "vtk" を外した(古い quick-xml・lz4_flex の既知の脆弱性を入れない)
+default-features = false
+features = ["analyzers", "filters", "tessellation"]
+
+[dependencies.truck-stepio]
+version = "0.3.0"
+optional = true
+
+[dependencies.truck-topology]
+version = "0.6.0"
+
+[features]
+default = ["step-test"]
+step-test = ["truck-stepio"]

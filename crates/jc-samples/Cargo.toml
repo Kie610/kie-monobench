@@ -1,0 +1,54 @@
+[package]
+name = "jc-samples"
+description = "見本の文書(基準部品、その加工、動作確認用のスケッチ)と、それを使う通しの試験"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "assembly"
+
+[dependencies]
+jc-core.workspace = true
+jc-sketch.workspace = true
+jc-cad.workspace = true
+jc-cad-extrude.workspace = true
+jc-cad-hole.workspace = true
+jc-cad-pattern.workspace = true
+jc-cad-edge.workspace = true
+jc-cam-commands.workspace = true
+jc-strategy-face.workspace = true
+jc-strategy-contour2d.workspace = true
+jc-strategy-pocket2d.workspace = true
+jc-strategy-drill.workspace = true
+jc-strategy-raster3d.workspace = true
+jc-strategy-waterline.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-contract.workspace = true
+jc-look.workspace = true
+jc-cam-setup.workspace = true
+jc-cam-tool.workspace = true
+jc-post.workspace = true
+jc-fea.workspace = true
+jc-flow.workspace = true
+jc-study.workspace = true
+jc-strategy-adaptive2d.workspace = true
+jc-strategy-chamfer.workspace = true
+jc-strategy-engrave.workspace = true
+jc-strategy-laser.workspace = true
+jc-strategy-pencil.workspace = true
+jc-strategy-rough3d.workspace = true
+jc-text.workspace = true
+jc-bundle = { workspace = true, features = ["smlib"] }
+jc-post-carvera-air.workspace = true
+jc-toolpath.workspace = true
+jc-interchange.workspace = true
+jc-cad-import-step.workspace = true
+
+[lints]
+workspace = true

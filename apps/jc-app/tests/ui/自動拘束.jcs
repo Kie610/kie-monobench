@@ -1,0 +1,27 @@
+# 自動拘束: 位置の決まっていない六角形と長穴のある
+# 作図の見本で、拘束 ▾ の「自動拘束」を押し、足りない拘束と寸法の候補を予告で見てから OK で付ける。
+# 寸法を外すと候補が減り、Esc でやめると何も付かない。
+#! sample sketch
+
+dclick "作図の見本"
+shot 前
+click "拘束 ▾"
+click "自動拘束"
+expect ~"全部を付けると自由度" exists
+expect "寸法も付ける" exists
+shot 予告
+
+# 寸法を外すと候補が減る。Esc でやめる(何も付かない)
+click "寸法も付ける"
+wait
+shot 寸法を外した予告
+key Escape
+expect ~"全部を付けると自由度" missing
+
+# もう一度開いて、寸法も付けて OK
+click "拘束 ▾"
+click "自動拘束"
+click ~"個を付ける)"
+wait
+expect ~"全部を付けると自由度" missing
+shot 後

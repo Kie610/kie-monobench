@@ -1,0 +1,24 @@
+[package]
+name = "jc-sketch-canvas"
+description = "下絵(キャンバス): 写真や図面の絵を平面に置き、2 点と距離で大きさを合わせる。形には使わず見せるだけ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cad"
+
+[dependencies]
+jc-core.workspace = true
+jc-cad.workspace = true
+jc-sketch.workspace = true
+jc-format.workspace = true
+jc-image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

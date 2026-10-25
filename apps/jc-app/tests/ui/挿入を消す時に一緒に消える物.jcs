@@ -1,0 +1,31 @@
+# 挿入を消す時に一緒に消える物(採用分 10-24 a1)。前は、部品のボディの機能を消すと、つなぐ相手の
+# 無いジョイントが止まって残り、中身の無い部品の箱も黙って残った。今は消す前の確かめに、計算でき
+# なくなる機能と中身がなくなる部品が並び、「一緒に消す」で片付けるか、「削除」で選んだ物だけ消すかを選ぶ。
+#! sample box-knob
+
+# 蓋の機能を消す: 蓋を上げる移動と、蓋を動かす蝶番、蝶番に続くつまみの回転が計算できなくなる
+rclick "蓋"#1
+click "削除"
+expect ~"⚠ 蓋を上げる" exists
+expect ~"⚠ 蝶番" exists
+expect ~"⚠ つまみの回転" exists
+shot 一緒に消える物の確かめ
+click "一緒に消す"
+wait
+expect "蓋を上げる" missing
+expect "蝶番" missing
+expect "つまみの回転" missing
+expect "蓋のスケッチ" exists
+shot 一緒に消した後
+
+# 取り消すと 1 回で全部戻る。「削除」なら蓋だけを消し、使っていた機能は止まって残る
+key Ctrl+Z
+wait
+expect "蝶番" exists
+rclick "蓋"#1
+click "削除"
+click "削除"
+wait
+expect "蓋を上げる" exists
+expect "蝶番" exists
+shot 選んだ物だけ消した後

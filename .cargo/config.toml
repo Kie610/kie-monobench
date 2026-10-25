@@ -1,0 +1,11 @@
+# `cargo xtask ...` で開発用の道具(xtask/)を動かす。使い方は docs/verify.md
+[alias]
+xtask = "run --quiet --package xtask --"
+
+[env]
+# クラウドの作業場で、SMLib の C++ の結果をコンテナをまたいで使い回す(crates/smlib-sys/build.rs の
+# shared_cache_dir)。/mnt/project-files が無い所(利用者の PC など)では使われない
+SMLIB_SHARED_CACHE = "/mnt/project-files/.cache/smlib-sys"
+# 検査(cargo xtask verify)の時間の記録(xtask/src/history.rs)。クラウドの作業場ではコンテナをまたいで
+# 残る所へ書く。/mnt/project-files が無い所(利用者の PC など)では target/verify/history.md へ書く
+JC_VERIFY_HISTORY = "/mnt/project-files/ops/verify/history.md"

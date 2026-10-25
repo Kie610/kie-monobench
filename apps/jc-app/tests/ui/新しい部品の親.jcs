@@ -1,0 +1,15 @@
+# ブラウザの右クリックの「新しい部品にする」「中に新しい部品」は、AI(MCP の run_action)と同じ
+# 部品の操作(asm.new_component)を通る。名前の既定は「部品N」、親は選んだボディの部品で決まる。
+#! sample part
+
+rclick "ボディ1"
+click "新しい部品にする"
+wait
+expect "部品1" exists
+shot ボディから部品1
+
+rclick "部品1"
+click "中に新しい部品"
+wait
+expect "部品2" exists
+shot 部品1の中に部品2

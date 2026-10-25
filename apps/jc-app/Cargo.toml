@@ -1,0 +1,50 @@
+[package]
+name = "jc-app"
+description = "GUI の実行ファイル"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "app"
+
+[[bin]]
+name = "kie-monobench"
+path = "src/main.rs"
+
+[dependencies]
+jc-core.workspace = true
+jc-ui.workspace = true
+jc-ui-sketch.workspace = true
+jc-ui-tools.workspace = true
+jc-ui-text.workspace = true
+jc-ui-library.workspace = true
+jc-bundle.workspace = true
+jc-session.workspace = true
+rfd.workspace = true
+eframe.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../../crates/jc-workspace-hack" }
+
+[target.'cfg(windows)'.dependencies]
+# 起動の窓を最初の画面まで覆い、作業域に収める src/win_start.rs だけが使う
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+jc-interchange.workspace = true
+jc-look.workspace = true
+serde_json.workspace = true
+jc-io-stl.workspace = true
+jc-samples.workspace = true
+egui.workspace = true
+egui_kittest.workspace = true
+
+[features]
+# SMLib のカーネルを入れる(外すと truck だけ。`--no-default-features`)
+default = ["smlib"]
+smlib = ["jc-bundle/smlib"]
+
+# Windows の OS の関数を呼ぶ src/win_start.rs だけが unsafe を使う(ワークスペースの forbid の代わりに deny)
+[lints.rust]
+unsafe_code = "deny"

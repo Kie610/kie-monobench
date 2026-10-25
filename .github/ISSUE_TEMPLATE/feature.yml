@@ -1,0 +1,21 @@
+name: 要望 / Feature request
+description: できるようにしてほしいこと / Something you want to be able to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 何をしたいか / What you want to do
+      description: 作りたい物と、今どこで困っているか(使う人の言葉で) / What you are making and where you get stuck, in your own words
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: 今のやり方 / How you do it now
+      description: 回り道があれば書く / Any workaround you use today
+  - type: textarea
+    id: idea
+    attributes:
+      label: こうなるとよい / What would help
+      description: 画面の流れや CLI・MCP の形の案があれば。ほかの製品の名前は書かず、働きで書く / Ideas for the interface, CLI or MCP. Describe the behaviour rather than naming other products

@@ -1,0 +1,23 @@
+[package]
+name = "jc-asm"
+description = "組立: 部品の木の操作、ジョイント(7 種。位置のまま結ぶ・原点を合わせる)・拘束・位置・剛性グループ・モーション リンク、干渉の確認、部品表、モーション スタディと接触セット、アニメーションの段(分解・ジョイントの動き)、別ファイルの部品をリンクで組み込む、規格部品(ねじ・ナット・座金・軸受)を穴に挿す"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cad"
+
+[dependencies]
+jc-look.workspace = true
+jc-core.workspace = true
+jc-interchange.workspace = true
+jc-cad.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

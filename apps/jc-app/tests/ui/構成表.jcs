@@ -1,0 +1,48 @@
+# 構成表: 基準部品のパラメータの欄の下の「構成表」で、
+# 幅と四隅の穴の並びの抑制を列にし、「小」と「大」の 2 つの構成を作って当て替える。
+# 当てた構成の値を直すと今の形と違うと知らせ、「当て直す」で形に入れる。取り消すと 1 回ずつ戻る。
+
+key Ctrl+P
+shot パラメータの表
+# 構成表はパラメータの一覧の下なので、パネルを下まで送る
+scroll "式" 3000
+click "構成表"
+shot 開いた所
+click "列を追加 ▾"
+click "width"
+click "列を追加 ▾"
+click "穴の並び の抑制"
+click "構成を追加"
+click "構成を追加"
+type "構成1 の名前" "小" enter
+type "構成2 の名前" "大" enter
+type "小 の width" "40 mm" enter
+click "小 の 穴の並び の抑制"
+type "大 の width" "80 mm" enter
+expect "小 の width" = "40 mm"
+scroll "構成表" 3000
+shot 二つの構成
+
+click "構成「小」を当てる"
+wait
+expect "width" exists
+shot 小を当てた
+click "構成「大」を当てる"
+wait
+shot 大を当てた
+
+# 当てた構成の値を直すと、今の形と違うと知らせる。「当て直す」で形に入れる
+type "大 の width" "90 mm" enter
+expect ~"と違います" exists
+scroll "構成表" 3000
+shot 違うと知らせる
+click "当て直す"
+wait
+expect ~"と違います" missing
+# 取り消しは 1 回ずつ戻る(当て直す → 値を直す → 大を当てる で、小の形に戻る)
+key Ctrl+Z
+key Ctrl+Z
+key Ctrl+Z
+wait
+expect ~"と違います" missing
+shot 取り消した

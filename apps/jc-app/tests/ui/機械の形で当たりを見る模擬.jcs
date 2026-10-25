@@ -1,0 +1,34 @@
+# 加工の見本(Carvera Air)をシミュレーションすると、機械の形(作業範囲・主軸の頭・ベッド・門の下)との
+# 当たりも見る。見本はそのまま通り、貫通の分だけベッドを削ると知らせる。
+# ストックをベッドの右へ寄せる(ベッドの上の置き場所 X 280 mm)と、X の作業範囲を+側へはみ出すと出る。
+# 再生すると、工具の上に主軸と Z の台を線で描く。
+#! sample cam
+
+click ~作業空間:
+click "加工"
+wait
+click "セットアップ 1"
+click "シミュレーション"
+until ~"機械の当たり・はみ出し 0 件" exists
+expect ~"ベッドを最大 0.30 mm 削る" exists
+shot 前-見本のシミュレーション
+click "編集Enter"
+wait
+scroll "横の余白" 3000
+type "ベッドの上の置き場所 X" 280
+click ~OK
+wait
+click "シミュレーション"
+until ~"X の作業範囲を+側へはみ出す" exists
+expect ~"機械の当たり・はみ出し 0 件" missing
+shot 作業範囲をはみ出す
+# 主軸の頭が入るよう、引いて縮める
+click "ズーム"
+drag f8:side:e10 0 160
+click "ズーム"
+click "再生"
+wait
+click "次の操作"
+wait
+wait
+shot 再生中の主軸の頭

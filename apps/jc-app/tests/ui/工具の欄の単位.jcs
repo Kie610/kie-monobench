@@ -1,0 +1,31 @@
+# 工具ライブラリの長さの欄は、文書の長さの単位に従う(in の文書は in で出し、in で打てる。保存は mm)。
+# 一覧の径、刃の径などの欄、切削条件の見出し(切削送り・下降・切込み)、チップロード、工具の絵の寸法が
+# みな in になる。
+#! sample cam
+
+click "設定"
+click "単位"
+select "この文書の長さの単位" "インチ(in)"
+click "Close window"
+expect "単位 in"
+
+click ~作業空間:
+click "加工"
+click "工具ライブラリ"
+click "T2 平 3.175 mm(径 0.125 in)"
+wait
+expect "刃の径" = "0.125 in"
+shot 工具の欄をインチで
+# 下の切削条件の表(見出しに単位。チップロードは右の外で、試験 jc-ui-tools が確かめる)
+scroll "全長" 600
+wait
+expect "切削送り(in/min)" exists
+shot 切削条件をインチで
+
+# 上へ戻し、刃の径に 0.25 と打つと 0.25 in(6.35 mm)が入る
+scroll "材料ごとの切削条件(一番上が既定)" -600
+wait
+type "刃の径" 0.25
+expect "刃の径" = "0.250 in"
+expect "T2 平 3.175 mm(径 0.250 in)" exists
+shot 刃の径を打ち直した所

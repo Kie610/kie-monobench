@@ -1,0 +1,18 @@
+[package]
+name = "jc-gcode-read"
+description = "書き出した G-code を読み直して経路に戻す(シミュレーションで確かめるため)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-cam-tool.workspace = true
+jc-toolpath.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

@@ -1,0 +1,10 @@
+# --sample で起動して、設計・スケッチ・加工の画面を撮る(1280×760 の座標)
+shot design
+# ブラウザの「板の輪郭」を二度押ししてスケッチを直す
+xdotool mousemove 95 343; sleep 0.3; xdotool click --repeat 2 --delay 80 1; sleep 2
+shot sketch
+click 1202 102
+# 作業空間の箱から「加工」
+click 60 86
+click 28 174
+shot cam

@@ -1,0 +1,24 @@
+[package]
+name = "jc-post"
+description = "ポストの trait、汎用のポスト(Fanuc 系・Grbl 系・LightBurn の SVG)、マシンライブラリ(機械の値)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-cam-tool.workspace = true
+jc-format.workspace = true
+jc-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

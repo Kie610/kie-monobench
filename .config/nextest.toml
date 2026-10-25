@@ -1,0 +1,19 @@
+# cargo-nextest の設定。`cargo xtask verify` が使う(docs/verify.md の 1 節)。
+# nextest はテストを 1 つずつ別のプロセスで、crate をまたいで並べて流す。
+
+[profile.verify]
+# 60 秒を超えたテストを途中で知らせ、終わりの集計にも並べる
+slow-timeout = { period = "60s" }
+status-level = "slow"
+final-status-level = "slow"
+failure-output = "final"
+# テストごとの時間(target/nextest/verify/junit.xml)
+junit = { path = "junit.xml" }
+
+# truck の回(JC_KERNEL=truck)。同時に動かすので、集計のファイルを分ける
+[profile.verify-truck]
+slow-timeout = { period = "60s" }
+status-level = "slow"
+final-status-level = "slow"
+failure-output = "final"
+junit = { path = "junit.xml" }

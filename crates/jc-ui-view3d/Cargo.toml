@@ -1,0 +1,29 @@
+[package]
+name = "jc-ui-view3d"
+description = "3D のビュー(ボディ・経路・目安を CPU か GPU で描き、面・辺・点を拾う。画面の外枠とスケッチの編集器が使う)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "ui"
+
+[dependencies]
+jc-look.workspace = true
+jc-core.workspace = true
+jc-interchange.workspace = true
+jc-measure.workspace = true
+jc-render.workspace = true
+egui.workspace = true
+egui-wgpu.workspace = true
+bytemuck.workspace = true
+log.workspace = true
+serde.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

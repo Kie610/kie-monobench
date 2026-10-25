@@ -1,0 +1,27 @@
+# ランプ(3D)(2026-10-21): 加工の「3D ▾」の一覧からランプを足すと、ボスの壁を 1 周ごとに斜めに
+# 下りる経路ができ、誤りなく計算が通る。1 周の下りとランプ角度を替えても通る。
+#! sample cam3d
+
+click ~作業空間:
+click "加工"
+click "3D ▾"
+expect "ランプ(3D)"
+shot 3Dの一覧
+click "ランプ(3D)"
+wait
+expect "1 周の下り"
+expect "ランプ角度"
+until ~"ランプ(3D)9" 60s
+shot 足した直後
+
+# 1 周の下りを 1 mm、傾きの上限を 3 deg にする
+type "1 周の下り" "1 mm"
+wait
+expect "1 周の下り" = "1 mm"
+type "ランプ角度" "3 deg"
+wait
+expect "ランプ角度" = "3 deg"
+until ~"ランプ(3D)9" 60s
+click ~OK
+wait
+shot 後

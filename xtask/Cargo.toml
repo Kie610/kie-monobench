@@ -1,0 +1,24 @@
+[package]
+name = "xtask"
+description = "開発用の道具: 変えた crate だけを検査する(`cargo xtask`)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# xtask は hakari の対象から外しているので、ほかの crate も使う依存の機能を増やさない。
+# 増やすと `verify --all`(--workspace で xtask も入る)の時だけ機能が変わり、wasmtime や
+# egui_kittest からアプリと試験まで全部が別の名前でもう 1 組できる(docs/verify.md の 8 節)
+[dependencies]
+serde_json.workspace = true
+# DXC の取ってきたものを確かめる(cargo xtask dxc)
+sha2 = { version = "0.10.9", default-features = false }
+# 飛ばしの例外の表(xtask/skips.toml・removed-tests.toml)を読む
+toml = { version = "1.1.8", default-features = false, features = ["parse", "serde"] }
+
+[package.metadata.jc]
+layer = "support"
+
+[lints]
+workspace = true

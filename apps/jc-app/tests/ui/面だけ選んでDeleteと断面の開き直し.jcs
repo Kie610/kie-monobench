@@ -1,0 +1,24 @@
+# 面・辺・角だけを選んで Delete を押すと消し方を知らせ、断面は閉じて開き直すと前の所から
+# 始まる(#3617)。
+#! sample part
+
+# 開いた直後は最後の機能を選んでいるので、Esc で外す(機能を選んでいれば Delete はそれを消す)。
+# 形の要素だけ(ここでは穴の縁)を選んで Delete。機能は消えず、下の帯に消し方が出る
+key Escape
+pick f8:end
+key Delete
+expect ~"面・辺・角は消せません" exists
+shot 面だけ選んでDelete
+key Escape
+
+# 断面を XY 平面にして閉じ、開き直すと XY 平面のまま
+click "断面解析"
+click "XY 平面"
+shot 断面をXYにした
+key Escape
+wait
+expect "XY 平面" missing
+click "断面解析"
+wait
+expect "XY 平面" exists
+shot 断面を開き直した

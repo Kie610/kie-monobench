@@ -1,0 +1,927 @@
+{
+ "source": "画板「JC の画面」の設計・加工・スケッチのツールバー(2026-10-21 に Kie と決めた版)",
+ "spaces": [
+  {
+   "space": "設計",
+   "groups": [
+    {
+     "name": "作成",
+     "front": [
+      {
+       "label": "スケッチを作成",
+       "role": "make",
+       "b": "M13 5l3 3-8 8H5v-3z",
+       "a": "M4 20c4-3 8 1 16-3"
+      },
+      {
+       "label": "3D スケッチを追加",
+       "role": "make",
+       "b": "M5 4v14h14M5 18l-2 3",
+       "a": "M8 15c2-7 6-1 11-9"
+      },
+      {
+       "label": "押し出し",
+       "role": "make",
+       "b": "M4 16l8 4 8-4-8-4z",
+       "a": "M12 3v9M9 6l3-3 3 3"
+      },
+      {
+       "label": "回転",
+       "role": "make",
+       "b": "M12 3v18",
+       "a": "M7 8c-3 1-3 7 0 8M17 8c3 1 3 7 0 8"
+      },
+      {
+       "label": "穴",
+       "role": "make",
+       "b": "M4 6h16v12H4z",
+       "a": "M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0"
+      }
+     ],
+     "menu": [
+      {
+       "label": "面にスケッチ"
+      },
+      {
+       "label": "スケッチの点に文字"
+      },
+      {
+       "label": "スケッチの線に文字"
+      },
+      {
+       "label": "穴(欄で指定)"
+      },
+      {
+       "label": "スケッチ平面を再定義",
+       "needs_selection": true
+      },
+      {
+       "label": "対象の面までにする",
+       "needs_selection": true
+      },
+      {
+       "label": "領域を選び直す(押し出し)",
+       "needs_selection": true
+      },
+      {
+       "label": "穴を止める面を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "同じ穴を足す",
+       "needs_selection": true
+      },
+      {
+       "label": "回転を止める面を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "回転軸を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "領域を選び直す(回転)",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "修正",
+     "front": [
+      {
+       "label": "プレス/プル",
+       "role": "modify",
+       "b": "M4 13h16v7H4z",
+       "a": "M4 9h16M12 3v4M10 5l2-2 2 2"
+      },
+      {
+       "label": "フィレット",
+       "role": "modify",
+       "b": "M4 20V11M11 4h9v16H4",
+       "a": "M4 11a7 7 0 0 1 7-7"
+      },
+      {
+       "label": "面取り",
+       "role": "modify",
+       "b": "M4 20V10M10 4h10v16H4",
+       "a": "M4 10l6-6"
+      },
+      {
+       "label": "シェル",
+       "role": "modify",
+       "b": "M4 7v13h16V7",
+       "a": "M8 7v9h8V7"
+      },
+      {
+       "label": "ブーリアン",
+       "role": "modify",
+       "b": "M3 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0",
+       "a": "M11 12a5 5 0 1 0 10 0a5 5 0 1 0-10 0",
+       "needs_selection": true
+      },
+      {
+       "label": "ボディを分割",
+       "role": "modify",
+       "b": "M4 5h16v14H4z",
+       "a": "M2 14l20-5"
+      },
+      {
+       "label": "移動/コピー",
+       "role": "modify",
+       "b": "M3 12h7v7H3z",
+       "a": "M14 5h7v7h-7zM10 12l4-4"
+      },
+      {
+       "label": "パラメータ",
+       "role": "modify",
+       "b": "M4 7h16M4 12h16M4 17h16",
+       "a": "M9 5v4M15 10v4M7 15v4"
+      }
+     ],
+     "menu": [
+      {
+       "label": "面をオフセット"
+      },
+      {
+       "label": "文字を線に分解",
+       "needs_selection": true
+      },
+      {
+       "label": "割る平面を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "回転の軸を選ぶ",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "パターン",
+     "front": [
+      {
+       "label": "ミラー",
+       "role": "repeat",
+       "b": "M12 3v18M9 7L4 17h5z",
+       "a": "M15 7l5 10h-5z"
+      },
+      {
+       "label": "矩形状パターン",
+       "role": "repeat",
+       "b": "M4 4h6v6H4z",
+       "a": "M14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"
+      },
+      {
+       "label": "円形状パターン",
+       "role": "repeat",
+       "b": "M10 3h4v4h-4z",
+       "a": "M17 10h4v4h-4zM10 17h4v4h-4zM3 10h4v4H3zM12 12h.01"
+      }
+     ],
+     "menu": [
+      {
+       "label": "この面でミラー",
+       "needs_selection": true
+      },
+      {
+       "label": "軸を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "方向 2 を選ぶ",
+       "needs_selection": true
+      },
+      {
+       "label": "対称の平面を選ぶ",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "組立",
+     "front": [
+      {
+       "label": "ジョイント",
+       "role": "define",
+       "b": "M3 7h7v10H3zM14 7h7v10h-7z",
+       "a": "M10 10h4M10 14h4M12 8v8",
+       "needs_selection": true
+      }
+     ],
+     "menu": [
+      {
+       "label": "新しい部品"
+      },
+      {
+       "label": "位置のままのジョイント"
+      },
+      {
+       "label": "規格部品"
+      },
+      {
+       "label": "部品表"
+      }
+     ]
+    },
+    {
+     "name": "検査",
+     "front": [
+      {
+       "label": "計測",
+       "role": "none",
+       "b": "M3 15L15 3l6 6L9 21zM7 11l2 2M10 8l2 2M13 5l2 2",
+       "a": ""
+      },
+      {
+       "label": "断面解析",
+       "role": "none",
+       "b": "M4 8l8-4 8 4v8l-8 4-8-4zM2 14l10-5 10 5",
+       "a": ""
+      },
+      {
+       "label": "体積を計測",
+       "role": "none",
+       "b": "M4 8l8-4 8 4v8l-8 4-8-4zM4 8l8 4 8-4M12 12v8",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "干渉",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "挿入",
+     "front": [
+      {
+       "label": "STEP を読み込む…",
+       "role": "none",
+       "b": "M12 3v11M8 10l4 4 4-4M4 16v4h16v-4",
+       "a": ""
+      },
+      {
+       "label": "SVG を挿入…",
+       "role": "none",
+       "b": "M4 18C8 4 16 20 20 6M3 17h2v2H3zM19 5h2v2h-2z",
+       "a": ""
+      },
+      {
+       "label": "キャンバス…",
+       "role": "none",
+       "b": "M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15 9h.01",
+       "a": "",
+       "decided": "Kie 2026-10-23: 画板の後に足した物だが、前に出したままにする"
+      }
+     ],
+     "menu": [
+      {
+       "label": "DXF を挿入…"
+      },
+      {
+       "label": "リンクで挿入…"
+      }
+     ]
+    },
+    {
+     "name": "書き出し",
+     "front": [
+      {
+       "label": "STEP を書き出す…",
+       "role": "none",
+       "b": "M4 9v11h11M13 11l7-7M15 4h5v5M6 14l3-1.5 3 1.5v3.5l-3 1.5-3-1.5zM6 14l3 1.5 3-1.5M9 15.5V19",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "STL を書き出す…"
+      },
+      {
+       "label": "3MF を書き出す…",
+       "new": true
+      },
+      {
+       "label": "DXF を書き出す…",
+       "needs_selection": true
+      },
+      {
+       "label": "SVG を書き出す…",
+       "new": true
+      },
+      {
+       "label": "STEP をボディごとに書き出す…"
+      },
+      {
+       "label": "STL をボディごとに書き出す…"
+      },
+      {
+       "label": "今のビューを DXF に書き出す…"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "space": "加工",
+   "groups": [
+    {
+     "name": "セットアップ",
+     "front": [
+      {
+       "label": "セットアップ",
+       "role": "define",
+       "b": "M4 9l8-4 8 4v7l-8 4-8-4zM4 9l8 4 8-4M12 13v7",
+       "a": "M2 22v-5M2 22h5"
+      }
+     ],
+     "menu": [
+      {
+       "label": "固定具を置く"
+      }
+     ]
+    },
+    {
+     "name": "2D",
+     "front": [
+      {
+       "label": "負荷制御粗取り",
+       "role": "make",
+       "b": "M3 5h18v15H3z",
+       "a": "M6 13c0-3 4-3 4 0s4 3 4 0 4-3 4 0",
+       "needs_selection": true
+      },
+      {
+       "label": "ポケット",
+       "role": "make",
+       "b": "M3 5h18v15H3z",
+       "a": "M7 9h10v7H7zM10 12.5h4",
+       "needs_selection": true
+      },
+      {
+       "label": "フェイス",
+       "role": "make",
+       "b": "M3 14h18v6H3z",
+       "a": "M4 5h16v3H4v3h16"
+      }
+     ],
+     "menu": [
+      {
+       "label": "輪郭"
+      },
+      {
+       "label": "スロット"
+      },
+      {
+       "label": "トレース",
+       "new": true
+      },
+      {
+       "label": "ねじ切り",
+       "new": true
+      },
+      {
+       "label": "ボア・円形"
+      },
+      {
+       "label": "彫刻"
+      },
+      {
+       "label": "V 彫り"
+      },
+      {
+       "label": "面取り"
+      },
+      {
+       "label": "レーザー"
+      }
+     ]
+    },
+    {
+     "name": "3D",
+     "front": [
+      {
+       "label": "3D 粗取り",
+       "role": "make",
+       "b": "M3 20c3-10 15-10 18 0",
+       "a": "M5 20v-4h3v-3h3v-2h2v2h3v3h3v4"
+      },
+      {
+       "label": "走査線(3D)",
+       "role": "make",
+       "b": "M3 20c3-10 15-10 18 0",
+       "a": "M6 20V9M10 20V6M14 20V6M18 20V9"
+      },
+      {
+       "label": "スキャロップ(3D)",
+       "role": "make",
+       "b": "M3 20c3-10 15-10 18 0",
+       "a": "M7 20c1.5-6 8.5-6 10 0M10.5 20c.5-2.5 2.5-2.5 3 0",
+       "decided": "Kie 2026-10-23: 画板の「スキャロップ」ではなく、他の 3D と同じく「(3D)」を付けた名前にする"
+      },
+      {
+       "label": "等高線(3D)",
+       "role": "make",
+       "b": "M3 20c3-10 15-10 18 0",
+       "a": "M5.5 16h13M8.5 12h7"
+      }
+     ],
+     "menu": [
+      {
+       "label": "平坦部(3D)"
+      },
+      {
+       "label": "ランプ(3D)",
+       "new": true
+      },
+      {
+       "label": "ペンシル(3D)"
+      },
+      {
+       "label": "渦巻き(3D)"
+      },
+      {
+       "label": "放射状(3D)"
+      },
+      {
+       "label": "モーフィング スパイラル(3D)",
+       "new": true
+      },
+      {
+       "label": "投影",
+       "new": true
+      }
+     ]
+    },
+    {
+     "name": "穴",
+     "front": [
+      {
+       "label": "穴あけ",
+       "role": "make",
+       "b": "M4 15h16v6H4z",
+       "a": "M10 3h4v5l-2 6-2-6z"
+      }
+     ],
+     "menu": [
+      {
+       "label": "穴から加工を作る"
+      },
+      {
+       "label": "ピン穴"
+      }
+     ]
+    },
+    {
+     "name": "確かめる",
+     "front": [
+      {
+       "label": "シミュレーション",
+       "role": "none",
+       "b": "M4 17h16v4H4zM11 3h2v8l-1 3-1-3z",
+       "a": ""
+      },
+      {
+       "label": "計測",
+       "role": "none",
+       "b": "M3 15L15 3l6 6L9 21zM7 11l2 2M10 8l2 2M13 5l2 2",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "G-code を見る"
+      },
+      {
+       "label": "G-code で確かめる"
+      },
+      {
+       "label": "断面解析"
+      },
+      {
+       "label": "削る様子の動画…"
+      }
+     ]
+    },
+    {
+     "name": "NC プログラム",
+     "front": [],
+     "menu": [
+      {
+       "label": "手動 NC"
+      },
+      {
+       "label": "加工のパターン",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "出力",
+     "front": [
+      {
+       "label": "G-code を書き出す",
+       "role": "none",
+       "b": "M6 3h9l4 4v14H6zM15 3v4h4M12 18v-7M9.5 13.5L12 11l2.5 2.5",
+       "a": ""
+      },
+      {
+       "label": "加工指示書を書き出す",
+       "role": "none",
+       "b": "M4 4h16v16H4zM4 9h16M10 9v11",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "G-code を名前を付けて書き出す…"
+      },
+      {
+       "label": "工具の順に並べ替えて書き出す"
+      },
+      {
+       "label": "加工指示書(HTML)を書き出す"
+      },
+      {
+       "label": "この加工だけ G-code に書き出す",
+       "needs_selection": true
+      },
+      {
+       "label": "全セットアップを 1 本に書き出す"
+      }
+     ]
+    },
+    {
+     "name": "管理",
+     "front": [
+      {
+       "label": "工具ライブラリ",
+       "role": "none",
+       "b": "M10 3h4v8h-4zM8 11h8l-1 10h-6z",
+       "a": ""
+      },
+      {
+       "label": "機械の設定",
+       "role": "none",
+       "b": "M4 20h16M6 20V5h12v15M10 5v6M9 11h2",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "加工の既定を書き出す…"
+      },
+      {
+       "label": "加工の既定を読み込む…"
+      },
+      {
+       "label": "加工の既定を初めに戻す"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "space": "スケッチ",
+   "groups": [
+    {
+     "name": "作成",
+     "front": [
+      {
+       "label": "線分",
+       "role": "make",
+       "b": "M5 19h.01M19 5h.01",
+       "a": "M5 19L19 5"
+      },
+      {
+       "label": "長方形",
+       "role": "make",
+       "b": "M4 6h.01M20 18h.01",
+       "a": "M4 6h16v12H4z"
+      },
+      {
+       "label": "円",
+       "role": "make",
+       "b": "M12 12h.01",
+       "a": "M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14"
+      },
+      {
+       "label": "長穴",
+       "role": "make",
+       "b": "M8 12h.01M16 12h.01",
+       "a": "M8 7h8a5 5 0 0 1 0 10H8a5 5 0 0 1 0-10"
+      },
+      {
+       "label": "ミラー",
+       "role": "repeat",
+       "b": "M12 3v3M12 9v2M12 14v2M12 19v2M9 6c-4 3-4 9 0 12",
+       "a": "M15 6c4 3 4 9 0 12"
+      }
+     ],
+     "menu": [
+      {
+       "label": "中点の線分"
+      },
+      {
+       "label": "3 点指定の長方形"
+      },
+      {
+       "label": "中心指定の長方形"
+      },
+      {
+       "label": "角の丸い長方形"
+      },
+      {
+       "label": "2 点の円"
+      },
+      {
+       "label": "3 点の円"
+      },
+      {
+       "label": "2 つに接する円"
+      },
+      {
+       "label": "3 つに接する円"
+      },
+      {
+       "label": "3 点の円弧"
+      },
+      {
+       "label": "接線円弧"
+      },
+      {
+       "label": "外接の多角形"
+      },
+      {
+       "label": "内接の多角形"
+      },
+      {
+       "label": "辺の多角形"
+      },
+      {
+       "label": "楕円"
+      },
+      {
+       "label": "全長の長穴"
+      },
+      {
+       "label": "中心からの長穴"
+      },
+      {
+       "label": "3 点円弧の長穴"
+      },
+      {
+       "label": "円弧の長穴"
+      },
+      {
+       "label": "通る点のスプライン"
+      },
+      {
+       "label": "制御点のスプライン"
+      },
+      {
+       "label": "円錐曲線"
+      },
+      {
+       "label": "点"
+      },
+      {
+       "label": "文字"
+      },
+      {
+       "label": "円形状パターン"
+      },
+      {
+       "label": "矩形状パターン"
+      },
+      {
+       "label": "投影"
+      },
+      {
+       "label": "交差"
+      }
+     ]
+    },
+    {
+     "name": "拘束",
+     "front": [
+      {
+       "label": "水平/垂直",
+       "role": "define",
+       "b": "M3 19h12M19 3v12",
+       "a": "M6 15h6M15 6v6"
+      },
+      {
+       "label": "一致",
+       "role": "define",
+       "b": "M4 19l8-7M12 12l8-7",
+       "a": "M10 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0"
+      },
+      {
+       "label": "平行",
+       "role": "define",
+       "b": "M6 20L12 4",
+       "a": "M12 20l6-16"
+      },
+      {
+       "label": "等しい",
+       "role": "define",
+       "b": "M4 6h7M13 18h7",
+       "a": "M9 11h6M9 14h6"
+      }
+     ],
+     "small": [
+      {
+       "label": "接線",
+       "role": "define",
+       "b": "M12 3a5 5 0 1 0 0 10a5 5 0 1 0 0-10",
+       "a": "M3 13h18"
+      },
+      {
+       "label": "直交",
+       "role": "define",
+       "b": "M5 19h14",
+       "a": "M12 19V5M12 15h4v4"
+      },
+      {
+       "label": "固定",
+       "role": "define",
+       "b": "M5 11h14v9H5z",
+       "a": "M8 11V8a4 4 0 0 1 8 0v3"
+      },
+      {
+       "label": "中点",
+       "role": "define",
+       "b": "M4 12h16",
+       "a": "M10 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0"
+      },
+      {
+       "label": "同心円",
+       "role": "define",
+       "b": "M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16",
+       "a": "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6"
+      },
+      {
+       "label": "同一直線上",
+       "role": "define",
+       "b": "M3 19l6.5-5",
+       "a": "M14.5 10l6.5-5"
+      },
+      {
+       "label": "対称",
+       "role": "define",
+       "b": "M12 3v18M4 7l4 10",
+       "a": "M20 7l-4 10"
+      },
+      {
+       "label": "曲率",
+       "role": "define",
+       "b": "M3 18h8",
+       "a": "M11 18c5 0 7-6 10-12"
+      }
+     ],
+     "menu": [
+      {
+       "label": "線上"
+      },
+      {
+       "label": "円周上"
+      },
+      {
+       "label": "ポリゴン"
+      }
+     ]
+    },
+    {
+     "name": "寸法",
+     "front": [
+      {
+       "label": "スケッチ寸法",
+       "role": "define",
+       "b": "M4 14v7M20 14v7",
+       "a": "M4 18h16M7 16l-3 2 3 2M17 16l3 2-3 2M10 10h4"
+      }
+     ],
+     "menu": [
+      {
+       "label": "計測"
+      }
+     ]
+    },
+    {
+     "name": "修正",
+     "front": [
+      {
+       "label": "トリム",
+       "role": "modify",
+       "b": "M3 12h5M16 12h5M8 5v14M16 5v14",
+       "a": "M10 12h1M13 12h1"
+      },
+      {
+       "label": "フィレット",
+       "role": "modify",
+       "b": "M5 19v-7M12 5h7",
+       "a": "M5 12a7 7 0 0 1 7-7"
+      },
+      {
+       "label": "オフセット",
+       "role": "modify",
+       "b": "M4 20V10a6 6 0 0 1 6-6h10",
+       "a": "M8 20v-9a3 3 0 0 1 3-3h9"
+      }
+     ],
+     "menu": [
+      {
+       "label": "面取り"
+      },
+      {
+       "label": "延長"
+      },
+      {
+       "label": "破断"
+      },
+      {
+       "label": "拡大縮小"
+      },
+      {
+       "label": "スケッチの尺度"
+      },
+      {
+       "label": "外へオフセット",
+       "needs_selection": true
+      },
+      {
+       "label": "内へオフセット",
+       "needs_selection": true
+      },
+      {
+       "label": "両側へオフセット",
+       "needs_selection": true
+      },
+      {
+       "label": "ブレンド曲線"
+      },
+      {
+       "label": "移動"
+      },
+      {
+       "label": "回転"
+      },
+      {
+       "label": "パラメータを変更"
+      },
+      {
+       "label": "補助線の切り替え",
+       "needs_selection": true
+      },
+      {
+       "label": "削除",
+       "needs_selection": true
+      }
+     ]
+    },
+    {
+     "name": "挿入",
+     "front": [
+      {
+       "label": "DXF を挿入",
+       "role": "none",
+       "b": "M5 3h9l5 5v13H5zM14 3v5h5M8 17l3-5 2 3 3-4",
+       "a": ""
+      }
+     ],
+     "menu": [
+      {
+       "label": "SVG を挿入"
+      }
+     ]
+    },
+    {
+     "name": "立体",
+     "front": [
+      {
+       "label": "押し出し",
+       "role": "make",
+       "b": "M4 16l8 4 8-4-8-4z",
+       "a": "M12 3v9M9 6l3-3 3 3"
+      }
+     ],
+     "menu": []
+    },
+    {
+     "name": "選択",
+     "front": [
+      {
+       "label": "選ぶ",
+       "role": "none",
+       "b": "M6 3l12 9-5.5 1 3.2 6.2-2.2 1.1-3.1-6.3L6 18z",
+       "a": ""
+      }
+     ],
+     "menu": []
+    }
+   ]
+  }
+ ]
+}

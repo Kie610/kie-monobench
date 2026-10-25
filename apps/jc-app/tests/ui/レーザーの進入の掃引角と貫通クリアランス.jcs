@@ -1,0 +1,23 @@
+# レーザーの線の切り抜きに、円弧の進入の掃引角と直線、退出の掃引角、貫通クリアランスを入れる。
+# 掃引角と直線の欄は、進入・退出が円弧の時だけ出る。
+#! sample laser
+
+click ~作業空間:
+click "加工"
+dclick "焼き印"
+select "焼き方" "線(なぞる)"
+select "進入" "直線"
+expect "進入の掃引角" missing
+select "進入" "円弧"
+expect "進入の掃引角" exists
+type "進入の掃引角" 180
+type "進入の直線" 2
+select "退出" "円弧"
+type "退出の掃引角" 45
+type "貫通クリアランス" 1
+expect "進入の掃引角" = "180 deg"
+expect "貫通クリアランス" = "1 mm"
+shot 欄
+click ~OK
+until ~"計算できた" 120s
+shot 後

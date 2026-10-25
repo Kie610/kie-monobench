@@ -1,0 +1,26 @@
+[package]
+name = "jc-kernel-truck"
+description = "truck による形状カーネルの実装"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "kernel"
+
+[dependencies]
+jc-core.workspace = true
+serde_json.workspace = true
+truck-modeling.workspace = true
+truck-shapeops.workspace = true
+truck-meshalgo.workspace = true
+truck-stepio.workspace = true
+truck-topology.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-contract.workspace = true
+
+[lints]
+workspace = true

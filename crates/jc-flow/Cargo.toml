@@ -1,0 +1,22 @@
+[package]
+name = "jc-flow"
+description = "流れと空力の解析(翼の渦格子法、2D・3D の格子ボルツマン法)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "analysis"
+
+[dependencies]
+jc-core.workspace = true
+jc-study.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "jc-strategy-waterline"
+description = "3D の等高線加工(急な壁を一定の高さごとに回って仕上げる)とランプ(段の間を斜めに下りてつなぐ)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-core.workspace = true
+jc-cam-tool.workspace = true
+jc-cam-dropcutter.workspace = true
+jc-cam-geom.workspace = true
+jc-cam-setup.workspace = true
+jc-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

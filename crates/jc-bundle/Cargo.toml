@@ -1,0 +1,73 @@
+[package]
+name = "jc-bundle"
+description = "組み立て: 機能の登録と形状カーネルの用意を 1 か所にまとめる(画面・CLI・MCP が共通で使う)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "assembly"
+
+[dependencies]
+jc-core.workspace = true
+jc-interchange.workspace = true
+jc-plugin-host.workspace = true
+jc-sketch.workspace = true
+jc-sketch-3d.workspace = true
+jc-text.workspace = true
+jc-io-dxf.workspace = true
+jc-io-svg.workspace = true
+jc-cad.workspace = true
+jc-cad-extrude.workspace = true
+jc-cad-revolve.workspace = true
+jc-cad-sweep.workspace = true
+jc-cad-boolean.workspace = true
+jc-cad-hole.workspace = true
+jc-cad-pattern.workspace = true
+jc-cad-modify.workspace = true
+jc-asm.workspace = true
+jc-fea.workspace = true
+jc-flow.workspace = true
+jc-study.workspace = true
+jc-cad-edge.workspace = true
+jc-cad-import-step.workspace = true
+jc-sketch-canvas.workspace = true
+jc-scene.workspace = true
+jc-config.workspace = true
+jc-cam-tool.workspace = true
+jc-cam-setup.workspace = true
+jc-strategy-face.workspace = true
+jc-strategy-contour2d.workspace = true
+jc-strategy-chamfer.workspace = true
+jc-strategy-engrave.workspace = true
+jc-strategy-laser.workspace = true
+jc-strategy-pocket2d.workspace = true
+jc-strategy-adaptive2d.workspace = true
+jc-strategy-drill.workspace = true
+jc-strategy-raster3d.workspace = true
+jc-strategy-waterline.workspace = true
+jc-strategy-pencil.workspace = true
+jc-strategy-rough3d.workspace = true
+jc-cam-commands.workspace = true
+jc-post.workspace = true
+jc-io-stl.workspace = true
+jc-io-view.workspace = true
+jc-io-render.workspace = true
+jc-post-carvera-air.workspace = true
+jc-samples.workspace = true
+jc-kernel-truck.workspace = true
+jc-kernel-smlib = { workspace = true, optional = true }
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[features]
+# SMLib のカーネル(C++ のビルドが要る)。外すと truck だけで組み立てる
+default = ["smlib"]
+smlib = ["dep:jc-kernel-smlib"]
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

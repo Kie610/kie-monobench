@@ -1,0 +1,53 @@
+# 3D 粗取りの渦巻きと丸め(2026-10-21): 加工の「3D ▾」から 3D 粗取りを足し、輪を渦巻きにつなぐ・
+# 角の丸め・進入方法のらせん・平らな面の山を許すを替えても、誤りなく計算が通る。らせんの直径は
+# 進入方法が斜めの時は出ない。
+#! sample cam3d
+
+click ~作業空間:
+click "加工"
+click "3D ▾"
+expect "3D 粗取り"
+click "3D 粗取り"
+wait
+expect "輪を渦巻きにつなぐ"
+expect "角の丸め"
+expect "平らな面の山を許す"
+until ~"3D 粗取り9" 120s
+expect ~削る所がありません missing
+shot 前
+
+# 輪を渦巻きにつなぎ、内側の輪の角を 2 mm で丸める
+expect "輪を渦巻きにつなぐ" = "切"
+click "輪を渦巻きにつなぐ"
+wait
+expect "輪を渦巻きにつなぐ" = "入"
+type "角の丸め" "2 mm"
+wait
+expect "角の丸め" = "2 mm"
+until ~"3D 粗取り9" 120s
+expect ~削る所がありません missing
+shot 渦巻きと丸め
+
+# 進入方法をらせんにし、らせんの直径を 2 mm にする。平らな面の山を許すを切る
+select "進入方法" "らせん"
+wait
+expect "らせんの直径"
+type "らせんの直径" "2 mm"
+wait
+expect "らせんの直径" = "2 mm"
+expect "平らな面の山を許す" = "入"
+click "平らな面の山を許す"
+wait
+expect "平らな面の山を許す" = "切"
+until ~"3D 粗取り9" 120s
+expect ~削る所がありません missing
+
+# 斜めにすると、らせんの直径は出ない
+select "進入方法" "斜め(輪に沿って)"
+wait
+expect "らせんの直径" missing
+until ~"3D 粗取り9" 120s
+click ~OK
+wait
+expect ~削る所がありません missing
+shot 後

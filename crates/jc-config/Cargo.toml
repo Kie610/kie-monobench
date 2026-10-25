@@ -1,0 +1,24 @@
+[package]
+name = "jc-config"
+description = "構成表(寸法違いの部品を 1 つの文書で持つ。行を当てるとパラメータと抑制を書き換えて計算し直す)の操作"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cad"
+
+[dependencies]
+jc-core.workspace = true
+jc-interchange.workspace = true
+serde_json.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-bundle = { workspace = true, features = ["smlib"] }
+jc-samples.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,30 @@
+[package]
+name = "jc-kernel-smlib"
+description = "SMLib(usd-brep)による形状カーネルの実装"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[package.metadata.jc]
+layer = "kernel"
+
+[dependencies]
+jc-core.workspace = true
+smlib-sys.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[build-dependencies]
+cc.workspace = true
+
+[dev-dependencies]
+jc-contract.workspace = true
+jc-kernel-truck.workspace = true
+
+# C++ の中継層を呼ぶ src/ffi.rs だけが unsafe を使う(ワークスペースの forbid の代わりに deny)
+[lints.rust]
+unsafe_code = "deny"

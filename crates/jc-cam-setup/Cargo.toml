@@ -1,0 +1,29 @@
+[package]
+name = "jc-cam-setup"
+description = "CAM のセットアップ(ストック、作業座標)と加工の機能の共通部品"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-core.workspace = true
+jc-cam-tool.workspace = true
+jc-cam-geom.workspace = true
+jc-post.workspace = true
+jc-toolpath.workspace = true
+jc-toolpath-fit.workspace = true
+jc-toolpath-moves.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-contract.workspace = true
+
+[lints]
+workspace = true

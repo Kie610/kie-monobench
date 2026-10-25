@@ -1,0 +1,44 @@
+# cargo-deny の設定。GPL 系(GPL・LGPL・AGPL)は allow に入れないことで拒否する。
+# `cargo xtask verify --all` が `cargo deny check licenses bans sources` を流す(docs/verify.md の 1 節)。
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    # egui の既定フォント(epaint_default_fonts)が使う、フォント向けのライセンス
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+
+# 作る環境(PC の Windows とクラウドの Linux)で実際に組み立てる依存だけを見る。
+# これが無いと cfg(fuzzing) でだけ入る libfuzzer-sys(rav1e が持つ。NCSA を含む)まで数えて落ちる
+# (2026-10-21 構造のレビュー 0a。NCSA は許可の表に足さない)。
+[graph]
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+# 既知の脆弱性(RustSec)。直す版があるものは版を上げて直し、ここには足さない。
+# 下は「保守されていない」の知らせだけで、直す版が無く、使っている上流も最新の版のまま持っている物(2026-10-25)。
+# 上流が外したら、その行を消す。
+[advisories]
+ignore = [
+    # truck-base 0.5.0(truck のカーネル)が使う行列の部品。truck は最新の版でも使っている
+    { id = "RUSTSEC-2026-0196", reason = "cgmath: truck-base 0.5.0 が使う。直す版は無く、truck の最新でも使っている" },
+    # egui_dock 0.21.1(画面の部品の並べ替え)が使うマクロの部品。組み立ての時だけ動く
+    { id = "RUSTSEC-2024-0436", reason = "paste: egui_dock 0.21.1 が使うマクロの部品。直す版は無く、egui_dock の最新でも使っている" },
+    # ruststep 0.4.0(truck の STEP の読み書き)が使うマクロの部品。組み立ての時だけ動く
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: ruststep 0.4.0 が使うマクロの部品。直す版は無く、truck-stepio の最新でも使っている" },
+]

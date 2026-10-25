@@ -1,0 +1,24 @@
+[package]
+name = "jc-toolpath-moves"
+description = "工具の動きの部品: 入り方・リード・仕上げの周回、輪郭に沿う動き、経路のつなぎ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-core.workspace = true
+jc-cam-geom.workspace = true
+jc-cam-tool.workspace = true
+jc-toolpath.workspace = true
+log.workspace = true
+serde.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

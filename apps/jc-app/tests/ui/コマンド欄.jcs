@@ -1,0 +1,20 @@
+# コマンド欄: 表示の一覧から出し、欄にコマンドを打って流せる(欄そのものもコマンドで打つ)。
+#! sample part
+
+shot 前
+# 表示の一覧(3D のビューの下の帯)から、コマンド欄を出す
+click "表示"
+shot 表示の一覧
+click "コマンド"
+key Escape
+expect "コマンド" exists
+
+# 欄に打ったコマンドが流れ、画面が変わる
+type "コマンド" "find 押し出し" enter
+until ~"Button \"押し出し\"" 10s
+type "コマンド" "pane ブラウザ off" enter
+until "ブラウザ を隠した" 10s
+expect "ブラウザを隠す" missing
+type "コマンド" "help type" enter
+until ~欄を押して中身を全部選び 10s
+shot 後

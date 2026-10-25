@@ -1,0 +1,25 @@
+[package]
+name = "jc-cam-tool"
+description = "工具と工具ライブラリ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-look.workspace = true
+jc-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+jc-format.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

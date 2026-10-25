@@ -1,0 +1,43 @@
+---
+source: crates/jc-post-carvera-air/src/lib.rs
+expression: g
+---
+(kieMonoBench / Carvera Air)
+(時間の目安 0.2 分、工具交換と工具長の測定は含まない)
+(T1 平 6 mm D6 シャンク6)
+(T3 平 2 mm D2 シャンク3.175)
+(注意: 工具 T1 平 6 mm は 6 mm のコレットに交換が要ります標準は 3.175 mm)
+G21
+G90
+G17
+G54
+(見本)
+(四角)
+M6 T1
+M491
+M3 S10000
+G4 P2
+G0 Z5
+X0 Y0
+Z1
+G1 Z-1 F200
+X10 F600
+Y10
+G0 Z5
+(らせん)
+G0 Z20
+M5
+M6 T3
+M491
+M3 S12000
+G4 P2
+G0 Z5
+X22 Y20
+Z1
+G1 Z0 F150
+G3 X18 Y20 Z-0.3 I-2 J0 F400
+X22 Y20 Z-0.6 I2 J0
+G0 Z5
+G0 Z20
+M5
+M30

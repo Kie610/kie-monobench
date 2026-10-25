@@ -1,0 +1,28 @@
+[package]
+name = "jc-render"
+description = "写実の絵を描く(材質・環境の光・影・木目。速い描き方と光線追跡を CPU で。画面・動画・静止画が共通で使う)と、画面の無い所で形を絵にする(picture。MCP の screenshot・版の縮小図)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "inspect"
+
+[dependencies]
+jc-core.workspace = true
+jc-look.workspace = true
+log.workspace = true
+# シーンの設定(render.scene)の JSON を読み書きする(settings.rs)
+serde_json.workspace = true
+# 形の絵を PNG で書く(picture.rs)
+jc-format.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+# picture の試験が書いた PNG を読み戻す
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+
+[lints]
+workspace = true

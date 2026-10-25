@@ -1,0 +1,19 @@
+[package]
+name = "smlib-sys"
+description = "usd-brep の SMLib と SM_API を静的ライブラリにする(ソースは third_party にある)"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+links = "smlib"
+build = "build.rs"
+rust-version.workspace = true
+publish = false
+
+[package.metadata.jc]
+layer = "kernel"
+
+[build-dependencies]
+cc.workspace = true
+
+[dependencies]
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }

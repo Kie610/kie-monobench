@@ -1,0 +1,39 @@
+# タイムラインの高さとグループ(2026-10-21 Kie): 設計のタイムラインは既定でアイコンだけが入る
+# 低い帯にする。グループは枠で囲まず色の下線で示す。グループを作った直後の名前の欄は、Enter・
+# Esc・欄の外を押すで抜けられる。直す前は欄へ毎こま注目を戻していて、どれでも抜けられず、
+# 「欄の外を押す」の後の expect で落ちた。
+#! sample part
+#! size 1280x800
+
+shot 既定の高さ
+# 札を選び、右クリックのメニューからグループにする。名前の欄が出て、打った名前は Enter で決まる
+click "板の輪郭"#1
+rclick "板の輪郭"#1
+click ~グループにする
+expect field:グループの名前 exists
+type field:グループの名前 "ボス" enter
+expect field:グループの名前 missing
+expect "グループ「ボス」を畳む"
+shot グループを作った
+
+# 名前変更を Esc でやめると、名前は変わらない
+rclick "グループ「ボス」を畳む"
+click "名前変更"
+expect field:グループの名前 exists
+type field:グループの名前 "やめる" none
+key Escape
+expect field:グループの名前 missing
+expect "グループ「ボス」を畳む"
+
+# 名前変更の途中で欄の外(3D ビューの「全体表示」)を押すと、打った所までで決まる
+rclick "グループ「ボス」を畳む"
+click "名前変更"
+type field:グループの名前 "台" none
+click "全体表示"
+expect field:グループの名前 missing
+expect "グループ「台」を畳む"
+
+# 畳む・開く
+click "グループ「台」を畳む"
+expect "グループ「台」を開く"
+click "グループ「台」を開く"

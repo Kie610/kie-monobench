@@ -1,0 +1,16 @@
+# 字とアイコンを 250 % にしても、加工の段の帯の札(アイコン・名前・工具)と右の操作が重ならずに押せる。
+#! sample cam
+
+click "設定"
+type "字の大きさ" 250 enter
+type "アイコンの大きさ" 250 enter
+# 窓は上の帯の歯車に重なるので、窓の × で閉じる
+click "Close window"
+expect "字の大きさ" missing
+click ~"作業空間:"
+click "加工"
+expect "素材" exists
+shot 段の帯-250
+click "素材"
+expect "編集パネルを隠す" exists
+shot 素材を選んだ-250

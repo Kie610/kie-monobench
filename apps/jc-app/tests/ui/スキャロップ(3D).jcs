@@ -1,0 +1,32 @@
+# スキャロップ(3D)(2026-10-21): 加工の「3D」のボタンからスキャロップを足すと、部品の外形の縁から
+# 面に沿って一定の間隔で内へずらした輪の経路ができ、誤りなく計算が通る。送り幅を替え、内から外へ
+# にしても通る。
+#! sample cam3d
+
+click ~作業空間:
+click "加工"
+shot 前
+click "3D ▾"
+expect "スキャロップ(3D)"
+shot 3Dの一覧
+click "スキャロップ(3D)"
+wait
+expect "送り幅"
+expect "内から外へ"
+until ~"スキャロップ(3D)9" 60s
+expect ~削る所がありません missing
+shot 足した直後
+
+# 送り幅を 1 mm にし、内から外へにする
+type "送り幅" "1 mm"
+wait
+expect "送り幅" = "1 mm"
+expect "内から外へ" = "切"
+click "内から外へ"
+wait
+expect "内から外へ" = "入"
+until ~"スキャロップ(3D)9" 60s
+expect ~削る所がありません missing
+click ~OK
+wait
+shot 後

@@ -1,0 +1,38 @@
+[package]
+name = "jc-mcp"
+description = "文書を AI から操作する MCP サーバ(標準入出力)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "app"
+
+[[bin]]
+name = "jc-mcp"
+path = "src/main.rs"
+
+[dependencies]
+jc-core.workspace = true
+jc-interchange.workspace = true
+jc-bundle.workspace = true
+jc-session.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../../crates/jc-workspace-hack" }
+
+[dev-dependencies]
+jc-format.workspace = true
+
+[features]
+# SMLib のカーネルを入れる(外すと truck だけ。`--no-default-features`)
+default = ["smlib"]
+smlib = ["jc-bundle/smlib"]
+
+[lints]
+workspace = true

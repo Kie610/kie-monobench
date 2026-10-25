@@ -1,0 +1,1167 @@
+# 見本の全部の面と辺の試験(matrix_tests.rs)で通った手。JC_MATRIX_BLESS=1 cargo test -p jc-samples -- --ignored matrix_full で書き直す
+3D の見本 / 辺 f10:side:e6|f10:side:e7 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f10:side:e7 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f10:side:e9 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f10:side:e9 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f10:start / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f10:start / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f10:start / cad.chamfer
+3D の見本 / 辺 f10:side:e6|f10:start / cad.fillet
+3D の見本 / 辺 f10:side:e6|f16:side:c1#0#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f16:side:c1#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f16:side:c2#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f16:side:c2#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f16:side:c4#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f16:side:c4#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f16:start#0#1#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f16:start#0#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e6|f16:start#0#1#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e6|f16:start#0#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f10:side:e8 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f10:side:e8 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f10:start / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f10:start / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f10:start / cad.chamfer
+3D の見本 / 辺 f10:side:e7|f10:start / cad.fillet
+3D の見本 / 辺 f10:side:e7|f16:side:c1#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:side:c1#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f16:side:c2#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:side:c2#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f16:side:c2#1#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:side:c2#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f16:side:c3#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:side:c3#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f16:start#1#1#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:start#1#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e7|f16:start#1#1#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e7|f16:start#1#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f10:side:e9 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f10:side:e9 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f10:start / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f10:start / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f10:start / cad.chamfer
+3D の見本 / 辺 f10:side:e8|f10:start / cad.fillet
+3D の見本 / 辺 f10:side:e8|f16:side:c2#1#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:side:c2#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f16:side:c3#0#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:side:c3#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f16:side:c3#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:side:c3#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f16:side:c4#2 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:side:c4#2 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f16:start#1#0#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:start#1#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e8|f16:start#1#0#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e8|f16:start#1#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f10:start / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f10:start / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f10:start / cad.chamfer
+3D の見本 / 辺 f10:side:e9|f10:start / cad.fillet
+3D の見本 / 辺 f10:side:e9|f16:side:c1#0#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:side:c1#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:side:c3#0#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:side:c3#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:side:c4#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:side:c4#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:side:c4#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:side:c4#1 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:side:c4#2 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:side:c4#2 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:start#0#0#0 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:start#0#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f10:side:e9|f16:start#0#0#1 / cad.add.sketch
+3D の見本 / 辺 f10:side:e9|f16:start#0#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f12:end|f12:side:e3 / cad.add.sketch
+3D の見本 / 辺 f12:end|f12:side:e3 / cad.add.sketch3d
+3D の見本 / 辺 f12:end|f12:side:e3 / cad.chamfer
+3D の見本 / 辺 f12:end|f12:side:e3 / cad.fillet
+3D の見本 / 辺 f16:side:c1#0#0|f16:side:c4#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#0|f16:side:c4#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#0#0|f16:start#0#0#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#0|f16:start#0#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#0#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#0#1|f16:start#0#1#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#1|f16:start#0#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#0#1|f16:start#0#1#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#1|f16:start#0#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#0#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#0#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#1|f16:side:c2#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#1|f16:side:c2#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#1|f16:start#1#1#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#1|f16:start#1#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c1#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c1#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#0|f16:start#0#1#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#0|f16:start#0#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#0|f16:side:c3#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#0|f16:side:c3#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#0|f16:start#1#0#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#0|f16:start#1#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#1|f16:start#1#1#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#1|f16:start#1#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#1|f16:start#1#1#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#1|f16:start#1#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c2#1#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c2#1#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#0|f16:side:c4#2 / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#0|f16:side:c4#2 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#0|f16:start#0#0#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#0|f16:start#0#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#1|f16:start#1#0#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#1|f16:start#1#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#1|f16:start#1#0#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#1|f16:start#1#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#0#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#0#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#1|f16:start#1#1#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#1|f16:start#1#1#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c3#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c3#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#0|f16:start#0#0#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#0|f16:start#0#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#0|f16:start#0#0#1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#0|f16:start#0#0#1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#1|f16:start#0#1#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#1|f16:start#0#1#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#2|f16:start#1#0#0 / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#2|f16:start#1#0#0 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c4#2|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c4#2|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f16:side:c6 / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f16:side:c6 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f16:side:c6 / cad.chamfer
+3D の見本 / 辺 f16:side:c5|f16:side:c6 / cad.fillet
+3D の見本 / 辺 f16:side:c5|f16:side:c8 / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f16:side:c8 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f16:side:c8 / cad.chamfer
+3D の見本 / 辺 f16:side:c5|f16:side:c8 / cad.fillet
+3D の見本 / 辺 f16:side:c5|f17:side:r1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f17:side:r1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f17:side:r4 / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f17:side:r4 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f8:end / cad.chamfer
+3D の見本 / 辺 f16:side:c5|f8:end / cad.fillet
+3D の見本 / 辺 f16:side:c5|f8:side:e5 / cad.add.sketch
+3D の見本 / 辺 f16:side:c5|f8:side:e5 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c5|f8:side:e5 / cad.chamfer
+3D の見本 / 辺 f16:side:c5|f8:side:e5 / cad.fillet
+3D の見本 / 辺 f16:side:c6|f16:side:c7 / cad.add.sketch
+3D の見本 / 辺 f16:side:c6|f16:side:c7 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c6|f16:side:c7 / cad.chamfer
+3D の見本 / 辺 f16:side:c6|f16:side:c7 / cad.fillet
+3D の見本 / 辺 f16:side:c6|f17:side:r1 / cad.add.sketch
+3D の見本 / 辺 f16:side:c6|f17:side:r1 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c6|f17:side:r2 / cad.add.sketch
+3D の見本 / 辺 f16:side:c6|f17:side:r2 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c6|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c6|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c6|f8:end / cad.chamfer
+3D の見本 / 辺 f16:side:c6|f8:end / cad.fillet
+3D の見本 / 辺 f16:side:c6|f8:side:e6 / cad.add.sketch
+3D の見本 / 辺 f16:side:c6|f8:side:e6 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c6|f8:side:e6 / cad.chamfer
+3D の見本 / 辺 f16:side:c6|f8:side:e6 / cad.fillet
+3D の見本 / 辺 f16:side:c7|f16:side:c8 / cad.add.sketch
+3D の見本 / 辺 f16:side:c7|f16:side:c8 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c7|f16:side:c8 / cad.chamfer
+3D の見本 / 辺 f16:side:c7|f16:side:c8 / cad.fillet
+3D の見本 / 辺 f16:side:c7|f17:side:r2 / cad.add.sketch
+3D の見本 / 辺 f16:side:c7|f17:side:r2 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c7|f17:side:r3 / cad.add.sketch
+3D の見本 / 辺 f16:side:c7|f17:side:r3 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c7|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c7|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c7|f8:end / cad.chamfer
+3D の見本 / 辺 f16:side:c7|f8:end / cad.fillet
+3D の見本 / 辺 f16:side:c7|f8:side:e7 / cad.add.sketch
+3D の見本 / 辺 f16:side:c7|f8:side:e7 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c7|f8:side:e7 / cad.chamfer
+3D の見本 / 辺 f16:side:c7|f8:side:e7 / cad.fillet
+3D の見本 / 辺 f16:side:c8|f17:side:r3 / cad.add.sketch
+3D の見本 / 辺 f16:side:c8|f17:side:r3 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c8|f17:side:r4 / cad.add.sketch
+3D の見本 / 辺 f16:side:c8|f17:side:r4 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c8|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:side:c8|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c8|f8:end / cad.chamfer
+3D の見本 / 辺 f16:side:c8|f8:end / cad.fillet
+3D の見本 / 辺 f16:side:c8|f8:side:e8 / cad.add.sketch
+3D の見本 / 辺 f16:side:c8|f8:side:e8 / cad.add.sketch3d
+3D の見本 / 辺 f16:side:c8|f8:side:e8 / cad.chamfer
+3D の見本 / 辺 f16:side:c8|f8:side:e8 / cad.fillet
+3D の見本 / 辺 f16:start#0#0#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#0#0#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#0#0#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#0#0#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#0#1#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#0#1#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#0#1#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#0#1#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#1#0#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#1#0#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#1#0#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#1#0#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#1#1#0|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#1#1#0|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f16:start#1#1#1|f8:end / cad.add.sketch
+3D の見本 / 辺 f16:start#1#1#1|f8:end / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r1|f8:side:e5 / cad.add.sketch
+3D の見本 / 辺 f17:side:r1|f8:side:e5 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r1|f8:side:e6 / cad.add.sketch
+3D の見本 / 辺 f17:side:r1|f8:side:e6 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r2|f8:side:e6 / cad.add.sketch
+3D の見本 / 辺 f17:side:r2|f8:side:e6 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r2|f8:side:e7 / cad.add.sketch
+3D の見本 / 辺 f17:side:r2|f8:side:e7 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r3|f8:side:e7 / cad.add.sketch
+3D の見本 / 辺 f17:side:r3|f8:side:e7 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r3|f8:side:e8 / cad.add.sketch
+3D の見本 / 辺 f17:side:r3|f8:side:e8 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r4|f8:side:e5 / cad.add.sketch
+3D の見本 / 辺 f17:side:r4|f8:side:e5 / cad.add.sketch3d
+3D の見本 / 辺 f17:side:r4|f8:side:e8 / cad.add.sketch
+3D の見本 / 辺 f17:side:r4|f8:side:e8 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f12:side:e3 / cad.add.sketch
+3D の見本 / 辺 f8:end|f12:side:e3 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f12:side:e3 / cad.chamfer
+3D の見本 / 辺 f8:end|f12:side:e3 / cad.fillet
+3D の見本 / 辺 f8:end|f14:side:p2 / cad.add.sketch
+3D の見本 / 辺 f8:end|f14:side:p2 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f14:side:p2 / cad.chamfer
+3D の見本 / 辺 f8:end|f14:side:p2 / cad.fillet
+3D の見本 / 辺 f8:end|f14:side:p3 / cad.add.sketch
+3D の見本 / 辺 f8:end|f14:side:p3 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f14:side:p3 / cad.chamfer
+3D の見本 / 辺 f8:end|f14:side:p3 / cad.fillet
+3D の見本 / 辺 f8:end|f14@1:side:p2 / cad.add.sketch
+3D の見本 / 辺 f8:end|f14@1:side:p2 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f14@1:side:p2 / cad.chamfer
+3D の見本 / 辺 f8:end|f14@1:side:p2 / cad.fillet
+3D の見本 / 辺 f8:end|f14@1:side:p3 / cad.add.sketch
+3D の見本 / 辺 f8:end|f14@1:side:p3 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f14@1:side:p3 / cad.chamfer
+3D の見本 / 辺 f8:end|f14@1:side:p3 / cad.fillet
+3D の見本 / 辺 f8:end|f8:side:e10 / cad.add.sketch
+3D の見本 / 辺 f8:end|f8:side:e10 / cad.add.sketch3d
+3D の見本 / 辺 f8:end|f8:side:e10 / cad.chamfer
+3D の見本 / 辺 f8:end|f8:side:e10 / cad.fillet
+3D の見本 / 辺 f8:side:e5|f8:start / cad.add.sketch
+3D の見本 / 辺 f8:side:e5|f8:start / cad.add.sketch3d
+3D の見本 / 辺 f8:side:e5|f8:start / cad.chamfer
+3D の見本 / 辺 f8:side:e6|f8:start / cad.add.sketch
+3D の見本 / 辺 f8:side:e6|f8:start / cad.add.sketch3d
+3D の見本 / 辺 f8:side:e6|f8:start / cad.chamfer
+3D の見本 / 辺 f8:side:e7|f8:start / cad.add.sketch
+3D の見本 / 辺 f8:side:e7|f8:start / cad.add.sketch3d
+3D の見本 / 辺 f8:side:e7|f8:start / cad.chamfer
+3D の見本 / 辺 f8:side:e8|f8:start / cad.add.sketch
+3D の見本 / 辺 f8:side:e8|f8:start / cad.add.sketch3d
+3D の見本 / 辺 f8:side:e8|f8:start / cad.chamfer
+3D の見本 / 辺 f8:start|f14:side:p2 / cad.add.sketch
+3D の見本 / 辺 f8:start|f14:side:p2 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f14:side:p2 / cad.chamfer
+3D の見本 / 辺 f8:start|f14:side:p2 / cad.fillet
+3D の見本 / 辺 f8:start|f14:side:p3 / cad.add.sketch
+3D の見本 / 辺 f8:start|f14:side:p3 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f14:side:p3 / cad.chamfer
+3D の見本 / 辺 f8:start|f14:side:p3 / cad.fillet
+3D の見本 / 辺 f8:start|f14@1:side:p2 / cad.add.sketch
+3D の見本 / 辺 f8:start|f14@1:side:p2 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f14@1:side:p2 / cad.chamfer
+3D の見本 / 辺 f8:start|f14@1:side:p2 / cad.fillet
+3D の見本 / 辺 f8:start|f14@1:side:p3 / cad.add.sketch
+3D の見本 / 辺 f8:start|f14@1:side:p3 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f14@1:side:p3 / cad.chamfer
+3D の見本 / 辺 f8:start|f14@1:side:p3 / cad.fillet
+3D の見本 / 辺 f8:start|f17:side:r1 / cad.add.sketch
+3D の見本 / 辺 f8:start|f17:side:r1 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f17:side:r1 / cad.chamfer
+3D の見本 / 辺 f8:start|f17:side:r2 / cad.add.sketch
+3D の見本 / 辺 f8:start|f17:side:r2 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f17:side:r2 / cad.chamfer
+3D の見本 / 辺 f8:start|f17:side:r3 / cad.add.sketch
+3D の見本 / 辺 f8:start|f17:side:r3 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f17:side:r3 / cad.chamfer
+3D の見本 / 辺 f8:start|f17:side:r4 / cad.add.sketch
+3D の見本 / 辺 f8:start|f17:side:r4 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f17:side:r4 / cad.chamfer
+3D の見本 / 辺 f8:start|f8:side:e10 / cad.add.sketch
+3D の見本 / 辺 f8:start|f8:side:e10 / cad.add.sketch3d
+3D の見本 / 辺 f8:start|f8:side:e10 / cad.chamfer
+3D の見本 / 辺 f8:start|f8:side:e10 / cad.fillet
+3D の見本 / 面 f10:side:e6 / cad.add.sketch
+3D の見本 / 面 f10:side:e6 / cad.add.sketch3d
+3D の見本 / 面 f10:side:e6 / cad.hole_on_face
+3D の見本 / 面 f10:side:e6 / cad.sketch_on_face
+3D の見本 / 面 f10:side:e6 / cad.text_on_face
+3D の見本 / 面 f10:side:e7 / cad.add.sketch
+3D の見本 / 面 f10:side:e7 / cad.add.sketch3d
+3D の見本 / 面 f10:side:e7 / cad.hole_on_face
+3D の見本 / 面 f10:side:e7 / cad.sketch_on_face
+3D の見本 / 面 f10:side:e7 / cad.text_on_face
+3D の見本 / 面 f10:side:e8 / cad.add.sketch
+3D の見本 / 面 f10:side:e8 / cad.add.sketch3d
+3D の見本 / 面 f10:side:e8 / cad.hole_on_face
+3D の見本 / 面 f10:side:e8 / cad.sketch_on_face
+3D の見本 / 面 f10:side:e8 / cad.text_on_face
+3D の見本 / 面 f10:side:e9 / cad.add.sketch
+3D の見本 / 面 f10:side:e9 / cad.add.sketch3d
+3D の見本 / 面 f10:side:e9 / cad.extrude
+3D の見本 / 面 f10:side:e9 / cad.hole_on_face
+3D の見本 / 面 f10:side:e9 / cad.sketch_on_face
+3D の見本 / 面 f10:side:e9 / cad.text_on_face
+3D の見本 / 面 f10:start / cad.add.sketch
+3D の見本 / 面 f10:start / cad.add.sketch3d
+3D の見本 / 面 f10:start / cad.chamfer
+3D の見本 / 面 f10:start / cad.extrude
+3D の見本 / 面 f10:start / cad.fillet
+3D の見本 / 面 f10:start / cad.hole_on_face
+3D の見本 / 面 f10:start / cad.sketch_on_face
+3D の見本 / 面 f10:start / cad.text_on_face
+3D の見本 / 面 f12:end / cad.add.sketch
+3D の見本 / 面 f12:end / cad.add.sketch3d
+3D の見本 / 面 f12:end / cad.chamfer
+3D の見本 / 面 f12:end / cad.extrude
+3D の見本 / 面 f12:end / cad.fillet
+3D の見本 / 面 f12:end / cad.hole_on_face
+3D の見本 / 面 f12:end / cad.sketch_on_face
+3D の見本 / 面 f12:end / cad.text_on_face
+3D の見本 / 面 f12:side:e3 / cad.add.sketch
+3D の見本 / 面 f12:side:e3 / cad.add.sketch3d
+3D の見本 / 面 f12:side:e3 / cad.thread
+3D の見本 / 面 f14:side:p2 / cad.add.sketch
+3D の見本 / 面 f14:side:p2 / cad.add.sketch3d
+3D の見本 / 面 f14:side:p2 / cad.thread
+3D の見本 / 面 f14:side:p3 / cad.add.sketch
+3D の見本 / 面 f14:side:p3 / cad.add.sketch3d
+3D の見本 / 面 f14:side:p3 / cad.thread
+3D の見本 / 面 f14@1:side:p2 / cad.add.sketch
+3D の見本 / 面 f14@1:side:p2 / cad.add.sketch3d
+3D の見本 / 面 f14@1:side:p2 / cad.thread
+3D の見本 / 面 f14@1:side:p3 / cad.add.sketch
+3D の見本 / 面 f14@1:side:p3 / cad.add.sketch3d
+3D の見本 / 面 f14@1:side:p3 / cad.thread
+3D の見本 / 面 f16:side:c1#0#0 / cad.add.sketch
+3D の見本 / 面 f16:side:c1#0#0 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c1#0#0 / cad.extrude
+3D の見本 / 面 f16:side:c1#0#0 / cad.hole_on_face
+3D の見本 / 面 f16:side:c1#0#0 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c1#0#0 / cad.text_on_face
+3D の見本 / 面 f16:side:c1#0#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c1#0#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c1#0#1 / cad.extrude
+3D の見本 / 面 f16:side:c1#0#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c1#0#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c1#0#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c1#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c1#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c1#1 / cad.extrude
+3D の見本 / 面 f16:side:c1#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c1#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c1#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c2#0 / cad.add.sketch
+3D の見本 / 面 f16:side:c2#0 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c2#0 / cad.hole_on_face
+3D の見本 / 面 f16:side:c2#0 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c2#0 / cad.text_on_face
+3D の見本 / 面 f16:side:c2#1#0 / cad.add.sketch
+3D の見本 / 面 f16:side:c2#1#0 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c2#1#0 / cad.extrude
+3D の見本 / 面 f16:side:c2#1#0 / cad.hole_on_face
+3D の見本 / 面 f16:side:c2#1#0 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c2#1#0 / cad.text_on_face
+3D の見本 / 面 f16:side:c2#1#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c2#1#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c2#1#1 / cad.extrude
+3D の見本 / 面 f16:side:c2#1#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c2#1#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c2#1#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c3#0#0 / cad.add.sketch
+3D の見本 / 面 f16:side:c3#0#0 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c3#0#0 / cad.extrude
+3D の見本 / 面 f16:side:c3#0#0 / cad.hole_on_face
+3D の見本 / 面 f16:side:c3#0#0 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c3#0#0 / cad.text_on_face
+3D の見本 / 面 f16:side:c3#0#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c3#0#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c3#0#1 / cad.extrude
+3D の見本 / 面 f16:side:c3#0#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c3#0#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c3#0#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c3#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c3#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c3#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c3#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c3#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c4#0 / cad.add.sketch
+3D の見本 / 面 f16:side:c4#0 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c4#0 / cad.extrude
+3D の見本 / 面 f16:side:c4#0 / cad.hole_on_face
+3D の見本 / 面 f16:side:c4#0 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c4#0 / cad.text_on_face
+3D の見本 / 面 f16:side:c4#1 / cad.add.sketch
+3D の見本 / 面 f16:side:c4#1 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c4#1 / cad.extrude
+3D の見本 / 面 f16:side:c4#1 / cad.hole_on_face
+3D の見本 / 面 f16:side:c4#1 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c4#1 / cad.text_on_face
+3D の見本 / 面 f16:side:c4#2 / cad.add.sketch
+3D の見本 / 面 f16:side:c4#2 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c4#2 / cad.hole_on_face
+3D の見本 / 面 f16:side:c4#2 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c4#2 / cad.text_on_face
+3D の見本 / 面 f16:side:c5 / cad.add.sketch
+3D の見本 / 面 f16:side:c5 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c5 / cad.chamfer
+3D の見本 / 面 f16:side:c5 / cad.extrude
+3D の見本 / 面 f16:side:c5 / cad.hole_on_face
+3D の見本 / 面 f16:side:c5 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c5 / cad.text_on_face
+3D の見本 / 面 f16:side:c6 / cad.add.sketch
+3D の見本 / 面 f16:side:c6 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c6 / cad.chamfer
+3D の見本 / 面 f16:side:c6 / cad.extrude
+3D の見本 / 面 f16:side:c6 / cad.hole_on_face
+3D の見本 / 面 f16:side:c6 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c6 / cad.text_on_face
+3D の見本 / 面 f16:side:c7 / cad.add.sketch
+3D の見本 / 面 f16:side:c7 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c7 / cad.chamfer
+3D の見本 / 面 f16:side:c7 / cad.extrude
+3D の見本 / 面 f16:side:c7 / cad.hole_on_face
+3D の見本 / 面 f16:side:c7 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c7 / cad.text_on_face
+3D の見本 / 面 f16:side:c8 / cad.add.sketch
+3D の見本 / 面 f16:side:c8 / cad.add.sketch3d
+3D の見本 / 面 f16:side:c8 / cad.chamfer
+3D の見本 / 面 f16:side:c8 / cad.extrude
+3D の見本 / 面 f16:side:c8 / cad.hole_on_face
+3D の見本 / 面 f16:side:c8 / cad.sketch_on_face
+3D の見本 / 面 f16:side:c8 / cad.text_on_face
+3D の見本 / 面 f16:start#0#0#0 / cad.add.sketch
+3D の見本 / 面 f16:start#0#0#0 / cad.add.sketch3d
+3D の見本 / 面 f16:start#0#0#0 / cad.sketch_on_face
+3D の見本 / 面 f16:start#0#0#0 / cad.text_on_face
+3D の見本 / 面 f16:start#0#0#1 / cad.add.sketch
+3D の見本 / 面 f16:start#0#0#1 / cad.add.sketch3d
+3D の見本 / 面 f16:start#0#0#1 / cad.sketch_on_face
+3D の見本 / 面 f16:start#0#0#1 / cad.text_on_face
+3D の見本 / 面 f16:start#0#1#0 / cad.add.sketch
+3D の見本 / 面 f16:start#0#1#0 / cad.add.sketch3d
+3D の見本 / 面 f16:start#0#1#0 / cad.extrude
+3D の見本 / 面 f16:start#0#1#0 / cad.hole_on_face
+3D の見本 / 面 f16:start#0#1#0 / cad.sketch_on_face
+3D の見本 / 面 f16:start#0#1#0 / cad.text_on_face
+3D の見本 / 面 f16:start#0#1#1 / cad.add.sketch
+3D の見本 / 面 f16:start#0#1#1 / cad.add.sketch3d
+3D の見本 / 面 f16:start#0#1#1 / cad.extrude
+3D の見本 / 面 f16:start#0#1#1 / cad.sketch_on_face
+3D の見本 / 面 f16:start#0#1#1 / cad.text_on_face
+3D の見本 / 面 f16:start#1#0#0 / cad.add.sketch
+3D の見本 / 面 f16:start#1#0#0 / cad.add.sketch3d
+3D の見本 / 面 f16:start#1#0#0 / cad.extrude
+3D の見本 / 面 f16:start#1#0#0 / cad.hole_on_face
+3D の見本 / 面 f16:start#1#0#0 / cad.sketch_on_face
+3D の見本 / 面 f16:start#1#0#0 / cad.text_on_face
+3D の見本 / 面 f16:start#1#0#1 / cad.add.sketch
+3D の見本 / 面 f16:start#1#0#1 / cad.add.sketch3d
+3D の見本 / 面 f16:start#1#0#1 / cad.sketch_on_face
+3D の見本 / 面 f16:start#1#0#1 / cad.text_on_face
+3D の見本 / 面 f16:start#1#1#0 / cad.add.sketch
+3D の見本 / 面 f16:start#1#1#0 / cad.add.sketch3d
+3D の見本 / 面 f16:start#1#1#0 / cad.hole_on_face
+3D の見本 / 面 f16:start#1#1#0 / cad.sketch_on_face
+3D の見本 / 面 f16:start#1#1#0 / cad.text_on_face
+3D の見本 / 面 f16:start#1#1#1 / cad.add.sketch
+3D の見本 / 面 f16:start#1#1#1 / cad.add.sketch3d
+3D の見本 / 面 f16:start#1#1#1 / cad.extrude
+3D の見本 / 面 f16:start#1#1#1 / cad.hole_on_face
+3D の見本 / 面 f16:start#1#1#1 / cad.sketch_on_face
+3D の見本 / 面 f16:start#1#1#1 / cad.text_on_face
+3D の見本 / 面 f17:side:r1 / cad.add.sketch
+3D の見本 / 面 f17:side:r1 / cad.add.sketch3d
+3D の見本 / 面 f17:side:r1 / cad.thread
+3D の見本 / 面 f17:side:r2 / cad.add.sketch
+3D の見本 / 面 f17:side:r2 / cad.add.sketch3d
+3D の見本 / 面 f17:side:r2 / cad.thread
+3D の見本 / 面 f17:side:r3 / cad.add.sketch
+3D の見本 / 面 f17:side:r3 / cad.add.sketch3d
+3D の見本 / 面 f17:side:r3 / cad.thread
+3D の見本 / 面 f17:side:r4 / cad.add.sketch
+3D の見本 / 面 f17:side:r4 / cad.add.sketch3d
+3D の見本 / 面 f17:side:r4 / cad.thread
+3D の見本 / 面 f8:end / cad.add.sketch
+3D の見本 / 面 f8:end / cad.add.sketch3d
+3D の見本 / 面 f8:end / cad.extrude
+3D の見本 / 面 f8:end / cad.sketch_on_face
+3D の見本 / 面 f8:end / cad.text_on_face
+3D の見本 / 面 f8:side:e10 / cad.add.sketch
+3D の見本 / 面 f8:side:e10 / cad.add.sketch3d
+3D の見本 / 面 f8:side:e10 / cad.thread
+3D の見本 / 面 f8:side:e5 / cad.add.sketch
+3D の見本 / 面 f8:side:e5 / cad.add.sketch3d
+3D の見本 / 面 f8:side:e5 / cad.extrude
+3D の見本 / 面 f8:side:e5 / cad.hole_on_face
+3D の見本 / 面 f8:side:e5 / cad.sketch_on_face
+3D の見本 / 面 f8:side:e5 / cad.text_on_face
+3D の見本 / 面 f8:side:e6 / cad.add.sketch
+3D の見本 / 面 f8:side:e6 / cad.add.sketch3d
+3D の見本 / 面 f8:side:e6 / cad.extrude
+3D の見本 / 面 f8:side:e6 / cad.hole_on_face
+3D の見本 / 面 f8:side:e6 / cad.sketch_on_face
+3D の見本 / 面 f8:side:e6 / cad.text_on_face
+3D の見本 / 面 f8:side:e7 / cad.add.sketch
+3D の見本 / 面 f8:side:e7 / cad.add.sketch3d
+3D の見本 / 面 f8:side:e7 / cad.extrude
+3D の見本 / 面 f8:side:e7 / cad.hole_on_face
+3D の見本 / 面 f8:side:e7 / cad.sketch_on_face
+3D の見本 / 面 f8:side:e7 / cad.text_on_face
+3D の見本 / 面 f8:side:e8 / cad.add.sketch
+3D の見本 / 面 f8:side:e8 / cad.add.sketch3d
+3D の見本 / 面 f8:side:e8 / cad.extrude
+3D の見本 / 面 f8:side:e8 / cad.hole_on_face
+3D の見本 / 面 f8:side:e8 / cad.sketch_on_face
+3D の見本 / 面 f8:side:e8 / cad.text_on_face
+3D の見本 / 面 f8:start / cad.add.sketch
+3D の見本 / 面 f8:start / cad.add.sketch3d
+3D の見本 / 面 f8:start / cad.chamfer
+3D の見本 / 面 f8:start / cad.extrude
+3D の見本 / 面 f8:start / cad.sketch_on_face
+3D の見本 / 面 f8:start / cad.text_on_face
+下から円柱 / 辺 f2:end#0|f2:side:e2#0 / cad.add.sketch
+下から円柱 / 辺 f2:end#0|f2:side:e2#0 / cad.add.sketch3d
+下から円柱 / 辺 f2:end#0|f4:side:e8 / cad.add.sketch
+下から円柱 / 辺 f2:end#0|f4:side:e8 / cad.add.sketch3d
+下から円柱 / 辺 f2:end#1|f2:side:e2#1 / cad.add.sketch
+下から円柱 / 辺 f2:end#1|f2:side:e2#1 / cad.add.sketch3d
+下から円柱 / 辺 f2:end#1|f2:side:e2#2 / cad.add.sketch
+下から円柱 / 辺 f2:end#1|f2:side:e2#2 / cad.add.sketch3d
+下から円柱 / 辺 f2:end#1|f4:side:e6 / cad.add.sketch
+下から円柱 / 辺 f2:end#1|f4:side:e6 / cad.add.sketch3d
+下から円柱 / 辺 f2:side:e2#0|f4:side:e8 / cad.add.sketch
+下から円柱 / 辺 f2:side:e2#0|f4:side:e8 / cad.add.sketch3d
+下から円柱 / 辺 f2:side:e2#1|f4:side:e6 / cad.add.sketch
+下から円柱 / 辺 f2:side:e2#1|f4:side:e6 / cad.add.sketch3d
+下から円柱 / 辺 f2:side:e2#2|f4:side:e6 / cad.add.sketch
+下から円柱 / 辺 f2:side:e2#2|f4:side:e6 / cad.add.sketch3d
+下から円柱 / 辺 f2:start#0|f2:side:e2#0 / cad.add.sketch
+下から円柱 / 辺 f2:start#0|f2:side:e2#0 / cad.add.sketch3d
+下から円柱 / 辺 f2:start#0|f4:side:e8 / cad.add.sketch
+下から円柱 / 辺 f2:start#0|f4:side:e8 / cad.add.sketch3d
+下から円柱 / 辺 f2:start#1|f2:side:e2#1 / cad.add.sketch
+下から円柱 / 辺 f2:start#1|f2:side:e2#1 / cad.add.sketch3d
+下から円柱 / 辺 f2:start#1|f2:side:e2#2 / cad.add.sketch
+下から円柱 / 辺 f2:start#1|f2:side:e2#2 / cad.add.sketch3d
+下から円柱 / 辺 f2:start#1|f4:side:e6 / cad.add.sketch
+下から円柱 / 辺 f2:start#1|f4:side:e6 / cad.add.sketch3d
+下から円柱 / 面 f2:end#0 / cad.add.sketch
+下から円柱 / 面 f2:end#0 / cad.add.sketch3d
+下から円柱 / 面 f2:end#0 / cad.extrude
+下から円柱 / 面 f2:end#0 / cad.mirror_on_face
+下から円柱 / 面 f2:end#0 / cad.sketch_on_face
+下から円柱 / 面 f2:end#0 / cad.text_on_face
+下から円柱 / 面 f2:end#1 / cad.add.sketch
+下から円柱 / 面 f2:end#1 / cad.add.sketch3d
+下から円柱 / 面 f2:end#1 / cad.extrude
+下から円柱 / 面 f2:end#1 / cad.mirror_on_face
+下から円柱 / 面 f2:end#1 / cad.sketch_on_face
+下から円柱 / 面 f2:end#1 / cad.text_on_face
+下から円柱 / 面 f2:side:e2#0 / cad.add.sketch
+下から円柱 / 面 f2:side:e2#0 / cad.add.sketch3d
+下から円柱 / 面 f2:side:e2#0 / cad.thread
+下から円柱 / 面 f2:side:e2#1 / cad.add.sketch
+下から円柱 / 面 f2:side:e2#1 / cad.add.sketch3d
+下から円柱 / 面 f2:side:e2#1 / cad.thread
+下から円柱 / 面 f2:side:e2#2 / cad.add.sketch
+下から円柱 / 面 f2:side:e2#2 / cad.add.sketch3d
+下から円柱 / 面 f2:side:e2#2 / cad.thread
+下から円柱 / 面 f2:start#0 / cad.add.sketch
+下から円柱 / 面 f2:start#0 / cad.add.sketch3d
+下から円柱 / 面 f2:start#0 / cad.extrude
+下から円柱 / 面 f2:start#0 / cad.mirror_on_face
+下から円柱 / 面 f2:start#0 / cad.sketch_on_face
+下から円柱 / 面 f2:start#0 / cad.text_on_face
+下から円柱 / 面 f2:start#1 / cad.add.sketch
+下から円柱 / 面 f2:start#1 / cad.add.sketch3d
+下から円柱 / 面 f2:start#1 / cad.extrude
+下から円柱 / 面 f2:start#1 / cad.mirror_on_face
+下から円柱 / 面 f2:start#1 / cad.sketch_on_face
+下から円柱 / 面 f2:start#1 / cad.text_on_face
+下から円柱 / 面 f4:side:e6 / cad.add.sketch
+下から円柱 / 面 f4:side:e6 / cad.add.sketch3d
+下から円柱 / 面 f4:side:e6 / cad.extrude
+下から円柱 / 面 f4:side:e6 / cad.mirror_on_face
+下から円柱 / 面 f4:side:e6 / cad.sketch_on_face
+下から円柱 / 面 f4:side:e6 / cad.text_on_face
+下から円柱 / 面 f4:side:e8 / cad.add.sketch
+下から円柱 / 面 f4:side:e8 / cad.add.sketch3d
+下から円柱 / 面 f4:side:e8 / cad.extrude
+下から円柱 / 面 f4:side:e8 / cad.mirror_on_face
+下から円柱 / 面 f4:side:e8 / cad.sketch_on_face
+下から円柱 / 面 f4:side:e8 / cad.text_on_face
+丸めの後の面取り / 辺 f2:end|f2:side:e7 / cad.add.sketch
+丸めの後の面取り / 辺 f2:end|f2:side:e7 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:end|f2:side:e7 / cad.chamfer
+丸めの後の面取り / 辺 f2:end|f2:side:e7 / cad.extrude
+丸めの後の面取り / 辺 f2:end|f2:side:e7 / cad.fillet
+丸めの後の面取り / 辺 f2:end|f2:side:e8 / cad.add.sketch
+丸めの後の面取り / 辺 f2:end|f2:side:e8 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:end|f2:side:e8 / cad.chamfer
+丸めの後の面取り / 辺 f2:end|f2:side:e8 / cad.extrude
+丸めの後の面取り / 辺 f2:end|f3:side:r1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:end|f3:side:r1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:end|f3:side:r1 / cad.extrude
+丸めの後の面取り / 辺 f2:end|f4:side:c1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:end|f4:side:c1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:end|f4:side:c1 / cad.chamfer
+丸めの後の面取り / 辺 f2:end|f4:side:c1 / cad.extrude
+丸めの後の面取り / 辺 f2:end|f4:side:c1 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e6 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e6 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e6 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e6 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e6 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e8 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e8 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e8 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e5|f2:side:e8 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e5|f2:start / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e5|f2:start / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e5|f2:start / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e5|f2:start / cad.extrude
+丸めの後の面取り / 辺 f2:side:e5|f2:start / cad.fillet
+丸めの後の面取り / 辺 f2:side:e5|f3:side:r1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e5|f3:side:r1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e5|f3:side:r1 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e6|f2:side:e7 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e6|f2:side:e7 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e6|f2:side:e7 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e6|f2:side:e7 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e6|f2:side:e7 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e6|f2:start / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e6|f2:start / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e6|f2:start / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e6|f2:start / cad.extrude
+丸めの後の面取り / 辺 f2:side:e6|f2:start / cad.fillet
+丸めの後の面取り / 辺 f2:side:e6|f3:side:r1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e6|f3:side:r1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e6|f3:side:r1 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e6|f3:side:r1 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e6|f3:side:r1 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e6|f4:side:c1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e6|f4:side:c1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e6|f4:side:c1 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e6|f4:side:c1 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e6|f4:side:c1 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e7|f2:side:e8 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e7|f2:side:e8 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e7|f2:side:e8 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e7|f2:side:e8 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e7|f2:side:e8 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e7|f2:start / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e7|f2:start / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e7|f2:start / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e7|f2:start / cad.extrude
+丸めの後の面取り / 辺 f2:side:e7|f2:start / cad.fillet
+丸めの後の面取り / 辺 f2:side:e7|f4:side:c1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e7|f4:side:c1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e7|f4:side:c1 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e7|f4:side:c1 / cad.extrude
+丸めの後の面取り / 辺 f2:side:e7|f4:side:c1 / cad.fillet
+丸めの後の面取り / 辺 f2:side:e8|f2:start / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e8|f2:start / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e8|f2:start / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e8|f2:start / cad.extrude
+丸めの後の面取り / 辺 f2:side:e8|f2:start / cad.fillet
+丸めの後の面取り / 辺 f2:side:e8|f3:side:r1 / cad.add.sketch
+丸めの後の面取り / 辺 f2:side:e8|f3:side:r1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f2:side:e8|f3:side:r1 / cad.chamfer
+丸めの後の面取り / 辺 f2:side:e8|f3:side:r1 / cad.extrude
+丸めの後の面取り / 辺 f3:side:r1|f4:side:c1 / cad.add.sketch
+丸めの後の面取り / 辺 f3:side:r1|f4:side:c1 / cad.add.sketch3d
+丸めの後の面取り / 辺 f3:side:r1|f4:side:c1 / cad.extrude
+丸めの後の面取り / 面 f2:end / cad.add.sketch
+丸めの後の面取り / 面 f2:end / cad.add.sketch3d
+丸めの後の面取り / 面 f2:end / cad.extrude
+丸めの後の面取り / 面 f2:end / cad.sketch_on_face
+丸めの後の面取り / 面 f2:end / cad.text_on_face
+丸めの後の面取り / 面 f2:side:e5 / cad.add.sketch
+丸めの後の面取り / 面 f2:side:e5 / cad.add.sketch3d
+丸めの後の面取り / 面 f2:side:e5 / cad.extrude
+丸めの後の面取り / 面 f2:side:e5 / cad.hole_on_face
+丸めの後の面取り / 面 f2:side:e5 / cad.sketch_on_face
+丸めの後の面取り / 面 f2:side:e5 / cad.text_on_face
+丸めの後の面取り / 面 f2:side:e6 / cad.add.sketch
+丸めの後の面取り / 面 f2:side:e6 / cad.add.sketch3d
+丸めの後の面取り / 面 f2:side:e6 / cad.chamfer
+丸めの後の面取り / 面 f2:side:e6 / cad.extrude
+丸めの後の面取り / 面 f2:side:e6 / cad.fillet
+丸めの後の面取り / 面 f2:side:e6 / cad.hole_on_face
+丸めの後の面取り / 面 f2:side:e6 / cad.sketch_on_face
+丸めの後の面取り / 面 f2:side:e6 / cad.text_on_face
+丸めの後の面取り / 面 f2:side:e7 / cad.add.sketch
+丸めの後の面取り / 面 f2:side:e7 / cad.add.sketch3d
+丸めの後の面取り / 面 f2:side:e7 / cad.chamfer
+丸めの後の面取り / 面 f2:side:e7 / cad.extrude
+丸めの後の面取り / 面 f2:side:e7 / cad.fillet
+丸めの後の面取り / 面 f2:side:e7 / cad.hole_on_face
+丸めの後の面取り / 面 f2:side:e7 / cad.sketch_on_face
+丸めの後の面取り / 面 f2:side:e7 / cad.text_on_face
+丸めの後の面取り / 面 f2:side:e8 / cad.add.sketch
+丸めの後の面取り / 面 f2:side:e8 / cad.add.sketch3d
+丸めの後の面取り / 面 f2:side:e8 / cad.chamfer
+丸めの後の面取り / 面 f2:side:e8 / cad.extrude
+丸めの後の面取り / 面 f2:side:e8 / cad.hole_on_face
+丸めの後の面取り / 面 f2:side:e8 / cad.sketch_on_face
+丸めの後の面取り / 面 f2:side:e8 / cad.text_on_face
+丸めの後の面取り / 面 f2:start / cad.add.sketch
+丸めの後の面取り / 面 f2:start / cad.add.sketch3d
+丸めの後の面取り / 面 f2:start / cad.chamfer
+丸めの後の面取り / 面 f2:start / cad.extrude
+丸めの後の面取り / 面 f2:start / cad.fillet
+丸めの後の面取り / 面 f2:start / cad.sketch_on_face
+丸めの後の面取り / 面 f2:start / cad.text_on_face
+丸めの後の面取り / 面 f3:side:r1 / cad.add.sketch
+丸めの後の面取り / 面 f3:side:r1 / cad.add.sketch3d
+丸めの後の面取り / 面 f3:side:r1 / cad.extrude
+丸めの後の面取り / 面 f3:side:r1 / cad.thread
+丸めの後の面取り / 面 f4:side:c1 / cad.add.sketch
+丸めの後の面取り / 面 f4:side:c1 / cad.add.sketch3d
+丸めの後の面取り / 面 f4:side:c1 / cad.chamfer
+丸めの後の面取り / 面 f4:side:c1 / cad.extrude
+丸めの後の面取り / 面 f4:side:c1 / cad.hole_on_face
+丸めの後の面取り / 面 f4:side:c1 / cad.sketch_on_face
+丸めの後の面取り / 面 f4:side:c1 / cad.text_on_face
+基準部品 / 辺 f10:side:e6|f10:side:e7 / cad.add.sketch
+基準部品 / 辺 f10:side:e6|f10:side:e7 / cad.add.sketch3d
+基準部品 / 辺 f10:side:e6|f10:side:e7 / cad.chamfer
+基準部品 / 辺 f10:side:e6|f10:side:e7 / cad.fillet
+基準部品 / 辺 f10:side:e6|f10:side:e9 / cad.add.sketch
+基準部品 / 辺 f10:side:e6|f10:side:e9 / cad.add.sketch3d
+基準部品 / 辺 f10:side:e6|f10:side:e9 / cad.chamfer
+基準部品 / 辺 f10:side:e6|f10:side:e9 / cad.fillet
+基準部品 / 辺 f10:side:e6|f10:start / cad.add.sketch
+基準部品 / 辺 f10:side:e6|f10:start / cad.add.sketch3d
+基準部品 / 辺 f10:side:e6|f10:start / cad.chamfer
+基準部品 / 辺 f10:side:e6|f10:start / cad.fillet
+基準部品 / 辺 f10:side:e6|f8:end / cad.add.sketch
+基準部品 / 辺 f10:side:e6|f8:end / cad.add.sketch3d
+基準部品 / 辺 f10:side:e6|f8:end / cad.chamfer
+基準部品 / 辺 f10:side:e6|f8:end / cad.fillet
+基準部品 / 辺 f10:side:e7|f10:side:e8 / cad.add.sketch
+基準部品 / 辺 f10:side:e7|f10:side:e8 / cad.add.sketch3d
+基準部品 / 辺 f10:side:e7|f10:side:e8 / cad.chamfer
+基準部品 / 辺 f10:side:e7|f10:side:e8 / cad.fillet
+基準部品 / 辺 f10:side:e7|f10:start / cad.add.sketch
+基準部品 / 辺 f10:side:e7|f10:start / cad.add.sketch3d
+基準部品 / 辺 f10:side:e7|f10:start / cad.chamfer
+基準部品 / 辺 f10:side:e7|f10:start / cad.fillet
+基準部品 / 辺 f10:side:e7|f8:end / cad.add.sketch
+基準部品 / 辺 f10:side:e7|f8:end / cad.add.sketch3d
+基準部品 / 辺 f10:side:e7|f8:end / cad.chamfer
+基準部品 / 辺 f10:side:e7|f8:end / cad.fillet
+基準部品 / 辺 f10:side:e8|f10:side:e9 / cad.add.sketch
+基準部品 / 辺 f10:side:e8|f10:side:e9 / cad.add.sketch3d
+基準部品 / 辺 f10:side:e8|f10:side:e9 / cad.chamfer
+基準部品 / 辺 f10:side:e8|f10:side:e9 / cad.fillet
+基準部品 / 辺 f10:side:e8|f10:start / cad.add.sketch
+基準部品 / 辺 f10:side:e8|f10:start / cad.add.sketch3d
+基準部品 / 辺 f10:side:e8|f10:start / cad.chamfer
+基準部品 / 辺 f10:side:e8|f10:start / cad.fillet
+基準部品 / 辺 f10:side:e8|f8:end / cad.add.sketch
+基準部品 / 辺 f10:side:e8|f8:end / cad.add.sketch3d
+基準部品 / 辺 f10:side:e8|f8:end / cad.chamfer
+基準部品 / 辺 f10:side:e8|f8:end / cad.fillet
+基準部品 / 辺 f10:side:e9|f10:start / cad.add.sketch
+基準部品 / 辺 f10:side:e9|f10:start / cad.add.sketch3d
+基準部品 / 辺 f10:side:e9|f10:start / cad.chamfer
+基準部品 / 辺 f10:side:e9|f10:start / cad.fillet
+基準部品 / 辺 f10:side:e9|f8:end / cad.add.sketch
+基準部品 / 辺 f10:side:e9|f8:end / cad.add.sketch3d
+基準部品 / 辺 f10:side:e9|f8:end / cad.chamfer
+基準部品 / 辺 f10:side:e9|f8:end / cad.fillet
+基準部品 / 辺 f12:end|f12:side:e3 / cad.add.sketch
+基準部品 / 辺 f12:end|f12:side:e3 / cad.add.sketch3d
+基準部品 / 辺 f12:end|f12:side:e3 / cad.chamfer
+基準部品 / 辺 f12:end|f12:side:e3 / cad.fillet
+基準部品 / 辺 f8:end|f12:side:e3 / cad.add.sketch
+基準部品 / 辺 f8:end|f12:side:e3 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f12:side:e3 / cad.chamfer
+基準部品 / 辺 f8:end|f12:side:e3 / cad.fillet
+基準部品 / 辺 f8:end|f14:side:p2 / cad.add.sketch
+基準部品 / 辺 f8:end|f14:side:p2 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f14:side:p2 / cad.chamfer
+基準部品 / 辺 f8:end|f14:side:p2 / cad.fillet
+基準部品 / 辺 f8:end|f14:side:p3 / cad.add.sketch
+基準部品 / 辺 f8:end|f14:side:p3 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f14:side:p3 / cad.chamfer
+基準部品 / 辺 f8:end|f14:side:p3 / cad.fillet
+基準部品 / 辺 f8:end|f14@1:side:p2 / cad.add.sketch
+基準部品 / 辺 f8:end|f14@1:side:p2 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f14@1:side:p2 / cad.chamfer
+基準部品 / 辺 f8:end|f14@1:side:p2 / cad.fillet
+基準部品 / 辺 f8:end|f14@1:side:p3 / cad.add.sketch
+基準部品 / 辺 f8:end|f14@1:side:p3 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f14@1:side:p3 / cad.chamfer
+基準部品 / 辺 f8:end|f14@1:side:p3 / cad.fillet
+基準部品 / 辺 f8:end|f8:side:e10 / cad.add.sketch
+基準部品 / 辺 f8:end|f8:side:e10 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f8:side:e10 / cad.chamfer
+基準部品 / 辺 f8:end|f8:side:e10 / cad.fillet
+基準部品 / 辺 f8:end|f8:side:e5 / cad.add.sketch
+基準部品 / 辺 f8:end|f8:side:e5 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f8:side:e5 / cad.chamfer
+基準部品 / 辺 f8:end|f8:side:e5 / cad.fillet
+基準部品 / 辺 f8:end|f8:side:e6 / cad.add.sketch
+基準部品 / 辺 f8:end|f8:side:e6 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f8:side:e6 / cad.chamfer
+基準部品 / 辺 f8:end|f8:side:e6 / cad.fillet
+基準部品 / 辺 f8:end|f8:side:e7 / cad.add.sketch
+基準部品 / 辺 f8:end|f8:side:e7 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f8:side:e7 / cad.chamfer
+基準部品 / 辺 f8:end|f8:side:e7 / cad.fillet
+基準部品 / 辺 f8:end|f8:side:e8 / cad.add.sketch
+基準部品 / 辺 f8:end|f8:side:e8 / cad.add.sketch3d
+基準部品 / 辺 f8:end|f8:side:e8 / cad.chamfer
+基準部品 / 辺 f8:end|f8:side:e8 / cad.fillet
+基準部品 / 辺 f8:side:e5|f8:side:e6 / cad.add.sketch
+基準部品 / 辺 f8:side:e5|f8:side:e6 / cad.add.sketch3d
+基準部品 / 辺 f8:side:e5|f8:side:e6 / cad.chamfer
+基準部品 / 辺 f8:side:e5|f8:side:e6 / cad.fillet
+基準部品 / 辺 f8:side:e5|f8:side:e8 / cad.add.sketch
+基準部品 / 辺 f8:side:e5|f8:side:e8 / cad.add.sketch3d
+基準部品 / 辺 f8:side:e5|f8:side:e8 / cad.chamfer
+基準部品 / 辺 f8:side:e5|f8:side:e8 / cad.fillet
+基準部品 / 辺 f8:side:e5|f8:start / cad.add.sketch
+基準部品 / 辺 f8:side:e5|f8:start / cad.add.sketch3d
+基準部品 / 辺 f8:side:e5|f8:start / cad.chamfer
+基準部品 / 辺 f8:side:e5|f8:start / cad.fillet
+基準部品 / 辺 f8:side:e6|f8:side:e7 / cad.add.sketch
+基準部品 / 辺 f8:side:e6|f8:side:e7 / cad.add.sketch3d
+基準部品 / 辺 f8:side:e6|f8:side:e7 / cad.chamfer
+基準部品 / 辺 f8:side:e6|f8:side:e7 / cad.fillet
+基準部品 / 辺 f8:side:e6|f8:start / cad.add.sketch
+基準部品 / 辺 f8:side:e6|f8:start / cad.add.sketch3d
+基準部品 / 辺 f8:side:e6|f8:start / cad.chamfer
+基準部品 / 辺 f8:side:e6|f8:start / cad.fillet
+基準部品 / 辺 f8:side:e7|f8:side:e8 / cad.add.sketch
+基準部品 / 辺 f8:side:e7|f8:side:e8 / cad.add.sketch3d
+基準部品 / 辺 f8:side:e7|f8:side:e8 / cad.chamfer
+基準部品 / 辺 f8:side:e7|f8:side:e8 / cad.fillet
+基準部品 / 辺 f8:side:e7|f8:start / cad.add.sketch
+基準部品 / 辺 f8:side:e7|f8:start / cad.add.sketch3d
+基準部品 / 辺 f8:side:e7|f8:start / cad.chamfer
+基準部品 / 辺 f8:side:e7|f8:start / cad.fillet
+基準部品 / 辺 f8:side:e8|f8:start / cad.add.sketch
+基準部品 / 辺 f8:side:e8|f8:start / cad.add.sketch3d
+基準部品 / 辺 f8:side:e8|f8:start / cad.chamfer
+基準部品 / 辺 f8:side:e8|f8:start / cad.fillet
+基準部品 / 辺 f8:start|f14:side:p2 / cad.add.sketch
+基準部品 / 辺 f8:start|f14:side:p2 / cad.add.sketch3d
+基準部品 / 辺 f8:start|f14:side:p2 / cad.chamfer
+基準部品 / 辺 f8:start|f14:side:p2 / cad.fillet
+基準部品 / 辺 f8:start|f14:side:p3 / cad.add.sketch
+基準部品 / 辺 f8:start|f14:side:p3 / cad.add.sketch3d
+基準部品 / 辺 f8:start|f14:side:p3 / cad.chamfer
+基準部品 / 辺 f8:start|f14:side:p3 / cad.fillet
+基準部品 / 辺 f8:start|f14@1:side:p2 / cad.add.sketch
+基準部品 / 辺 f8:start|f14@1:side:p2 / cad.add.sketch3d
+基準部品 / 辺 f8:start|f14@1:side:p2 / cad.chamfer
+基準部品 / 辺 f8:start|f14@1:side:p2 / cad.fillet
+基準部品 / 辺 f8:start|f14@1:side:p3 / cad.add.sketch
+基準部品 / 辺 f8:start|f14@1:side:p3 / cad.add.sketch3d
+基準部品 / 辺 f8:start|f14@1:side:p3 / cad.chamfer
+基準部品 / 辺 f8:start|f14@1:side:p3 / cad.fillet
+基準部品 / 辺 f8:start|f8:side:e10 / cad.add.sketch
+基準部品 / 辺 f8:start|f8:side:e10 / cad.add.sketch3d
+基準部品 / 辺 f8:start|f8:side:e10 / cad.chamfer
+基準部品 / 辺 f8:start|f8:side:e10 / cad.fillet
+基準部品 / 面 f10:side:e6 / cad.add.sketch
+基準部品 / 面 f10:side:e6 / cad.add.sketch3d
+基準部品 / 面 f10:side:e6 / cad.chamfer
+基準部品 / 面 f10:side:e6 / cad.extrude
+基準部品 / 面 f10:side:e6 / cad.fillet
+基準部品 / 面 f10:side:e6 / cad.hole_on_face
+基準部品 / 面 f10:side:e6 / cad.mirror_on_face
+基準部品 / 面 f10:side:e6 / cad.sketch_on_face
+基準部品 / 面 f10:side:e6 / cad.text_on_face
+基準部品 / 面 f10:side:e7 / cad.add.sketch
+基準部品 / 面 f10:side:e7 / cad.add.sketch3d
+基準部品 / 面 f10:side:e7 / cad.chamfer
+基準部品 / 面 f10:side:e7 / cad.extrude
+基準部品 / 面 f10:side:e7 / cad.fillet
+基準部品 / 面 f10:side:e7 / cad.hole_on_face
+基準部品 / 面 f10:side:e7 / cad.mirror_on_face
+基準部品 / 面 f10:side:e7 / cad.sketch_on_face
+基準部品 / 面 f10:side:e7 / cad.text_on_face
+基準部品 / 面 f10:side:e8 / cad.add.sketch
+基準部品 / 面 f10:side:e8 / cad.add.sketch3d
+基準部品 / 面 f10:side:e8 / cad.chamfer
+基準部品 / 面 f10:side:e8 / cad.extrude
+基準部品 / 面 f10:side:e8 / cad.fillet
+基準部品 / 面 f10:side:e8 / cad.hole_on_face
+基準部品 / 面 f10:side:e8 / cad.mirror_on_face
+基準部品 / 面 f10:side:e8 / cad.sketch_on_face
+基準部品 / 面 f10:side:e8 / cad.text_on_face
+基準部品 / 面 f10:side:e9 / cad.add.sketch
+基準部品 / 面 f10:side:e9 / cad.add.sketch3d
+基準部品 / 面 f10:side:e9 / cad.chamfer
+基準部品 / 面 f10:side:e9 / cad.extrude
+基準部品 / 面 f10:side:e9 / cad.fillet
+基準部品 / 面 f10:side:e9 / cad.hole_on_face
+基準部品 / 面 f10:side:e9 / cad.mirror_on_face
+基準部品 / 面 f10:side:e9 / cad.sketch_on_face
+基準部品 / 面 f10:side:e9 / cad.text_on_face
+基準部品 / 面 f10:start / cad.add.sketch
+基準部品 / 面 f10:start / cad.add.sketch3d
+基準部品 / 面 f10:start / cad.chamfer
+基準部品 / 面 f10:start / cad.extrude
+基準部品 / 面 f10:start / cad.fillet
+基準部品 / 面 f10:start / cad.hole_on_face
+基準部品 / 面 f10:start / cad.mirror_on_face
+基準部品 / 面 f10:start / cad.sketch_on_face
+基準部品 / 面 f10:start / cad.text_on_face
+基準部品 / 面 f12:end / cad.add.sketch
+基準部品 / 面 f12:end / cad.add.sketch3d
+基準部品 / 面 f12:end / cad.chamfer
+基準部品 / 面 f12:end / cad.extrude
+基準部品 / 面 f12:end / cad.fillet
+基準部品 / 面 f12:end / cad.hole_on_face
+基準部品 / 面 f12:end / cad.mirror_on_face
+基準部品 / 面 f12:end / cad.sketch_on_face
+基準部品 / 面 f12:end / cad.text_on_face
+基準部品 / 面 f12:side:e3 / cad.add.sketch
+基準部品 / 面 f12:side:e3 / cad.add.sketch3d
+基準部品 / 面 f12:side:e3 / cad.thread
+基準部品 / 面 f14:side:p2 / cad.add.sketch
+基準部品 / 面 f14:side:p2 / cad.add.sketch3d
+基準部品 / 面 f14:side:p2 / cad.thread
+基準部品 / 面 f14:side:p3 / cad.add.sketch
+基準部品 / 面 f14:side:p3 / cad.add.sketch3d
+基準部品 / 面 f14:side:p3 / cad.thread
+基準部品 / 面 f14@1:side:p2 / cad.add.sketch
+基準部品 / 面 f14@1:side:p2 / cad.add.sketch3d
+基準部品 / 面 f14@1:side:p2 / cad.thread
+基準部品 / 面 f14@1:side:p3 / cad.add.sketch
+基準部品 / 面 f14@1:side:p3 / cad.add.sketch3d
+基準部品 / 面 f14@1:side:p3 / cad.thread
+基準部品 / 面 f8:end / cad.add.sketch
+基準部品 / 面 f8:end / cad.add.sketch3d
+基準部品 / 面 f8:end / cad.chamfer
+基準部品 / 面 f8:end / cad.extrude
+基準部品 / 面 f8:end / cad.fillet
+基準部品 / 面 f8:end / cad.mirror_on_face
+基準部品 / 面 f8:end / cad.sketch_on_face
+基準部品 / 面 f8:end / cad.text_on_face
+基準部品 / 面 f8:side:e10 / cad.add.sketch
+基準部品 / 面 f8:side:e10 / cad.add.sketch3d
+基準部品 / 面 f8:side:e10 / cad.thread
+基準部品 / 面 f8:side:e5 / cad.add.sketch
+基準部品 / 面 f8:side:e5 / cad.add.sketch3d
+基準部品 / 面 f8:side:e5 / cad.chamfer
+基準部品 / 面 f8:side:e5 / cad.extrude
+基準部品 / 面 f8:side:e5 / cad.fillet
+基準部品 / 面 f8:side:e5 / cad.hole_on_face
+基準部品 / 面 f8:side:e5 / cad.mirror_on_face
+基準部品 / 面 f8:side:e5 / cad.sketch_on_face
+基準部品 / 面 f8:side:e5 / cad.text_on_face
+基準部品 / 面 f8:side:e6 / cad.add.sketch
+基準部品 / 面 f8:side:e6 / cad.add.sketch3d
+基準部品 / 面 f8:side:e6 / cad.chamfer
+基準部品 / 面 f8:side:e6 / cad.extrude
+基準部品 / 面 f8:side:e6 / cad.fillet
+基準部品 / 面 f8:side:e6 / cad.hole_on_face
+基準部品 / 面 f8:side:e6 / cad.mirror_on_face
+基準部品 / 面 f8:side:e6 / cad.sketch_on_face
+基準部品 / 面 f8:side:e6 / cad.text_on_face
+基準部品 / 面 f8:side:e7 / cad.add.sketch
+基準部品 / 面 f8:side:e7 / cad.add.sketch3d
+基準部品 / 面 f8:side:e7 / cad.chamfer
+基準部品 / 面 f8:side:e7 / cad.extrude
+基準部品 / 面 f8:side:e7 / cad.fillet
+基準部品 / 面 f8:side:e7 / cad.hole_on_face
+基準部品 / 面 f8:side:e7 / cad.mirror_on_face
+基準部品 / 面 f8:side:e7 / cad.sketch_on_face
+基準部品 / 面 f8:side:e7 / cad.text_on_face
+基準部品 / 面 f8:side:e8 / cad.add.sketch
+基準部品 / 面 f8:side:e8 / cad.add.sketch3d
+基準部品 / 面 f8:side:e8 / cad.chamfer
+基準部品 / 面 f8:side:e8 / cad.extrude
+基準部品 / 面 f8:side:e8 / cad.fillet
+基準部品 / 面 f8:side:e8 / cad.hole_on_face
+基準部品 / 面 f8:side:e8 / cad.mirror_on_face
+基準部品 / 面 f8:side:e8 / cad.sketch_on_face
+基準部品 / 面 f8:side:e8 / cad.text_on_face
+基準部品 / 面 f8:start / cad.add.sketch
+基準部品 / 面 f8:start / cad.add.sketch3d
+基準部品 / 面 f8:start / cad.chamfer
+基準部品 / 面 f8:start / cad.extrude
+基準部品 / 面 f8:start / cad.fillet
+基準部品 / 面 f8:start / cad.mirror_on_face
+基準部品 / 面 f8:start / cad.sketch_on_face
+基準部品 / 面 f8:start / cad.text_on_face
+角の丸め / 辺 f2:end|f2:side:e7 / cad.add.sketch
+角の丸め / 辺 f2:end|f2:side:e7 / cad.add.sketch3d
+角の丸め / 辺 f2:end|f2:side:e7 / cad.chamfer
+角の丸め / 辺 f2:end|f2:side:e7 / cad.extrude
+角の丸め / 辺 f2:end|f2:side:e8 / cad.add.sketch
+角の丸め / 辺 f2:end|f2:side:e8 / cad.add.sketch3d
+角の丸め / 辺 f2:end|f2:side:e8 / cad.chamfer
+角の丸め / 辺 f2:end|f2:side:e8 / cad.extrude
+角の丸め / 辺 f2:end|f3:side:r1 / cad.add.sketch
+角の丸め / 辺 f2:end|f3:side:r1 / cad.add.sketch3d
+角の丸め / 辺 f2:end|f3:side:r1 / cad.extrude
+角の丸め / 辺 f2:end|f3:side:r2 / cad.add.sketch
+角の丸め / 辺 f2:end|f3:side:r2 / cad.add.sketch3d
+角の丸め / 辺 f2:end|f3:side:r2 / cad.extrude
+角の丸め / 辺 f2:side:e5|f2:side:e8 / cad.add.sketch
+角の丸め / 辺 f2:side:e5|f2:side:e8 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e5|f2:side:e8 / cad.chamfer
+角の丸め / 辺 f2:side:e5|f2:side:e8 / cad.extrude
+角の丸め / 辺 f2:side:e5|f2:start / cad.add.sketch
+角の丸め / 辺 f2:side:e5|f2:start / cad.add.sketch3d
+角の丸め / 辺 f2:side:e5|f2:start / cad.chamfer
+角の丸め / 辺 f2:side:e5|f2:start / cad.extrude
+角の丸め / 辺 f2:side:e5|f3:side:r1 / cad.add.sketch
+角の丸め / 辺 f2:side:e5|f3:side:r1 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e5|f3:side:r1 / cad.extrude
+角の丸め / 辺 f2:side:e5|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f2:side:e5|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e5|f3:side:r3 / cad.extrude
+角の丸め / 辺 f2:side:e6|f2:side:e7 / cad.add.sketch
+角の丸め / 辺 f2:side:e6|f2:side:e7 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e6|f2:side:e7 / cad.chamfer
+角の丸め / 辺 f2:side:e6|f2:side:e7 / cad.extrude
+角の丸め / 辺 f2:side:e6|f2:start / cad.add.sketch
+角の丸め / 辺 f2:side:e6|f2:start / cad.add.sketch3d
+角の丸め / 辺 f2:side:e6|f2:start / cad.chamfer
+角の丸め / 辺 f2:side:e6|f2:start / cad.extrude
+角の丸め / 辺 f2:side:e6|f3:side:r2 / cad.add.sketch
+角の丸め / 辺 f2:side:e6|f3:side:r2 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e6|f3:side:r2 / cad.extrude
+角の丸め / 辺 f2:side:e6|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f2:side:e6|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e6|f3:side:r3 / cad.extrude
+角の丸め / 辺 f2:side:e7|f2:side:e8 / cad.add.sketch
+角の丸め / 辺 f2:side:e7|f2:side:e8 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e7|f2:side:e8 / cad.chamfer
+角の丸め / 辺 f2:side:e7|f2:side:e8 / cad.extrude
+角の丸め / 辺 f2:side:e7|f2:side:e8 / cad.fillet
+角の丸め / 辺 f2:side:e7|f2:start / cad.add.sketch
+角の丸め / 辺 f2:side:e7|f2:start / cad.add.sketch3d
+角の丸め / 辺 f2:side:e7|f2:start / cad.chamfer
+角の丸め / 辺 f2:side:e7|f2:start / cad.extrude
+角の丸め / 辺 f2:side:e7|f2:start / cad.fillet
+角の丸め / 辺 f2:side:e7|f3:side:r2 / cad.add.sketch
+角の丸め / 辺 f2:side:e7|f3:side:r2 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e7|f3:side:r2 / cad.chamfer
+角の丸め / 辺 f2:side:e7|f3:side:r2 / cad.extrude
+角の丸め / 辺 f2:side:e8|f2:start / cad.add.sketch
+角の丸め / 辺 f2:side:e8|f2:start / cad.add.sketch3d
+角の丸め / 辺 f2:side:e8|f2:start / cad.chamfer
+角の丸め / 辺 f2:side:e8|f2:start / cad.extrude
+角の丸め / 辺 f2:side:e8|f2:start / cad.fillet
+角の丸め / 辺 f2:side:e8|f3:side:r1 / cad.add.sketch
+角の丸め / 辺 f2:side:e8|f3:side:r1 / cad.add.sketch3d
+角の丸め / 辺 f2:side:e8|f3:side:r1 / cad.chamfer
+角の丸め / 辺 f2:side:e8|f3:side:r1 / cad.extrude
+角の丸め / 辺 f2:start|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f2:start|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f2:start|f3:side:r3 / cad.chamfer
+角の丸め / 辺 f2:start|f3:side:r3 / cad.extrude
+角の丸め / 辺 f3:side:ball|f3:side:r1 / cad.add.sketch
+角の丸め / 辺 f3:side:ball|f3:side:r1 / cad.add.sketch3d
+角の丸め / 辺 f3:side:ball|f3:side:r1 / cad.chamfer
+角の丸め / 辺 f3:side:ball|f3:side:r1 / cad.extrude
+角の丸め / 辺 f3:side:ball|f3:side:r1 / cad.fillet
+角の丸め / 辺 f3:side:ball|f3:side:r2 / cad.add.sketch
+角の丸め / 辺 f3:side:ball|f3:side:r2 / cad.add.sketch3d
+角の丸め / 辺 f3:side:ball|f3:side:r2 / cad.chamfer
+角の丸め / 辺 f3:side:ball|f3:side:r2 / cad.extrude
+角の丸め / 辺 f3:side:ball|f3:side:r2 / cad.fillet
+角の丸め / 辺 f3:side:ball|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f3:side:ball|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f3:side:ball|f3:side:r3 / cad.chamfer
+角の丸め / 辺 f3:side:ball|f3:side:r3 / cad.extrude
+角の丸め / 辺 f3:side:ball|f3:side:r3 / cad.fillet
+角の丸め / 辺 f3:side:r1|f3:side:r2 / cad.add.sketch
+角の丸め / 辺 f3:side:r1|f3:side:r2 / cad.add.sketch3d
+角の丸め / 辺 f3:side:r1|f3:side:r2 / cad.chamfer
+角の丸め / 辺 f3:side:r1|f3:side:r2 / cad.extrude
+角の丸め / 辺 f3:side:r1|f3:side:r2 / cad.fillet
+角の丸め / 辺 f3:side:r1|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f3:side:r1|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f3:side:r1|f3:side:r3 / cad.chamfer
+角の丸め / 辺 f3:side:r1|f3:side:r3 / cad.extrude
+角の丸め / 辺 f3:side:r1|f3:side:r3 / cad.fillet
+角の丸め / 辺 f3:side:r2|f3:side:r3 / cad.add.sketch
+角の丸め / 辺 f3:side:r2|f3:side:r3 / cad.add.sketch3d
+角の丸め / 辺 f3:side:r2|f3:side:r3 / cad.chamfer
+角の丸め / 辺 f3:side:r2|f3:side:r3 / cad.extrude
+角の丸め / 辺 f3:side:r2|f3:side:r3 / cad.fillet
+角の丸め / 面 f2:end / cad.add.sketch
+角の丸め / 面 f2:end / cad.add.sketch3d
+角の丸め / 面 f2:end / cad.extrude
+角の丸め / 面 f2:end / cad.sketch_on_face
+角の丸め / 面 f2:end / cad.text_on_face
+角の丸め / 面 f2:side:e5 / cad.add.sketch
+角の丸め / 面 f2:side:e5 / cad.add.sketch3d
+角の丸め / 面 f2:side:e5 / cad.extrude
+角の丸め / 面 f2:side:e5 / cad.hole_on_face
+角の丸め / 面 f2:side:e5 / cad.sketch_on_face
+角の丸め / 面 f2:side:e5 / cad.text_on_face
+角の丸め / 面 f2:side:e6 / cad.add.sketch
+角の丸め / 面 f2:side:e6 / cad.add.sketch3d
+角の丸め / 面 f2:side:e6 / cad.extrude
+角の丸め / 面 f2:side:e6 / cad.hole_on_face
+角の丸め / 面 f2:side:e6 / cad.sketch_on_face
+角の丸め / 面 f2:side:e6 / cad.text_on_face
+角の丸め / 面 f2:side:e7 / cad.add.sketch
+角の丸め / 面 f2:side:e7 / cad.add.sketch3d
+角の丸め / 面 f2:side:e7 / cad.chamfer
+角の丸め / 面 f2:side:e7 / cad.extrude
+角の丸め / 面 f2:side:e7 / cad.hole_on_face
+角の丸め / 面 f2:side:e7 / cad.sketch_on_face
+角の丸め / 面 f2:side:e7 / cad.text_on_face
+角の丸め / 面 f2:side:e8 / cad.add.sketch
+角の丸め / 面 f2:side:e8 / cad.add.sketch3d
+角の丸め / 面 f2:side:e8 / cad.chamfer
+角の丸め / 面 f2:side:e8 / cad.extrude
+角の丸め / 面 f2:side:e8 / cad.hole_on_face
+角の丸め / 面 f2:side:e8 / cad.sketch_on_face
+角の丸め / 面 f2:side:e8 / cad.text_on_face
+角の丸め / 面 f2:start / cad.add.sketch
+角の丸め / 面 f2:start / cad.add.sketch3d
+角の丸め / 面 f2:start / cad.chamfer
+角の丸め / 面 f2:start / cad.extrude
+角の丸め / 面 f2:start / cad.sketch_on_face
+角の丸め / 面 f2:start / cad.text_on_face
+角の丸め / 面 f3:side:ball / cad.add.sketch
+角の丸め / 面 f3:side:ball / cad.add.sketch3d
+角の丸め / 面 f3:side:ball / cad.extrude
+角の丸め / 面 f3:side:r1 / cad.add.sketch
+角の丸め / 面 f3:side:r1 / cad.add.sketch3d
+角の丸め / 面 f3:side:r1 / cad.extrude
+角の丸め / 面 f3:side:r1 / cad.thread
+角の丸め / 面 f3:side:r2 / cad.add.sketch
+角の丸め / 面 f3:side:r2 / cad.add.sketch3d
+角の丸め / 面 f3:side:r2 / cad.extrude
+角の丸め / 面 f3:side:r2 / cad.thread
+角の丸め / 面 f3:side:r3 / cad.add.sketch
+角の丸め / 面 f3:side:r3 / cad.add.sketch3d
+角の丸め / 面 f3:side:r3 / cad.extrude
+角の丸め / 面 f3:side:r3 / cad.thread

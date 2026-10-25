@@ -1,0 +1,22 @@
+# 文書の単位を ft にできる。前は mm・cm・m・in だけで、式にも ft を書けなかった。
+#! sample part
+
+click "設定"
+click "単位"
+click "この文書の長さの単位"
+shot 単位の一覧
+key Escape
+select "この文書の長さの単位" "フィート(ft)"
+expect "この文書の長さの単位" = "フィート(ft)"
+shot 設定の単位にフィート
+click "Close window"
+expect "単位 ft"
+
+# 押し出しの距離に数だけ打つと ft で入る。式にも ft と in を混ぜて書ける
+dclick "板"
+type "距離" 0.05
+expect "距離" = "0.05 ft"
+type "距離" "1 in + 0.01 ft"
+expect ~"= 0.093333 ft"
+shot 押し出しの距離をフィートで
+key Escape

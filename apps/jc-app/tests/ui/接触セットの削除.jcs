@@ -1,0 +1,18 @@
+# 接触セットの右クリックの名前。前は「消す」で、ほかの右クリック・窓の「削除」と言葉が
+# 違った(用語表の「使わない語」。点検「言葉の揺れ」が止める)。今は「削除」で、押すとブラウザから消える。
+#! sample box
+
+pick f2:side:e5
+pick f4:end ctrl
+click "組立 ▾"
+click "新しい接触セット"
+wait
+click "接触セット"
+expect "接触セット1" exists
+rclick "接触セット1"
+shot 右クリックのメニュー
+expect "削除" exists
+expect "消す" missing
+click "削除"
+wait
+expect "接触セット1" missing

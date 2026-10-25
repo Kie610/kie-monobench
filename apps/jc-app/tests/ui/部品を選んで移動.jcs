@@ -1,0 +1,19 @@
+# 部品のボディを選んで M を押すと、中の形だけでなく部品ごと値で動かす(10-22 a2)。前は M がいつも
+# ボディの移動/コピーを始め、部品の中の形だけが動いた。今は位置の機能を作り始め、編集パネルに
+# 「位置1 を作る」と X・Y・Z の距離が出る。部品をアクティブにした中では前のまま(jc-ui の components_tests の
+# m_on_a_part_moves_the_whole_part_by_value)。
+#! sample part
+
+rclick "ボディ1"
+click "新しい部品にする"
+wait
+expect "部品1" exists
+click "ボディ1"
+wait
+key M
+wait
+shot 部品を選んでM
+expect "位置1" exists
+expect "X 距離" exists
+key Escape
+wait

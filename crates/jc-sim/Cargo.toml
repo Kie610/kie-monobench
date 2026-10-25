@@ -1,0 +1,22 @@
+[package]
+name = "jc-sim"
+description = "ストック除去シミュレーション(高さマップ)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-core.workspace = true
+jc-cam-tool.workspace = true
+jc-toolpath.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

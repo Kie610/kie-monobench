@@ -1,0 +1,18 @@
+[package]
+name = "jc-format"
+description = "ファイルの形式の書き手と読み手の小さな部品(zip・PNG・DXF R12・SVG・base64)。ほかの crate に依存しない"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "core"
+
+[dependencies]
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

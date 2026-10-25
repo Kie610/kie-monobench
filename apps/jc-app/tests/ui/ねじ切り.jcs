@@ -1,0 +1,43 @@
+# 加工の見本で、ねじ切りミルを工具ライブラリに足し、中央の穴の壁を選んでねじ切りを作る。
+# 出た G-code に、Z が変わりながら回る G3(右ねじの穴は反時計回りで下から上へ)があることを確かめる。
+#! sample cam
+
+click ~作業空間:
+click "加工"
+shot 前
+
+# 工具ライブラリに、径 6・首 4 のねじ切りミル(山の角度 60 度)を足す
+click "工具ライブラリ"
+click "工具を足す"
+select "種類" "ねじ切りミル"
+type "刃の径" 6
+type "刃長" 14
+type "首の径" 4
+type "名前" "ねじ切りミル 6 mm"
+expect "山の角度" = "60 度"
+shot 工具
+click ~OK
+
+# 中央の穴の壁を選び、2D の一覧からねじ切りを作る
+pick f8:side:e10
+expect ~"半径: 4.000 mm" exists
+# 穴の壁を選んでいても、▾ の一覧から穴の加工が消えない(右クリックに出る物も一覧に残る。ボア・円形は
+# 2D のまとまり)
+click "2D ▾"
+expect "ボア・円形" exists
+shot 2Dの一覧
+click "ねじ切り"
+type "ピッチ" 1.25
+expect "ピッチ" = "1.25 mm"
+shot ねじ切りの欄
+click ~OK
+shot 後
+# G-code を見て、終わり(この加工)まで巻く。下穴 8 mm の中心から半円で壁へ寄り、
+# 反時計回り(G3)で 1 周 1.25 mm ずつ Z を上げ、半円で中心へ戻ってから上がる
+click "G-code を見る"#2
+scroll ~"(kieMonoBench / Carvera Air)" 1000000
+expect ~"G3 X33.677 Y22 I0.838 J0" exists
+expect ~"X30.323 Y22 Z-16 I-1.677 J0" exists
+expect ~"X33.677 Y22 Z-5.375 I1.677 J0" exists
+expect ~"X32 Y22 I-0.838 J0" exists
+shot G-code

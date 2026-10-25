@@ -1,0 +1,20 @@
+[package]
+name = "jc-toolpath-fit"
+description = "経路への円弧のあてはめ(細かい直線を許容差の中で円弧と長い直線にまとめる)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-toolpath.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-cam-tool.workspace = true
+
+[lints]
+workspace = true

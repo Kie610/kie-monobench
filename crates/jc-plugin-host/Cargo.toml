@@ -1,0 +1,24 @@
+[package]
+name = "jc-plugin-host"
+description = "WASM のプラグイン(Component Model)を読み込む"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "cam"
+
+[dependencies]
+jc-post.workspace = true
+jc-toolpath.workspace = true
+serde_json.workspace = true
+wasmtime.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-cam-tool.workspace = true
+jc-post-carvera-air.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,20 @@
+[package]
+name = "jc-study"
+description = "解析の研究の共通の部品(解き方と見せ方の間で受け渡す結果の形、実行・中止・古い印、結果の見せ方)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "analysis"
+
+[dependencies]
+jc-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[lints]
+workspace = true

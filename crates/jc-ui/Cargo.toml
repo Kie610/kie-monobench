@@ -1,0 +1,57 @@
+[package]
+name = "jc-ui"
+description = "画面の枠組み(外枠・ブラウザ・タイムライン・パネル・タブ・版の履歴と見比べ。3D のビューは jc-ui-view3d)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.jc]
+layer = "ui"
+
+[dependencies]
+jc-core.workspace = true
+jc-look.workspace = true
+jc-interchange.workspace = true
+jc-session.workspace = true
+jc-ui-view3d.workspace = true
+jc-render.workspace = true
+jc-measure.workspace = true
+egui.workspace = true
+egui_dock.workspace = true
+accesskit_consumer.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+
+[dev-dependencies]
+jc-format.workspace = true
+# 書いた静止画を読み直す試験
+jc-image.workspace = true
+jc-contract.workspace = true
+jc-text.workspace = true
+jc-bundle = { workspace = true, features = ["smlib"] }
+jc-samples.workspace = true
+jc-sketch.workspace = true
+jc-cad.workspace = true
+jc-cad-boolean.workspace = true
+jc-cad-edge.workspace = true
+jc-cad-extrude.workspace = true
+jc-cad-hole.workspace = true
+jc-cad-import-step.workspace = true
+jc-cad-pattern.workspace = true
+jc-cad-modify.workspace = true
+jc-sketch-canvas.workspace = true
+jc-cad-revolve.workspace = true
+jc-cam-commands.workspace = true
+jc-strategy-face.workspace = true
+jc-strategy-pocket2d.workspace = true
+jc-strategy-chamfer.workspace = true
+jc-strategy-engrave.workspace = true
+jc-post-carvera-air.workspace = true
+egui_kittest.workspace = true
+egui-wgpu.workspace = true
+
+[lints]
+workspace = true

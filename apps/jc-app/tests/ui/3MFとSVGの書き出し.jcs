@@ -1,0 +1,32 @@
+# 3MF と SVG の書き出し(2026-10-21): 設計のツールバーの「書き出し」から 3MF と今のビューの SVG を、
+# ブラウザのスケッチの右クリックからスケッチの SVG を、人と同じ手順で書き出す。
+# 3MF には設定で替えた文書の長さの単位(in)とボディの色が入り、SVG は mm の大きさの黒い線で、
+# 閉じた輪郭になる(ファイルの中身は screens.rs の check_script_files が確かめる)。
+#! sample part
+#! files
+
+# 設定 → 単位で、この文書の長さの単位を in にする
+click "設定"
+click "単位"
+select "この文書の長さの単位" "インチ(in)"
+click "Close window"
+expect "単位 in"
+shot 前
+
+# 設計のツールバーの「書き出し」から 3MF
+click "書き出し ▾"
+shot 書き出しの一覧
+click "3MF を書き出す…"
+until ~"に書き出しました" 120s
+
+# 同じく、今のビューの SVG
+click "書き出し ▾"
+click "今のビューを SVG に書き出す…"
+until ~"に書き出しました" 120s
+
+# ブラウザのスケッチを右クリックして、SVG として保存
+rclick "板の輪郭"
+shot スケッチの右クリック
+click "SVG として保存…"
+until ~"に書き出しました" 60s
+shot 後
