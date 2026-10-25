@@ -1,0 +1,36 @@
+name: 機械 / Machine
+description: 機械を足してほしい・機械の値が違う / Add a machine, or a machine setting is wrong
+labels: [machine]
+body:
+  - type: input
+    id: machine
+    attributes:
+      label: 機械 / Machine
+      description: 作り手と型番 / Maker and model
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: 制御と G-code の方言 / Controller and G-code dialect
+      placeholder: Grbl 1.1 / Marlin / ...
+    validations:
+      required: true
+  - type: textarea
+    id: values
+    attributes:
+      label: 機械の値 / Machine values
+      description: 動く範囲(X・Y・Z)、主軸の回転数の範囲、工具の交換(自動か手か)、使える G-code と M-code。分かる物だけでかまいません / Travel (X, Y, Z), spindle speed range, tool change (automatic or manual), supported G and M codes. Fill in what you know
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: 動いた G-code の例 / G-code that runs on the machine
+      description: その機械で実際に動いた短い G-code があれば貼ります。最初と最後の数十行で足ります / A short G-code file that ran on the machine, if you have one. The first and last few dozen lines are enough
+      render: text
+  - type: textarea
+    id: wrong
+    attributes:
+      label: 違っている所 / What is wrong
+      description: 既にある機械の値が違う時だけ。どの値がいくつで、正しくはいくつか / Only for a machine that is already listed - which value, what it is now, and what it should be

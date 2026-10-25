@@ -34,11 +34,11 @@ PR の本文には、検査の結果を件数(通過・失敗・飛ばし)で書
 
 ## 取り込み
 
-PR は維持する人が読み、手元で全体の検査(`cargo xtask verify --all`)を通してから main に入れます。GitHub の画面の merge ボタンは使いません。
+PR は維持する人が読み、手元で全体の検査(`cargo xtask verify --all`)を通してから main に入れます。GitHub の画面の merge ボタンは使いません。届いた Issue と PR の仕分けと返し方は [docs/受け方.md](docs/受け方.md) にあります。
 
 ## ライセンス
 
-あなたが取り込みのために出した物は、特に断らない限り、Apache-2.0 の定める「Contribution」として、このリポジトリと同じく MIT と Apache-2.0 の両方で配られ、追加の条件は付きません。署名の手続き(CLA)は求めません。
+あなたが取り込みのために出した物は、特に断らない限り、Apache-2.0 の定める「Contribution」として、このリポジトリと同じく MIT と Apache-2.0 の両方で配られ、追加の条件は付きません。署名の手続き(CLA)は求めません。製品名とアイコンの扱いは [TRADEMARKS.md](TRADEMARKS.md) にあります。
 
 ## 振る舞い
 

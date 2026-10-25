@@ -20,6 +20,7 @@ pub const FILES: &[&str] = &[
     "README.md",
     "CONTRIBUTING.md",
     "SECURITY.md",
+    "TRADEMARKS.md",
     "docs/使い方.md",
     "docs/できないことと予定.md",
 ];
@@ -32,6 +33,7 @@ pub const RECORD_FILES: &[&str] = &[
     "docs/地図.md",
     "docs/用語表.md",
     "docs/避ける形.md",
+    "docs/受け方.md",
 ];
 
 /// 書かない語。後ろに英数字が続く所(`Kie610` など)は数えない。
