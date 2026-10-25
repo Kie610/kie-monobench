@@ -9,7 +9,7 @@ use crate::{
     ShapeHandle, Value,
 };
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod action;
@@ -71,6 +71,15 @@ pub struct Context<'a> {
     /// 開いている文書の番号(画面のタブごとに違う。CLI・MCP など文書が 1 つの所は 0)。
     /// 文書の外に結果を持つモジュール(解析の研究の結果)が、タブをまたいで混ぜないのに使う
     pub doc: u64,
+    /// 操作が文書のデータから開くファイルを確かめる口(AI から動く時に許したフォルダの中に限る)。
+    /// `None` なら確かめない(利用者が画面や CLI から動かす時)。開く所は [`Context::open_path`] を通す
+    pub files: Option<&'a dyn FileGate>,
+}
+
+/// 操作が開いてよいファイルを決める口。ホスト(MCP・AI の頼みを流す画面)が渡す。
+pub trait FileGate: Sync + std::fmt::Debug {
+    /// 開いてよければ、開くパス(許したフォルダの中の絶対パス)を返す。外なら理由を返す。
+    fn open(&self, path: &Path) -> Result<PathBuf, String>;
 }
 
 static NO_ARGS: serde_json::Value = serde_json::Value::Null;
@@ -99,6 +108,16 @@ impl<'a> Context<'a> {
             doc_path: None,
             args: &NO_ARGS,
             doc: 0,
+            files: None,
+        }
+    }
+
+    /// 文書のデータに書いたパス(リンクの元など)を開く前に確かめる。開くパスを返す。
+    /// 利用者の選んだファイル(`file`)はホストが確かめて渡すので、これは通さなくてよい。
+    pub fn open_path(&self, path: &Path) -> Result<PathBuf, String> {
+        match self.files {
+            Some(g) => g.open(path),
+            None => Ok(path.to_path_buf()),
         }
     }
 

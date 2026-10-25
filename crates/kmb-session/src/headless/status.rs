@@ -70,6 +70,12 @@ impl Headless {
 
     /// 文書の要約: パラメータ、タイムライン(状態と理由)、モジュールの足す項目(セットアップなど)。
     pub fn status(&self) -> Json {
+        self.status_in(None)
+    }
+
+    /// [`Self::status`] の、モジュールが調べに開くファイル(リンクの元など)を `files`(AI に
+    /// 許したフォルダ)に限る版(MCP)。
+    pub fn status_in(&self, files: Option<&dyn kmb_core::FileGate>) -> Json {
         // 読む値も、書く数だけの値と同じ文書の長さの単位で出す(画面のパラメータの表と同じ)。
         // 値は文書の単位で出す(書く時も文書の単位で読むので、読んだ数を書き戻しても変わらない)
         let units = self.doc.data().properties.units;
@@ -214,7 +220,10 @@ impl Headless {
                 })
                 .collect();
         }
-        let cx = self.context(None, None, &Json::Null);
+        let cx = kmb_core::Context {
+            files,
+            ..self.context(None, None, &Json::Null)
+        };
         for (k, v) in self.modules.extensions.status(&cx) {
             out[k] = v;
         }
