@@ -255,6 +255,8 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// 元のファイルを読んで、組み込む写しと絶対パスを作る。組み込む文書の中(入れ子も)に、元自身か
 /// 今の文書(`cx.doc_path`)を組み込んだリンクがあれば、輪になるので断る。
 fn read_source(path: &Path, cx: &Context<'_>) -> Result<(serde_json::Value, PathBuf), String> {
+    // AI から動く時は許したフォルダの外を読まない(元のパスは文書のデータにあり、書き換えられる)
+    let path = &cx.open_path(path)?;
     let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     if cx.doc_path.is_some_and(|d| same_file(d, &abs)) {
         return Err("開いている文書そのものは組み込めません(輪になります)".into());
@@ -750,6 +752,9 @@ fn link_infos(
         } else {
             resolve(&link, cx.doc_path)
         };
+        // AI から調べる時は、許したフォルダの外の元を読まない(元が無い時と同じに見せる)
+        let refused = source.as_ref().and_then(|p| cx.open_path(p).err());
+        let source = if refused.is_some() { None } else { source };
         let mut h = DefaultHasher::new();
         f.data.to_string().hash(&mut h);
         source.hash(&mut h);
@@ -764,7 +769,9 @@ fn link_infos(
                 let src = match &source {
                     Some(p) => std::fs::read_to_string(p)
                         .map_err(|e| format!("{} を読めません: {e}", p.display())),
-                    None => Err(format!("{} が見つかりません", link.path)),
+                    None => Err(refused
+                        .clone()
+                        .unwrap_or_else(|| format!("{} が見つかりません", link.path))),
                 };
                 let (s, n) = state(&link, src.as_deref().map_err(Clone::clone), cx.registry);
                 log::info!("リンク {}「{}」の様子: {s:?}({n})", f.id.0, f.name);

@@ -95,7 +95,7 @@ impl Session {
 
     /// 文書の要約: パラメータ、タイムライン(状態と理由)、セットアップ。
     pub fn status(&self) -> Json {
-        self.work.status()
+        self.work.status_in(Some(&self.roots))
     }
 
     pub fn open(&mut self, path: &str) -> Reply {
@@ -511,7 +511,13 @@ impl Session {
         args: &Json,
         out: Option<&Path>,
     ) -> Reply {
-        match self.work.run(id, selected.map(FeatureId), file, args)? {
+        // 操作が文書のデータから開くファイル(リンクの元など)も許したフォルダに限る
+        let picks = kmb_session::Picks {
+            selected: selected.map(FeatureId),
+            files: Some(&self.roots),
+            ..kmb_session::Picks::default()
+        };
+        match self.work.run_with(id, &picks, file, args)?.into_ran() {
             Ran::Changed(added) => {
                 let mut r = self.status();
                 r["added"] = json!(added.iter().map(|a| a.0).collect::<Vec<_>>());

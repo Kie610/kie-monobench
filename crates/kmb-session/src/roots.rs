@@ -5,7 +5,7 @@
 //! [`kmb_core::ArgKind::File`] と宣言してあるので、どの操作でも同じ確かめを通る。設定の欄も、パスは
 //! [`kmb_core::FieldKind::File`] と宣言し、同じ確かめを通る。
 
-use kmb_core::{Action, ArgKind, FieldKind, Settings};
+use kmb_core::{Action, ArgKind, FieldKind, FileGate, Settings};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -139,6 +139,13 @@ impl Roots {
             f.set(value, Some(Value::String(full.display().to_string())));
         }
         Ok(())
+    }
+}
+
+/// 操作が文書のデータから開くファイル(リンクの元など)も、許したフォルダの中に限る。
+impl FileGate for Roots {
+    fn open(&self, path: &Path) -> Result<PathBuf, String> {
+        self.resolve(&path.to_string_lossy())
     }
 }
 

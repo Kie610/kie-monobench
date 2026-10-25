@@ -47,6 +47,8 @@ pub struct Picks<'a> {
     pub bodies_picked: bool,
     /// 開いている文書の番号(画面のタブごとに違う)
     pub doc: u64,
+    /// AI から動く時の、操作が開いてよいファイル(許したフォルダ。[`crate::roots::Roots`])
+    pub files: Option<&'a dyn kmb_core::FileGate>,
 }
 
 /// [`Headless::run_with`] の結果。
