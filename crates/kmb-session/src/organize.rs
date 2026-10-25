@@ -438,6 +438,23 @@ fn same_spelling(p: &Path) -> PathBuf {
     }
 }
 
+/// ごみ箱の中の物の元の名前。Windows のごみ箱の一覧は名前を画面に出す形で返すので、
+/// 「登録済みの拡張子を表示しない」設定(既定)では `脚.json` が `脚` になる。ごみ箱の中の
+/// 実体(`$R…`)は元の拡張子を保つので、名前に無ければそれを足す。
+fn trashed_name(name: &std::ffi::OsStr, id: &std::ffi::OsStr) -> std::ffi::OsString {
+    let mut full = name.to_os_string();
+    if let Some(ext) = Path::new(id).extension() {
+        let has = Path::new(name)
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext));
+        if !has {
+            full.push(".");
+            full.push(ext);
+        }
+    }
+    full
+}
+
 /// ごみ箱の中の、元が `want` の物を戻す(`path` が無ければ誤り)。
 fn restore(path: &Path, want: &[PathBuf]) -> Result<(), String> {
     #[cfg(any(
@@ -452,7 +469,13 @@ fn restore(path: &Path, want: &[PathBuf]) -> Result<(), String> {
     {
         let target = same_spelling(path);
         let want: Vec<PathBuf> = want.iter().map(|w| same_spelling(w)).collect();
-        let all = trash::os_limited::list().map_err(|e| format!("ごみ箱を読めません: {e}"))?;
+        let mut all = trash::os_limited::list().map_err(|e| format!("ごみ箱を読めません: {e}"))?;
+        if cfg!(windows) {
+            // 戻す時もこの名前で置くので、比べる前に元の名前へ直す(直さないと拡張子の無いファイルで戻る)
+            for i in &mut all {
+                i.name = trashed_name(&i.name, &i.id);
+            }
+        }
         let count = all.len();
         let (items, others): (Vec<trash::TrashItem>, Vec<trash::TrashItem>) = all
             .into_iter()
@@ -703,6 +726,18 @@ mod tests {
         assert!(p.is_file());
         assert_eq!(history::list(&p).len(), 1, "版の履歴も戻る");
         let _ = std::fs::remove_dir_all(&t);
+    }
+
+    #[test]
+    fn the_trashed_name_gets_back_the_hidden_extension() {
+        use std::ffi::OsStr;
+        let id = OsStr::new("C:/$Recycle.Bin/S-1-5-21/$RAB12CD.json");
+        assert_eq!(trashed_name(OsStr::new("脚"), id), "脚.json");
+        assert_eq!(trashed_name(OsStr::new("脚.json"), id), "脚.json");
+        assert_eq!(trashed_name(OsStr::new("脚.JSON"), id), "脚.JSON");
+        // 拡張子の無い物はそのまま
+        let bare = OsStr::new("C:/$Recycle.Bin/S-1-5-21/$RAB12CD");
+        assert_eq!(trashed_name(OsStr::new("部品"), bare), "部品");
     }
 
     #[test]
