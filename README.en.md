@@ -10,9 +10,9 @@
   <a href="README.md">日本語</a> · English
 </p>
 
-![An AI agent designs a mounting plate in a new document, creates drilling and contour toolpaths, then changes the width parameter from 80 mm to 110 mm and the model and toolpaths rebuild](docs/screenshots/demo.gif)
+![An AI agent designs a mounting plate at a human pace, creates the machining moves, then changes the width parameter from 80 mm to 110 mm and the model and moves rebuild](docs/screenshots/demo.gif)
 
-*Example: a board mounting plate with four holes. An AI agent drives the app through the MCP `app` tool, ties the sketch dimensions to a `幅` (width) parameter, extrudes, and adds drilling and contour toolpaths. Changing the width from 80 mm to 110 mm rebuilds the plate, the hole positions and the toolpaths (2.2x speed, the last part at normal speed).*
+*Example: a board mounting plate with four holes, built by an AI agent at a human pace (buttons are pressed through the MCP `app` tool; points on the drawing and typed numbers go through a virtual mouse and keyboard). The holes sit on the corners of a guide line offset 8 mm inside the outline; only the first hole gets a diameter and the others are made equal to it. The outline's width dimension is tied to a `幅` (width) parameter, so changing it from 80 mm to 110 mm moves the holes and rebuilds the drilling and outline-cutting moves.*
 
 ![The Design workspace editing the extrusion of the sample plate, previewing it in both directions](docs/screenshots/design.png)
 
