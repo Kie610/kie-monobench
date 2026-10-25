@@ -222,7 +222,8 @@ pub fn register(reg: &mut Registry) {
                     &kmb_cad::axis::axis_ref_choices("通る点と向きで指定"),
                 ))
                 .pick_on("line", MOVE_AXIS)
-                .hide_choice("edge"),
+                .hide_choice("edge")
+                .hide_choice("datum"),
             )
             .field(
                 rotate(Field::vector("origin", "軸の通る点").length())

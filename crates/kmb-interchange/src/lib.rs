@@ -5,6 +5,7 @@
 //! | 型 | 出す機能 | 読む所 |
 //! | --- | --- | --- |
 //! | [`DatumPlane`](`datum.plane@1`、出力 `datum`) | 作業平面(kmb-cad-datum) | スケッチの平面 |
+//! | [`DatumAxis`](`datum.axis@1`)・[`DatumPoint`](`datum.point@1`、出力 `datum`) | 作業軸・作業点(kmb-cad-datum) | 回転・パターン・移動の軸、作業平面・作業軸の点 |
 //! | [`HoleInfo`](`hole.info@1`、出力 `hole`) | 穴(kmb-cad-hole) | 穴あけ・穴から加工を作る |
 //! | [`motion::MotionStudies`](区画 `asm.motion`)・[`contact::Contacts`](区画 `asm.contacts`) | 組立(kmb-asm) | 画面・kmb-session |
 //! | [`animation::Storyboard`](区画 `asm.animation`)・ジョイントの今の様子 [`animation::Drive`] | 組立(kmb-asm) | 画面・レンダリングの書き出し・kmb-session |
@@ -22,5 +23,8 @@ pub mod ink;
 pub mod motion;
 pub mod role;
 
-pub use datum::{DATUM_OUTPUT, DatumPlane, datum_choices, datum_plane, datum_planes, selected_datum};
+pub use datum::{
+    DATUM_OUTPUT, DatumAxis, DatumPlane, DatumPoint, datum_axes, datum_axis, datum_axis_choices,
+    datum_choices, datum_plane, datum_planes, datum_point, datum_points, selected_datum,
+};
 pub use hole::{HOLE_OUTPUT, HoleInfo, HoleKind, HolePart, Tap};
