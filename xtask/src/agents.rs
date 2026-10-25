@@ -237,7 +237,7 @@ struct Index {
     words: BTreeSet<String>,
     /// xtask のソースの文字列(命令と旗)
     xtask: String,
-    /// CLI のソースの文字列(`jc` の命令)
+    /// CLI のソースの文字列(`kmb` の命令)
     cli: String,
 }
 
@@ -437,9 +437,9 @@ fn span_problem(root: &Path, ix: &Index, s: &str) -> Option<String> {
     if s.starts_with("cargo ") {
         return None; // ほかの道具の命令は見ない
     }
-    if let Some(rest) = s.strip_prefix("jc ") {
+    if let Some(rest) = s.strip_prefix("kmb ") {
         let w = rest.split_whitespace().next()?;
-        return (!ix.cli.contains(&format!("\"{w}\""))).then(|| format!("jc に命令「{w}」が無い"));
+        return (!ix.cli.contains(&format!("\"{w}\""))).then(|| format!("kmb に命令「{w}」が無い"));
     }
     if s.starts_with("--") && !s.contains(' ') {
         return (!ix.xtask.contains(&format!("\"{s}\"")))

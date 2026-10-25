@@ -295,8 +295,8 @@ fn release_apps(target: &Path) -> Vec<&'static str> {
     let exe = if cfg!(windows) { ".exe" } else { "" };
     [
         ("jc-app", "kie-monobench"),
-        ("jc-cli", "jc-cli"),
-        ("jc-mcp", "jc-mcp"),
+        ("jc-cli", "kmb"),
+        ("jc-mcp", "kmb-mcp"),
     ]
     .into_iter()
     .filter(|(_, bin)| target.join("release").join(format!("{bin}{exe}")).is_file())

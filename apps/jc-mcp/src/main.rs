@@ -1,4 +1,4 @@
-//! `jc-mcp [--root <作業フォルダ>] [--allow <フォルダ>]...`。MCP クライアントの設定に、
+//! `kmb-mcp [--root <作業フォルダ>] [--allow <フォルダ>]...`。MCP クライアントの設定に、
 //! このコマンドを登録して使う。AI が読み書きできるのは、作業フォルダと `--allow` のフォルダだけ。
 
 use rmcp::ServiceExt;
@@ -28,7 +28,7 @@ async fn main() -> ExitCode {
             },
             "--help" | "-h" => {
                 println!(
-                    "jc-mcp [--root <作業フォルダ>] [--allow <フォルダ>]...  標準入出力で MCP サーバとして動く"
+                    "kmb-mcp [--root <作業フォルダ>] [--allow <フォルダ>]...  標準入出力で MCP サーバとして動く"
                 );
                 return ExitCode::SUCCESS;
             }
@@ -44,10 +44,10 @@ async fn main() -> ExitCode {
     }
     // ログとクラッシュ報告を手元に残す(送信しない)。残せなくても動く
     let data_dir = jc_session::default_data_dir();
-    jc_session::logging::init(data_dir.as_deref(), "jc-mcp");
+    jc_session::logging::init(data_dir.as_deref(), "kmb-mcp");
     log::info!("作業フォルダ {}、許すフォルダ {allow:?}", root.display());
     let _crash = data_dir.as_deref().and_then(|d| {
-        jc_session::crash::install(d, "jc-mcp")
+        jc_session::crash::install(d, "kmb-mcp")
             .map_err(|e| eprintln!("クラッシュ報告を残せません: {e}"))
             .ok()
     });

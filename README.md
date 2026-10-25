@@ -20,7 +20,7 @@
 
 まだ開発の途中で、配布用の実行ファイルはない。ソースから組み立てて使う。
 
-画面のアプリは `kie-monobench`、コマンドは `jc`、MCP サーバは `jc-mcp`。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
+画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp`(crate は今までどおり `jc-cli`・`jc-mcp`)。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
 
 ## 何ができるか
 
@@ -57,7 +57,7 @@
 ```sh
 cargo run --release -p jc-app -- --sample   # 見本の部品と加工で画面を開く
 cargo run --release -p jc-app               # 開始画面から始める
-cargo run --release -p jc-cli -- --help     # コマンド(jc)の一覧
+cargo run --release -p jc-cli -- --help     # コマンド(kmb)の一覧
 cargo xtask verify                          # 変えた crate のテストと点検
 ```
 
@@ -67,23 +67,25 @@ cargo xtask verify                          # 変えた crate のテストと点
 ## 使い方の入口
 
 - **画面**: 引数なしで起動すると開始画面が出て、見本と「はじめての手順」(見本を開いてから G-code を書き出すまで)がある。操作の流れは [docs/使い方.md](docs/使い方.md)。
-- **コマンド(`jc`)**: 文書を作る・パラメータを変える・機能を足す・書き出す・G-code を作る・削ってみる。画面のボタンと同じ操作は `jc actions` で一覧し、`jc run` で動かす。
+- **コマンド(`kmb`)**: 文書を作る・パラメータを変える・機能を足す・書き出す・G-code を作る・削ってみる。画面のボタンと同じ操作は `kmb actions` で一覧し、`kmb run` で動かす。
 
   ```sh
-  jc sample --cam cam.kmb        # 見本の部品と加工の文書を作る
-  jc param set cam.kmb width "60 mm"
-  jc gcode cam.kmb cam.nc        # Carvera Air 向けの G-code
-  jc sim cam.kmb                 # 食い込みと削り残しを調べる
-  jc export cam.kmb part.step
+  kmb sample --cam cam.kmb        # 見本の部品と加工の文書を作る
+  kmb param set cam.kmb width "60 mm"
+  kmb gcode cam.kmb cam.nc        # Carvera Air 向けの G-code
+  kmb sim cam.kmb                 # 食い込みと削り残しを調べる
+  kmb export cam.kmb part.step
   ```
 
-- **AI(MCP)**: `jc-mcp` は標準入出力で動く MCP サーバ。読み書きできるのは作業フォルダ(`--root`)と `--allow` のフォルダだけ。画面の設定で「AI との接続」を入れると、動いている画面の文書も操作できる。
+- **AI(MCP)**: `kmb-mcp` は標準入出力で動く MCP サーバ。読み書きできるのは作業フォルダ(`--root`)と `--allow` のフォルダだけ。画面の設定で「AI との接続」を入れると、動いている画面の文書も操作できる。
 
   ```json
   { "mcpServers": { "kiemonobench": {
-    "command": "<リポジトリの場所>/target/release/jc-mcp",
+    "command": "<リポジトリの場所>/target/release/kmb-mcp",
     "args": ["--root", "<読み書きを許すフォルダ>"] } } }
   ```
+
+  前の名前(コマンド `jc`、MCP の `jc-mcp`)から移る時: MCP の設定の `command` を `.../kmb-mcp`(Windows は `kmb-mcp.exe`)に書き換え、台本などで `jc` と打っていた所を `kmb` にする。前の名前の実行ファイルはもう作られないので、`target/release` に残った `jc`・`jc-mcp` は古いまま止まる(消してよい)。設定の鍵(上の `kiemonobench`)はそのままでよい。ログのファイルの頭は `kmb-cli-`・`kmb-mcp-` になる。
 
 - **ポストのプラグイン**: WASM のコンポーネント(インタフェースは `crates/jc-plugin-host/wit/post.wit`)。ファイル・ネットワーク・時計には触れられない。見本は `plugins/post-example/`。
 

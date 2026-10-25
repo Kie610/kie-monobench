@@ -18,7 +18,7 @@ pub fn io_reference() -> String {
          落ちる)。決まりは AGENTS.md「4. 入出力の約束」。\n",
     );
 
-    // 操作と引数(画面・CLI の `jc actions`・MCP の `actions`・コマンド欄が同じ宣言を使う)
+    // 操作と引数(画面・CLI の `kmb actions`・MCP の `actions`・コマンド欄が同じ宣言を使う)
     let actions: Vec<jc_core::Action> = h
         .actions(None)
         .into_iter()

@@ -20,7 +20,7 @@
 
 This is work in progress and there are no prebuilt downloads yet. Build it from source.
 
-The desktop app is `kie-monobench`, the CLI is `jc` and the MCP server is `jc-mcp`. Documents use the `.kmb` extension (the content is JSON). On first start, the data folder of the earlier working name (`jisaku-cadcam`) is carried over, and `.json` documents still open.
+The desktop app is `kie-monobench`, the CLI is `kmb` and the MCP server is `kmb-mcp` (the crates are still `jc-cli` and `jc-mcp`). Documents use the `.kmb` extension (the content is JSON). On first start, the data folder of the earlier working name (`jisaku-cadcam`) is carried over, and `.json` documents still open.
 
 ## What it does
 
@@ -57,7 +57,7 @@ Requirements:
 ```sh
 cargo run --release -p jc-app -- --sample   # open the app with the sample part and its machining
 cargo run --release -p jc-app               # start from the start screen
-cargo run --release -p jc-cli -- --help     # the command-line tool (jc)
+cargo run --release -p jc-cli -- --help     # the command-line tool (kmb)
 cargo xtask verify                          # tests and checks for the crates you changed
 ```
 
@@ -67,23 +67,25 @@ How to test and the logging rules are in [docs/verify.md](docs/verify.md) (in Ja
 ## Getting started
 
 - **Desktop app:** started without arguments, it shows a start screen with samples and a getting-started walkthrough that goes from opening a sample to writing G-code. The usual workflow is described in [docs/使い方.md](docs/使い方.md) (in Japanese).
-- **Command line (`jc`):** create designs, change parameters, add features, export, write G-code and simulate. `jc actions` lists the same operations as the app's buttons and `jc run` runs them.
+- **Command line (`kmb`):** create designs, change parameters, add features, export, write G-code and simulate. `kmb actions` lists the same operations as the app's buttons and `kmb run` runs them.
 
   ```sh
-  jc sample --cam cam.kmb        # a design with the sample part and its machining
-  jc param set cam.kmb width "60 mm"
-  jc gcode cam.kmb cam.nc        # G-code for the Carvera Air
-  jc sim cam.kmb                 # check for gouges and leftover material
-  jc export cam.kmb part.step
+  kmb sample --cam cam.kmb        # a design with the sample part and its machining
+  kmb param set cam.kmb width "60 mm"
+  kmb gcode cam.kmb cam.nc        # G-code for the Carvera Air
+  kmb sim cam.kmb                 # check for gouges and leftover material
+  kmb export cam.kmb part.step
   ```
 
-- **AI agents (MCP):** `jc-mcp` is a Model Context Protocol server over standard input and output. It can only read and write the working folder (`--root`) and folders given with `--allow`. With "AI connection" turned on in the app's settings, it can also work on the document open in the running app.
+- **AI agents (MCP):** `kmb-mcp` is a Model Context Protocol server over standard input and output. It can only read and write the working folder (`--root`) and folders given with `--allow`. With "AI connection" turned on in the app's settings, it can also work on the document open in the running app.
 
   ```json
   { "mcpServers": { "kiemonobench": {
-    "command": "<path to the repository>/target/release/jc-mcp",
+    "command": "<path to the repository>/target/release/kmb-mcp",
     "args": ["--root", "<folder the AI may read and write>"] } } }
   ```
+
+  Moving from the earlier names (CLI `jc`, MCP server `jc-mcp`): change `command` in your MCP settings to `.../kmb-mcp` (`kmb-mcp.exe` on Windows), and replace `jc` with `kmb` in your scripts. The old executables are no longer built, so a `jc` or `jc-mcp` left in `target/release` stays out of date (you can delete it). The settings key (`kiemonobench` above) can stay. Log files now start with `kmb-cli-` and `kmb-mcp-`.
 
 - **Post processor plugins:** WASM components (interface in `crates/jc-plugin-host/wit/post.wit`). Plugins get no access to files, the network or the clock. An example is in `plugins/post-example/`.
 

@@ -488,7 +488,7 @@ impl Workspace {
             "undo" => self.undo(),
             "redo" => self.redo(),
             // 操作の一覧(引数の宣言つき)と、操作を ID で実行する(画面のボタンと同じ道。CLI の
-            // `jc actions`・`jc run` と同じ引数の形)
+            // `kmb actions`・`kmb run` と同じ引数の形)
             "actions" => return Ok(Answer::Now(json!({ "actions": self.actions() }))),
             "run" => {
                 let id = need("id")?;
