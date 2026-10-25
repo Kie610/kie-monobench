@@ -6,6 +6,7 @@
 //! cargo xtask verify [<crate>...] [--base <ref>] [--dependents] [--all] [--truck] [--no-clippy]
 //! cargo xtask sweep [--yes] [--keep-days <日数>]
 //! cargo xtask docs
+//! cargo xtask labels
 //! cargo xtask api
 //! cargo xtask dxc
 //! cargo xtask release [--check] [cargo の引数...]
@@ -26,6 +27,8 @@
 //!   無い飛ばしと消えたテスト(skips.rs)。`--all` ではライセンス(cargo-deny)も。`--all`・`--dependents` は cargo-nextest が無ければ失敗にする。
 //! - 点検には資料の形(docs.rs)も入る: docs/機能/ の断片、凍結した経緯、地図.md の crate の一覧。
 //!   `docs` は断片から一覧の表を target/docs/ に作り、地図.md の crate の一覧を書き直す。
+//! - Issue のひな型が付けるラベルが `.github/labels.yml` にあるか(labels.rs)。`labels` はその定義を
+//!   GitHub に反映する `gh label create` のコマンドを出す。
 //! - 毎回読む骨格の資料(agents.rs): AGENTS.md と .claude/rules/ に書いた名前・パス・節の実在、
 //!   大きさの上限、決まりに付けた点検の名前、層の表(`docs` が layers.rs から作る)。
 //! - コアの公開の項目(api.rs)が分かれ目から変わっていれば、契約テスト(kmb-contract)を使う crate を
@@ -60,6 +63,7 @@ mod docs;
 mod dxc;
 mod history;
 mod jobs;
+mod labels;
 mod layers;
 mod licenses;
 mod products;
@@ -756,6 +760,7 @@ fn checks(ws: &Workspace, fork: &str, changed: &[String]) -> Done {
     doc.extend(board::check(root, &read));
     doc.extend(prose::check(root));
     doc.extend(prose::check_records(root));
+    doc.extend(labels::check(root));
     let skeleton = agents::check(root);
     doc.extend(skeleton.problems);
     let mut product = products::check(root);
@@ -979,7 +984,7 @@ fn run() -> Result<ExitCode, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some((cmd, rest)) = args.split_first() else {
         return Err(
-            "使い方: cargo xtask affected|checks|verify|sweep|docs|io|api|dxc|release|paths [...](docs/verify.md)"
+            "使い方: cargo xtask affected|checks|verify|sweep|docs|labels|io|api|dxc|release|paths [...](docs/verify.md)"
                 .into(),
         );
     };
@@ -1011,6 +1016,16 @@ fn run() -> Result<ExitCode, String> {
     if cmd == "paths" {
         let ws = workspace()?;
         return release::paths(&ws.root, &ws.target_dir, rest);
+    }
+    if cmd == "labels" {
+        // ラベルの定義を GitHub に反映するコマンドを出す(流すのは維持する人。labels.rs)
+        let text = std::fs::read_to_string(labels::FILE)
+            .map_err(|e| format!("{} を読めない: {e}", labels::FILE))?;
+        let defs = labels::parse(&text).map_err(|e| e.join("\n"))?;
+        for c in labels::commands(&defs) {
+            println!("{c}");
+        }
+        return Ok(ExitCode::SUCCESS);
     }
     if cmd == "dxc" {
         dxc::run(&workspace()?.target_dir)?;

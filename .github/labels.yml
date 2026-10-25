@@ -1,0 +1,33 @@
+# Issue と PR のラベルの定義。GitHub への反映は `cargo xtask labels` が出すコマンドで行う。
+# ひな型(ISSUE_TEMPLATE)が付けるラベルは、ここに無いと点検(ラベル)が落とす。
+# 使い分けは docs/受け方.md。
+- name: bug
+  color: d73a4a
+  description: 思った通りに動かない / Something does not work as expected
+- name: enhancement
+  color: a2eeef
+  description: できるようにしてほしいこと / Something you want to be able to do
+- name: question
+  color: d876e3
+  description: 使い方の質問 / Question about how to use it
+- name: machine
+  color: 1d76db
+  description: 機械の追加・機械の値の直し / Add a machine or fix machine settings
+- name: safety
+  color: b60205
+  description: 機械や人を傷つけうる(誤った G-code など)/ Could harm the machine or a person (wrong G-code)
+- name: needs-info
+  color: fbca04
+  description: 再現や判断に要る情報を待っている / Waiting for information to reproduce or decide
+- name: confirmed
+  color: 0e8a16
+  description: 再現できた・作ると決めた / Reproduced, or accepted to be built
+- name: duplicate
+  color: cfd3d7
+  description: 同じ内容の Issue・PR がある / Already reported
+- name: wontfix
+  color: ffffff
+  description: 作らない・直さない(理由は返事に書く)/ Will not be done (reason in the reply)
+- name: good first issue
+  color: 7057ff
+  description: 初めての人に向く小さな作業 / Small task for newcomers

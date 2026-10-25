@@ -151,6 +151,8 @@ MIT([LICENSE-MIT](LICENSE-MIT))と Apache-2.0([LICENSE-APACHE](LICENSE-APACHE))�
 
 このソフトは独立に作っています。機械や CAD・CAM の製品の作り手とは関係がありません。機械・ファイル形式・ソフトの名前はそれぞれの持ち主の商標で、互換を示すためだけに書いています。
 
+製品名「kieMonoBench」とアプリのアイコンは、コードのライセンスに入りません。使ってよい範囲と、手を加えた版を配る時の決まりは [TRADEMARKS.md](TRADEMARKS.md) にあります。
+
 ### 同梱する他のソフトとデータ
 
 | 置き場 | 中身とライセンス |
