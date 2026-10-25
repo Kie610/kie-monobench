@@ -55,6 +55,12 @@ jobs:
         with:
           tool: cargo-nextest@0.9.108,cargo-deny@0.19.9,cargo-hakari@0.9.39
 
+      # 字体の試験(kmb-ui の fonts.rs)が日本語の字体を使う。ubuntu には入っていないので、
+      # クラウドの作業場と同じ IPA を入れる(Windows には游ゴシックなどがある)
+      - name: 日本語の字体
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q fonts-ipafont-gothic
+
       - name: cargo xtask verify
         shell: bash
         run: |
