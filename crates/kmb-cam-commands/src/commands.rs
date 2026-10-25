@@ -1182,7 +1182,7 @@ impl Extension for CamCommands {
                     self.post_for(&self.machine())
                         .map_or_else(|e| e, |p| p.id().to_string())
                 )],
-                fields: vec![Field::text("plugin", "プラグイン(.wasm のファイル)").help(
+                fields: vec![Field::file("plugin", "プラグイン(.wasm のファイル)").help(
                     "空なら内蔵のポスト。CLI の --post や MCP の post で指定したものが先に使われる",
                 )],
                 value: json!({"plugin": plugin}),

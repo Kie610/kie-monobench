@@ -134,6 +134,76 @@ fn every_file_arg_of_every_action_stays_inside_the_allowed_folders() {
     }
 }
 
+// 確かめること(設定の側):
+// - 設定の欄で、鍵の名前がパスらしい物は `Field::file` で宣言している
+// - ファイルの欄に作業フォルダの外を渡すと、設定を変えずに入力の誤りで断る(ポストのプラグインなど)
+// - 中の相対パスは作業フォルダから数えた絶対パスにして渡す
+#[test]
+fn every_file_field_of_every_setting_stays_inside_the_allowed_folders() {
+    let root = temp_root("file-settings");
+    let outside = temp_root("file-settings-outside");
+    // 外に置くのは、ポストとして動く本物のプラグイン(確かめが無ければ読んで通ってしまう)
+    let wasm =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/post-example.wasm");
+    std::fs::copy(&wasm, outside.join("post.wasm")).unwrap();
+    let mut s = Session::new(root.clone());
+    let secret = outside.join("post.wasm").display().to_string();
+    let up = format!(
+        "../{}/post.wasm",
+        outside.file_name().unwrap().to_string_lossy()
+    );
+    let before = s.settings();
+    let mut checked = 0;
+    for g in s.work.settings() {
+        for f in &g.fields {
+            let pathlike = ["path", "file", "dir", "folder", "plugin"]
+                .iter()
+                .any(|w| f.key.contains(w));
+            assert!(
+                !(pathlike && matches!(f.kind, kmb_core::FieldKind::Text)),
+                "設定 {} の {} はファイルのパスなら Field::file で宣言する",
+                g.id,
+                f.key
+            );
+            if f.kind != kmb_core::FieldKind::File {
+                continue;
+            }
+            for p in [secret.as_str(), up.as_str()] {
+                let mut v = g.value.clone();
+                f.set(&mut v, Some(json!(p)));
+                let e = s.set_settings(&g.id, &v).unwrap_err();
+                assert_eq!(
+                    e.kind,
+                    kmb_core::ProblemKind::Input,
+                    "{} の {}: {e}",
+                    g.id,
+                    f.key
+                );
+                assert!(e.message.contains("外"), "{} の {}: {e}", g.id, f.key);
+            }
+            checked += 1;
+        }
+    }
+    assert!(checked >= 1, "ファイルの欄を持つ設定が無い");
+    assert_eq!(s.settings(), before, "断った設定は何も変えない");
+    // 中の相対パスは通り、作業フォルダから数えた絶対パスで持つ
+    std::fs::copy(&wasm, root.join("post.wasm")).unwrap();
+    let r = s
+        .set_settings("cam.post", &json!({"plugin": "post.wasm"}))
+        .unwrap();
+    let post = r
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|g| g["id"] == "cam.post")
+        .unwrap();
+    let inside = root.canonicalize().unwrap().join("post.wasm");
+    assert_eq!(post["value"]["plugin"], json!(inside.display().to_string()));
+    for d in [root, outside] {
+        std::fs::remove_dir_all(&d).ok();
+    }
+}
+
 #[test]
 fn paths_outside_the_root_and_allowed_folders_are_refused() {
     let root = temp_root("allow");

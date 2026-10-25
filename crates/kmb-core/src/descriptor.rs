@@ -73,6 +73,8 @@ pub enum FieldKind {
     Bool,
     /// 自由な文字列(例: 材料の名前)。空にすると項目を消す
     Text,
+    /// ファイルのパス(例: ポストのプラグイン)。AI(MCP)から来た値は、許したフォルダの中に限る
+    File,
     /// 決まった値から選ぶ
     Choice {
         choices: Vec<Choice>,
@@ -476,6 +478,11 @@ impl Field {
 
     pub fn text(key: &str, label: &str) -> Self {
         Self::new(key, label, FieldKind::Text)
+    }
+
+    /// ファイルのパスの欄([`FieldKind::File`])。
+    pub fn file(key: &str, label: &str) -> Self {
+        Self::new(key, label, FieldKind::File)
     }
 
     pub fn vector(key: &str, label: &str) -> Self {

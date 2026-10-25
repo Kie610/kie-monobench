@@ -475,6 +475,17 @@ enum Step {
 }
 
 impl Workspace {
+    /// 今の入力が AI から来たものなら、AI に許したフォルダ(内部の道具の間か、AI から来た
+    /// スクリプトの行が画面の部品を打っている間)。
+    pub(crate) fn ai_roots_now(&self) -> Option<Roots> {
+        self.cmdline.ai_roots.clone().or_else(|| {
+            self.cmdline
+                .running
+                .as_ref()
+                .and_then(|r| r.job.roots.clone())
+        })
+    }
+
     /// 内部の道具を流す。AI から来たスクリプトの行なら、その間だけ AI に許したフォルダを当てる。
     fn live_request_in(
         &mut self,

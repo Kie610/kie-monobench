@@ -199,6 +199,21 @@ impl Headless {
         Ok(true)
     }
 
+    /// [`Self::set_settings`] の、AI(MCP)から来た値の版。ファイルの欄(ポストのプラグインなど)を
+    /// `roots` の中の絶対パスにしてから変え、外を指せば何も変えずに断る。
+    pub fn set_settings_in(
+        &mut self,
+        id: &str,
+        value: &serde_json::Value,
+        roots: &crate::roots::Roots,
+    ) -> Result<bool, String> {
+        let mut value = value.clone();
+        if let Some(g) = self.settings().into_iter().find(|g| g.id == id) {
+            roots.confine_settings(&g, &mut value)?;
+        }
+        self.set_settings(id, &value)
+    }
+
     /// 形のカーネル。
     pub fn kernel(&self) -> &std::sync::Arc<dyn kmb_core::Kernel> {
         &self.modules.kernel

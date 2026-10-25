@@ -479,7 +479,10 @@ impl Session {
     /// 設定を変える。この接続の間だけ効き、PC の設定のファイルには書かない。文書ごとに持つ設定
     /// (レンダリングのシーン)は今の文書にも書く(取り消せる)。
     pub fn set_settings(&mut self, id: &str, value: &Json) -> Reply {
-        self.work.set_settings(id, value)?;
+        // ファイルの欄(ポストのプラグインなど)も許したフォルダの中に限る
+        self.work
+            .set_settings_in(id, value, &self.roots)
+            .map_err(|e| kmb_core::Problem::new(kmb_core::ProblemKind::Input, e))?;
         Ok(self.settings())
     }
 

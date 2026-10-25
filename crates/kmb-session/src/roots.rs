@@ -2,9 +2,10 @@
 //!
 //! MCP の道具が読み書きするパスも、MCP から動いている画面へ送る頼みに入ったファイルの引数も、ここで
 //! 確かめる。外を指すもの(`..` やリンクで外へ出るものも)は断る。操作がファイルを読む引数は
-//! [`kmb_core::ArgKind::File`] と宣言してあるので、どの操作でも同じ確かめを通る。
+//! [`kmb_core::ArgKind::File`] と宣言してあるので、どの操作でも同じ確かめを通る。設定の欄も、パスは
+//! [`kmb_core::FieldKind::File`] と宣言し、同じ確かめを通る。
 
-use kmb_core::{Action, ArgKind};
+use kmb_core::{Action, ArgKind, FieldKind, Settings};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -118,6 +119,24 @@ impl Roots {
                 .resolve(p)
                 .map_err(|e| format!("{} の {}: {e}", action.id, a.key))?;
             map.insert(a.key.clone(), Value::String(full.display().to_string()));
+        }
+        Ok(())
+    }
+
+    /// 設定 `group` の値 `value` のうち、ファイルの欄を許したフォルダの中の絶対パスに置き換える。
+    /// 外を指すパスがあれば、どの欄かを添えて断る(設定は変えない)。
+    pub fn confine_settings(&self, group: &Settings, value: &mut Value) -> Result<(), String> {
+        for f in group.fields.iter().filter(|f| f.kind == FieldKind::File) {
+            let Some(p) = f.get(value).and_then(Value::as_str).map(str::to_string) else {
+                continue;
+            };
+            if p.trim().is_empty() {
+                continue;
+            }
+            let full = self
+                .resolve(&p)
+                .map_err(|e| format!("設定 {} の {}: {e}", group.id, f.key))?;
+            f.set(value, Some(Value::String(full.display().to_string())));
         }
         Ok(())
     }
