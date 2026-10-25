@@ -409,3 +409,11 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - 配る物: 層 `app` の crate(画面・CLI・MCP)から通常の依存だけをたどる。マクロ(proc-macro)とその先・build スクリプト用・試験用は exe に入らないので載せない。3 つの exe を 1 つの一覧でまかなう。
 - 先頭は本体と自作の素材(アイコン・機械の台の穴のデータ・陰影の式など。本体と同じ MIT か Apache-2.0)。続いて crate でない部品(Rust の標準ライブラリ、SMLib・SM_API とその直しの写し、Hershey のフォント。`xtask/src/licenses.rs` の `EXTRAS`)、他者の crate。リポジトリから当てた写し(truck-shapeops)には、変えたことを注記する(Apache-2.0 の求め)。
 - 本文は crate の一番上の LICENSE・COPYING・NOTICE などをそのまま載せ、同じ本文は 1 回だけにして使う部品を並べる。GPL の名前の付くファイル(GPL との二択の部品の物)は載せない。ファイルの無い crate は宣言の本文を `xtask/licenses/` の雛形から作る。雛形の無い許諾の crate が入ると `verify --all` と依存を変えた時の点検「許諾文の一覧」が落ちる。その時は許諾の本文を確かめ、雛形を足す(deny.toml の許す表に入っている物だけ)。
+
+## 14. PR ごとの検査(GitHub の CI)
+
+- `.github/workflows/verify.yml` が、PR と main へのプッシュのたびに `cargo xtask verify` を Linux(ubuntu-latest)と Windows(windows-latest)で流す。カーネルは SMLib(SMLib のソースは third_party にあり、そのまま組める)。
+- 範囲: PR は分かれ目から変えた crate とそれに依存する crate(`--dependents --base origin/<PR の向き先>`)。検査の道具(`.github/workflows/`)・Rust の版(`rust-toolchain.toml`)・cargo の設定(`.cargo/`)・nextest の設定を変えた PR と、main へのプッシュ・手で流す時は全体(`--all`)。`--all` は記録の無い CI では truck の回も足す(1 節)。
+- 道具の版は 1 節の入れ方とそろえる(cargo-nextest・cargo-deny・cargo-hakari)。
+- 組み立て済みの物は main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
+- 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
