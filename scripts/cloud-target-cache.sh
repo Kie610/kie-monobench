@@ -111,12 +111,13 @@ restore)
         exit 0
     fi
     # 揃えた依存(kmb-workspace-hack)が置いた時と違えば、自前の crate は全部別の指紋で作り直すので
-    # incremental は使われない。戻さずに場所を空けておく
-    skip=""
+    # incremental は使われない。取り出した後で消して場所を空ける。tar の --exclude で除くと、deps の
+    # rmeta が incremental の物へのハードリンクになっていて、リンク先が無く取り出し全体が失敗する
+    drop_incr=""
     saved_hack=$(printf '%s\n' "$snap" | sed -n 's/^hack: //p')
     if [ -n "$saved_hack" ] && [ "$saved_hack" != "$(hack_sum)" ]; then
-        echo "揃えた依存が置いた時と違うので、incremental は戻しません"
-        skip="--exclude=debug/incremental"
+        echo "揃えた依存が置いた時と違うので、incremental は取り出した後で消します"
+        drop_incr=1
     fi
     start=$(date +%s)
     mkdir -p "$staging"
@@ -125,12 +126,13 @@ restore)
     # sh には pipefail が無いので、前の段の失敗は印のファイルで受け取る
     failed=$(mktemp)
     if ! { cat "$dir/$parts"/part-* || echo cat >>"$failed"; } | { zstd -dc -T0 || echo zstd >>"$failed"; } |
-        tar -C "$staging" -xf - -X "$ex" $skip || [ -s "$failed" ]; then
+        tar -C "$staging" -xf - -X "$ex" || [ -s "$failed" ]; then
         rm -f "$ex" "$failed"
         echo "取り出しに失敗したので戻しません(一から組み立てます)" >&2
         exit 1
     fi
     rm -f "$ex" "$failed"
+    [ -z "$drop_incr" ] || rm -rf "$staging/debug/incremental"
     mv "$staging/debug" target/debug
     rm -rf "$staging"
     echo "target/debug を戻しました($(( $(date +%s) - start )) 秒、$(du -sh target/debug | cut -f1)、残りの空き $(df -Pk . | awk 'NR==2{printf "%.1f", $4/1e6}') GB)"
