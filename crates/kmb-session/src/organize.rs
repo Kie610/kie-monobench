@@ -426,6 +426,18 @@ pub fn restore_folder(path: &Path) -> Result<(), String> {
     restore(path, &[path.to_path_buf()])
 }
 
+/// ごみ箱の元の場所と比べる綴り。親のフォルダ(ごみ箱へ移した後も残る)を実際の綴りに直し、
+/// 名前を足す。Windows のごみ箱は元の場所を長い名前で覚えるが、一時フォルダなどは短い名前
+/// (`C:\Users\RUNNER~1\…`)で渡ることがあり、そのままでは見つからなかった。
+fn same_spelling(p: &Path) -> PathBuf {
+    match (p.parent(), p.file_name()) {
+        (Some(dir), Some(name)) => std::fs::canonicalize(dir)
+            .map(|d| d.join(name))
+            .unwrap_or_else(|_| p.to_path_buf()),
+        _ => p.to_path_buf(),
+    }
+}
+
 /// ごみ箱の中の、元が `want` の物を戻す(`path` が無ければ誤り)。
 fn restore(path: &Path, want: &[PathBuf]) -> Result<(), String> {
     #[cfg(any(
@@ -438,14 +450,16 @@ fn restore(path: &Path, want: &[PathBuf]) -> Result<(), String> {
         )
     ))]
     {
+        let target = same_spelling(path);
+        let want: Vec<PathBuf> = want.iter().map(|w| same_spelling(w)).collect();
         let items: Vec<trash::TrashItem> = trash::os_limited::list()
             .map_err(|e| format!("ごみ箱を読めません: {e}"))?
             .into_iter()
-            .filter(|i| want.contains(&i.original_parent.join(&i.name)))
+            .filter(|i| want.contains(&same_spelling(&i.original_parent.join(&i.name))))
             .collect();
         if !items
             .iter()
-            .any(|i| i.original_parent.join(&i.name) == path)
+            .any(|i| same_spelling(&i.original_parent.join(&i.name)) == target)
         {
             return Err(format!("{} がごみ箱に見つかりません", path.display()));
         }
