@@ -161,6 +161,7 @@ pub fn resolve_plane_noting(
             };
             face_plane(ctx.kernel(), shape, face, origin).map_err(EvalError::InvalidData)?
         }
+        SketchPlane::Datum { feature } => (kmb_interchange::datum_plane(ctx, *feature)?, None),
     })
 }
 
@@ -202,13 +203,7 @@ pub fn points_of(sol: &Solution, plane: Plane) -> kmb_core::Points {
 
 impl Feature for Sketch {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut out: Vec<InputRef> = Vec::new();
-        if let SketchPlane::Face { feature, .. } = &self.plane {
-            out.push(InputRef::Output {
-                feature: *feature,
-                slot: "body".into(),
-            });
-        }
+        let mut out: Vec<InputRef> = self.plane.inputs();
         for f in self.projections.iter().filter_map(|p| p.source.feature()) {
             let i = InputRef::Output {
                 feature: f,

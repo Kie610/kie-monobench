@@ -103,6 +103,33 @@ fn base_plane(key: &str) -> Option<SketchPlane> {
     })
 }
 
+/// 指定 `plane` の平面: xy・yz・zx か作業平面の機能の番号(face は選んでいる面なので、ここでは
+/// 読まない)。知らない値は誤り。
+fn plane_arg(cx: &Context<'_>) -> Result<Option<SketchPlane>, String> {
+    let Some(v) = cx.arg("plane") else {
+        return Ok(None);
+    };
+    if let Some(n) = v.as_u64() {
+        let id = kmb_core::FeatureId(n);
+        if kmb_interchange::datum_planes(cx).iter().all(|(f, ..)| *f != id) {
+            return Err(format!("機能 {n} は作業平面ではありません"));
+        }
+        return Ok(Some(SketchPlane::Datum { feature: id }));
+    }
+    match v.as_str() {
+        Some("face") => Ok(None),
+        Some(key) => base_plane(key)
+            .map(Some)
+            .ok_or_else(|| format!("平面 {key} はありません(xy・yz・zx・face か作業平面の機能の番号)")),
+        None => Err(format!("平面 {v} はありません(xy・yz・zx・face か作業平面の機能の番号)")),
+    }
+}
+
+/// 選んでいる作業平面の上の平面。
+fn selected_datum_plane(cx: &Context<'_>) -> Option<SketchPlane> {
+    kmb_interchange::selected_datum(cx).map(|feature| SketchPlane::Datum { feature })
+}
+
 /// 選んでいるスケッチ(ID、中身)。
 pub fn selected_sketch(cx: &Context<'_>) -> Option<(kmb_core::FeatureId, Sketch)> {
     let id = cx.selected?;
@@ -208,16 +235,14 @@ fn redefine_plane(cx: &Context<'_>) -> Result<Outcome, String> {
     let (id, mut sketch) = selected_sketch(cx).ok_or("スケッチを選んでから使う")?;
     let plane = match picked_sketch_plane(cx) {
         Some(p) => p,
-        None => cx
-            .arg_str("plane")
-            .and_then(base_plane)
-            .ok_or("新しい平面(XY・YZ・ZX の四角か、ボディの平らな面)をクリックして選ぶ")?,
+        None => plane_arg(cx)?
+            .ok_or("新しい平面(XY・YZ・ZX の四角か作業平面、ボディの平らな面)をクリックして選ぶ")?,
     };
-    if let SketchPlane::Face { feature, .. } = &plane {
+    if let Some(feature) = &plane.source() {
         let at = |f: kmb_core::FeatureId| cx.data.features.iter().position(|e| e.id == f);
         if *feature == id || at(*feature) > at(id) {
             return Err(
-                "このスケッチより後にできたボディの面には移せません(計算の順が逆になる)".into(),
+                "このスケッチより後にできた面や作業平面には移せません(計算の順が逆になる)".into(),
             );
         }
     }
@@ -296,7 +321,7 @@ impl Extension for SketchCommands {
         let on_face: &[Place] = if face { &[Place::FaceMenu] } else { &[] };
         vec![
             Action::new(ADD_SKETCH, "スケッチを作成", "cad")
-                .args([kmb_core::Arg::choice("plane", "描く平面(省くと選んでいる面か XY。face は手順でクリックした面)", &[("xy", "XY"), ("yz", "YZ"), ("zx", "ZX"), ("face", "クリックした面")]), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
+                .args([kmb_core::Arg::value("plane", "描く平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面か作業平面、なければ XY)"), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
                 .menu("作成")
                 .icon("sketch")
                 .aliases("すけっち sketch")
@@ -311,7 +336,7 @@ impl Extension for SketchCommands {
                 .at(on_face)
                 .disabled_if((!face).then_some(NEED_FACE)),
             Action::new(REDEFINE_PLANE, "スケッチ平面を再定義", "cad")
-                .arg(kmb_core::Arg::choice("plane", "新しい平面(省くと選んでいる面。face は手順でクリックした面)", &[("xy", "XY"), ("yz", "YZ"), ("zx", "ZX"), ("face", "クリックした面")]))
+                .arg(kmb_core::Arg::value("plane", "新しい平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面)"))
                 .menu("作成")
                 .icon("replane")
                 .aliases("へいめん さいていぎ redefine plane めん うつす")
@@ -345,20 +370,24 @@ impl Extension for SketchCommands {
         Some(match id {
             // 平らな面を選んでいれば、その面に(面を選んでから押せばそこに描く)
             // 平面を選ぶ手順で選んだ平面(`plane` が xy・yz・zx)。指定がなければ XY
-            ADD_SKETCH => Ok(insert_feature(
-                "スケッチを作成",
-                SKETCH,
-                format!("スケッチ{}", cx.count_of(SKETCH) + 1),
-                &with_face_edges(
-                    cx,
-                    Sketch {
-                        plane: picked_sketch_plane(cx)
-                            .or_else(|| cx.arg_str("plane").and_then(base_plane))
-                            .unwrap_or_default(),
-                        ..Default::default()
-                    },
-                ),
-            )),
+            // 選んでいる作業平面か、手順で選んだ作業平面(`plane` が機能の番号)にも描ける
+            ADD_SKETCH => plane_arg(cx).map(|given| {
+                insert_feature(
+                    "スケッチを作成",
+                    SKETCH,
+                    format!("スケッチ{}", cx.count_of(SKETCH) + 1),
+                    &with_face_edges(
+                        cx,
+                        Sketch {
+                            plane: picked_sketch_plane(cx)
+                                .or(given)
+                                .or_else(|| selected_datum_plane(cx))
+                                .unwrap_or_default(),
+                            ..Default::default()
+                        },
+                    ),
+                )
+            }),
             SKETCH_ON_FACE => match picked_sketch_plane(cx) {
                 Some(plane) => Ok(insert_feature(
                     "面にスケッチを追加",
@@ -388,6 +417,9 @@ impl Extension for SketchCommands {
         if id != ADD_SKETCH && id != REDEFINE_PLANE {
             return None;
         }
+        if id == ADD_SKETCH && selected_datum_plane(cx).is_some() {
+            return None;
+        }
         // 軸の正の向きへ広がる正方形を原点から少し浮かせる(描く四角と同じ)。
         // 大きさは画面の上で一定(ビューが原点の目安の大きさに伸ばす。長さ 1 がその大きさ)
         let (a, b) = (kmb_core::Plane::ORIGIN_GAP, 1.0 + kmb_core::Plane::ORIGIN_GAP);
@@ -413,8 +445,9 @@ impl Extension for SketchCommands {
                     ..Default::default()
                 }
             })
+            .chain(kmb_interchange::datum_choices(cx))
             .collect();
-        // 原点の平面のほかにボディの平らな面もそのままクリックで選べる
+        // 原点の平面と作業平面のほかに、ボディの平らな面もそのままクリックで選べる
         Some(vec![Handle {
             choices,
             faces: true,

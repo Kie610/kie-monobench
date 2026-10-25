@@ -45,6 +45,7 @@ kmb-cad-extrude = { path = "crates/kmb-cad-extrude" }
 kmb-cad-revolve = { path = "crates/kmb-cad-revolve" }
 kmb-cad-sweep = { path = "crates/kmb-cad-sweep" }
 kmb-cad-boolean = { path = "crates/kmb-cad-boolean" }
+kmb-cad-datum = { path = "crates/kmb-cad-datum" }
 kmb-cad-hole = { path = "crates/kmb-cad-hole" }
 kmb-cad-pattern = { path = "crates/kmb-cad-pattern" }
 kmb-cad-modify = { path = "crates/kmb-cad-modify" }

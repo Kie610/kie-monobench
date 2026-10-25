@@ -65,6 +65,7 @@ mod adopted_io_tests;
 mod adopted_shape_tests;
 mod adopted_sketch_tests;
 mod asm_tests;
+mod datum_tests;
 mod edge_tests;
 mod extrude_revolve_hole_tests;
 mod face_edit_tests;

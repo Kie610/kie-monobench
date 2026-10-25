@@ -1,0 +1,22 @@
+# 作業平面: 板の上面を選んで構築のまとまりから作業平面を押すと、10 mm 浮かせた作業平面ができ、
+# 3D のビューに灰色の四角で出る。作業平面を選んでスケッチを作成すると、その上にスケッチを描く。
+#! sample part
+#! size 1280x800
+
+shot 前
+pick f8:end
+click "構築 ▾"
+click "作業平面"
+wait
+expect "作業平面1" exists
+shot 作業平面を作った
+expect "距離" = "10 mm"
+type "距離" "20 mm" enter
+wait
+shot 距離を20mmにした
+key Escape
+click "作業平面1"
+click "スケッチを作成"
+wait
+expect ~"作業平面の上" exists
+shot 作業平面の上のスケッチ

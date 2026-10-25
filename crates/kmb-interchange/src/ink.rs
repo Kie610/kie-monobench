@@ -64,6 +64,9 @@ pub mod plane {
     pub const BOTTOM: PlaneInk = PlaneInk("bottom");
 
     pub const ALL: [PlaneInk; 4] = [SAFE, FEED, TOP, BOTTOM];
+
+    /// 作業平面(基準面と同じ灰色。加工の高さの色とは別に、画面のテーマが決める)
+    pub const DATUM: PlaneInk = PlaneInk("datum");
 }
 
 /// 部品の代わりに描く形の面の色の役割。

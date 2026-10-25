@@ -834,11 +834,8 @@ impl Feature for Text {
                     slot: slot.into(),
                 });
             }
-        } else if let SketchPlane::Face { feature, .. } = &self.plane {
-            out.push(InputRef::Output {
-                feature: *feature,
-                slot: "body".into(),
-            });
+        } else {
+            out.extend(self.plane.inputs());
         }
         for e in exprs(&mut self.clone()) {
             for i in expr_inputs(e)? {

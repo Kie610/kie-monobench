@@ -1,0 +1,22 @@
+[package]
+name = "kmb-cad-datum"
+description = "作業平面(面・平面から浮かせる、軸のまわりに傾ける、2 つの面の真ん中、3 点を通る)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-cad.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true
