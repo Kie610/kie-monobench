@@ -1,0 +1,23 @@
+[package]
+name = "kmb-cad-import-step"
+description = "ソリッドの機能: STEP の読み込み"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-cad.workspace = true
+serde.workspace = true
+encoding_rs.workspace = true
+log.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

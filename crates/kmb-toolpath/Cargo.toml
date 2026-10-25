@@ -1,0 +1,22 @@
+[package]
+name = "kmb-toolpath"
+description = "機械に依存しない経路の中間表現と検査"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-cam-tool.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

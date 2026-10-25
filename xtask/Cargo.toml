@@ -17,7 +17,7 @@ sha2 = { version = "0.10.9", default-features = false }
 # 飛ばしの例外の表(xtask/skips.toml・removed-tests.toml)を読む
 toml = { version = "1.1.8", default-features = false, features = ["parse", "serde"] }
 
-[package.metadata.jc]
+[package.metadata.kmb]
 layer = "support"
 
 [lints]

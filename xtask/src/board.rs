@@ -1,16 +1,16 @@
 //! 画板の並びの点検: 画板「JC の画面」のツールバーと実物の既知の差の表
-//! (`crates/jc-ui/board/known-diffs.txt`)は、減る向きにしか変えない(2026-10-22 Kie)。
+//! (`crates/kmb-ui/board/known-diffs.txt`)は、減る向きにしか変えない(2026-10-22 Kie)。
 //!
-//! 実物と画板の比べ方は jc-ui の `board` と、その試験(設計・加工は jc-ui、スケッチは jc-ui-sketch)。
+//! 実物と画板の比べ方は kmb-ui の `board` と、その試験(設計・加工は kmb-ui、スケッチは kmb-ui-sketch)。
 //! ここでは分かれ目の版と比べ、差の行が増えていたら落とす。画板のデータ
-//! (`crates/jc-ui/board/toolbar.json`)を直した時だけは、新しく決めた物を差に書いてよい。
+//! (`crates/kmb-ui/board/toolbar.json`)を直した時だけは、新しく決めた物を差に書いてよい。
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-pub const BOARD: &str = "crates/jc-ui/board/toolbar.json";
-pub const KNOWN: &str = "crates/jc-ui/board/known-diffs.txt";
+pub const BOARD: &str = "crates/kmb-ui/board/toolbar.json";
+pub const KNOWN: &str = "crates/kmb-ui/board/known-diffs.txt";
 
 /// 表の差の行(「差 # 理由」の差の所)。
 fn rows(text: &str) -> BTreeSet<String> {
@@ -49,9 +49,9 @@ mod tests {
     use super::*;
 
     fn run(base_board: &str, base_known: &str, now_board: &str, now_known: &str) -> usize {
-        let dir = std::env::temp_dir().join(format!("jc-board-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-board-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("crates/jc-ui/board")).unwrap();
+        fs::create_dir_all(dir.join("crates/kmb-ui/board")).unwrap();
         fs::write(dir.join(BOARD), now_board).unwrap();
         fs::write(dir.join(KNOWN), now_known).unwrap();
         let (bb, bk) = (base_board.to_string(), base_known.to_string());

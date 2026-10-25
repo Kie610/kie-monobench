@@ -28,7 +28,7 @@
 //!   `docs` は断片から一覧の表を target/docs/ に作り、地図.md の crate の一覧を書き直す。
 //! - 毎回読む骨格の資料(agents.rs): AGENTS.md と .claude/rules/ に書いた名前・パス・節の実在、
 //!   大きさの上限、決まりに付けた点検の名前、層の表(`docs` が layers.rs から作る)。
-//! - コアの公開の項目(api.rs)が分かれ目から変わっていれば、契約テスト(jc-contract)を使う crate を
+//! - コアの公開の項目(api.rs)が分かれ目から変わっていれば、契約テスト(kmb-contract)を使う crate を
 //!   全部足して流す(`CORE_API_VERSION` は公開まで上げない、2026-10-21)。`api` は今の一覧を出す。
 //! - `release` はアプリを release で作り、exe にこの PC のパス(ユーザー名を含むホームなど)が残って
 //!   いないかを数える。`paths` は数えるだけ(release.rs)。組み立てた後、exe の横に他者の部品の
@@ -39,7 +39,7 @@
 //!   切っていれば `sweep --yes` を流す。cargo は依存の機能や版が変わるたびに別の名前で作り直して
 //!   古いものを消さず、クラウドの作業場(約 30 GB)では main を 2〜3 回取り込むと溢れていた
 //!   (docs/verify.md の 8 節)。空きを測れない所(`df` の無い Windows など)では何もしない。
-//! - `verify` は組み立ての前に、揃えた依存(jc-workspace-hack)が前の組み立てから変わっていれば
+//! - `verify` は組み立ての前に、揃えた依存(kmb-workspace-hack)が前の組み立てから変わっていれば
 //!   使われなくなる incremental を消し、空きが少なければ incremental の前の回を消す(組み立ての
 //!   途中で空きが尽きないように。2026-10-23)。
 //! - `verify` は組み立ての間、空きが `JC_WATCH_BELOW_GB`(既定 6)GB を切れば、作り直して要らなく
@@ -83,11 +83,11 @@ use std::time::{Instant, SystemTime};
 #[derive(Debug, Clone, PartialEq, Default)]
 struct Package {
     name: String,
-    /// ワークスペースの根からのフォルダ(`/` 区切り、例 `crates/jc-core`)
+    /// ワークスペースの根からのフォルダ(`/` 区切り、例 `crates/kmb-core`)
     dir: String,
     /// ワークスペースの中の依存先(開発用・ビルド用を含む)
     deps: Vec<String>,
-    /// `[package.metadata.jc]` の `layer`
+    /// `[package.metadata.kmb]` の `layer`
     layer: Option<String>,
     /// Cargo.toml の `description`(docs/地図.md の crate の一覧に使う)
     description: Option<String>,
@@ -135,9 +135,9 @@ fn classify(files: &[String], packages: &[Package]) -> Changes {
             c.packages.insert("smlib-sys".into());
             continue;
         }
-        // 例のプラグイン(plugins/、ワークスペースの外)は jc-plugin-host の試験が読む
-        if f.starts_with("plugins/") && packages.iter().any(|p| p.name == "jc-plugin-host") {
-            c.packages.insert("jc-plugin-host".into());
+        // 例のプラグイン(plugins/、ワークスペースの外)は kmb-plugin-host の試験が読む
+        if f.starts_with("plugins/") && packages.iter().any(|p| p.name == "kmb-plugin-host") {
+            c.packages.insert("kmb-plugin-host".into());
             continue;
         }
         let owner = packages
@@ -163,9 +163,9 @@ fn classify(files: &[String], packages: &[Package]) -> Changes {
 /// モジュールは、ここに足す。
 const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     // 押し出し・ブーリアン・フィレット・面取り・穴など、形そのものの試験
-    ("jc-solid", None),
+    ("kmb-solid", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
-    ("jc-samples", Some("hole_tests::")),
+    ("kmb-samples", Some("hole_tests::")),
 ];
 
 /// truck の回で流す試験のうち、選んだ crate にあるもの。
@@ -261,7 +261,7 @@ fn parse_metadata(meta: &Json) -> Vec<Package> {
                 name: p["name"].as_str().unwrap_or_default().into(),
                 dir,
                 deps,
-                layer: p["metadata"]["jc"]["layer"].as_str().map(String::from),
+                layer: p["metadata"]["kmb"]["layer"].as_str().map(String::from),
                 description: p["description"].as_str().map(String::from),
                 edges,
             }
@@ -673,7 +673,7 @@ fn verify_cargo_test(o: &Options, sel: &Option<BTreeSet<String>>, ws: &Workspace
     results
 }
 
-/// 実行中の飛ばしの印を書くファイル(jc-contract の `skip!`)。
+/// 実行中の飛ばしの印を書くファイル(kmb-contract の `skip!`)。
 fn skip_log(ws: &Workspace) -> PathBuf {
     ws.target_dir.join("verify").join("skips.log")
 }
@@ -684,9 +684,9 @@ fn git_show(fork: &str, path: &str) -> Option<String> {
     output(Command::new("git").args(["show", &format!("{fork}:{path}")])).ok()
 }
 
-/// jc-core の公開の項目の一覧(今と分かれ目)。
+/// kmb-core の公開の項目の一覧(今と分かれ目)。
 fn core_api(ws: &Workspace, fork: &str) -> Option<(api::Api, api::Api)> {
-    let dir = &ws.packages.iter().find(|p| p.name == "jc-core")?.dir;
+    let dir = &ws.packages.iter().find(|p| p.name == "kmb-core")?.dir;
     let src = format!("{dir}/src");
     let now = api::of_dir(Path::new(&src));
     let mut old = api::Api::new();
@@ -701,7 +701,7 @@ fn core_api(ws: &Workspace, fork: &str) -> Option<(api::Api, api::Api)> {
     Some((old, now))
 }
 
-/// コアの公開の項目が変わっていれば、契約テストを使う crate(と jc-contract)を選びに足す。
+/// コアの公開の項目が変わっていれば、契約テストを使う crate(と kmb-contract)を選びに足す。
 fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<String>>) {
     let Some(s) = sel.as_mut() else {
         return;
@@ -726,9 +726,9 @@ fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<Stri
             println!("  {sign} …ほか {} 件", v.len() - 10);
         }
     }
-    s.insert("jc-contract".into());
+    s.insert("kmb-contract".into());
     for p in &ws.packages {
-        if p.edges.iter().any(|e| e.name == "jc-contract") {
+        if p.edges.iter().any(|e| e.name == "kmb-contract") {
             s.insert(p.name.clone());
         }
     }
@@ -890,7 +890,7 @@ fn licenses_check(ws: &Workspace) -> Done {
     d
 }
 
-/// 揃えた依存(jc-workspace-hack)の点検(cargo-hakari)。`cargo hakari generate --diff` と
+/// 揃えた依存(kmb-workspace-hack)の点検(cargo-hakari)。`cargo hakari generate --diff` と
 /// `manage-deps --dry-run` が差を出さないこと。依存を変えたのに作り直さないと、PC の取り込みで
 /// 初めて落ちる(道具の無いクラウドで、古い揃えのまま通ってしまう)。
 /// 道具が無いのも失敗(クラウドは scripts/install-hakari.sh)。
@@ -1045,9 +1045,9 @@ fn run() -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
     if cmd == "io" {
-        // 入出力の一覧 docs/入出力.md を登録から書き直す(apps/jc-mcp/src/reference.rs)
+        // 入出力の一覧 docs/入出力.md を登録から書き直す(apps/kmb-mcp/src/reference.rs)
         let ok = cargo()
-            .args(["test", "-q", "-p", "jc-mcp", "--lib", "io_reference"])
+            .args(["test", "-q", "-p", "kmb-mcp", "--lib", "io_reference"])
             .env("JC_BLESS", "1")
             .status()
             .map_err(|e| format!("cargo test を動かせない: {e}"))?
@@ -1068,7 +1068,7 @@ fn run() -> Result<ExitCode, String> {
     }
     if cmd == "api" {
         let ws = workspace()?;
-        let (_, now) = core_api(&ws, "HEAD").ok_or("jc-core が見つかりません")?;
+        let (_, now) = core_api(&ws, "HEAD").ok_or("kmb-core が見つかりません")?;
         for (k, files) in &now {
             println!("{}: {k}", files.join("・"));
         }
@@ -1106,7 +1106,7 @@ fn run() -> Result<ExitCode, String> {
                 println!(
                     "== 記録で truck の回が通ってから 7 日を過ぎたので、truck の回も流します\
                      (落ちたら 1 件ずつ truck の弱さか JC の退行かを確かめ、弱さなら試験に \
-                     jc_contract::skip! を書いて xtask/skips.toml の [runtime] に理由を足す。docs/verify.md の 1 節)"
+                     kmb_contract::skip! を書いて xtask/skips.toml の [runtime] に理由を足す。docs/verify.md の 1 節)"
                 );
                 o.truck = true;
             }
@@ -1209,11 +1209,11 @@ mod tests {
 
     fn ws() -> Vec<Package> {
         vec![
-            pkg("jc-core", "crates/jc-core", &[]),
-            pkg("jc-cam", "crates/jc-cam", &["jc-core"]),
-            pkg("jc-cam-commands", "crates/jc-cam-commands", &["jc-cam"]),
-            pkg("jc-ui", "crates/jc-ui", &["jc-core"]),
-            pkg("jc-app", "apps/jc-app", &["jc-ui", "jc-cam-commands"]),
+            pkg("kmb-core", "crates/kmb-core", &[]),
+            pkg("kmb-cam", "crates/kmb-cam", &["kmb-core"]),
+            pkg("kmb-cam-commands", "crates/kmb-cam-commands", &["kmb-cam"]),
+            pkg("kmb-ui", "crates/kmb-ui", &["kmb-core"]),
+            pkg("kmb-app", "apps/kmb-app", &["kmb-ui", "kmb-cam-commands"]),
             pkg("smlib-sys", "crates/smlib-sys", &[]),
         ]
     }
@@ -1225,10 +1225,10 @@ mod tests {
     #[test]
     fn files_are_given_to_the_crate_whose_folder_holds_them() {
         let files: Vec<String> = [
-            "crates/jc-cam/src/lib.rs",
+            "crates/kmb-cam/src/lib.rs",
             // 名前の始まりが同じ別の crate を取り違えない
-            "crates/jc-cam-commands/src/entry.rs",
-            "crates\\jc-ui\\src\\ribbon.rs",
+            "crates/kmb-cam-commands/src/entry.rs",
+            "crates\\kmb-ui\\src\\ribbon.rs",
             "third_party/smlibpy-patches/SmBool.cpp",
             "docs/plan.md",
         ]
@@ -1237,50 +1237,50 @@ mod tests {
         let c = classify(&files, &ws());
         assert_eq!(
             c.packages,
-            set(&["jc-cam", "jc-cam-commands", "jc-ui", "smlib-sys"])
+            set(&["kmb-cam", "kmb-cam-commands", "kmb-ui", "smlib-sys"])
         );
         assert!(!c.everything);
         assert_eq!(c.unrelated, ["docs/plan.md"]);
         assert!(classify(&["Cargo.lock".into()], &ws()).everything);
         assert!(classify(&[".cargo/config.toml".into()], &ws()).everything);
         let mut w = ws();
-        w.push(pkg("jc-plugin-host", "crates/jc-plugin-host", &[]));
+        w.push(pkg("kmb-plugin-host", "crates/kmb-plugin-host", &[]));
         assert_eq!(
             classify(&["plugins/post-example.wasm".into()], &w).packages,
-            set(&["jc-plugin-host"])
+            set(&["kmb-plugin-host"])
         );
     }
 
     #[test]
     fn dependents_are_followed_through_other_crates() {
         assert_eq!(
-            with_dependents(&set(&["jc-cam"]), &ws()),
-            set(&["jc-cam", "jc-cam-commands", "jc-app"])
+            with_dependents(&set(&["kmb-cam"]), &ws()),
+            set(&["kmb-cam", "kmb-cam-commands", "kmb-app"])
         );
-        assert_eq!(with_dependents(&set(&["jc-app"]), &ws()), set(&["jc-app"]));
-        assert_eq!(with_dependents(&set(&["jc-core"]), &ws()).len(), 5);
+        assert_eq!(with_dependents(&set(&["kmb-app"]), &ws()), set(&["kmb-app"]));
+        assert_eq!(with_dependents(&set(&["kmb-core"]), &ws()).len(), 5);
     }
 
     #[test]
     fn truck_runs_only_the_shape_tests() {
         let mut w = ws();
-        w.push(pkg("jc-solid", "crates/jc-solid", &[]));
-        w.push(pkg("jc-samples", "crates/jc-samples", &[]));
+        w.push(pkg("kmb-solid", "crates/kmb-solid", &[]));
+        w.push(pkg("kmb-samples", "crates/kmb-samples", &[]));
         let all = truck_targets(&None, &w);
         assert_eq!(
             all,
-            [("jc-solid", None), ("jc-samples", Some("hole_tests::"))]
+            [("kmb-solid", None), ("kmb-samples", Some("hole_tests::"))]
         );
         assert_eq!(
             truck_filter(&all),
-            "package(jc-solid) | (package(jc-samples) & test(/^hole_tests::/))"
+            "package(kmb-solid) | (package(kmb-samples) & test(/^hole_tests::/))"
         );
         // 選んだ crate に形の計算の試験がなければ流さない(画面や加工だけの変更)
         assert_eq!(
-            truck_targets(&Some(set(&["jc-core", "jc-ui", "jc-solid"])), &w),
-            [("jc-solid", None)]
+            truck_targets(&Some(set(&["kmb-core", "kmb-ui", "kmb-solid"])), &w),
+            [("kmb-solid", None)]
         );
-        assert!(truck_targets(&Some(set(&["jc-ui", "jc-app"])), &w).is_empty());
+        assert!(truck_targets(&Some(set(&["kmb-ui", "kmb-app"])), &w).is_empty());
         // ワークスペースにない crate は数えない
         assert!(truck_targets(&None, &ws()).is_empty());
     }
@@ -1304,11 +1304,11 @@ mod tests {
             "workspace_root": "D:\\w",
             "workspace_members": ["a 0.1.0", "b 0.1.0"],
             "packages": [
-                {"id": "a 0.1.0", "name": "jc-a", "manifest_path": "D:\\w\\crates\\jc-a\\Cargo.toml",
-                 "metadata": {"jc": {"layer": "cad"}},
-                 "dependencies": [{"name": "serde", "kind": null}, {"name": "jc-b", "kind": null},
-                                  {"name": "jc-b", "kind": "dev"}]},
-                {"id": "b 0.1.0", "name": "jc-b", "manifest_path": "D:\\w\\crates\\jc-b\\Cargo.toml",
+                {"id": "a 0.1.0", "name": "kmb-a", "manifest_path": "D:\\w\\crates\\kmb-a\\Cargo.toml",
+                 "metadata": {"kmb": {"layer": "cad"}},
+                 "dependencies": [{"name": "serde", "kind": null}, {"name": "kmb-b", "kind": null},
+                                  {"name": "kmb-b", "kind": "dev"}]},
+                {"id": "b 0.1.0", "name": "kmb-b", "manifest_path": "D:\\w\\crates\\kmb-b\\Cargo.toml",
                  "metadata": null, "dependencies": []}
             ]
         });
@@ -1316,38 +1316,38 @@ mod tests {
         assert_eq!(got.len(), 2);
         assert_eq!(
             (got[0].name.as_str(), got[0].dir.as_str()),
-            ("jc-a", "crates/jc-a")
+            ("kmb-a", "crates/kmb-a")
         );
-        assert_eq!(got[0].deps, ["jc-b"]);
+        assert_eq!(got[0].deps, ["kmb-b"]);
         assert_eq!(got[0].layer.as_deref(), Some("cad"));
         assert_eq!(
             got[0].edges,
             [
                 Edge {
-                    name: "jc-b".into(),
+                    name: "kmb-b".into(),
                     kind: Kind::Normal
                 },
                 Edge {
-                    name: "jc-b".into(),
+                    name: "kmb-b".into(),
                     kind: Kind::Dev
                 }
             ]
         );
-        assert_eq!(got[1], pkg("jc-b", "crates/jc-b", &[]));
+        assert_eq!(got[1], pkg("kmb-b", "crates/kmb-b", &[]));
     }
 
     #[test]
     fn arguments_choose_crates_and_steps() {
         let a = |v: &[&str]| parse_args(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
-        let o = a(&["jc-ui", "--dependents", "--no-clippy", "--base", "main"]).unwrap();
-        assert_eq!(o.crates, ["jc-ui"]);
+        let o = a(&["kmb-ui", "--dependents", "--no-clippy", "--base", "main"]).unwrap();
+        assert_eq!(o.crates, ["kmb-ui"]);
         assert!(o.dependents && !o.clippy && !o.truck);
         assert_eq!(o.base, "main");
         assert_eq!(a(&[]).unwrap().base, "origin/main");
         assert!(a(&["--fast"]).is_err());
         assert_eq!(
-            package_args(&Some(set(&["jc-ui", "jc-core"]))),
-            ["-p", "jc-core", "-p", "jc-ui"]
+            package_args(&Some(set(&["kmb-ui", "kmb-core"]))),
+            ["-p", "kmb-core", "-p", "kmb-ui"]
         );
         assert_eq!(package_args(&None), ["--workspace"]);
     }

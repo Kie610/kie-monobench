@@ -2104,1262 +2104,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "jc-app"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui",
- "egui_kittest",
- "jc-bundle",
- "jc-core",
- "jc-interchange",
- "jc-io-stl",
- "jc-look",
- "jc-samples",
- "jc-session",
- "jc-ui",
- "jc-ui-library",
- "jc-ui-sketch",
- "jc-ui-text",
- "jc-ui-tools",
- "jc-workspace-hack",
- "log",
- "rfd",
- "serde_json",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "jc-asm"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-look",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-bundle"
-version = "0.1.0"
-dependencies = [
- "jc-asm",
- "jc-cad",
- "jc-cad-boolean",
- "jc-cad-edge",
- "jc-cad-extrude",
- "jc-cad-hole",
- "jc-cad-import-step",
- "jc-cad-modify",
- "jc-cad-pattern",
- "jc-cad-revolve",
- "jc-cad-sweep",
- "jc-cam-commands",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-config",
- "jc-core",
- "jc-fea",
- "jc-flow",
- "jc-interchange",
- "jc-io-dxf",
- "jc-io-render",
- "jc-io-stl",
- "jc-io-svg",
- "jc-io-view",
- "jc-kernel-smlib",
- "jc-kernel-truck",
- "jc-plugin-host",
- "jc-post",
- "jc-post-carvera-air",
- "jc-samples",
- "jc-scene",
- "jc-sketch",
- "jc-sketch-3d",
- "jc-sketch-canvas",
- "jc-strategy-adaptive2d",
- "jc-strategy-chamfer",
- "jc-strategy-contour2d",
- "jc-strategy-drill",
- "jc-strategy-engrave",
- "jc-strategy-face",
- "jc-strategy-laser",
- "jc-strategy-pencil",
- "jc-strategy-pocket2d",
- "jc-strategy-raster3d",
- "jc-strategy-rough3d",
- "jc-strategy-waterline",
- "jc-study",
- "jc-text",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad"
-version = "0.1.0"
-dependencies = [
- "cavalier_contours",
- "jc-core",
- "jc-interchange",
- "jc-look",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-boolean"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-edge"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-extrude"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-hole"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-import-step"
-version = "0.1.0"
-dependencies = [
- "encoding_rs",
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-modify"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-interchange",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-pattern"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-revolve"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cad-sweep"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cam-commands"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-program",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-format",
- "jc-gcode-read",
- "jc-interchange",
- "jc-io-render",
- "jc-io-stl",
- "jc-look",
- "jc-post",
- "jc-post-carvera-air",
- "jc-sim",
- "jc-strategy-adaptive2d",
- "jc-strategy-chamfer",
- "jc-strategy-contour2d",
- "jc-strategy-drill",
- "jc-strategy-engrave",
- "jc-strategy-face",
- "jc-strategy-laser",
- "jc-strategy-pencil",
- "jc-strategy-pocket2d",
- "jc-strategy-raster3d",
- "jc-strategy-rough3d",
- "jc-strategy-waterline",
- "jc-toolpath",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cam-dropcutter"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath-moves",
- "jc-workspace-hack",
- "serde",
-]
-
-[[package]]
-name = "jc-cam-geom"
-version = "0.1.0"
-dependencies = [
- "cavalier_contours",
- "jc-core",
- "jc-workspace-hack",
- "serde",
-]
-
-[[package]]
-name = "jc-cam-program"
-version = "0.1.0"
-dependencies = [
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-format",
- "jc-gcode-read",
- "jc-look",
- "jc-post",
- "jc-post-carvera-air",
- "jc-sim",
- "jc-strategy-chamfer",
- "jc-strategy-contour2d",
- "jc-strategy-drill",
- "jc-strategy-face",
- "jc-strategy-pocket2d",
- "jc-toolpath",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cam-setup"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-tool",
- "jc-contract",
- "jc-core",
- "jc-post",
- "jc-toolpath",
- "jc-toolpath-fit",
- "jc-toolpath-moves",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cam-tool"
-version = "0.1.0"
-dependencies = [
- "crc32fast",
- "jc-core",
- "jc-format",
- "jc-look",
- "jc-workspace-hack",
- "miniz_oxide 0.9.1",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "jc-bundle",
- "jc-core",
- "jc-interchange",
- "jc-session",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-config"
-version = "0.1.0"
-dependencies = [
- "jc-bundle",
- "jc-core",
- "jc-interchange",
- "jc-samples",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-contract"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-workspace-hack",
- "serde_json",
-]
-
-[[package]]
-name = "jc-core"
-version = "0.1.0"
-dependencies = [
- "jc-expr",
- "jc-workspace-hack",
- "log",
- "proptest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-expr"
-version = "0.1.0"
-dependencies = [
- "jc-workspace-hack",
- "proptest",
- "serde",
-]
-
-[[package]]
-name = "jc-fea"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-look",
- "jc-study",
- "jc-workspace-hack",
- "log",
- "nalgebra",
- "robust",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-flow"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-study",
- "jc-workspace-hack",
- "log",
- "nalgebra",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-format"
-version = "0.1.0"
-dependencies = [
- "crc32fast",
- "jc-workspace-hack",
- "miniz_oxide 0.9.1",
-]
-
-[[package]]
-name = "jc-gcode-read"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-toolpath",
- "jc-workspace-hack",
-]
-
-[[package]]
-name = "jc-image"
-version = "0.1.0"
-dependencies = [
- "image",
- "jc-format",
- "jc-workspace-hack",
-]
-
-[[package]]
-name = "jc-interchange"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-look",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-io-dxf"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-format",
- "jc-interchange",
- "jc-io-svg",
- "jc-sketch",
- "jc-workspace-hack",
- "proptest",
- "serde_json",
-]
-
-[[package]]
-name = "jc-io-render"
-version = "0.1.0"
-dependencies = [
- "color_quant",
- "gif",
- "jc-contract",
- "jc-core",
- "jc-format",
- "jc-image",
- "jc-interchange",
- "jc-look",
- "jc-render",
- "jc-workspace-hack",
- "log",
- "png",
- "rav1e",
- "serde",
- "serde_json",
- "windows",
-]
-
-[[package]]
-name = "jc-io-stl"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-format",
- "jc-interchange",
- "jc-look",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-io-svg"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-format",
- "jc-interchange",
- "jc-sketch",
- "jc-workspace-hack",
- "log",
- "proptest",
- "serde_json",
-]
-
-[[package]]
-name = "jc-io-view"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-format",
- "jc-interchange",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-kernel-smlib"
-version = "0.1.0"
-dependencies = [
- "cc",
- "jc-contract",
- "jc-core",
- "jc-kernel-truck",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
- "smlib-sys",
-]
-
-[[package]]
-name = "jc-kernel-truck"
-version = "0.1.0"
-dependencies = [
- "jc-contract",
- "jc-core",
- "jc-workspace-hack",
- "serde_json",
- "truck-meshalgo",
- "truck-modeling",
- "truck-shapeops",
- "truck-stepio",
- "truck-topology",
-]
-
-[[package]]
-name = "jc-look"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-mcp"
-version = "0.1.0"
-dependencies = [
- "jc-bundle",
- "jc-core",
- "jc-format",
- "jc-interchange",
- "jc-session",
- "jc-workspace-hack",
- "log",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "jc-measure"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-look",
- "jc-workspace-hack",
- "serde",
-]
-
-[[package]]
-name = "jc-plugin-host"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-post",
- "jc-post-carvera-air",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde_json",
- "wasmtime",
-]
-
-[[package]]
-name = "jc-post"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-format",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-post-carvera-air"
-version = "0.1.0"
-dependencies = [
- "insta",
- "jc-cam-tool",
- "jc-post",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-render"
-version = "0.1.0"
-dependencies = [
- "crc32fast",
- "jc-core",
- "jc-format",
- "jc-look",
- "jc-workspace-hack",
- "log",
- "miniz_oxide 0.9.1",
- "serde_json",
-]
-
-[[package]]
-name = "jc-samples"
-version = "0.1.0"
-dependencies = [
- "jc-bundle",
- "jc-cad",
- "jc-cad-edge",
- "jc-cad-extrude",
- "jc-cad-hole",
- "jc-cad-import-step",
- "jc-cad-pattern",
- "jc-cam-commands",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-contract",
- "jc-core",
- "jc-fea",
- "jc-flow",
- "jc-interchange",
- "jc-look",
- "jc-post",
- "jc-post-carvera-air",
- "jc-sketch",
- "jc-strategy-adaptive2d",
- "jc-strategy-chamfer",
- "jc-strategy-contour2d",
- "jc-strategy-drill",
- "jc-strategy-engrave",
- "jc-strategy-face",
- "jc-strategy-laser",
- "jc-strategy-pencil",
- "jc-strategy-pocket2d",
- "jc-strategy-raster3d",
- "jc-strategy-rough3d",
- "jc-strategy-waterline",
- "jc-study",
- "jc-text",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-scene"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-format",
- "jc-image",
- "jc-interchange",
- "jc-look",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-session"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "jc-core",
- "jc-format",
- "jc-image",
- "jc-interchange",
- "jc-look",
- "jc-measure",
- "jc-render",
- "jc-workspace-hack",
- "log",
- "miniz_oxide 0.9.1",
- "serde",
- "serde_json",
- "trash",
-]
-
-[[package]]
-name = "jc-sim"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
-]
-
-[[package]]
-name = "jc-sketch"
-version = "0.1.0"
-dependencies = [
- "i_overlay",
- "jc-contract",
- "jc-core",
- "jc-sketch-solver",
- "jc-workspace-hack",
- "proptest",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-sketch-3d"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-sketch",
- "jc-sketch-solver",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-sketch-canvas"
-version = "0.1.0"
-dependencies = [
- "jc-cad",
- "jc-core",
- "jc-format",
- "jc-image",
- "jc-sketch",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-sketch-solver"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-workspace-hack",
- "nalgebra",
- "serde",
-]
-
-[[package]]
-name = "jc-solid"
-version = "0.1.0"
-dependencies = [
- "jc-asm",
- "jc-cad",
- "jc-cad-boolean",
- "jc-cad-edge",
- "jc-cad-extrude",
- "jc-cad-hole",
- "jc-cad-import-step",
- "jc-cad-modify",
- "jc-cad-pattern",
- "jc-cad-revolve",
- "jc-cad-sweep",
- "jc-contract",
- "jc-core",
- "jc-interchange",
- "jc-kernel-smlib",
- "jc-kernel-truck",
- "jc-look",
- "jc-samples",
- "jc-sketch",
- "jc-text",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-adaptive2d"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-post",
- "jc-post-carvera-air",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-chamfer"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-contour2d"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-drill"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-interchange",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-engrave"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-face"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-laser"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-pencil"
-version = "0.1.0"
-dependencies = [
- "jc-cam-dropcutter",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-pocket2d"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-raster3d"
-version = "0.1.0"
-dependencies = [
- "jc-cam-dropcutter",
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-rough3d"
-version = "0.1.0"
-dependencies = [
- "jc-cam-dropcutter",
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-sim",
- "jc-toolpath",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-strategy-waterline"
-version = "0.1.0"
-dependencies = [
- "jc-cam-dropcutter",
- "jc-cam-geom",
- "jc-cam-setup",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-study"
-version = "0.1.0"
-dependencies = [
- "jc-core",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-text"
-version = "0.1.0"
-dependencies = [
- "i_overlay",
- "jc-core",
- "jc-interchange",
- "jc-sketch",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
- "skrifa",
-]
-
-[[package]]
-name = "jc-toolpath"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-workspace-hack",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-toolpath-fit"
-version = "0.1.0"
-dependencies = [
- "jc-cam-tool",
- "jc-toolpath",
- "jc-workspace-hack",
-]
-
-[[package]]
-name = "jc-toolpath-moves"
-version = "0.1.0"
-dependencies = [
- "jc-cam-geom",
- "jc-cam-tool",
- "jc-core",
- "jc-toolpath",
- "jc-workspace-hack",
- "log",
- "serde",
-]
-
-[[package]]
-name = "jc-ui"
-version = "0.1.0"
-dependencies = [
- "accesskit_consumer",
- "egui",
- "egui-wgpu",
- "egui_dock",
- "egui_kittest",
- "jc-bundle",
- "jc-cad",
- "jc-cad-boolean",
- "jc-cad-edge",
- "jc-cad-extrude",
- "jc-cad-hole",
- "jc-cad-import-step",
- "jc-cad-modify",
- "jc-cad-pattern",
- "jc-cad-revolve",
- "jc-cam-commands",
- "jc-contract",
- "jc-core",
- "jc-format",
- "jc-image",
- "jc-interchange",
- "jc-look",
- "jc-measure",
- "jc-post-carvera-air",
- "jc-render",
- "jc-samples",
- "jc-session",
- "jc-sketch",
- "jc-sketch-canvas",
- "jc-strategy-chamfer",
- "jc-strategy-engrave",
- "jc-strategy-face",
- "jc-strategy-pocket2d",
- "jc-text",
- "jc-ui-view3d",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-ui-library"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_kittest",
- "jc-bundle",
- "jc-core",
- "jc-samples",
- "jc-session",
- "jc-ui",
- "jc-workspace-hack",
- "log",
-]
-
-[[package]]
-name = "jc-ui-sketch"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_kittest",
- "jc-bundle",
- "jc-cam-commands",
- "jc-core",
- "jc-interchange",
- "jc-io-dxf",
- "jc-samples",
- "jc-sketch",
- "jc-sketch-3d",
- "jc-ui",
- "jc-workspace-hack",
- "log",
- "serde_json",
-]
-
-[[package]]
-name = "jc-ui-text"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_kittest",
- "jc-bundle",
- "jc-core",
- "jc-session",
- "jc-text",
- "jc-ui",
- "jc-workspace-hack",
- "serde_json",
-]
-
-[[package]]
-name = "jc-ui-tools"
-version = "0.1.0"
-dependencies = [
- "egui",
- "egui_kittest",
- "jc-bundle",
- "jc-cam-commands",
- "jc-cam-tool",
- "jc-core",
- "jc-samples",
- "jc-session",
- "jc-ui",
- "jc-workspace-hack",
- "serde_json",
-]
-
-[[package]]
-name = "jc-ui-view3d"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "egui",
- "egui-wgpu",
- "jc-core",
- "jc-interchange",
- "jc-look",
- "jc-measure",
- "jc-render",
- "jc-workspace-hack",
- "log",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "jc-workspace-hack"
-version = "0.1.0"
-dependencies = [
- "accesskit",
- "ahash",
- "anyhow",
- "arrayvec",
- "bitflags 2.13.2",
- "bytemuck",
- "cc",
- "chrono",
- "cranelift-bitset",
- "ecolor",
- "egui",
- "egui-wgpu",
- "emath",
- "epaint",
- "fnv",
- "font-types",
- "getrandom 0.4.3",
- "hashbrown 0.16.1",
- "hashbrown 0.17.1",
- "indexmap",
- "linux-raw-sys 0.12.1",
- "log",
- "memchr",
- "miniz_oxide 0.9.1",
- "naga",
- "num-complex",
- "num-rational",
- "num-traits",
- "once_cell",
- "proc-macro2",
- "profiling",
- "pulley-interpreter",
- "quote",
- "read-fonts",
- "ron",
- "rustc-hash 2.1.3",
- "rustix 1.1.5",
- "scopeguard",
- "semver",
- "serde",
- "serde_core",
- "serde_json",
- "simd-adler32",
- "skrifa",
- "slab",
- "smallvec",
- "syn 2.0.119",
- "syn 3.0.8",
- "thiserror 2.0.21",
- "tracing",
- "tracing-core",
- "uuid",
- "wasm-encoder",
- "wasmparser",
- "wasmtime-internal-core",
- "wayland-backend",
- "wgpu",
- "wgpu-core",
- "wgpu-core-deps-windows-linux-android",
- "wgpu-hal",
- "wgpu-types",
- "windows",
- "windows-sys 0.61.2",
- "zerocopy",
-]
-
-[[package]]
 name = "jni"
 version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3474,6 +2218,1262 @@ checksum = "90ceaa75eb0036a32b6b9833962eb18137449e9817e2e586006471925b727fd5"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
+]
+
+[[package]]
+name = "kmb-app"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-io-stl",
+ "kmb-look",
+ "kmb-samples",
+ "kmb-session",
+ "kmb-ui",
+ "kmb-ui-library",
+ "kmb-ui-sketch",
+ "kmb-ui-text",
+ "kmb-ui-tools",
+ "kmb-workspace-hack",
+ "log",
+ "rfd",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kmb-asm"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-bundle"
+version = "0.1.0"
+dependencies = [
+ "kmb-asm",
+ "kmb-cad",
+ "kmb-cad-boolean",
+ "kmb-cad-edge",
+ "kmb-cad-extrude",
+ "kmb-cad-hole",
+ "kmb-cad-import-step",
+ "kmb-cad-modify",
+ "kmb-cad-pattern",
+ "kmb-cad-revolve",
+ "kmb-cad-sweep",
+ "kmb-cam-commands",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-config",
+ "kmb-core",
+ "kmb-fea",
+ "kmb-flow",
+ "kmb-interchange",
+ "kmb-io-dxf",
+ "kmb-io-render",
+ "kmb-io-stl",
+ "kmb-io-svg",
+ "kmb-io-view",
+ "kmb-kernel-smlib",
+ "kmb-kernel-truck",
+ "kmb-plugin-host",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-samples",
+ "kmb-scene",
+ "kmb-sketch",
+ "kmb-sketch-3d",
+ "kmb-sketch-canvas",
+ "kmb-strategy-adaptive2d",
+ "kmb-strategy-chamfer",
+ "kmb-strategy-contour2d",
+ "kmb-strategy-drill",
+ "kmb-strategy-engrave",
+ "kmb-strategy-face",
+ "kmb-strategy-laser",
+ "kmb-strategy-pencil",
+ "kmb-strategy-pocket2d",
+ "kmb-strategy-raster3d",
+ "kmb-strategy-rough3d",
+ "kmb-strategy-waterline",
+ "kmb-study",
+ "kmb-text",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad"
+version = "0.1.0"
+dependencies = [
+ "cavalier_contours",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-boolean"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-edge"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-extrude"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-hole"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-import-step"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-modify"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-pattern"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-revolve"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-sweep"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cam-commands"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-program",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-format",
+ "kmb-gcode-read",
+ "kmb-interchange",
+ "kmb-io-render",
+ "kmb-io-stl",
+ "kmb-look",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-sim",
+ "kmb-strategy-adaptive2d",
+ "kmb-strategy-chamfer",
+ "kmb-strategy-contour2d",
+ "kmb-strategy-drill",
+ "kmb-strategy-engrave",
+ "kmb-strategy-face",
+ "kmb-strategy-laser",
+ "kmb-strategy-pencil",
+ "kmb-strategy-pocket2d",
+ "kmb-strategy-raster3d",
+ "kmb-strategy-rough3d",
+ "kmb-strategy-waterline",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cam-dropcutter"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath-moves",
+ "kmb-workspace-hack",
+ "serde",
+]
+
+[[package]]
+name = "kmb-cam-geom"
+version = "0.1.0"
+dependencies = [
+ "cavalier_contours",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+]
+
+[[package]]
+name = "kmb-cam-program"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-format",
+ "kmb-gcode-read",
+ "kmb-look",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-sim",
+ "kmb-strategy-chamfer",
+ "kmb-strategy-contour2d",
+ "kmb-strategy-drill",
+ "kmb-strategy-face",
+ "kmb-strategy-pocket2d",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cam-setup"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-tool",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-post",
+ "kmb-toolpath",
+ "kmb-toolpath-fit",
+ "kmb-toolpath-moves",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cam-tool"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "kmb-core",
+ "kmb-format",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "miniz_oxide 0.9.1",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-session",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-config"
+version = "0.1.0"
+dependencies = [
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-samples",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-contract"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-core"
+version = "0.1.0"
+dependencies = [
+ "kmb-expr",
+ "kmb-workspace-hack",
+ "log",
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-expr"
+version = "0.1.0"
+dependencies = [
+ "kmb-workspace-hack",
+ "proptest",
+ "serde",
+]
+
+[[package]]
+name = "kmb-fea"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-look",
+ "kmb-study",
+ "kmb-workspace-hack",
+ "log",
+ "nalgebra",
+ "robust",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-flow"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-study",
+ "kmb-workspace-hack",
+ "log",
+ "nalgebra",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-format"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "kmb-workspace-hack",
+ "miniz_oxide 0.9.1",
+]
+
+[[package]]
+name = "kmb-gcode-read"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+]
+
+[[package]]
+name = "kmb-image"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "kmb-format",
+ "kmb-workspace-hack",
+]
+
+[[package]]
+name = "kmb-interchange"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-io-dxf"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-format",
+ "kmb-interchange",
+ "kmb-io-svg",
+ "kmb-sketch",
+ "kmb-workspace-hack",
+ "proptest",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-io-render"
+version = "0.1.0"
+dependencies = [
+ "color_quant",
+ "gif",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-format",
+ "kmb-image",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-render",
+ "kmb-workspace-hack",
+ "log",
+ "png",
+ "rav1e",
+ "serde",
+ "serde_json",
+ "windows",
+]
+
+[[package]]
+name = "kmb-io-stl"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-format",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-io-svg"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-format",
+ "kmb-interchange",
+ "kmb-sketch",
+ "kmb-workspace-hack",
+ "log",
+ "proptest",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-io-view"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-format",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-kernel-smlib"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-kernel-truck",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+ "smlib-sys",
+]
+
+[[package]]
+name = "kmb-kernel-truck"
+version = "0.1.0"
+dependencies = [
+ "kmb-contract",
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde_json",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-shapeops",
+ "truck-stepio",
+ "truck-topology",
+]
+
+[[package]]
+name = "kmb-look"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-mcp"
+version = "0.1.0"
+dependencies = [
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-format",
+ "kmb-interchange",
+ "kmb-session",
+ "kmb-workspace-hack",
+ "log",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "kmb-measure"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "serde",
+]
+
+[[package]]
+name = "kmb-plugin-host"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde_json",
+ "wasmtime",
+]
+
+[[package]]
+name = "kmb-post"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-format",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-post-carvera-air"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "kmb-cam-tool",
+ "kmb-post",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-render"
+version = "0.1.0"
+dependencies = [
+ "crc32fast",
+ "kmb-core",
+ "kmb-format",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "log",
+ "miniz_oxide 0.9.1",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-samples"
+version = "0.1.0"
+dependencies = [
+ "kmb-bundle",
+ "kmb-cad",
+ "kmb-cad-edge",
+ "kmb-cad-extrude",
+ "kmb-cad-hole",
+ "kmb-cad-import-step",
+ "kmb-cad-pattern",
+ "kmb-cam-commands",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-fea",
+ "kmb-flow",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-sketch",
+ "kmb-strategy-adaptive2d",
+ "kmb-strategy-chamfer",
+ "kmb-strategy-contour2d",
+ "kmb-strategy-drill",
+ "kmb-strategy-engrave",
+ "kmb-strategy-face",
+ "kmb-strategy-laser",
+ "kmb-strategy-pencil",
+ "kmb-strategy-pocket2d",
+ "kmb-strategy-raster3d",
+ "kmb-strategy-rough3d",
+ "kmb-strategy-waterline",
+ "kmb-study",
+ "kmb-text",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-scene"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-format",
+ "kmb-image",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-session"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "kmb-core",
+ "kmb-format",
+ "kmb-image",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-measure",
+ "kmb-render",
+ "kmb-workspace-hack",
+ "log",
+ "miniz_oxide 0.9.1",
+ "serde",
+ "serde_json",
+ "trash",
+]
+
+[[package]]
+name = "kmb-sim"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+]
+
+[[package]]
+name = "kmb-sketch"
+version = "0.1.0"
+dependencies = [
+ "i_overlay",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-sketch-solver",
+ "kmb-workspace-hack",
+ "proptest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-sketch-3d"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-sketch",
+ "kmb-sketch-solver",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-sketch-canvas"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-format",
+ "kmb-image",
+ "kmb-sketch",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-sketch-solver"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "nalgebra",
+ "serde",
+]
+
+[[package]]
+name = "kmb-solid"
+version = "0.1.0"
+dependencies = [
+ "kmb-asm",
+ "kmb-cad",
+ "kmb-cad-boolean",
+ "kmb-cad-edge",
+ "kmb-cad-extrude",
+ "kmb-cad-hole",
+ "kmb-cad-import-step",
+ "kmb-cad-modify",
+ "kmb-cad-pattern",
+ "kmb-cad-revolve",
+ "kmb-cad-sweep",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-kernel-smlib",
+ "kmb-kernel-truck",
+ "kmb-look",
+ "kmb-samples",
+ "kmb-sketch",
+ "kmb-text",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-adaptive2d"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-post",
+ "kmb-post-carvera-air",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-chamfer"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-contour2d"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-drill"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-engrave"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-face"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-laser"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-pencil"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-dropcutter",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-pocket2d"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-raster3d"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-dropcutter",
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-rough3d"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-dropcutter",
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-sim",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-strategy-waterline"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-dropcutter",
+ "kmb-cam-geom",
+ "kmb-cam-setup",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-study"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-text"
+version = "0.1.0"
+dependencies = [
+ "i_overlay",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-sketch",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+ "skrifa",
+]
+
+[[package]]
+name = "kmb-toolpath"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-toolpath-fit"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-tool",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+]
+
+[[package]]
+name = "kmb-toolpath-moves"
+version = "0.1.0"
+dependencies = [
+ "kmb-cam-geom",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+]
+
+[[package]]
+name = "kmb-ui"
+version = "0.1.0"
+dependencies = [
+ "accesskit_consumer",
+ "egui",
+ "egui-wgpu",
+ "egui_dock",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-cad",
+ "kmb-cad-boolean",
+ "kmb-cad-edge",
+ "kmb-cad-extrude",
+ "kmb-cad-hole",
+ "kmb-cad-import-step",
+ "kmb-cad-modify",
+ "kmb-cad-pattern",
+ "kmb-cad-revolve",
+ "kmb-cam-commands",
+ "kmb-contract",
+ "kmb-core",
+ "kmb-format",
+ "kmb-image",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-measure",
+ "kmb-post-carvera-air",
+ "kmb-render",
+ "kmb-samples",
+ "kmb-session",
+ "kmb-sketch",
+ "kmb-sketch-canvas",
+ "kmb-strategy-chamfer",
+ "kmb-strategy-engrave",
+ "kmb-strategy-face",
+ "kmb-strategy-pocket2d",
+ "kmb-text",
+ "kmb-ui-view3d",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-ui-library"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-samples",
+ "kmb-session",
+ "kmb-ui",
+ "kmb-workspace-hack",
+ "log",
+]
+
+[[package]]
+name = "kmb-ui-sketch"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-cam-commands",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-io-dxf",
+ "kmb-samples",
+ "kmb-sketch",
+ "kmb-sketch-3d",
+ "kmb-ui",
+ "kmb-workspace-hack",
+ "log",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-ui-text"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-core",
+ "kmb-session",
+ "kmb-text",
+ "kmb-ui",
+ "kmb-workspace-hack",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-ui-tools"
+version = "0.1.0"
+dependencies = [
+ "egui",
+ "egui_kittest",
+ "kmb-bundle",
+ "kmb-cam-commands",
+ "kmb-cam-tool",
+ "kmb-core",
+ "kmb-samples",
+ "kmb-session",
+ "kmb-ui",
+ "kmb-workspace-hack",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-ui-view3d"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "egui",
+ "egui-wgpu",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-look",
+ "kmb-measure",
+ "kmb-render",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-workspace-hack"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "ahash",
+ "anyhow",
+ "arrayvec",
+ "bitflags 2.13.2",
+ "bytemuck",
+ "cc",
+ "chrono",
+ "cranelift-bitset",
+ "ecolor",
+ "egui",
+ "egui-wgpu",
+ "emath",
+ "epaint",
+ "fnv",
+ "font-types",
+ "getrandom 0.4.3",
+ "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
+ "indexmap",
+ "linux-raw-sys 0.12.1",
+ "log",
+ "memchr",
+ "miniz_oxide 0.9.1",
+ "naga",
+ "num-complex",
+ "num-rational",
+ "num-traits",
+ "once_cell",
+ "proc-macro2",
+ "profiling",
+ "pulley-interpreter",
+ "quote",
+ "read-fonts",
+ "ron",
+ "rustc-hash 2.1.3",
+ "rustix 1.1.5",
+ "scopeguard",
+ "semver",
+ "serde",
+ "serde_core",
+ "serde_json",
+ "simd-adler32",
+ "skrifa",
+ "slab",
+ "smallvec",
+ "syn 2.0.119",
+ "syn 3.0.8",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-core",
+ "uuid",
+ "wasm-encoder",
+ "wasmparser",
+ "wasmtime-internal-core",
+ "wayland-backend",
+ "wgpu",
+ "wgpu-core",
+ "wgpu-core-deps-windows-linux-android",
+ "wgpu-hal",
+ "wgpu-types",
+ "windows",
+ "windows-sys 0.61.2",
+ "zerocopy",
 ]
 
 [[package]]
@@ -5388,7 +5388,7 @@ name = "smlib-sys"
 version = "0.1.0"
 dependencies = [
  "cc",
- "jc-workspace-hack",
+ "kmb-workspace-hack",
 ]
 
 [[package]]

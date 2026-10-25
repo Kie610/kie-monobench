@@ -1,12 +1,12 @@
 ---
 paths:
-  - "crates/jc-cad*/**"
-  - "crates/jc-sketch*/**"
-  - "crates/jc-kernel-*/**"
-  - "crates/jc-asm/**"
-  - "crates/jc-text/**"
-  - "crates/jc-io-dxf/**"
-  - "crates/jc-io-svg/**"
+  - "crates/kmb-cad*/**"
+  - "crates/kmb-sketch*/**"
+  - "crates/kmb-kernel-*/**"
+  - "crates/kmb-asm/**"
+  - "crates/kmb-text/**"
+  - "crates/kmb-io-dxf/**"
+  - "crates/kmb-io-svg/**"
 ---
 # CAD(スケッチ・ソリッド・組立)を触る時の決まり
 
@@ -16,5 +16,5 @@ paths:
 - 参照は生成履歴による名前で探し、見つからない・決まらない時は参照切れとして止める。黙って別の面に付け替えない。
 - 新しく作るコマンドは既存の機能を書き換えない。消せば元に戻るよう足す機能の側に持つ(点検: 前の機能を書き換えない)。作っている途中は OK・Enter で決め、キャンセル・Esc で作る前へ戻す(やり直しにも残さない)。
 - 形はクリックで決める。最後の手順をクリックか数字と Enter で決めたらそのまま作り、残りの値は途中の欄で直す。選ぶ手順は 1 つ選ぶと次へ進み、複数は Ctrl を押しながら。スケッチのできた点だけはドラッグで動かせる。
-- スケッチの拘束の数値の部分は jc-sketch-solver に置く。2D・3D のスケッチで解き方を分けない(点検: 数値の置き場)。
+- スケッチの拘束の数値の部分は kmb-sketch-solver に置く。2D・3D のスケッチで解き方を分けない(点検: 数値の置き場)。
 - 機能の欄は記述子で宣言し、単位を持たせる。寸法・式の単位とねじの提案などの決定は docs/機能/ の断片と policy.md を見る。

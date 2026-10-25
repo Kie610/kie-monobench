@@ -1,0 +1,22 @@
+[package]
+name = "kmb-cad"
+description = "ソリッドの機能の共通部品(演算、道具の作り方、同じ平面の面の扱い)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+cavalier_contours.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

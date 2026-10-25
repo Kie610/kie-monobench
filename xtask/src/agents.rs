@@ -35,14 +35,14 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ("層の向き", "xtask/src/layers.rs", "fn allowed("),
     (
         "許したフォルダ",
-        "apps/jc-mcp/src/tests.rs",
+        "apps/kmb-mcp/src/tests.rs",
         "fn every_file_arg_of_every_action_stays_inside_the_allowed_folders(",
     ),
     ("他製品の名前", "xtask/src/products.rs", "pub fn check("),
     ("言葉の揺れ", "xtask/src/words.rs", "pub fn check("),
     (
         "名前の一意",
-        "crates/jc-bundle/tests/ids.rs",
+        "crates/kmb-bundle/tests/ids.rs",
         "fn action_and_setting_ids_and_roles_are_unique_and_targets_exist(",
     ),
     (
@@ -141,15 +141,15 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ("画板の並び", "xtask/src/board.rs", "pub fn check("),
     ("コアの API", "xtask/src/api.rs", "pub fn diff("),
     ("ライセンス", "deny.toml", "[licenses]"),
-    ("引数の宣言", "crates/jc-core/src/args.rs", "fn check_args("),
+    ("引数の宣言", "crates/kmb-core/src/args.rs", "fn check_args("),
     (
         "キーの割り当て",
-        "crates/jc-ui/src/keys_tests.rs",
+        "crates/kmb-ui/src/keys_tests.rs",
         "fn i_measures_m_moves_and_s_opens_the_search_at_the_cursor(",
     ),
     (
         "選びの切替",
-        "crates/jc-ui/src/design/select_tests.rs",
+        "crates/kmb-ui/src/design/select_tests.rs",
         "fn picking_a_face_drops_the_feature_selection_so_delete_keeps_the_feature(",
     ),
 ];
@@ -337,7 +337,7 @@ impl Index {
                         if top == "xtask" {
                             ix.xtask.push_str(&text);
                         }
-                        if name == "jc-cli" {
+                        if name == "kmb-cli" {
                             ix.cli.push_str(&text);
                         }
                     }
@@ -462,12 +462,12 @@ fn span_problem(root: &Path, ix: &Index, s: &str) -> Option<String> {
     if s.starts_with('.') || s.starts_with('@') {
         return None; // 拡張子や文書の横の置き場所
     }
-    // crate の名前(`jc-toolpath`)
+    // crate の名前(`kmb-toolpath`)
     if s.contains('-')
         && s.bytes()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'*')
     {
-        // 接頭辞(`jc-`)は、その字で始まる crate があれば良い
+        // 接頭辞(`kmb-`)は、その字で始まる crate があれば良い
         let pat = if s.ends_with('-') {
             format!("{s}*")
         } else {
@@ -477,7 +477,7 @@ fn span_problem(root: &Path, ix: &Index, s: &str) -> Option<String> {
         let ok = glob_exists(root, &segs("crates")) || glob_exists(root, &segs("apps"));
         return (!ok).then(|| format!("crate「{s}」が無い"));
     }
-    // 名前の印(`Action::args`・`jc_session::write_output`・`module()`・`ui_*`)
+    // 名前の印(`Action::args`・`kmb_session::write_output`・`module()`・`ui_*`)
     let head = s.split('(').next().unwrap_or(s).trim_end_matches('!');
     let segs: Vec<&str> = head.split("::").collect();
     let ok_ident = |t: &str| {
@@ -486,7 +486,7 @@ fn span_problem(root: &Path, ix: &Index, s: &str) -> Option<String> {
             && !t.is_empty()
     };
     if !segs.iter().all(|t| ok_ident(t)) {
-        // `cx.arg`・`[package.metadata.jc] layer` のような印は語だけを見る
+        // `cx.arg`・`[package.metadata.kmb] layer` のような印は語だけを見る
         let mut w = BTreeSet::new();
         words_in(head, &mut w);
         let missing: Vec<String> = w
@@ -497,7 +497,7 @@ fn span_problem(root: &Path, ix: &Index, s: &str) -> Option<String> {
         return (!missing.is_empty()).then(|| format!("名前「{}」が無い", missing.join("・")));
     }
     let last = *segs.last()?;
-    if segs.len() > 1 && segs[0].starts_with("jc_") {
+    if segs.len() > 1 && segs[0].starts_with("kmb_") {
         let dir = segs[0].replace('_', "-");
         return match ix.by_crate.get(&dir) {
             None => Some(format!("crate「{dir}」が無い")),
@@ -854,7 +854,7 @@ mod tests {
     /// 試験用の小さな作業場(名前の付いた一時フォルダ)。
     fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         let root =
-            std::env::temp_dir().join(format!("jc-xtask-agents-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("kmb-xtask-agents-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         for (f, text) in files {
             let p = root.join(f);
@@ -875,7 +875,7 @@ mod tests {
 
     fn files<'a>(agents: &'a str, rule: &'a str) -> Vec<(&'a str, &'a str)> {
         vec![
-            ("crates/jc-thing/src/lib.rs", LIB),
+            ("crates/kmb-thing/src/lib.rs", LIB),
             ("xtask/src/main.rs", XTASK),
             (
                 "docs/policy.md",
@@ -894,14 +894,14 @@ mod tests {
     ];
 
     const RULE: &str =
-        "---\npaths:\n  - \"crates/jc-thing/**\"\n---\n# 決まり\n\n- `Widget` を使う。\n";
+        "---\npaths:\n  - \"crates/kmb-thing/**\"\n---\n# 決まり\n\n- `Widget` を使う。\n";
 
     #[test]
     fn written_names_must_exist() {
         // 修正後: 書いた物が全部ある
         let good = agents(
-            "- `Widget`・`Ink::Travel`・`jc_thing::write_output`\n\
-             - `crates/jc-thing/src/lib.rs`・`crates/jc-*/src`・`jc-thing`・`cargo xtask verify --all`\n\
+            "- `Widget`・`Ink::Travel`・`kmb_thing::write_output`\n\
+             - `crates/kmb-thing/src/lib.rs`・`crates/kmb-*/src`・`kmb-thing`・`cargo xtask verify --all`\n\
              - `run_action`・`fs::write`・`.json`・`T<n> M6`・policy.md「決めたこと」「5. ログ」\n",
         );
         let root = tree("good", &files(&good, RULE));
@@ -909,8 +909,8 @@ mod tests {
         assert!(r.problems.is_empty(), "{:#?}", r.problems);
         // 修正前: 名前を変えた・消した・書き間違えた物は全部落ちる
         let bad = agents(
-            "- `Widgit`・`Ink::Trav`・`jc_thing::write_out`・`jc_nothing::x`\n\
-             - `crates/jc-thing/src/nope.rs`・`crates/jc-none*/src`・`jc-other`・`cargo xtask verfy`\n\
+            "- `Widgit`・`Ink::Trav`・`kmb_thing::write_out`・`kmb_nothing::x`\n\
+             - `crates/kmb-thing/src/nope.rs`・`crates/kmb-none*/src`・`kmb-other`・`cargo xtask verfy`\n\
              - `ui_*`・policy.md「決めたこと」「6. ログ」\n",
         );
         let root = tree("bad", &files(&bad, RULE));
@@ -958,10 +958,10 @@ mod tests {
             "{:#?}",
             r.problems
         );
-        let wrong = RULE.replace("jc-thing/**", "jc-gone/**");
+        let wrong = RULE.replace("kmb-thing/**", "kmb-gone/**");
         let r = check_with(&tree("misc3", &files(&a, &wrong)), TEST_CHECKS);
         assert!(
-            r.problems.iter().any(|p| p.contains("jc-gone")),
+            r.problems.iter().any(|p| p.contains("kmb-gone")),
             "{:#?}",
             r.problems
         );
@@ -985,8 +985,8 @@ mod tests {
 
     #[test]
     fn small_parts() {
-        assert!(wildcard("jc-cad*", "jc-cad-hole") && wildcard("jc-*-x", "jc-a-x"));
-        assert!(!wildcard("jc-cad*", "jc-cam") && !wildcard("a*b", "ab-"));
+        assert!(wildcard("kmb-cad*", "kmb-cad-hole") && wildcard("kmb-*-x", "kmb-a-x"));
+        assert!(!wildcard("kmb-cad*", "kmb-cam") && !wildcard("a*b", "ab-"));
         assert_eq!(def_in("    pub(crate) const fn go() {}"), Some("go"));
         assert_eq!(def_in("    Travel,"), Some("Travel"));
         assert_eq!(def_in("    pub ink3: Color32,"), Some("ink3"));

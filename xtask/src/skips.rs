@@ -5,7 +5,7 @@
 //!
 //! 1. `#[ignore]` に理由(`#[ignore = "…"]`)が無い物を落とす。
 //! 2. `#[ignore]` でないテストの本体に `return` がある物を落とす(環境が無い時に黙って通過する
-//!    形)。実行中に飛ばす時は `jc_contract::skip!("理由")` を使う(印を書いてから return する。
+//!    形)。実行中に飛ばす時は `kmb_contract::skip!("理由")` を使う(印を書いてから return する。
 //!    xtask が数えて「飛ばし(実行中)」に分ける)。例外は `xtask/skips.toml` の `[static]`。
 //! 3. `--base` との分かれ目から消えたテストを落とす。消してよいのは `xtask/removed-tests.toml` に
 //!    日付と理由を書いた物だけ(Kie の確認は要らない。消した物は区切りの報告に一覧で書く)。
@@ -14,7 +14,7 @@
 //! 4. 決まった回数だけ回して、待つ物が揃わなくても黙って先へ進む待ちを落とす(`for _ in 0..n` の中で
 //!    `sleep` し、揃えば値を持たない `return;`・`break;` で抜け、回し終えた後に誤りにする文が無い物)。裏で読む物を
 //!    待ちきれずに先へ進み、負荷の高い時だけ別の所で落ちる揺れの元になる。時間切れで誤りにして止める
-//!    (例: `crates/jc-ui-library/src/tests.rs` の `settle`)。見るのはテストのファイルと `#[cfg(test)]` の中。
+//!    (例: `crates/kmb-ui-library/src/tests.rs` の `settle`)。見るのはテストのファイルと `#[cfg(test)]` の中。
 //!
 //! 実行中の飛ばし(`skip!` の印)は、`JC_SKIP_LOG` のファイルに 1 行ずつ書かれる。`skips.toml` の
 //! `[runtime]` に無い物が出たら落とす。
@@ -267,7 +267,7 @@ pub fn check(root: &Path, packages: &[Package], allow: &Allowed) -> Report {
             for line in silent_waits(&file, &text) {
                 r.problems.push(format!(
                     "{}/{file}:{line} の待ちは決まった回数を回し終えると黙って先へ進む。時間切れで誤りにして止める\
-                     (assert! か panic!。例: crates/jc-ui-library/src/tests.rs の settle)",
+                     (assert! か panic!。例: crates/kmb-ui-library/src/tests.rs の settle)",
                     p.dir
                 ));
             }
@@ -286,7 +286,7 @@ pub fn check(root: &Path, packages: &[Package], allow: &Allowed) -> Report {
                     }
                     Problem::SilentReturn => r.problems.push(format!(
                         "{}/{}:{line} {} が本体で return している。環境が無くて飛ばすなら \
-                         jc_contract::skip!(\"理由\") を使う(黙って通過に数えない)。道具なら \
+                         kmb_contract::skip!(\"理由\") を使う(黙って通過に数えない)。道具なら \
                          #[ignore = \"…\"]。そのままにするなら xtask/skips.toml の [static] に理由を書く",
                         p.dir, t.file, t.name
                     )),
@@ -491,12 +491,12 @@ fn scan(v: &[u8]) {\n    for x in v { if *x == 0 { break; } }\n    // for _ in 0
 #[test]\n#[ignore]\nfn tool() {}\n\
 #[test]\n#[ignore = \"道具: 絵を書く\"]\nfn tool2() { return; }\n\
 #[test]\nfn gpu() { let Some(g) = gpu() else { eprintln!(\"no\"); return; }; }\n\
-#[test]\nfn marked() { if no_gpu() { jc_contract::skip!(\"GPU が無い\"); } }\n\
+#[test]\nfn marked() { if no_gpu() { kmb_contract::skip!(\"GPU が無い\"); } }\n\
 #[test]\nfn returns_later() { let r = 1; r.returned(); }\n\
 #[test]\nfn closures() { let f = |x: u8| { if x > 1 { return 2; } x }; let g = move || -> u8 { return 1 }; \
 fn h() -> u8 { return 3; } if a || b { f(1); } }\n\
 #[test]\nfn loop_return() { loop { if done() { return; } } }\n";
-        let t = file_tests("jc-x", "src/a.rs", text);
+        let t = file_tests("kmb-x", "src/a.rs", text);
         let got: Vec<(&str, Problem)> =
             t.iter().map(|(t, _, p, _)| (t.name.as_str(), *p)).collect();
         assert_eq!(
@@ -530,45 +530,45 @@ fn h() -> u8 { return 3; } if a || b { f(1); } }\n\
                 .map(|(k, n, c)| ((k.to_string(), n.to_string()), *c))
                 .collect()
         };
-        // jc-a から jc-b へ移した solve、本当に消した old、2 つ消して 1 つだけ移した twice
+        // kmb-a から kmb-b へ移した solve、本当に消した old、2 つ消して 1 つだけ移した twice
         let got = gone(c(&[
-            ("jc-a", "solve", 1),
-            ("jc-b", "solve", -1),
-            ("jc-a", "old", 1),
-            ("jc-a", "twice", 2),
-            ("jc-c", "twice", -1),
+            ("kmb-a", "solve", 1),
+            ("kmb-b", "solve", -1),
+            ("kmb-a", "old", 1),
+            ("kmb-a", "twice", 2),
+            ("kmb-c", "twice", -1),
         ]));
-        let want = [("jc-a", "old"), ("jc-a", "twice")];
+        let want = [("kmb-a", "old"), ("kmb-a", "twice")];
         assert_eq!(
             got,
             want.map(|(k, n)| (k.to_string(), n.to_string())).to_vec()
         );
         // 足しただけの物は消えたことにならない
-        assert!(gone(c(&[("jc-b", "new", -1)])).is_empty());
+        assert!(gone(c(&[("kmb-b", "new", -1)])).is_empty());
     }
 
     #[test]
     fn files_of_a_removed_crate_still_have_an_owner() {
         let dirs = [
-            ("jc-sketch", "crates/jc-sketch"),
-            ("jc-sketch-solver", "crates/jc-sketch-solver"),
+            ("kmb-sketch", "crates/kmb-sketch"),
+            ("kmb-sketch-solver", "crates/kmb-sketch-solver"),
         ];
         let o = |f: &str| owner(&dirs, f);
         assert_eq!(
-            o("crates/jc-sketch-solver/src/lib.rs"),
-            Some(("jc-sketch-solver".into(), "crates/jc-sketch-solver".into()))
+            o("crates/kmb-sketch-solver/src/lib.rs"),
+            Some(("kmb-sketch-solver".into(), "crates/kmb-sketch-solver".into()))
         );
         assert_eq!(
-            o("crates/jc-old/src/lib.rs"),
-            Some(("jc-old".into(), "crates/jc-old".into()))
+            o("crates/kmb-old/src/lib.rs"),
+            Some(("kmb-old".into(), "crates/kmb-old".into()))
         );
         assert_eq!(o("xtask/src/main.rs"), None);
     }
 
     #[test]
     fn tables_need_a_reason_for_every_line() {
-        assert!(table("[static]\n\"jc-x f\" = \"\"\n", "f").is_err());
-        let t = table("[static]\n\"jc-x f\" = \"GPU\"\n", "f").unwrap();
-        assert_eq!(t["static"]["jc-x f"], "GPU");
+        assert!(table("[static]\n\"kmb-x f\" = \"\"\n", "f").is_err());
+        let t = table("[static]\n\"kmb-x f\" = \"GPU\"\n", "f").unwrap();
+        assert_eq!(t["static"]["kmb-x f"], "GPU");
     }
 }

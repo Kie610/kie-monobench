@@ -1,0 +1,26 @@
+[package]
+name = "kmb-sketch"
+description = "2D スケッチの要素と拘束(数値の解き方は kmb-sketch-solver)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-sketch-solver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+i_overlay.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-sketch-solver = { workspace = true, features = ["check"] }
+kmb-contract.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

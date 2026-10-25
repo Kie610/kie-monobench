@@ -1,0 +1,24 @@
+[package]
+name = "kmb-plugin-host"
+description = "WASM のプラグイン(Component Model)を読み込む"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-post.workspace = true
+kmb-toolpath.workspace = true
+serde_json.workspace = true
+wasmtime.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-cam-tool.workspace = true
+kmb-post-carvera-air.workspace = true
+
+[lints]
+workspace = true

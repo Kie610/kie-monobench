@@ -1,5 +1,5 @@
 //! コアの公開の項目の一覧(`cargo xtask api`)。`verify` は分かれ目の一覧と今の一覧を比べ、変わって
-//! いれば契約テスト(jc-contract)を使う crate を全部選ぶ(版の数 `CORE_API_VERSION` を PR ごとに
+//! いれば契約テスト(kmb-contract)を使う crate を全部選ぶ(版の数 `CORE_API_VERSION` を PR ごとに
 //! 上げずに済む)。
 //!
 //! 組み立てずに字面で読む(rustdoc の JSON は nightly が要るため)。拾うのは `pub` で始まる項目の

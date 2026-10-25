@@ -1,10 +1,10 @@
 //! 検査(`verify`)の組み立ての前・途中・後に、作り直して要らなくなった古い成果物を消して空きを保つ。
 //!
 //! 依存の宣言(どれかの `Cargo.toml`)が変わると、その crate から下流の crate の指紋が全部変わり、
-//! cargo は古い組の隣に新しい組を作る。2026-10-23 のクラウドでは、jc-interchange の依存を変えた
-//! main で `verify jc-session --dependents` を流すと、組み立ての 2 分で deps が 12 → 17 GB、
+//! cargo は古い組の隣に新しい組を作る。2026-10-23 のクラウドでは、kmb-interchange の依存を変えた
+//! main で `verify kmb-session --dependents` を流すと、組み立ての 2 分で deps が 12 → 17 GB、
 //! incremental が 5.5 → 8.2 GB になり、空きが 12.6 → 4.0 GB に減った(新しく作ったテストの実行
-//! ファイル 17 個すべてに、指紋の違う古い同名の物が残っていた)。揃えた依存(jc-workspace-hack)
+//! ファイル 17 個すべてに、指紋の違う古い同名の物が残っていた)。揃えた依存(kmb-workspace-hack)
 //! だけを見る組み立て前の片付け(`free_before_build`)は、この時に働かない。
 //!
 //! - 組み立ての前(`free_before_build`): 揃えた依存が前の組み立てから変わっていれば incremental を
@@ -12,7 +12,7 @@
 //! - 組み立ての途中(`Watch`): 空きが `JC_WATCH_BELOW_GB`(既定 6)GB を切ったら、incremental の
 //!   前の回と、この組み立てで同じ名前の新しい物ができたテストの実行ファイルを消す。実行ファイルは
 //!   ほかのコンパイルに読まれないので、組み立ての最中に消しても壊れない。同じ名前の別の試験
-//!   (jc-mcp の lib と bin など)を消し過ぎた時のため、何か消したら組み立てをもう一度流す
+//!   (kmb-mcp の lib と bin など)を消し過ぎた時のため、何か消したら組み立てをもう一度流す
 //!   (足りない物だけ作る)。
 //! - 組み立ての後(`superseded`): 上に足して、自前の crate の lib(`.rlib`・`.rmeta`・`.d`)と
 //!   incremental の crate のフォルダのうち、この組み立てで同じ名前の新しい物ができた古い物を消す。
@@ -39,7 +39,7 @@ fn modified(p: &Path) -> SystemTime {
         .unwrap_or(SystemTime::UNIX_EPOCH)
 }
 
-/// 指紋を除いた名前(`jc_ui-0123456789abcdef` → `jc_ui`、`libjc_ui-….rlib` → `libjc_ui.rlib`)
+/// 指紋を除いた名前(`kmb_ui-0123456789abcdef` → `kmb_ui`、`libkmb_ui-….rlib` → `libkmb_ui.rlib`)
 fn stem_of(name: &str) -> Option<String> {
     let h = fingerprint_of(name)?;
     Some(name.replacen(&format!("-{h}"), "", 1))
@@ -76,7 +76,7 @@ fn older_siblings(items: Vec<(String, PathBuf, SystemTime)>, since: SystemTime) 
 }
 
 /// deps の中の、この組み立てで同じ名前の新しい物ができた古い物。`libs` が空ならテストと実行
-/// ファイル(拡張子の無い物)だけ、空でなければその lib の名前(`jc_ui` など)の `.rlib`・`.rmeta`・
+/// ファイル(拡張子の無い物)だけ、空でなければその lib の名前(`kmb_ui` など)の `.rlib`・`.rmeta`・
 /// `.d` も
 pub fn superseded_files(deps: &Path, since: SystemTime, libs: &BTreeSet<String>) -> Vec<PathBuf> {
     let items = fs::read_dir(deps)
@@ -268,11 +268,11 @@ pub(crate) fn avail_gb_at(dir: &Path) -> Option<f64> {
 }
 
 /// 揃えた依存の crate の Cargo.toml。前の組み立ての時の写しを target/debug に置いて比べる
-pub(crate) const HACK_TOML: &str = "crates/jc-workspace-hack/Cargo.toml";
+pub(crate) const HACK_TOML: &str = "crates/kmb-workspace-hack/Cargo.toml";
 
-pub(crate) const HACK_SEEN: &str = "debug/.jc-workspace-hack.toml";
+pub(crate) const HACK_SEEN: &str = "debug/.kmb-workspace-hack.toml";
 
-/// 揃えた依存(jc-workspace-hack)が前の組み立てから変わっていれば、組み立ての前に incremental を消す。
+/// 揃えた依存(kmb-workspace-hack)が前の組み立てから変わっていれば、組み立ての前に incremental を消す。
 ///
 /// 自前の crate は全部この crate に依存するので、ここが変わると全部の指紋が変わって別の名前で
 /// 作り直され、前の incremental は 1 つも読まれなくなる(消しても遅くならない)。組み立ての後の
@@ -415,7 +415,7 @@ mod tests {
     }
 
     fn tmp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("jc-space-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("kmb-space-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -428,15 +428,15 @@ mod tests {
         let old = since - Duration::from_secs(3600);
         let new = since + Duration::from_secs(3600);
         // 作り直した試験(古い同名あり)、作り直していない試験、依存の lib、自前の lib
-        touch(&d.join("jc_ui-0000000000000001"), old);
-        touch(&d.join("jc_ui-0000000000000002"), new);
+        touch(&d.join("kmb_ui-0000000000000001"), old);
+        touch(&d.join("kmb_ui-0000000000000002"), new);
         touch(&d.join("cli-0000000000000003"), old);
         touch(&d.join("libserde-0000000000000004.rlib"), old);
         touch(&d.join("libserde-0000000000000005.rlib"), new);
-        touch(&d.join("libjc_ui-0000000000000001.rlib"), old);
-        touch(&d.join("libjc_ui-0000000000000002.rlib"), new);
-        touch(&d.join("jc_ui-0000000000000001.d"), old);
-        touch(&d.join("jc_ui-0000000000000002.d"), new);
+        touch(&d.join("libkmb_ui-0000000000000001.rlib"), old);
+        touch(&d.join("libkmb_ui-0000000000000002.rlib"), new);
+        touch(&d.join("kmb_ui-0000000000000001.d"), old);
+        touch(&d.join("kmb_ui-0000000000000002.d"), new);
         let names = |v: Vec<PathBuf>| -> Vec<String> {
             let mut n: Vec<String> = v
                 .iter()
@@ -447,15 +447,15 @@ mod tests {
         };
         assert_eq!(
             names(superseded_files(&d, since, &BTreeSet::new())),
-            ["jc_ui-0000000000000001"]
+            ["kmb_ui-0000000000000001"]
         );
-        let libs = BTreeSet::from(["jc_ui".to_string()]);
+        let libs = BTreeSet::from(["kmb_ui".to_string()]);
         assert_eq!(
             names(superseded_files(&d, since, &libs)),
             [
-                "jc_ui-0000000000000001",
-                "jc_ui-0000000000000001.d",
-                "libjc_ui-0000000000000001.rlib"
+                "kmb_ui-0000000000000001",
+                "kmb_ui-0000000000000001.d",
+                "libkmb_ui-0000000000000001.rlib"
             ]
         );
         let _ = fs::remove_dir_all(&d);
@@ -469,11 +469,11 @@ mod tests {
         let since = SystemTime::now() - Duration::from_secs(60);
         let old = since - Duration::from_secs(3600);
         let new = since + Duration::from_secs(3600);
-        touch(&d.join("jc_ui-aaa/s-1-x/f.bin"), old);
-        touch(&d.join("jc_ui-bbb/s-2-y/f.bin"), new);
-        touch(&d.join("jc_core-ccc/s-1-z/f.bin"), old);
+        touch(&d.join("kmb_ui-aaa/s-1-x/f.bin"), old);
+        touch(&d.join("kmb_ui-bbb/s-2-y/f.bin"), new);
+        touch(&d.join("kmb_core-ccc/s-1-z/f.bin"), old);
         let got = superseded_incremental(&d, since);
-        assert_eq!(got, [d.join("jc_ui-aaa")]);
+        assert_eq!(got, [d.join("kmb_ui-aaa")]);
         let _ = fs::remove_dir_all(&d);
     }
 

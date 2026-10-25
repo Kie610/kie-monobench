@@ -1,0 +1,22 @@
+[package]
+name = "kmb-sim"
+description = "ストック除去シミュレーション(高さマップ)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-tool.workspace = true
+kmb-toolpath.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

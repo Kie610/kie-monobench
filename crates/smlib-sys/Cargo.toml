@@ -9,11 +9,11 @@ build = "build.rs"
 rust-version.workspace = true
 publish = false
 
-[package.metadata.jc]
+[package.metadata.kmb]
 layer = "kernel"
 
 [build-dependencies]
 cc.workspace = true
 
 [dependencies]
-jc-workspace-hack = { version = "0.1", path = "../jc-workspace-hack" }
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }

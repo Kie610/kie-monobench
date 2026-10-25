@@ -20,7 +20,7 @@
 
 This is work in progress and there are no prebuilt downloads yet. Build it from source.
 
-The desktop app is `kie-monobench`, the CLI is `kmb` and the MCP server is `kmb-mcp` (the crates are still `jc-cli` and `jc-mcp`). Documents use the `.kmb` extension (the content is JSON). On first start, the data folder of the earlier working name (`jisaku-cadcam`) is carried over, and `.json` documents still open.
+The desktop app is `kie-monobench`, the CLI is `kmb` and the MCP server is `kmb-mcp` (the crates are still `kmb-cli` and `kmb-mcp`). Documents use the `.kmb` extension (the content is JSON). On first start, the data folder of the earlier working name (`jisaku-cadcam`) is carried over, and `.json` documents still open.
 
 ## What it does
 
@@ -55,9 +55,9 @@ Requirements:
 - On Linux, the windowing and graphics libraries for the desktop app (X11 or Wayland, and a Vulkan driver)
 
 ```sh
-cargo run --release -p jc-app -- --sample   # open the app with the sample part and its machining
-cargo run --release -p jc-app               # start from the start screen
-cargo run --release -p jc-cli -- --help     # the command-line tool (kmb)
+cargo run --release -p kmb-app -- --sample   # open the app with the sample part and its machining
+cargo run --release -p kmb-app               # start from the start screen
+cargo run --release -p kmb-cli -- --help     # the command-line tool (kmb)
 cargo xtask verify                          # tests and checks for the crates you changed
 ```
 
@@ -85,9 +85,9 @@ How to test and the logging rules are in [docs/verify.md](docs/verify.md) (in Ja
     "args": ["--root", "<folder the AI may read and write>"] } } }
   ```
 
-  Moving from the earlier names (CLI `jc`, MCP server `jc-mcp`): change `command` in your MCP settings to `.../kmb-mcp` (`kmb-mcp.exe` on Windows), and replace `jc` with `kmb` in your scripts. The old executables are no longer built, so a `jc` or `jc-mcp` left in `target/release` stays out of date (you can delete it). The settings key (`kiemonobench` above) can stay. Log files now start with `kmb-cli-` and `kmb-mcp-`.
+  Moving from the earlier names (CLI `jc`, MCP server `kmb-mcp`): change `command` in your MCP settings to `.../kmb-mcp` (`kmb-mcp.exe` on Windows), and replace `jc` with `kmb` in your scripts. The old executables are no longer built, so a `jc` or `kmb-mcp` left in `target/release` stays out of date (you can delete it). The settings key (`kiemonobench` above) can stay. Log files now start with `kmb-cli-` and `kmb-mcp-`.
 
-- **Post processor plugins:** WASM components (interface in `crates/jc-plugin-host/wit/post.wit`). Plugins get no access to files, the network or the clock. An example is in `plugins/post-example/`.
+- **Post processor plugins:** WASM components (interface in `crates/kmb-plugin-host/wit/post.wit`). Plugins get no access to files, the network or the clock. An example is in `plugins/post-example/`.
 
 Before cutting on a real machine, always check in this order: simulation, an air cut with Z raised, then a test cut in wax or MDF.
 
@@ -108,7 +108,7 @@ This software is developed independently and is not affiliated with any machine 
 ### Bundled third-party software and data
 
 - `third_party/usd-brep/`: SMLib and SM_API from NVIDIA usd-brep 1.0.0 (Apache-2.0, Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES; full text in `third_party/usd-brep/LICENSE`).
-- `third_party/smlibpy-patches/`: two SMLib fixes from smlibpy (Copyright (c) 2026 AWV Informatik AG, MIT; full text in `third_party/smlibpy-patches/LICENSE`). The STEP writer in `crates/jc-kernel-smlib/shim/jc_step.cpp` is also based on smlibpy's writer.
+- `third_party/smlibpy-patches/`: two SMLib fixes from smlibpy (Copyright (c) 2026 AWV Informatik AG, MIT; full text in `third_party/smlibpy-patches/LICENSE`). The STEP writer in `crates/kmb-kernel-smlib/shim/jc_step.cpp` is also based on smlibpy's writer.
 - `third_party/truck-shapeops/`: a patched copy of truck-shapeops 0.4.0 (Apache-2.0, Copyright (c) RICOS Co. Ltd.; full text in `third_party/truck-shapeops/LICENSE`), used for booleans in the alternative truck kernel.
-- `futural.jhf` and `rowmans.jhf` in `crates/jc-text/fonts/`: Hershey font data. The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc. Full licence text in `crates/jc-text/fonts/HERSHEY-LICENSE.txt`.
+- `futural.jhf` and `rowmans.jhf` in `crates/kmb-text/fonts/`: Hershey font data. The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc. Full licence text in `crates/kmb-text/fonts/HERSHEY-LICENSE.txt`.
 - Origins and update procedures: [third_party/README.md](third_party/README.md) (in Japanese).

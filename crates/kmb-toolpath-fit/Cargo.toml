@@ -1,0 +1,20 @@
+[package]
+name = "kmb-toolpath-fit"
+description = "経路への円弧のあてはめ(細かい直線を許容差の中で円弧と長い直線にまとめる)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-toolpath.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-cam-tool.workspace = true
+
+[lints]
+workspace = true

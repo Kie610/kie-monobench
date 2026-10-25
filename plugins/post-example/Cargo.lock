@@ -862,92 +862,92 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-name = "jc-cam-tool"
+name = "kmb-cam-tool"
 version = "0.1.0"
 dependencies = [
  "crc32fast",
- "jc-core",
- "jc-format",
- "jc-look",
- "jc-workspace-hack",
+ "kmb-core",
+ "kmb-format",
+ "kmb-look",
+ "kmb-workspace-hack",
  "miniz_oxide",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "jc-core"
+name = "kmb-core"
 version = "0.1.0"
 dependencies = [
- "jc-expr",
- "jc-workspace-hack",
+ "kmb-expr",
+ "kmb-workspace-hack",
  "log",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "jc-expr"
+name = "kmb-expr"
 version = "0.1.0"
 dependencies = [
- "jc-workspace-hack",
+ "kmb-workspace-hack",
  "serde",
 ]
 
 [[package]]
-name = "jc-format"
+name = "kmb-format"
 version = "0.1.0"
 dependencies = [
  "crc32fast",
- "jc-workspace-hack",
+ "kmb-workspace-hack",
  "miniz_oxide",
 ]
 
 [[package]]
-name = "jc-look"
+name = "kmb-look"
 version = "0.1.0"
 dependencies = [
- "jc-core",
- "jc-workspace-hack",
+ "kmb-core",
+ "kmb-workspace-hack",
  "log",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "jc-post"
+name = "kmb-post"
 version = "0.1.0"
 dependencies = [
- "jc-cam-tool",
- "jc-format",
- "jc-toolpath",
- "jc-workspace-hack",
+ "kmb-cam-tool",
+ "kmb-format",
+ "kmb-toolpath",
+ "kmb-workspace-hack",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "jc-post-example"
+name = "kmb-post-example"
 version = "0.1.0"
 dependencies = [
- "jc-post",
- "jc-toolpath",
+ "kmb-post",
+ "kmb-toolpath",
  "serde_json",
  "wit-bindgen 0.61.1",
 ]
 
 [[package]]
-name = "jc-toolpath"
+name = "kmb-toolpath"
 version = "0.1.0"
 dependencies = [
- "jc-cam-tool",
- "jc-workspace-hack",
+ "kmb-cam-tool",
+ "kmb-workspace-hack",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "jc-workspace-hack"
+name = "kmb-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "accesskit",

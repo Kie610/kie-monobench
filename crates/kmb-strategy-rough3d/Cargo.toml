@@ -1,0 +1,28 @@
+[package]
+name = "kmb-strategy-rough3d"
+description = "3D の荒削り(等高線ごとのオフセットの輪)と平らな所の仕上げ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-dropcutter.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-setup.workspace = true
+kmb-toolpath.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-sim.workspace = true
+
+[lints]
+workspace = true

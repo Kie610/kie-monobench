@@ -158,19 +158,19 @@ mod tests {
     fn only_whole_literals_outside_tests_are_reported() {
         let code = "fn a(ui: &mut Ui) {\n    ui.button(\"消す\");\n    ui.label(\"消すと戻せない\");\n    \
             // \"やめる\"\n}\n#[cfg(test)]\nmod t {\n    fn b() { click(\"やめる\"); }\n}\n";
-        let ps = problems("crates/jc-x/src/lib.rs", code, &banned());
+        let ps = problems("crates/kmb-x/src/lib.rs", code, &banned());
         assert_eq!(ps.len(), 1, "{ps:?}");
-        assert!(ps[0].starts_with("crates/jc-x/src/lib.rs:2:") && ps[0].contains("「削除」"));
+        assert!(ps[0].starts_with("crates/kmb-x/src/lib.rs:2:") && ps[0].contains("「削除」"));
     }
 
     #[test]
     fn test_files_are_skipped() {
-        assert!(is_test_file("crates/jc-ui/src/render/render_tests.rs"));
+        assert!(is_test_file("crates/kmb-ui/src/render/render_tests.rs"));
         assert!(is_test_file(
-            "crates/jc-solid/src/asm_tests/motion_tests.rs"
+            "crates/kmb-solid/src/asm_tests/motion_tests.rs"
         ));
-        assert!(is_test_file("crates/jc-core/src/tests.rs"));
-        assert!(!is_test_file("crates/jc-ui/src/render/gallery_ui.rs"));
+        assert!(is_test_file("crates/kmb-core/src/tests.rs"));
+        assert!(!is_test_file("crates/kmb-ui/src/render/gallery_ui.rs"));
     }
 
     #[test]

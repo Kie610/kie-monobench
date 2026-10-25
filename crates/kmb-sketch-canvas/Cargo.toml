@@ -1,0 +1,24 @@
+[package]
+name = "kmb-sketch-canvas"
+description = "下絵(キャンバス): 写真や図面の絵を平面に置き、2 点と距離で大きさを合わせる。形には使わず見せるだけ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cad.workspace = true
+kmb-sketch.workspace = true
+kmb-format.workspace = true
+kmb-image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

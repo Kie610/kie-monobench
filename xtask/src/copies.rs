@@ -100,7 +100,7 @@ pub fn check(root: &Path, sources: &[(String, String, Source)]) -> Vec<String> {
     if std::env::var_os("JC_BLESS").is_some() {
         let mut text = String::from(
             "# 別の crate にある同じ関数の写し(xtask/src/copies.rs)。1 行が 1 組。\n\
-             # 増やさない。共通の部品(jc-cam-geom・jc-cam-setup など)へ寄せて直したら行を消す。\n\
+             # 増やさない。共通の部品(kmb-cam-geom・kmb-cam-setup など)へ寄せて直したら行を消す。\n\
              # 手で直さず JC_BLESS=1 cargo xtask checks で書き直す(増えた行は直してから)。\n",
         );
         for g in now.keys() {
@@ -148,20 +148,20 @@ mod tests {
             .replace("    let", "  let");
         let short = "fn tiny() -> f64 {\n    1.0\n}\n";
         let s = vec![
-            ("jc-a".into(), "src/lib.rs".into(), src(body)),
-            ("jc-b".into(), "src/geo.rs".into(), src(&other)),
-            ("jc-b".into(), "src/x.rs".into(), src(short)),
-            ("jc-c".into(), "src/x.rs".into(), src(short)),
+            ("kmb-a".into(), "src/lib.rs".into(), src(body)),
+            ("kmb-b".into(), "src/geo.rs".into(), src(&other)),
+            ("kmb-b".into(), "src/x.rs".into(), src(short)),
+            ("kmb-c".into(), "src/x.rs".into(), src(short)),
         ];
         let g = groups(&s);
         assert_eq!(
             g.keys().collect::<Vec<_>>(),
-            vec!["jc-a::dist = jc-b::dist"]
+            vec!["kmb-a::dist = kmb-b::dist"]
         );
         // 同じ crate の中の写しは数えない
         let same = vec![
-            ("jc-a".into(), "src/lib.rs".into(), src(body)),
-            ("jc-a".into(), "src/b.rs".into(), src(body)),
+            ("kmb-a".into(), "src/lib.rs".into(), src(body)),
+            ("kmb-a".into(), "src/b.rs".into(), src(body)),
         ];
         assert!(groups(&same).is_empty());
     }

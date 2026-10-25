@@ -1,0 +1,24 @@
+[package]
+name = "kmb-config"
+description = "構成表(寸法違いの部品を 1 つの文書で持つ。行を当てるとパラメータと抑制を書き換えて計算し直す)の操作"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-samples.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+[package]
+name = "kmb-scene"
+description = "レンダリングの光源(点光源・スポットライト)とデカール(面に貼る絵)の機能。形は変えず、3D のビューとレンダリングが出力を読む"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-look.workspace = true
+# 種類の役割の印(デカール)
+kmb-interchange.workspace = true
+kmb-cad.workspace = true
+kmb-format.workspace = true
+kmb-image.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

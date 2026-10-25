@@ -1,0 +1,24 @@
+[package]
+name = "kmb-toolpath-moves"
+description = "工具の動きの部品: 入り方・リード・仕上げの周回、輪郭に沿う動き、経路のつなぎ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-tool.workspace = true
+kmb-toolpath.workspace = true
+log.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

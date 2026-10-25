@@ -1,0 +1,20 @@
+[package]
+name = "kmb-look"
+description = "見た目と材料の語彙: 物理材料と外観の表、文書の外観、光源とデカールの型(描き手・解析・CAD が共通で引く)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "core"
+
+[dependencies]
+kmb-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

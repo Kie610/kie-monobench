@@ -1,0 +1,25 @@
+[package]
+name = "kmb-cam-tool"
+description = "工具と工具ライブラリ"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+miniz_oxide.workspace = true
+crc32fast.workspace = true
+kmb-format.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

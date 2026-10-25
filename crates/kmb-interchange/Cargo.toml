@@ -1,0 +1,21 @@
+[package]
+name = "kmb-interchange"
+description = "層をまたぐ受け渡しの型と語彙(穴の情報、組立の動き・接触・アニメーションの区画、構成表の区画、描き方と役割の印)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "interchange"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-look.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

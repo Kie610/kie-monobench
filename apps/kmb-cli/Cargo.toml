@@ -1,0 +1,32 @@
+[package]
+name = "kmb-cli"
+description = "文書を操作する CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "app"
+
+[[bin]]
+name = "kmb"
+path = "src/main.rs"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-bundle.workspace = true
+kmb-session.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../../crates/kmb-workspace-hack" }
+
+[features]
+# SMLib のカーネルを入れる(外すと truck だけ。`--no-default-features`)
+default = ["smlib"]
+smlib = ["kmb-bundle/smlib"]
+
+[lints]
+workspace = true

@@ -20,7 +20,7 @@
 
 まだ開発の途中で、配布用の実行ファイルはない。ソースから組み立てて使う。
 
-画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp`(crate は今までどおり `jc-cli`・`jc-mcp`)。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
+画面のアプリは `kie-monobench`、コマンドは `kmb`、MCP サーバは `kmb-mcp`(crate は今までどおり `kmb-cli`・`kmb-mcp`)。文書の拡張子は `.kmb`(中身は JSON)。前の仮の名前(`jisaku-cadcam`)の時のデータフォルダは最初の起動で引き継ぎ、`.json` の文書もそのまま開ける。
 
 ## 何ができるか
 
@@ -55,9 +55,9 @@
 - Linux で画面を動かすには、窓と描画の部品(X11 か Wayland、Vulkan のドライバ)
 
 ```sh
-cargo run --release -p jc-app -- --sample   # 見本の部品と加工で画面を開く
-cargo run --release -p jc-app               # 開始画面から始める
-cargo run --release -p jc-cli -- --help     # コマンド(kmb)の一覧
+cargo run --release -p kmb-app -- --sample   # 見本の部品と加工で画面を開く
+cargo run --release -p kmb-app               # 開始画面から始める
+cargo run --release -p kmb-cli -- --help     # コマンド(kmb)の一覧
 cargo xtask verify                          # 変えた crate のテストと点検
 ```
 
@@ -85,9 +85,9 @@ cargo xtask verify                          # 変えた crate のテストと点
     "args": ["--root", "<読み書きを許すフォルダ>"] } } }
   ```
 
-  前の名前(コマンド `jc`、MCP の `jc-mcp`)から移る時: MCP の設定の `command` を `.../kmb-mcp`(Windows は `kmb-mcp.exe`)に書き換え、台本などで `jc` と打っていた所を `kmb` にする。前の名前の実行ファイルはもう作られないので、`target/release` に残った `jc`・`jc-mcp` は古いまま止まる(消してよい)。設定の鍵(上の `kiemonobench`)はそのままでよい。ログのファイルの頭は `kmb-cli-`・`kmb-mcp-` になる。
+  前の名前(コマンド `jc`、MCP の `kmb-mcp`)から移る時: MCP の設定の `command` を `.../kmb-mcp`(Windows は `kmb-mcp.exe`)に書き換え、台本などで `jc` と打っていた所を `kmb` にする。前の名前の実行ファイルはもう作られないので、`target/release` に残った `jc`・`kmb-mcp` は古いまま止まる(消してよい)。設定の鍵(上の `kiemonobench`)はそのままでよい。ログのファイルの頭は `kmb-cli-`・`kmb-mcp-` になる。
 
-- **ポストのプラグイン**: WASM のコンポーネント(インタフェースは `crates/jc-plugin-host/wit/post.wit`)。ファイル・ネットワーク・時計には触れられない。見本は `plugins/post-example/`。
+- **ポストのプラグイン**: WASM のコンポーネント(インタフェースは `crates/kmb-plugin-host/wit/post.wit`)。ファイル・ネットワーク・時計には触れられない。見本は `plugins/post-example/`。
 
 実機で削る前に、必ずシミュレーション、Z を浮かせた空運転、ワックスや MDF での試し削りの順に確かめる。
 
@@ -108,7 +108,7 @@ MIT([LICENSE-MIT](LICENSE-MIT))か Apache-2.0([LICENSE-APACHE](LICENSE-APACHE))�
 ### 同梱する他のソフトとデータ
 
 - `third_party/usd-brep/`: NVIDIA usd-brep 1.0.0 の SMLib と SM_API(Apache-2.0、Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES。全文は `third_party/usd-brep/LICENSE`)。
-- `third_party/smlibpy-patches/`: smlibpy(Copyright (c) 2026 AWV Informatik AG、MIT。全文は `third_party/smlibpy-patches/LICENSE`)の SMLib の修正 2 つ。`crates/jc-kernel-smlib/shim/jc_step.cpp` の STEP の書き出しも smlibpy の書き出しを元にしている。
+- `third_party/smlibpy-patches/`: smlibpy(Copyright (c) 2026 AWV Informatik AG、MIT。全文は `third_party/smlibpy-patches/LICENSE`)の SMLib の修正 2 つ。`crates/kmb-kernel-smlib/shim/jc_step.cpp` の STEP の書き出しも smlibpy の書き出しを元にしている。
 - `third_party/truck-shapeops/`: truck-shapeops 0.4.0(Apache-2.0、Copyright (c) RICOS Co. Ltd.。全文は `third_party/truck-shapeops/LICENSE`)を直した写し。予備の形状カーネル truck のブーリアンに当てる。
-- `crates/jc-text/fonts/` の `futural.jhf` と `rowmans.jhf`: Hershey フォントのデータ。The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc. 許諾の全文は `crates/jc-text/fonts/HERSHEY-LICENSE.txt`。
+- `crates/kmb-text/fonts/` の `futural.jhf` と `rowmans.jhf`: Hershey フォントのデータ。The Hershey Fonts were originally created by Dr. A. V. Hershey while working at the U. S. National Bureau of Standards. The format of the Font data in this distribution was originally created by James Hurt, Cognition, Inc. 許諾の全文は `crates/kmb-text/fonts/HERSHEY-LICENSE.txt`。
 - 出どころと更新の手順は [third_party/README.md](third_party/README.md)。

@@ -1,12 +1,12 @@
 //! ポストのプラグインの見本。Grbl 系の書き方(G21/G90/G17/G54、G2/G3 と I/J、M6 T、M3 S、
 //! M30)で G-code を書く。実機では確かめていない(U)。プラグインの書き方の見本として使う。
 
-use jc_post::{MachineProfile, num};
-use jc_toolpath::{ArcDir, Move, Op, Program};
+use kmb_post::{MachineProfile, num};
+use kmb_toolpath::{ArcDir, Move, Op, Program};
 use std::fmt::Write;
 
 wit_bindgen::generate!({
-    path: "../../crates/jc-plugin-host/wit",
+    path: "../../crates/kmb-plugin-host/wit",
     world: "post",
 });
 
@@ -71,7 +71,7 @@ impl Guest for Example {
                 Op::Dwell { seconds } => {
                     let _ = writeln!(out, "G4 P{}", num(*seconds));
                 }
-                // ホスト(jc-plugin-host)は、後から足した知らせをコメントにし、停止を含む
+                // ホスト(kmb-plugin-host)は、後から足した知らせをコメントにし、停止を含む
                 // プログラムは渡さない。ここに来るのは、ホストを通さずに呼んだ時だけ
                 Op::Message { text } => {
                     let t: String = text.chars().filter(|c| *c != '(' && *c != ')').collect();

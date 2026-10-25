@@ -1,0 +1,24 @@
+[package]
+name = "kmb-text"
+description = "文字(1 本線のフォントか輪郭のフォントで平面やスケッチの点・線に置く)と、文字を置く・線に分解する・フォントを替える操作"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-sketch.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+i_overlay.workspace = true
+skrifa.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

@@ -630,7 +630,7 @@ mod tests {
 
     #[test]
     fn decisions_without_fragment_are_listed() {
-        let dir = std::env::temp_dir().join(format!("jc-docs-decisions-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-docs-decisions-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join(DIR)).unwrap();
         fs::write(
@@ -696,11 +696,11 @@ mod tests {
             ..Default::default()
         };
         let s = crate_list(&[
-            pk("jc-ui", "ui", "画面"),
-            pk("jc-core", "core", "核 | 文書"),
+            pk("kmb-ui", "ui", "画面"),
+            pk("kmb-core", "core", "核 | 文書"),
         ]);
-        let core = s.find("| jc-core | 核 \\| 文書 |").unwrap();
-        let ui = s.find("| jc-ui | 画面 |").unwrap();
+        let core = s.find("| kmb-core | 核 \\| 文書 |").unwrap();
+        let ui = s.find("| kmb-ui | 画面 |").unwrap();
         assert!(core < ui);
         let map = format!("前\n{MAP_BEGIN}\n古い\n{MAP_END}\n後\n");
         assert_eq!(map_with_list(&map, &s).unwrap(), format!("前\n{s}\n後\n"));

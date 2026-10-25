@@ -5,42 +5,42 @@
 
 [removed]
 # 2026-10-21 構造のレビュー 0a: 層の検査を xtask の点検(xtask/src/layers.rs)へ移した。毎回流れる
-"jc-bundle the_graph_is_read_and_the_core_depends_only_on_the_expression_crate" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle every_crate_names_its_layer" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle dependencies_follow_the_layer_table" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle only_the_assembly_names_the_kernel" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle strategies_do_not_depend_on_each_other" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle only_apps_depend_on_the_assembly" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle the_screen_depends_only_on_the_core" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle the_3d_view_and_measuring_know_only_the_core" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle screen_extensions_use_the_screen_and_their_own_module_only" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle apps_use_modules_only_through_the_assembly" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle solid_features_do_not_depend_on_each_other" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle layers_do_not_name_the_types_of_other_layers" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle known_exceptions_still_exist" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
-"jc-bundle every_module_is_named_exactly_once" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle the_graph_is_read_and_the_core_depends_only_on_the_expression_crate" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle every_crate_names_its_layer" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle dependencies_follow_the_layer_table" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle only_the_assembly_names_the_kernel" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle strategies_do_not_depend_on_each_other" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle only_apps_depend_on_the_assembly" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle the_screen_depends_only_on_the_core" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle the_3d_view_and_measuring_know_only_the_core" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle screen_extensions_use_the_screen_and_their_own_module_only" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle apps_use_modules_only_through_the_assembly" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle solid_features_do_not_depend_on_each_other" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle layers_do_not_name_the_types_of_other_layers" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle known_exceptions_still_exist" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
+"kmb-bundle every_module_is_named_exactly_once" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
 
 # 2026-10-22: 名前を変えただけ(中の確かめは残し、M が移動/コピーを始めることを足した)
-"jc-ui i_and_m_measure_and_s_opens_the_search_at_the_cursor" = "2026-10-22 Kie 承認(a2 で M を移動/コピーに): i_measures_m_moves_and_s_opens_the_search_at_the_cursor へ名前を変えた"
-# 2026-10-23 リファクタリング 組 0: 動作確認のためだけの機能(jc-demo-features)を消した。試験は消した種類そのものを確かめる物
-"jc-demo-features value_contract" = "2026-10-23 Kie 承認(判断カード): 動作確認だけの jc-demo-features を消したため"
-"jc-demo-features scale_contract" = "2026-10-23 Kie 承認(判断カード): 動作確認だけの jc-demo-features を消したため"
+"kmb-ui i_and_m_measure_and_s_opens_the_search_at_the_cursor" = "2026-10-22 Kie 承認(a2 で M を移動/コピーに): i_measures_m_moves_and_s_opens_the_search_at_the_cursor へ名前を変えた"
+# 2026-10-23 リファクタリング 組 0: 動作確認のためだけの機能(kmb-demo-features)を消した。試験は消した種類そのものを確かめる物
+"kmb-demo-features value_contract" = "2026-10-23 Kie 承認(判断カード): 動作確認だけの kmb-demo-features を消したため"
+"kmb-demo-features scale_contract" = "2026-10-23 Kie 承認(判断カード): 動作確認だけの kmb-demo-features を消したため"
 # 2026-10-24 テストの整理: 台本 54 本を順に流す 1 つのテストを、台本ごとのテスト ui::<台本の名前>(build.rs が作る)に分けた
-"jc-app ui_scripts" = "2026-10-24 台本ごとのテスト ui::<台本の名前> に分けた(並べて流すため)"
+"kmb-app ui_scripts" = "2026-10-24 台本ごとのテスト ui::<台本の名前> に分けた(並べて流すため)"
 # 2026-10-24 テストの整理の続き: 見本の再計算と操作の集めを 1 回にするため、名前の検査 4 本を 1 本
 # (names_and_roles_of_the_bundle)にまとめた。中の確かめは同じ名前の関数として残している
-"jc-bundle action_and_setting_ids_and_roles_are_unique_and_targets_exist" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
-"jc-bundle the_name_owner_table_for_the_layer_check_is_up_to_date" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
-"jc-bundle clashing_ids_roles_and_missing_targets_are_found" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
-"jc-bundle every_role_in_the_vocabulary_is_claimed" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
+"kmb-bundle action_and_setting_ids_and_roles_are_unique_and_targets_exist" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
+"kmb-bundle the_name_owner_table_for_the_layer_check_is_up_to_date" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
+"kmb-bundle clashing_ids_roles_and_missing_targets_are_found" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
+"kmb-bundle every_role_in_the_vocabulary_is_claimed" = "2026-10-24 names_and_roles_of_the_bundle にまとめた(見本を 1 回だけ再計算する)"
 # 2026-10-24 Kie の指示(他製品の名前をソースから消す): 名前から他製品の名前を外しただけ(中の確かめは同じ)
-"jc-expr fusion_constants_and_functions" = "2026-10-24 Kie の指示: constants_and_functions_in_expressions へ名前を変えた"
-"jc-kernel-smlib step_files_from_fusion_become_solids_that_take_a_hole" = "2026-10-24 Kie の指示: step_files_from_another_cad_become_solids_that_take_a_hole へ名前を変えた"
-"jc-ui the_tool_of_an_extrude_is_drawn_as_a_solid_in_fusions_colours_for_its_operation" = "2026-10-24 Kie の指示: the_tool_of_an_extrude_is_drawn_as_a_solid_in_the_colour_of_its_operation へ名前を変えた"
-"jc-ui every_key_is_written_once_and_fusion_keys_are_there" = "2026-10-24 Kie の指示: every_key_is_written_once_and_the_one_letter_keys_are_there へ名前を変えた"
+"kmb-expr fusion_constants_and_functions" = "2026-10-24 Kie の指示: constants_and_functions_in_expressions へ名前を変えた"
+"kmb-kernel-smlib step_files_from_fusion_become_solids_that_take_a_hole" = "2026-10-24 Kie の指示: step_files_from_another_cad_become_solids_that_take_a_hole へ名前を変えた"
+"kmb-ui the_tool_of_an_extrude_is_drawn_as_a_solid_in_fusions_colours_for_its_operation" = "2026-10-24 Kie の指示: the_tool_of_an_extrude_is_drawn_as_a_solid_in_the_colour_of_its_operation へ名前を変えた"
+"kmb-ui every_key_is_written_once_and_fusion_keys_are_there" = "2026-10-24 Kie の指示: every_key_is_written_once_and_the_one_letter_keys_are_there へ名前を変えた"
 "xtask allowed_phrases_and_patent_sections_are_not_reported" = "2026-10-24 Kie の指示: 特許の記録を外へ移したので allowed_phrases_are_not_reported_but_patent_sections_are へ名前を変えた"
 # 2026-10-24 E7: 辺を拾う道を CPU の 1 本にし、GPU の番号の絵をやめた(辺を選ぶやり方を 1 つにそろえる)。
-# 上から見て下の面の辺を拾わない確かめは jc-ui の edges_hidden_below_are_not_picked_from_above に移した
-"jc-ui gpu_edge_ids_pick_the_same_edges_as_the_cpu" = "2026-10-24 Kie 承認(E7 辺を拾う道を 1 本に): 比べる相手の GPU の番号の絵を外した"
+# 上から見て下の面の辺を拾わない確かめは kmb-ui の edges_hidden_below_are_not_picked_from_above に移した
+"kmb-ui gpu_edge_ids_pick_the_same_edges_as_the_cpu" = "2026-10-24 Kie 承認(E7 辺を拾う道を 1 本に): 比べる相手の GPU の番号の絵を外した"
 # 2026-10-25 u9: 先頭のカンマの小数(`,5`)を 0.5 と読むのをやめ、誤りにした。全角の数字を受けるのは full_width_digits_and_signs_are_numbers
-"jc-expr a_leading_decimal_comma_is_a_number" = "2026-10-25 判定「直す」(10-22 u9、ルールに合わない物を直す): 誤りにするので a_leading_decimal_comma_is_an_error へ名前を変えた"
+"kmb-expr a_leading_decimal_comma_is_a_number" = "2026-10-25 判定「直す」(10-22 u9、ルールに合わない物を直す): 誤りにするので a_leading_decimal_comma_is_an_error へ名前を変えた"

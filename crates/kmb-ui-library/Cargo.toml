@@ -1,0 +1,26 @@
+[package]
+name = "kmb-ui-library"
+description = "モデル管理の画面(画面の拡張。ホームのタブの、場所・デザインのカード・選んだ物の概要)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "ui"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-ui.workspace = true
+kmb-session.workspace = true
+egui.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-samples.workspace = true
+egui_kittest.workspace = true
+
+[lints]
+workspace = true

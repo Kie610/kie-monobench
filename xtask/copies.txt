@@ -1,3 +1,3 @@
 # 別の crate にある同じ関数の写し(xtask/src/copies.rs)。1 行が 1 組。
-# 増やさない。共通の部品(jc-cam-geom・jc-cam-setup など)へ寄せて直したら行を消す。
+# 増やさない。共通の部品(kmb-cam-geom・kmb-cam-setup など)へ寄せて直したら行を消す。
 # 手で直さず JC_BLESS=1 cargo xtask checks で書き直す(増えた行は直してから)。

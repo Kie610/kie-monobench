@@ -1,0 +1,24 @@
+[package]
+name = "kmb-fea"
+description = "強度と熱の解析(形に沿った 2 次の四面体の網で、応力とたわみ・温度・共振・軽い形の参考を解く)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "analysis"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+kmb-study.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+robust = "1.2.0"
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

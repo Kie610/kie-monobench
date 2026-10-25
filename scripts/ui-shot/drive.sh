@@ -1,6 +1,6 @@
 #!/bin/bash
 # 画面の写真を撮る(Linux のクラウドの作業場向け。画面のない所で、仮想の画面と CPU の描画で動かす)。
-# 決まった場面は apps/jc-app/tests/screens.rs の方が手軽(使い分けは同じフォルダの README.md)。
+# 決まった場面は apps/kmb-app/tests/screens.rs の方が手軽(使い分けは同じフォルダの README.md)。
 #
 # 使い方: scripts/ui-shot/drive.sh <手順のファイル> [アプリの引数...]
 #   例: SHOT_OUT=out scripts/ui-shot/drive.sh scripts/ui-shot/cam.steps --sample
@@ -9,20 +9,20 @@
 #   click x y / rclick x y / move x y / key キー名 / type 文字 / wait 秒
 # 環境変数:
 #   SHOT_OUT   写真の置き場(既定 .)
-#   SHOT_HOME  アプリのデータフォルダの親(既定 /tmp/jc-shot-home)。
+#   SHOT_HOME  アプリのデータフォルダの親(既定 /tmp/kmb-shot-home)。
 #              明るさは $SHOT_HOME/.local/share/kie-monobench/layout.json の "brightness"
 #   SHOT_THEME light / dark(既定 light。layout.json を書き直す)
 #   SHOT_SIZE  画面の大きさ(実際の画素、既定 1280x760)。窓をこの大きさに広げる(最大化と同じ)
 #   SHOT_SCALE 表示倍率(既定 1。Windows の 200% なら 2。例: SHOT_SIZE=3840x2068 SHOT_SCALE=2)
 #   WAIT       起動を待つ秒(既定 12)
-#   APP        実行ファイル(既定 target/debug/kie-monobench。cargo build -p jc-app で作る)
+#   APP        実行ファイル(既定 target/debug/kie-monobench。cargo build -p kmb-app で作る)
 # 要るもの: Xvfb、xdotool、ImageMagick、Mesa の lavapipe(Vulkan の CPU 実装)、libxkbcommon-x11
 #   apt-get install -y xvfb xdotool imagemagick mesa-vulkan-drivers libxkbcommon-x11-0 fonts-ipafont-gothic
 set -u
 STEPS=$1; shift
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 APP=${APP:-$ROOT/target/debug/kie-monobench}
-export HOME=${SHOT_HOME:-/tmp/jc-shot-home}
+export HOME=${SHOT_HOME:-/tmp/kmb-shot-home}
 mkdir -p "$HOME/.local/share/kie-monobench"
 echo "{\"brightness\":\"${SHOT_THEME:-light}\"}" > "$HOME/.local/share/kie-monobench/layout.json"
 export WGPU_BACKEND=vulkan VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json

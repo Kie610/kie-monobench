@@ -55,7 +55,7 @@ struct Extra {
 
 const EXTRAS: &[Extra] = &[
     Extra {
-        owner: "jc-core",
+        owner: "kmb-core",
         name: "Rust の標準ライブラリ (Rust standard library)",
         license: "MIT OR Apache-2.0",
         file: None,
@@ -76,10 +76,10 @@ const EXTRAS: &[Extra] = &[
         copyright: "",
     },
     Extra {
-        owner: "jc-text",
+        owner: "kmb-text",
         name: "Hershey フォント (Roman Simplex・Futura Light)",
         license: "Hershey fonts license",
-        file: Some("crates/jc-text/fonts/HERSHEY-LICENSE.txt"),
+        file: Some("crates/kmb-text/fonts/HERSHEY-LICENSE.txt"),
         copyright: "",
     },
 ];
@@ -150,7 +150,7 @@ pub fn shipped(meta: &Json) -> (Vec<Crate>, BTreeSet<String>) {
     let mut todo: Vec<&str> = members
         .iter()
         .copied()
-        .filter(|id| packages[id]["metadata"]["jc"]["layer"] == "app")
+        .filter(|id| packages[id]["metadata"]["kmb"]["layer"] == "app")
         .collect();
     let mut seen = BTreeSet::new();
     while let Some(id) = todo.pop() {
@@ -510,7 +510,7 @@ mod tests {
                "authors": ["A B <a@b>"], "manifest_path": format!("/r/{id}/Cargo.toml"),
                "source": "registry", "license_file": null,
                "targets": [{"kind": [kind]}],
-               "metadata": layer.map(|l| json!({"jc": {"layer": l}}))})
+               "metadata": layer.map(|l| json!({"kmb": {"layer": l}}))})
     }
 
     fn dep(id: &str, kind: Option<&str>) -> Json {
@@ -585,7 +585,7 @@ mod tests {
 
     #[test]
     fn same_text_is_listed_once_with_all_users() {
-        let dir = std::env::temp_dir().join(format!("jc-licenses-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-licenses-{}", std::process::id()));
         let root = dir.join("root");
         for (d, files) in [
             (
