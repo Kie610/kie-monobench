@@ -393,6 +393,13 @@ fn a_post_plugin_chosen_in_the_settings_writes_the_gcode() {
         .unwrap();
     // 読めないファイルは断り、何も変えない
     assert!(!ws.change_settings(id, &serde_json::json!({"plugin": "/nonexistent/x.wasm"})));
+    // AI から来た値(画面の欄に打った物も)は、AI に許したフォルダの外のプラグインを断る
+    let work = temp_dir("post-roots");
+    ws.cmdline.ai_roots = Some(kmb_session::roots::Roots::new(work.clone()));
+    let plugin = serde_json::json!({"plugin": wasm.display().to_string()});
+    assert!(!ws.change_settings(id, &plugin));
+    ws.cmdline.ai_roots = None;
+    let _ = std::fs::remove_dir_all(&work);
     ws.select(setup);
     let first = |ws: &mut Workspace| {
         ws.run_action(kmb_cam_commands::VIEW_GCODE);

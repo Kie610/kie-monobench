@@ -524,7 +524,7 @@ fn value_ui(
                 }
             }
         }
-        FieldKind::Text => {
+        FieldKind::Text | FieldKind::File => {
             let cur = f.get(data).and_then(Json::as_str).unwrap_or("").to_string();
             ui.horizontal(|ui| {
                 if let Some(v) = expr_field(ui, key, &cur) {

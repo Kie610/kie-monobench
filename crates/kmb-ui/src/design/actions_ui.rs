@@ -824,7 +824,12 @@ impl Workspace {
     /// 設定を変え、データフォルダがあれば書く。文書ごとに持つ設定(レンダリングのシーン)は今の
     /// 文書にも書く(取り消せる)。正しくない値なら何も変えずに知らせる。
     pub fn change_settings(&mut self, id: &str, value: &serde_json::Value) -> bool {
-        match self.cur.work.set_settings(id, value) {
+        // AI が画面の欄に打った値なら、ファイルの欄(ポストのプラグインなど)を AI に許したフォルダに限る
+        let r = match self.ai_roots_now() {
+            Some(roots) => self.cur.work.set_settings_in(id, value, &roots),
+            None => self.cur.work.set_settings(id, value),
+        };
+        match r {
             Err(e) => {
                 self.win.fail(e);
                 return false;
@@ -1088,7 +1093,7 @@ pub(crate) fn setting_field(
     }
     let key = egui::Id::new(("setting", group, &f.key));
     match &f.kind {
-        FieldKind::Number { .. } | FieldKind::Text => {
+        FieldKind::Number { .. } | FieldKind::Text | FieldKind::File => {
             let cur = match f.get(v) {
                 Some(serde_json::Value::String(s)) => s.clone(),
                 Some(serde_json::Value::Null) | None => String::new(),
@@ -1096,7 +1101,7 @@ pub(crate) fn setting_field(
             };
             if let Some(new) = crate::feature_ui::expr_field(ui, key, &cur) {
                 let new = new.trim();
-                let value = if matches!(f.kind, FieldKind::Text) {
+                let value = if matches!(f.kind, FieldKind::Text | FieldKind::File) {
                     Some(serde_json::Value::String(new.to_string()))
                 } else {
                     // 読めない値は捨てる(欄は元の値に戻る)
