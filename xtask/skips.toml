@@ -2,7 +2,7 @@
 # 直してもう要らなくなった行は消す(残すと cargo xtask verify の点検が落ちる)。
 
 # 本体で return してよいテスト(「crate 関数」= 理由)。環境が無くて飛ばすなら、ここに足さずに
-# jc_contract::skip!("理由") を使う(印が残り、実行中の飛ばしとして数えられる)。
+# kmb_contract::skip!("理由") を使う(印が残り、実行中の飛ばしとして数えられる)。
 [static]
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
@@ -11,7 +11,7 @@ frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"
 gpu_edge_ids_pick_the_same_edges_as_the_cpu = "GPU の描画装置を作れない所(クラウドなど)"
 the_diameter_sign_is_drawn_by_a_fallback = "日本語の字体が 1 つも入っていない所(字体の無い CI など。PC とクラウドには入っている)"
-a_skip_returns_and_writes_the_test_name_and_the_reason = "jc-contract の飛ばしの印そのものの試験(いつも)"
+a_skip_returns_and_writes_the_test_name_and_the_reason = "kmb-contract の飛ばしの印そのものの試験(いつも)"
 holes_become_drilling_operations_that_follow_the_hole = "truck の回(皿の段のブーリアン)"
 a_tapered_extrude_narrows_toward_its_end = "truck の回(テーパーの押し出し)"
 shell_opens_the_chosen_faces_and_hollows_a_chosen_body = "truck の回(シェル)"
@@ -34,8 +34,8 @@ a_keyhole_top_is_rounded_along_the_arc_and_the_straight_edges = "truck の回(�
 rounding_the_keyhole_top_face_reaches_the_arc_edge = "truck の回(円の辺)"
 a_fillet_beside_a_hole_can_use_the_largest_radius_it_suggests = "truck の回(丸めの柱と穴のブーリアン)"
 a_root_fillet_beside_a_hole_can_use_the_largest_radius_it_suggests = "truck の回(ブーリアンでできた辺)"
-round_edges_of_the_boss_and_holes_can_be_picked_and_drawn = "truck の回(円の辺。jc-ui は truck の回に入らない)"
-a_thread_on_the_boss_suggests_the_nearest_metric_size = "truck の回(円の辺。jc-ui は truck の回に入らない)"
+round_edges_of_the_boss_and_holes_can_be_picked_and_drawn = "truck の回(円の辺。kmb-ui は truck の回に入らない)"
+a_thread_on_the_boss_suggests_the_nearest_metric_size = "truck の回(円の辺。kmb-ui は truck の回に入らない)"
 a_revolve_stops_at_a_face_that_holds_its_axis = "truck の回(同じ平面で接するブーリアン。Windows で落ちる)"
 a_boolean_can_keep_its_tools = "truck の回(同じ平面で接するブーリアン)"
 patterns_and_mirrors_repeat_every_listed_feature = "truck の回(同じ平面で接するブーリアン)"

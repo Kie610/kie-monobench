@@ -1,0 +1,26 @@
+[package]
+name = "kmb-kernel-truck"
+description = "truck による形状カーネルの実装"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "kernel"
+
+[dependencies]
+kmb-core.workspace = true
+serde_json.workspace = true
+truck-modeling.workspace = true
+truck-shapeops.workspace = true
+truck-meshalgo.workspace = true
+truck-stepio.workspace = true
+truck-topology.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-contract.workspace = true
+
+[lints]
+workspace = true

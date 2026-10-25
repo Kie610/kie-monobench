@@ -1,0 +1,38 @@
+[package]
+name = "kmb-mcp"
+description = "文書を AI から操作する MCP サーバ(標準入出力)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "app"
+
+[[bin]]
+name = "kmb-mcp"
+path = "src/main.rs"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-bundle.workspace = true
+kmb-session.workspace = true
+rmcp.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../../crates/kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-format.workspace = true
+
+[features]
+# SMLib のカーネルを入れる(外すと truck だけ。`--no-default-features`)
+default = ["smlib"]
+smlib = ["kmb-bundle/smlib"]
+
+[lints]
+workspace = true

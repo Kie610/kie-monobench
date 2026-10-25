@@ -1,0 +1,25 @@
+# リンクした部品の元のファイルを選び直す(10-20 a7)。前は右クリックに「最新にする」「この版に固定」
+# 「リンクを切る」「元を開く」しか無く、元を移したり差し替えたりするとつなぎ直せなかった。今は
+# 「元のファイルを選び直す…」があり、元が見つからない時も出る(選んだ後の流れは kmb-ui の
+# components_tests の a_missing_link_source_can_be_picked_again_from_the_menu)。
+#! project
+#! size 1280x800
+
+click "データパネル"
+until "すべての場所" exists 10s
+click "棚"
+until "台座" exists 30s
+click "天板"
+until "現在のデザインに挿入" exists 10s
+click "現在のデザインに挿入"
+wait
+until "~天板.json を読み込みました" exists 10s
+click ~OK
+wait
+click "データパネルを閉じる"
+wait
+rclick "天板"
+wait
+shot 部品の右クリック
+expect "元のファイルを選び直す…" exists
+expect "この版に固定" exists

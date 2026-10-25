@@ -1,0 +1,31 @@
+package jisaku-cadcam:post@0.1.0;
+
+/// ポストのプラグインが返す診断。
+interface types {
+  enum severity {
+    error,
+    warning,
+  }
+
+  record diagnostic {
+    severity: severity,
+    message: string,
+  }
+}
+
+/// ポストのプラグイン。プログラムと機械プロファイルは JSON で受け取る
+/// (形は kmb-toolpath の `Program`、kmb-post の `MachineProfile` を serde_json で書いたもの。
+/// 工具は切削条件が 1 つの古い形(`cam.tools@1` の工具)で渡し、工具の型が変わっても形を変えない)。
+/// プラグインはファイル、ネットワーク、時計に触れない。
+world post {
+  use types.{diagnostic};
+
+  /// 識別子(例: "example-grbl")
+  export id: func() -> string;
+  /// 対象の機械や方言の説明
+  export describe: func() -> string;
+  /// 出力の前の検査。共通の検査(範囲、回転数、工具番号)はホストが行う
+  export check: func(program: string, machine: string) -> list<diagnostic>;
+  /// G-code を作る。誤りがあれば診断を返す
+  export emit: func(program: string, machine: string) -> result<string, list<diagnostic>>;
+}

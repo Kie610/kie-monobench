@@ -1,0 +1,21 @@
+[package]
+name = "kmb-cam-dropcutter"
+description = "工具を部品に触れるまで下ろした高さ(ドロップカッター)と、その等高線"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-tool.workspace = true
+kmb-toolpath-moves.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

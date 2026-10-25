@@ -1,0 +1,19 @@
+[package]
+name = "kmb-measure"
+description = "測る計算(表示用の網から点・辺・面の値と、2 つの間の距離・角度を出す。画面と MCP が共通で使う)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "inspect"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

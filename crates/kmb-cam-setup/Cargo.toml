@@ -1,0 +1,29 @@
+[package]
+name = "kmb-cam-setup"
+description = "CAM のセットアップ(ストック、作業座標)と加工の機能の共通部品"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-geom.workspace = true
+kmb-post.workspace = true
+kmb-toolpath.workspace = true
+kmb-toolpath-fit.workspace = true
+kmb-toolpath-moves.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-contract.workspace = true
+
+[lints]
+workspace = true

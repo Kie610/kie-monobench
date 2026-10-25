@@ -3,7 +3,7 @@
 
 use super::*;
 
-/// 名前の持ち主の表(xtask/names.txt。jc-bundle の試験 `tests/ids.rs` が登録から書く)。
+/// 名前の持ち主の表(xtask/names.txt。kmb-bundle の試験 `tests/ids.rs` が登録から書く)。
 /// ID → 名乗った crate。
 pub(super) fn names_table(root: &Path) -> BTreeMap<String, Vec<String>> {
     parse_names(&fs::read_to_string(root.join("xtask/names.txt")).unwrap_or_default())
@@ -28,7 +28,7 @@ pub(super) fn head(id: &str) -> Option<&str> {
 }
 
 /// 他の層の名前を書いてはいけない層。コア・受け渡しの型・試験の部品・組み立ては区分や扱う層の
-/// 名前を持つので外す。画面の拡張(jc-ui-*)は、依存する機能のモジュールの名前だけを書いてよい。
+/// 名前を持つので外す。画面の拡張(kmb-ui-*)は、依存する機能のモジュールの名前だけを書いてよい。
 pub(super) fn must_not_name(layer: &str) -> &'static [&'static str] {
     match layer {
         "cad" => &["cam", "io", "analysis"],
@@ -104,7 +104,7 @@ pub(super) fn foreign_names(
 ) -> Vec<String> {
     if table.is_empty() {
         return vec![
-            "名前の持ち主の表 xtask/names.txt が無い。JC_BLESS=1 cargo test -p jc-bundle --test ids で作る"
+            "名前の持ち主の表 xtask/names.txt が無い。JC_BLESS=1 cargo test -p kmb-bundle --test ids で作る"
                 .into(),
         ];
     }
@@ -170,18 +170,18 @@ pub(super) fn foreign_names(
 
 /// 種類を登録する crate(`pub fn register`)は `pub fn module()` で 1 つ名乗り、組み立ての中で
 /// ちょうど 1 回だけ並ぶ。登録は名乗りを通すので、組み立ては `register` を直接呼ばない。
-/// jc-solid は CAD の機能をまとめて登録し直す試験用なので数えない。
+/// kmb-solid は CAD の機能をまとめて登録し直す試験用なので数えない。
 pub(super) fn modules_named_once(root: &Path, g: &Graph) -> Vec<String> {
     let mut out = vec![];
-    let Some(assembly) = product_sources(root, g.dir("jc-bundle"))
+    let Some(assembly) = product_sources(root, g.dir("kmb-bundle"))
         .into_iter()
         .find(|(rel, _, _)| rel == "src/lib.rs")
         .map(|(_, _, s)| s.code)
     else {
-        return vec!["組み立て jc-bundle の src/lib.rs が読めない".into()];
+        return vec!["組み立て kmb-bundle の src/lib.rs が読めない".into()];
     };
     for &n in g.p.keys() {
-        if n == "jc-solid" {
+        if n == "kmb-solid" {
             continue;
         }
         let Some(lib) = product_sources(root, g.dir(n))
@@ -234,13 +234,13 @@ mod tests {
     #[test]
     fn owners_are_looked_up_by_the_whole_name_then_by_the_head() {
         let t = parse_names(
-            "# 見出し\nasm.position@1\tjc-asm\ncad.extrude@1\tjc-cad-extrude\ncad.sketch@1\tjc-sketch\n",
+            "# 見出し\nasm.position@1\tkmb-asm\ncad.extrude@1\tkmb-cad-extrude\ncad.sketch@1\tkmb-sketch\n",
         );
-        assert_eq!(owners_of("asm.position@1", &t), (true, vec!["jc-asm"]));
-        assert_eq!(owners_of("asm.position", &t), (true, vec!["jc-asm"]));
+        assert_eq!(owners_of("asm.position@1", &t), (true, vec!["kmb-asm"]));
+        assert_eq!(owners_of("asm.position", &t), (true, vec!["kmb-asm"]));
         assert_eq!(
             owners_of("cad.unknown", &t),
-            (false, vec!["jc-cad-extrude", "jc-sketch"])
+            (false, vec!["kmb-cad-extrude", "kmb-sketch"])
         );
         assert_eq!(owners_of("zzz.x", &t), (false, vec![]));
     }

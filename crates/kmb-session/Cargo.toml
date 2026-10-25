@@ -1,0 +1,29 @@
+[package]
+name = "kmb-session"
+description = "ファイルの扱い: 壊れない保存、世代のバックアップ、自動保存と復旧、最近使ったファイル、画面なしの作業 `Headless`(CLI・MCP が共通)、版の履歴 `history`、プロジェクトの一覧 `projects`、デザインの概要と移す・ごみ箱 `library`"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "session"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-measure.workspace = true
+kmb-format.workspace = true
+kmb-image.workspace = true
+kmb-render.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+miniz_oxide.workspace = true
+chrono.workspace = true
+trash.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

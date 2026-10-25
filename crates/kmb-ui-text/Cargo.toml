@@ -1,0 +1,26 @@
+[package]
+name = "kmb-ui-text"
+description = "文字の編集器(画面の拡張。フォントの選び欄と、輪郭のフォントの字を文書へ足す)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "ui"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-ui.workspace = true
+kmb-text.workspace = true
+egui.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-session.workspace = true
+egui_kittest.workspace = true
+
+[lints]
+workspace = true

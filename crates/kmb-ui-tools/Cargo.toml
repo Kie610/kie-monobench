@@ -1,0 +1,28 @@
+[package]
+name = "kmb-ui-tools"
+description = "工具ライブラリの編集器(画面の拡張。一覧と形・切削条件の欄、PC 全体のライブラリとの書き戻し)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "ui"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-ui.workspace = true
+kmb-session.workspace = true
+kmb-cam-tool.workspace = true
+egui.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-samples.workspace = true
+kmb-cam-commands.workspace = true
+egui_kittest.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,46 @@
+[package]
+name = "kmb-io-render"
+description = "絵と動画と glTF の書き出しと、その操作・シーンの設定(MP4 は Windows の H.264 か、アプリに入っている AV1)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "io"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-look.workspace = true
+kmb-interchange.workspace = true
+kmb-render.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+# 連番 PNG は kmb-format の書き手
+kmb-format.workspace = true
+# デカールの絵(PNG・JPEG・BMP)を画素にする
+kmb-image.workspace = true
+# GIF(MIT または Apache-2.0)と、色を 256 に減らす NeuQuant(MIT。gif が使うのと同じ版)
+gif = "0.14.2"
+color_quant = "1.1.0"
+# MP4 に入れる AV1 の符号器(純 Rust。BSD-2-Clause)。AV1 は使用料なしの符号(AOMedia の特許の許諾)。
+# Windows では OS の H.264 を先に使い、使えない時と Windows 以外でこれを使う。
+# `asm` は組み立てに nasm が要るので有効にしない(既定の機能は切る)
+rav1e = { version = "0.8.1", default-features = false, features = ["threading"] }
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+# 環境(ffmpeg・Media Foundation)が無くて飛ばすテストの印 skip!
+kmb-contract.workspace = true
+# 書いた PNG を読み直す試験(MIT または Apache-2.0)
+png = "0.18.1"
+
+# Windows の Media Foundation(OS が持つ H.264 の符号器と MP4 の書き手)を呼ぶ(MIT または Apache-2.0)。
+# Media Foundation の DLL は N 版の Windows に無いので、関数は実行時に探す(読めなければ AV1 にする)
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_Media_MediaFoundation", "Win32_System_Com", "Win32_System_LibraryLoader"] }
+
+# Windows の Media Foundation を呼ぶ src/mf.rs だけが unsafe を使う(ワークスペースの forbid の代わりに deny)
+[lints.rust]
+unsafe_code = "deny"

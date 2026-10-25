@@ -1,7 +1,7 @@
 //! `cargo xtask release`: アプリを release で作り、実行ファイルにビルドした PC のパスが残っていないかを数える。
 //!
 //! ```text
-//! cargo xtask release [--check] [cargo の引数...]   既定は -p jc-app。--check は cargo check だけ(数えない)
+//! cargo xtask release [--check] [cargo の引数...]   既定は -p kmb-app。--check は cargo check だけ(数えない)
 //! cargo xtask paths <ファイル>...                     ファイルに残るこの PC のパスを数える
 //! ```
 //!
@@ -254,7 +254,7 @@ pub fn run(
     let check = args.iter().any(|a| a == "--check");
     let mut rest: Vec<String> = args.iter().filter(|a| *a != "--check").cloned().collect();
     if !rest.iter().any(|a| a == "-p" || a.starts_with("--package")) {
-        rest.extend(["-p".into(), "jc-app".into()]);
+        rest.extend(["-p".into(), "kmb-app".into()]);
     }
     let exe = target.join("release").join(if cfg!(windows) {
         "kie-monobench.exe"
@@ -262,7 +262,7 @@ pub fn run(
         "kie-monobench"
     });
     let n = needles(root, target);
-    let app = rest.windows(2).any(|w| w[0] == "-p" && w[1] == "jc-app");
+    let app = rest.windows(2).any(|w| w[0] == "-p" && w[1] == "kmb-app");
     // 作り直す前の exe を数えておき、直した後と並べる
     let before = (!check && app && exe.is_file())
         .then(|| read(&exe).map(|b| scan(&b, &n)))

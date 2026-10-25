@@ -1,0 +1,24 @@
+[package]
+name = "kmb-strategy-raster3d"
+description = "3D の仕上げ(走査線・渦巻き・放射・投影・モーフィング スパイラル・スキャロップ)。工具を下ろした高さをなぞる"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-cam-geom.workspace = true
+kmb-core.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-dropcutter.workspace = true
+kmb-cam-setup.workspace = true
+kmb-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

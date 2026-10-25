@@ -1,0 +1,49 @@
+[package]
+name = "kmb-cam-commands"
+description = "CAM の機能の登録と加工の操作(追加・G-code の書き出し・段取り表・シミュレーション・再生・使い回し。プログラムの組み立ては kmb-cam-program)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+kmb-format.workspace = true
+kmb-interchange.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-setup.workspace = true
+kmb-cam-program.workspace = true
+kmb-toolpath.workspace = true
+kmb-post.workspace = true
+kmb-sim.workspace = true
+kmb-gcode-read.workspace = true
+kmb-io-stl.workspace = true
+kmb-io-render.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-strategy-contour2d.workspace = true
+kmb-strategy-chamfer.workspace = true
+kmb-strategy-pocket2d.workspace = true
+kmb-strategy-adaptive2d.workspace = true
+kmb-strategy-face.workspace = true
+kmb-strategy-engrave.workspace = true
+kmb-strategy-laser.workspace = true
+kmb-strategy-drill.workspace = true
+kmb-strategy-raster3d.workspace = true
+kmb-strategy-waterline.workspace = true
+kmb-strategy-pencil.workspace = true
+kmb-strategy-rough3d.workspace = true
+kmb-post-carvera-air.workspace = true
+
+
+[lints]
+workspace = true

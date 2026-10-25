@@ -1,0 +1,73 @@
+[package]
+name = "kmb-bundle"
+description = "組み立て: 機能の登録と形状カーネルの用意を 1 か所にまとめる(画面・CLI・MCP が共通で使う)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "assembly"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-plugin-host.workspace = true
+kmb-sketch.workspace = true
+kmb-sketch-3d.workspace = true
+kmb-text.workspace = true
+kmb-io-dxf.workspace = true
+kmb-io-svg.workspace = true
+kmb-cad.workspace = true
+kmb-cad-extrude.workspace = true
+kmb-cad-revolve.workspace = true
+kmb-cad-sweep.workspace = true
+kmb-cad-boolean.workspace = true
+kmb-cad-hole.workspace = true
+kmb-cad-pattern.workspace = true
+kmb-cad-modify.workspace = true
+kmb-asm.workspace = true
+kmb-fea.workspace = true
+kmb-flow.workspace = true
+kmb-study.workspace = true
+kmb-cad-edge.workspace = true
+kmb-cad-import-step.workspace = true
+kmb-sketch-canvas.workspace = true
+kmb-scene.workspace = true
+kmb-config.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-setup.workspace = true
+kmb-strategy-face.workspace = true
+kmb-strategy-contour2d.workspace = true
+kmb-strategy-chamfer.workspace = true
+kmb-strategy-engrave.workspace = true
+kmb-strategy-laser.workspace = true
+kmb-strategy-pocket2d.workspace = true
+kmb-strategy-adaptive2d.workspace = true
+kmb-strategy-drill.workspace = true
+kmb-strategy-raster3d.workspace = true
+kmb-strategy-waterline.workspace = true
+kmb-strategy-pencil.workspace = true
+kmb-strategy-rough3d.workspace = true
+kmb-cam-commands.workspace = true
+kmb-post.workspace = true
+kmb-io-stl.workspace = true
+kmb-io-view.workspace = true
+kmb-io-render.workspace = true
+kmb-post-carvera-air.workspace = true
+kmb-samples.workspace = true
+kmb-kernel-truck.workspace = true
+kmb-kernel-smlib = { workspace = true, optional = true }
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[features]
+# SMLib のカーネル(C++ のビルドが要る)。外すと truck だけで組み立てる
+default = ["smlib"]
+smlib = ["dep:kmb-kernel-smlib"]
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

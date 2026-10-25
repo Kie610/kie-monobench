@@ -28,7 +28,7 @@ pub(super) fn raw_reads(code: &str) -> Vec<usize> {
 pub(super) fn raw_arg_reads(root: &Path, g: &Graph) -> Vec<String> {
     let mut out = vec![];
     for &n in g.p.keys() {
-        if n == "jc-core" {
+        if n == "kmb-core" {
             continue;
         }
         for (rel, _, src) in product_sources(root, g.dir(n)) {
@@ -61,7 +61,7 @@ pub(super) fn direct_writes(code: &str) -> Vec<usize> {
     at
 }
 
-/// 画面とアプリの層で、書き出しを `std::fs::write` で直に書いている所。`jc_session::write_output`
+/// 画面とアプリの層で、書き出しを `std::fs::write` で直に書いている所。`kmb_session::write_output`
 /// を通す(壊れない書き込みとログ。途中で落ちても半分のファイルを残さない)。
 pub(super) fn direct_output_writes(root: &Path, g: &Graph) -> Vec<String> {
     let mut out = vec![];
@@ -72,7 +72,7 @@ pub(super) fn direct_output_writes(root: &Path, g: &Graph) -> Vec<String> {
         for (rel, _, src) in product_sources(root, g.dir(n)) {
             for at in direct_writes(&src.code) {
                 out.push(format!(
-                    "{n}/{rel}:{} がファイルを直に書いている。jc_session::write_output(書き出し)か \
+                    "{n}/{rel}:{} がファイルを直に書いている。kmb_session::write_output(書き出し)か \
                      write_atomic(設定など)を通す",
                     src.line_of(at)
                 ));
@@ -98,8 +98,8 @@ pub(super) fn kernel_uses(code: &str) -> Vec<usize> {
     at
 }
 
-/// 加工の戦略(jc-strategy-*)がカーネルに直に触っている所と、evaluate の中で経路を作っている所。
-/// 戦略は解いた入力(jc_cam_setup::StrategyInput)だけから経路を作る(WASM の戦略と同じ入口に
+/// 加工の戦略(kmb-strategy-*)がカーネルに直に触っている所と、evaluate の中で経路を作っている所。
+/// 戦略は解いた入力(kmb_cam_setup::StrategyInput)だけから経路を作る(WASM の戦略と同じ入口に
 /// するため)。
 pub(super) fn strategy_kernel_uses(
     root: &Path,
@@ -108,7 +108,7 @@ pub(super) fn strategy_kernel_uses(
 ) -> Vec<String> {
     let mut out = vec![];
     let mut used = BTreeSet::new();
-    for &n in g.p.keys().filter(|n| n.starts_with("jc-strategy-")) {
+    for &n in g.p.keys().filter(|n| n.starts_with("kmb-strategy-")) {
         for (rel, _, src) in product_sources(root, g.dir(n)) {
             // 経路はどの戦略も plan で作り、ホストは finish_plan で出力にする(evaluate で経路を作らない)
             for w in [".finish(", ".toolpath(ctx"] {
@@ -145,11 +145,11 @@ pub(super) fn strategy_kernel_uses(
 
 /// 機械を名指ししてはいけない汎用の加工の crate か(機械の値とポストは機械の crate と組み立てが持つ)。
 pub(super) fn is_generic_cam(n: &str) -> bool {
-    n == "jc-post"
-        || n == "jc-sim"
-        || n.starts_with("jc-cam-")
-        || n.starts_with("jc-strategy-")
-        || n.starts_with("jc-toolpath")
+    n == "kmb-post"
+        || n == "kmb-sim"
+        || n.starts_with("kmb-cam-")
+        || n.starts_with("kmb-strategy-")
+        || n.starts_with("kmb-toolpath")
 }
 
 /// コードと文字列の中の、機械の名前(大小を無視)の位置。コメントと説明の文の中の例は数えない
@@ -306,11 +306,11 @@ pub(super) fn screen_ops(root: &Path, g: &Graph, known: &[(&str, &str, usize)]) 
 fn screen_crates<'a>(g: &Graph<'a>) -> Vec<&'a str> {
     g.p.keys()
         .copied()
-        .filter(|n| g.layer(n) == "ui" || *n == "jc-app")
+        .filter(|n| g.layer(n) == "ui" || *n == "kmb-app")
         .collect()
 }
 
-/// `edit::名前(`(jc-session の変更の組み立て)と `Transaction::new(` の位置。
+/// `edit::名前(`(kmb-session の変更の組み立て)と `Transaction::new(` の位置。
 pub(super) fn edit_builds(code: &str) -> Vec<usize> {
     let mut at: Vec<usize> = code
         .match_indices("edit::")
@@ -330,7 +330,7 @@ pub(super) fn edit_builds(code: &str) -> Vec<usize> {
     at
 }
 
-/// 画面とアプリの層で、文書の変更を jc-session の edit でその場で組む所(8-1)。組んだ変更は CLI・MCP
+/// 画面とアプリの層で、文書の変更を kmb-session の edit でその場で組む所(8-1)。組んだ変更は CLI・MCP
 /// から呼べないので、新しい操作は `Headless` の口に置き、画面もそれを呼ぶ。今ある所は減らすだけ。
 pub(super) fn screen_edits(root: &Path, g: &Graph, known: &[(&str, &str, usize)]) -> Vec<String> {
     let crates = screen_crates(g);
@@ -370,7 +370,7 @@ fn screen_counts(
                 let lines: Vec<String> = at.iter().map(|&a| src.line_of(a).to_string()).collect();
                 out.push(format!(
                     "{n}/{rel} が{what}をその場で組んでいる({} 個、許すのは {allowed} 個。\
-                     行 {})。jc_session の Headless の口を通す(CLI・MCP からも同じ操作ができる)",
+                     行 {})。kmb_session の Headless の口を通す(CLI・MCP からも同じ操作ができる)",
                     at.len(),
                     lines.join("・")
                 ));
@@ -396,7 +396,7 @@ fn screen_counts(
 /// 逆向き: CLI・MCP からしかできない操作)。`known` に無い物が増えたら落とし、画面が呼ぶように
 /// なった物は `known` から消させる。
 pub(super) fn session_only_calls(root: &Path, g: &Graph, known: &[&str]) -> Vec<String> {
-    let dir = root.join("crates/jc-session/src");
+    let dir = root.join("crates/kmb-session/src");
     let mut files = vec![dir.join("headless.rs")];
     files.extend(rust_files(&dir.join("headless")));
     let mut names = BTreeSet::new();
@@ -452,7 +452,7 @@ pub(super) fn session_only_calls(root: &Path, g: &Graph, known: &[&str]) -> Vec<
     out
 }
 
-/// 再計算を自分で回す・形の控えを直に扱うコアの口。画面とアプリの層は呼ばず、jc-session の
+/// 再計算を自分で回す・形の控えを直に扱うコアの口。画面とアプリの層は呼ばず、kmb-session の
 /// `Headless`(start・poll・wait_recompute・recompute)を通す(CLI・MCP と同じ道で計算し、裏の
 /// 再計算の取り消しと控えの受け渡しを 1 か所にする)。
 pub(super) const RECOMPUTE_CALLS: &[&str] = &[
@@ -478,7 +478,7 @@ pub(super) fn screen_recomputes(root: &Path, g: &Graph) -> Vec<String> {
             for name in RECOMPUTE_CALLS {
                 for at in calls_of(&src.code, name) {
                     out.push(format!(
-                        "{n}/{rel}:{} が {name} を直に呼んでいる。画面とアプリの再計算は jc_session の \
+                        "{n}/{rel}:{} が {name} を直に呼んでいる。画面とアプリの再計算は kmb_session の \
                          Headless(start・poll・wait_recompute・recompute)を通す",
                         src.line_of(at)
                     ));
@@ -594,7 +594,7 @@ pub(super) fn machine_names(root: &Path, g: &Graph, known: &[(&str, &str, &str)]
                     continue;
                 }
                 out.push(format!(
-                    "{n}/{rel}:{} が機械を名指ししている。機械の値は機械の crate(jc-post-…)に置き、\
+                    "{n}/{rel}:{} が機械を名指ししている。機械の値は機械の crate(kmb-post-…)に置き、\
                      組み立てがマシンライブラリに入れる",
                     src.line_of(at)
                 ));
@@ -620,7 +620,7 @@ pub(super) fn json_names(src: &Source) -> Vec<usize> {
         .collect()
 }
 
-/// 文書の拡張子を字で書いている所(8-5)。文書の保存・開く・リンク・一覧は `jc_core::DOCUMENT_EXTENSION`
+/// 文書の拡張子を字で書いている所(8-5)。文書の保存・開く・リンク・一覧は `kmb_core::DOCUMENT_EXTENSION`
 /// と `DOCUMENT_EXTENSIONS` を使う。文書でない JSON(設定・控え・索引・パラメータの表など)は `known` に
 /// 数で載せる。数が増えたら落とし(文書の拡張子なら定数を使う。文書でなければ表を直す)、減ったら表を直させる。
 pub(super) fn document_extensions(
@@ -645,7 +645,7 @@ pub(super) fn document_extensions(
                 let lines: Vec<String> = at.iter().map(|&a| src.line_of(a).to_string()).collect();
                 out.push(format!(
                     "{n}/{rel} が拡張子 json を字で書いている({} 個、許すのは {allowed} 個。行 {})。\
-                     文書のファイルなら jc_core::DOCUMENT_EXTENSION(開く側は DOCUMENT_EXTENSIONS)を使う。\
+                     文書のファイルなら kmb_core::DOCUMENT_EXTENSION(開く側は DOCUMENT_EXTENSIONS)を使う。\
                      文書でない JSON なら xtask/src/layers.rs の JSON_NAME_KNOWN を直す",
                     at.len(),
                     lines.join("・")
@@ -747,7 +747,7 @@ mod tests {
     fn json_extension_names_are_found_in_literals_only() {
         let src = Source::new(
             "// 文書は .json\nconst A: &str = \"json\";\nlet p = dir.join(\"index.json\");\n\
-             let q = format!(\"{stem}.json\");\nlet r = \"json の中身\";\nlet s = jc_core::DOCUMENT_EXTENSION;\n",
+             let q = format!(\"{stem}.json\");\nlet r = \"json の中身\";\nlet s = kmb_core::DOCUMENT_EXTENSION;\n",
         );
         let lines: Vec<usize> = json_names(&src).iter().map(|&a| src.line_of(a)).collect();
         assert_eq!(lines, [2, 3, 4]);
@@ -774,7 +774,7 @@ mod tests {
 
     #[test]
     fn direct_file_writes_are_found_across_lines() {
-        let code = "std::fs::write(p, b)?;\nfs::write\n    (p, b);\nstd::fs::File::create(p);\njc_session::write_output(p, b);";
+        let code = "std::fs::write(p, b)?;\nfs::write\n    (p, b);\nstd::fs::File::create(p);\nkmb_session::write_output(p, b);";
         assert_eq!(direct_writes(&Source::new(code).code).len(), 3);
         assert!(direct_writes("my_fs::write(p)").is_empty());
         assert!(direct_writes("fs::write_all(p)").is_empty());
@@ -791,8 +791,8 @@ mod tests {
             .map(|&a| src.line_of(a))
             .collect();
         assert_eq!(lines, [2, 3]);
-        assert!(is_generic_cam("jc-strategy-face") && is_generic_cam("jc-post"));
-        assert!(!is_generic_cam("jc-post-carvera-air") && !is_generic_cam("jc-bundle"));
+        assert!(is_generic_cam("kmb-strategy-face") && is_generic_cam("kmb-post"));
+        assert!(!is_generic_cam("kmb-post-carvera-air") && !is_generic_cam("kmb-bundle"));
     }
 
     #[test]
@@ -809,14 +809,14 @@ mod tests {
 
     #[test]
     fn edit_builds_count_the_change_builders() {
-        let code = "edit::rename(d, a); jc_session::edit::set_components(l, v); edit::GroupMode::Exact;\n\
+        let code = "edit::rename(d, a); kmb_session::edit::set_components(l, v); edit::GroupMode::Exact;\n\
                     my_edit::x(); Transaction::new(l, ops); edit::ParamInfo::default()";
         assert_eq!(edit_builds(code).len(), 3);
     }
 
     #[test]
     fn op_uses_count_only_the_transaction_op() {
-        let code = "Op::AddParam { .. }; ToolOp::Cut; jc_core::Op::SetBodyName; MyOp::X";
+        let code = "Op::AddParam { .. }; ToolOp::Cut; kmb_core::Op::SetBodyName; MyOp::X";
         assert_eq!(op_uses(code).len(), 2);
     }
 
@@ -842,12 +842,12 @@ mod tests {
 
     #[test]
     fn only_the_numeric_crates_may_use_nalgebra() {
-        let toml = "[package]\nname = \"x\"\n\n[dependencies]\njc-core.workspace = true\n\
+        let toml = "[package]\nname = \"x\"\n\n[dependencies]\nkmb-core.workspace = true\n\
                     nalgebra.workspace = true\n\n[dev-dependencies]\nproptest = \"1\"\n";
         assert!(normal_dependency(toml, "nalgebra"));
         assert!(!normal_dependency(toml, "proptest"));
         assert!(!normal_dependency(toml, "nalgebra-sparse"));
-        let dev = "[dependencies]\njc-core = { path = \"../jc-core\" }\n[dev-dependencies]\nnalgebra = \"0.33\"\n";
+        let dev = "[dependencies]\nkmb-core = { path = \"../kmb-core\" }\n[dev-dependencies]\nnalgebra = \"0.33\"\n";
         assert!(!normal_dependency(dev, "nalgebra"));
         assert!(normal_dependency(
             "[dependencies]\nnalgebra = { version = \"0.33\" }\n",

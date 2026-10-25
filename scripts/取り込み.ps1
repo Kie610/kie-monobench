@@ -7,7 +7,7 @@
     1. origin から main と指定のブランチを取得し、main を origin/main に早送りする
     2. ブランチを順に取り込む(どれも merge --no-ff。ブランチ 1 本が 1 つの取り込みのコミットになり、戻す時に 1 回で戻せる)。
        衝突したら merge --abort して、そのブランチ名を出して止まる(それまでに取り込んだ分は手元の main に残る)
-    2.5 cargo hakari generate --diff と manage-deps --dry-run で jc-workspace-hack がそろっているかを確かめる
+    2.5 cargo hakari generate --diff と manage-deps --dry-run で kmb-workspace-hack がそろっているかを確かめる
     2.7 cargo-deny が無ければ入れる(verify --all のライセンスの点検が使う)
     3. cargo xtask verify --all(既定の SMLib の回)。出力は .local/取り込み/verify.log へ書き、画面には rc= と通過/失敗の行だけ出す
     4. 製品のコード(apps/ crates/ third_party/ plugins/ と、[patch] や依存を決める Cargo.toml・Cargo.lock、ビルドの設定の .cargo/config.toml・rust-toolchain.toml)が変わっていれば、アプリを release で作る(出力は .local/取り込み/build.log)。
@@ -107,7 +107,7 @@ foreach ($b in $Branches) {
 }
 $summary.Add("取り込み: $($Branches.Count) 本 ($($Branches -join ', '))")
 
-# 1.5 jc-workspace-hack が取り込んだ後の依存とそろっているか(docs/verify.md)。ずれていればプッシュせずに止める
+# 1.5 kmb-workspace-hack が取り込んだ後の依存とそろっているか(docs/verify.md)。ずれていればプッシュせずに止める
 foreach ($h in @(@('generate', '--diff'), @('manage-deps', '--dry-run'))) {
     $hout = & cargo hakari @h 2>&1
     if ($LASTEXITCODE -ne 0) {

@@ -1,0 +1,27 @@
+[package]
+name = "kmb-strategy-drill"
+description = "穴あけ(ドリル・ヘリカル・もみつけ)、円形、ねじ切り、裏返しのピン穴、穴の機能からの穴あけの組み立て"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-setup.workspace = true
+kmb-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

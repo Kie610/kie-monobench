@@ -1,0 +1,24 @@
+[package]
+name = "kmb-strategy-waterline"
+description = "3D の等高線加工(急な壁を一定の高さごとに回って仕上げる)とランプ(段の間を斜めに下りてつなぐ)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-dropcutter.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-setup.workspace = true
+kmb-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

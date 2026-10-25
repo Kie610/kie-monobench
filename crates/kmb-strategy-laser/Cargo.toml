@@ -1,0 +1,23 @@
+[package]
+name = "kmb-strategy-laser"
+description = "レーザーで線をなぞって焼く・閉じた形を埋めて焼く加工"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-cam-setup.workspace = true
+kmb-cam-geom.workspace = true
+kmb-cam-tool.workspace = true
+kmb-toolpath.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

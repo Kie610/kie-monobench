@@ -264,8 +264,8 @@ mod tests {
             "c",
             &[],
             &[
-                Done::new("テスト(truck) jc-solid", true, 1.0),
-                Done::new("テスト(truck) jc-samples", true, 2.0),
+                Done::new("テスト(truck) kmb-solid", true, 1.0),
+                Done::new("テスト(truck) kmb-samples", true, 2.0),
             ],
             3.0,
         );
@@ -304,14 +304,14 @@ mod tests {
     #[test]
     fn a_shared_place_that_does_not_exist_falls_back_to_target() {
         let local = (Path::new("t").join("verify").join("history.md"), false);
-        let missing = Some("/jc-no-such-place/ops/verify/history.md".into());
+        let missing = Some("/kmb-no-such-place/ops/verify/history.md".into());
         assert_eq!(path_from(missing, Path::new("t")), local);
         assert_eq!(path_from(None, Path::new("t")), local);
         assert_eq!(path_from(Some("".into()), Path::new("t")), local);
         // 最初の 2 段があれば、その下のフォルダはまだ無くてよい(書く時に作る)
         let tmp = std::env::temp_dir();
         if tmp.is_absolute() && tmp.components().count() >= 2 {
-            let p = tmp.join("jc-history-test").join("a").join("history.md");
+            let p = tmp.join("kmb-history-test").join("a").join("history.md");
             let top: PathBuf = p.components().take(3).collect();
             assert_eq!(
                 path_from(Some(p.clone().into()), Path::new("t")).1,

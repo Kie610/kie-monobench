@@ -1,0 +1,31 @@
+[package]
+name = "kmb-ui-sketch"
+description = "スケッチの編集器(画面の拡張。線・円・拘束・寸法を描いて決める)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "ui"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-ui.workspace = true
+kmb-sketch.workspace = true
+kmb-sketch-3d.workspace = true
+egui.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-io-dxf.workspace = true
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-samples.workspace = true
+kmb-cam-commands.workspace = true
+egui_kittest.workspace = true
+
+[lints]
+workspace = true

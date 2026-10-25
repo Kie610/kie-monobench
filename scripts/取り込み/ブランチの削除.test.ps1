@@ -8,7 +8,7 @@ param([string]$Impl = (Join-Path $PSScriptRoot 'ブランチの削除.ps1'))
 $ErrorActionPreference = 'Stop'
 . $Impl
 
-$root = Join-Path ([IO.Path]::GetTempPath()) "jc-branch-delete-$PID"
+$root = Join-Path ([IO.Path]::GetTempPath()) "kmb-branch-delete-$PID"
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 $failed = 0
 function Check([bool]$ok, [string]$what) {

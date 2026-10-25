@@ -1,0 +1,22 @@
+[package]
+name = "kmb-cam-geom"
+description = "加工用の幾何(水平な面の輪郭、縦の穴、円弧の当てはめ、オフセット、輪をたどる部品)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+cavalier_contours.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+
+
+[lints]
+workspace = true

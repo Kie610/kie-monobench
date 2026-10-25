@@ -12,80 +12,80 @@ rust-version = "1.89"
 
 [workspace.dependencies]
 encoding_rs = "0.8"
-jc-expr = { path = "crates/jc-expr" }
-jc-core = { path = "crates/jc-core" }
-jc-contract = { path = "crates/jc-contract" }
-jc-sketch = { path = "crates/jc-sketch" }
-jc-sketch-3d = { path = "crates/jc-sketch-3d" }
-jc-sketch-solver = { path = "crates/jc-sketch-solver" }
-jc-text = { path = "crates/jc-text" }
-jc-io-dxf = { path = "crates/jc-io-dxf" }
-jc-io-svg = { path = "crates/jc-io-svg" }
-jc-format = { path = "crates/jc-format" }
-jc-image = { path = "crates/jc-image" }
-jc-look = { path = "crates/jc-look" }
-jc-ui = { path = "crates/jc-ui" }
-jc-ui-sketch = { path = "crates/jc-ui-sketch" }
-jc-ui-tools = { path = "crates/jc-ui-tools" }
-jc-ui-text = { path = "crates/jc-ui-text" }
-jc-ui-library = { path = "crates/jc-ui-library" }
-jc-ui-view3d = { path = "crates/jc-ui-view3d" }
-jc-measure = { path = "crates/jc-measure" }
-jc-fea = { path = "crates/jc-fea" }
-jc-flow = { path = "crates/jc-flow" }
-jc-study = { path = "crates/jc-study" }
-jc-render = { path = "crates/jc-render" }
-jc-kernel-truck = { path = "crates/jc-kernel-truck" }
-jc-kernel-smlib = { path = "crates/jc-kernel-smlib" }
+kmb-expr = { path = "crates/kmb-expr" }
+kmb-core = { path = "crates/kmb-core" }
+kmb-contract = { path = "crates/kmb-contract" }
+kmb-sketch = { path = "crates/kmb-sketch" }
+kmb-sketch-3d = { path = "crates/kmb-sketch-3d" }
+kmb-sketch-solver = { path = "crates/kmb-sketch-solver" }
+kmb-text = { path = "crates/kmb-text" }
+kmb-io-dxf = { path = "crates/kmb-io-dxf" }
+kmb-io-svg = { path = "crates/kmb-io-svg" }
+kmb-format = { path = "crates/kmb-format" }
+kmb-image = { path = "crates/kmb-image" }
+kmb-look = { path = "crates/kmb-look" }
+kmb-ui = { path = "crates/kmb-ui" }
+kmb-ui-sketch = { path = "crates/kmb-ui-sketch" }
+kmb-ui-tools = { path = "crates/kmb-ui-tools" }
+kmb-ui-text = { path = "crates/kmb-ui-text" }
+kmb-ui-library = { path = "crates/kmb-ui-library" }
+kmb-ui-view3d = { path = "crates/kmb-ui-view3d" }
+kmb-measure = { path = "crates/kmb-measure" }
+kmb-fea = { path = "crates/kmb-fea" }
+kmb-flow = { path = "crates/kmb-flow" }
+kmb-study = { path = "crates/kmb-study" }
+kmb-render = { path = "crates/kmb-render" }
+kmb-kernel-truck = { path = "crates/kmb-kernel-truck" }
+kmb-kernel-smlib = { path = "crates/kmb-kernel-smlib" }
 smlib-sys = { path = "crates/smlib-sys" }
-jc-solid = { path = "crates/jc-solid" }
-jc-cad = { path = "crates/jc-cad" }
-jc-interchange = { path = "crates/jc-interchange" }
-jc-cad-extrude = { path = "crates/jc-cad-extrude" }
-jc-cad-revolve = { path = "crates/jc-cad-revolve" }
-jc-cad-sweep = { path = "crates/jc-cad-sweep" }
-jc-cad-boolean = { path = "crates/jc-cad-boolean" }
-jc-cad-hole = { path = "crates/jc-cad-hole" }
-jc-cad-pattern = { path = "crates/jc-cad-pattern" }
-jc-cad-modify = { path = "crates/jc-cad-modify" }
-jc-asm = { path = "crates/jc-asm" }
-jc-cad-edge = { path = "crates/jc-cad-edge" }
-jc-cad-import-step = { path = "crates/jc-cad-import-step" }
-jc-sketch-canvas = { path = "crates/jc-sketch-canvas" }
-jc-scene = { path = "crates/jc-scene" }
-jc-config = { path = "crates/jc-config" }
-jc-io-stl = { path = "crates/jc-io-stl" }
-jc-io-view = { path = "crates/jc-io-view" }
-jc-io-render = { path = "crates/jc-io-render" }
-jc-cam-tool = { path = "crates/jc-cam-tool" }
-jc-cam-geom = { path = "crates/jc-cam-geom" }
-jc-cam-setup = { path = "crates/jc-cam-setup" }
-jc-toolpath = { path = "crates/jc-toolpath" }
-jc-toolpath-fit = { path = "crates/jc-toolpath-fit" }
-jc-toolpath-moves = { path = "crates/jc-toolpath-moves" }
-jc-strategy-pencil = { path = "crates/jc-strategy-pencil" }
-jc-strategy-face = { path = "crates/jc-strategy-face" }
-jc-strategy-raster3d = { path = "crates/jc-strategy-raster3d" }
-jc-strategy-waterline = { path = "crates/jc-strategy-waterline" }
-jc-cam-dropcutter = { path = "crates/jc-cam-dropcutter" }
-jc-strategy-rough3d = { path = "crates/jc-strategy-rough3d" }
-jc-strategy-contour2d = { path = "crates/jc-strategy-contour2d" }
-jc-strategy-chamfer = { path = "crates/jc-strategy-chamfer" }
-jc-strategy-engrave = { path = "crates/jc-strategy-engrave" }
-jc-strategy-laser = { path = "crates/jc-strategy-laser" }
-jc-strategy-pocket2d = { path = "crates/jc-strategy-pocket2d" }
-jc-strategy-adaptive2d = { path = "crates/jc-strategy-adaptive2d" }
-jc-strategy-drill = { path = "crates/jc-strategy-drill" }
-jc-post = { path = "crates/jc-post" }
-jc-post-carvera-air = { path = "crates/jc-post-carvera-air" }
-jc-gcode-read = { path = "crates/jc-gcode-read" }
-jc-plugin-host = { path = "crates/jc-plugin-host" }
-jc-sim = { path = "crates/jc-sim" }
-jc-cam-commands = { path = "crates/jc-cam-commands" }
-jc-cam-program = { path = "crates/jc-cam-program" }
-jc-bundle = { path = "crates/jc-bundle", default-features = false }
-jc-samples = { path = "crates/jc-samples" }
-jc-session = { path = "crates/jc-session" }
+kmb-solid = { path = "crates/kmb-solid" }
+kmb-cad = { path = "crates/kmb-cad" }
+kmb-interchange = { path = "crates/kmb-interchange" }
+kmb-cad-extrude = { path = "crates/kmb-cad-extrude" }
+kmb-cad-revolve = { path = "crates/kmb-cad-revolve" }
+kmb-cad-sweep = { path = "crates/kmb-cad-sweep" }
+kmb-cad-boolean = { path = "crates/kmb-cad-boolean" }
+kmb-cad-hole = { path = "crates/kmb-cad-hole" }
+kmb-cad-pattern = { path = "crates/kmb-cad-pattern" }
+kmb-cad-modify = { path = "crates/kmb-cad-modify" }
+kmb-asm = { path = "crates/kmb-asm" }
+kmb-cad-edge = { path = "crates/kmb-cad-edge" }
+kmb-cad-import-step = { path = "crates/kmb-cad-import-step" }
+kmb-sketch-canvas = { path = "crates/kmb-sketch-canvas" }
+kmb-scene = { path = "crates/kmb-scene" }
+kmb-config = { path = "crates/kmb-config" }
+kmb-io-stl = { path = "crates/kmb-io-stl" }
+kmb-io-view = { path = "crates/kmb-io-view" }
+kmb-io-render = { path = "crates/kmb-io-render" }
+kmb-cam-tool = { path = "crates/kmb-cam-tool" }
+kmb-cam-geom = { path = "crates/kmb-cam-geom" }
+kmb-cam-setup = { path = "crates/kmb-cam-setup" }
+kmb-toolpath = { path = "crates/kmb-toolpath" }
+kmb-toolpath-fit = { path = "crates/kmb-toolpath-fit" }
+kmb-toolpath-moves = { path = "crates/kmb-toolpath-moves" }
+kmb-strategy-pencil = { path = "crates/kmb-strategy-pencil" }
+kmb-strategy-face = { path = "crates/kmb-strategy-face" }
+kmb-strategy-raster3d = { path = "crates/kmb-strategy-raster3d" }
+kmb-strategy-waterline = { path = "crates/kmb-strategy-waterline" }
+kmb-cam-dropcutter = { path = "crates/kmb-cam-dropcutter" }
+kmb-strategy-rough3d = { path = "crates/kmb-strategy-rough3d" }
+kmb-strategy-contour2d = { path = "crates/kmb-strategy-contour2d" }
+kmb-strategy-chamfer = { path = "crates/kmb-strategy-chamfer" }
+kmb-strategy-engrave = { path = "crates/kmb-strategy-engrave" }
+kmb-strategy-laser = { path = "crates/kmb-strategy-laser" }
+kmb-strategy-pocket2d = { path = "crates/kmb-strategy-pocket2d" }
+kmb-strategy-adaptive2d = { path = "crates/kmb-strategy-adaptive2d" }
+kmb-strategy-drill = { path = "crates/kmb-strategy-drill" }
+kmb-post = { path = "crates/kmb-post" }
+kmb-post-carvera-air = { path = "crates/kmb-post-carvera-air" }
+kmb-gcode-read = { path = "crates/kmb-gcode-read" }
+kmb-plugin-host = { path = "crates/kmb-plugin-host" }
+kmb-sim = { path = "crates/kmb-sim" }
+kmb-cam-commands = { path = "crates/kmb-cam-commands" }
+kmb-cam-program = { path = "crates/kmb-cam-program" }
+kmb-bundle = { path = "crates/kmb-bundle", default-features = false }
+kmb-samples = { path = "crates/kmb-samples" }
+kmb-session = { path = "crates/kmb-session" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 miniz_oxide = "0.9.1"
@@ -95,7 +95,7 @@ crc32fast = "1.5.2"
 # 下絵の絵(PNG・JPEG・BMP)の読み書き。eframe 経由で既に Cargo.lock にある
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp"] }
 log = "0.4.34"
-# 輪郭のフォントの字の形(jc-text)。egui の epaint と同じ版
+# 輪郭のフォントの字の形(kmb-text)。egui の epaint と同じ版
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive"] }
 proptest = "1.12.0"
@@ -106,7 +106,7 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 rfd = "0.17.2"
 egui_kittest = "0.36.2"
-# 画面の部品の一覧(AccessKit の木)を読む(jc-ui の drive。MIT OR Apache-2.0)
+# 画面の部品の一覧(AccessKit の木)を読む(kmb-ui の drive。MIT OR Apache-2.0)
 accesskit_consumer = "0.35.0"
 # 画面の部品を並べる(Unity 式のドッキング。MIT)
 egui_dock = { version = "0.21.1", features = ["serde"] }
@@ -139,69 +139,69 @@ opt-level = 2
 debug = "line-tables-only"
 
 # シミュレーションは格子を細かく回すので、開発ビルドでも最適化する
-[profile.dev.package.jc-sim]
+[profile.dev.package.kmb-sim]
 opt-level = 2
 
 # 光線追跡と動画のコマは最適化なしだと何十倍も遅い
-[profile.dev.package.jc-render]
+[profile.dev.package.kmb-render]
 opt-level = 2
 
-[profile.dev.package.jc-io-render]
+[profile.dev.package.kmb-io-render]
 opt-level = 2
 
-[profile.dev.package.jc-strategy-raster3d]
+[profile.dev.package.kmb-strategy-raster3d]
 opt-level = 2
 
-[profile.dev.package.jc-strategy-waterline]
+[profile.dev.package.kmb-strategy-waterline]
 opt-level = 2
 
-[profile.dev.package.jc-cam-dropcutter]
+[profile.dev.package.kmb-cam-dropcutter]
 opt-level = 2
 
-[profile.dev.package.jc-strategy-adaptive2d]
+[profile.dev.package.kmb-strategy-adaptive2d]
 opt-level = 2
 
-[profile.dev.package.jc-strategy-pencil]
+[profile.dev.package.kmb-strategy-pencil]
 opt-level = 2
 
-[profile.dev.package.jc-strategy-rough3d]
+[profile.dev.package.kmb-strategy-rough3d]
 opt-level = 2
 
-[profile.dev.package.jc-toolpath-fit]
+[profile.dev.package.kmb-toolpath-fit]
 opt-level = 2
 
-# 加工の試験で時間の大半を使う所(工具の形、加工領域、経路のつなぎ。つなぎは jc-toolpath-moves)。どれも小さい crate なので、
+# 加工の試験で時間の大半を使う所(工具の形、加工領域、経路のつなぎ。つなぎは kmb-toolpath-moves)。どれも小さい crate なので、
 # 最適化してもコンパイルはほとんど延びない(2026-10-17 測定。docs/verify.md の 6 節)
-[profile.dev.package.jc-cam-tool]
+[profile.dev.package.kmb-cam-tool]
 opt-level = 2
 
-[profile.dev.package.jc-cam-geom]
+[profile.dev.package.kmb-cam-geom]
 opt-level = 2
 
-[profile.dev.package.jc-toolpath-moves]
+[profile.dev.package.kmb-toolpath-moves]
 opt-level = 2
 
-[profile.dev.package.jc-toolpath]
+[profile.dev.package.kmb-toolpath]
 opt-level = 2
 
 # 削った所の空振りを省く計算(高さの格子に工具を押す)。加工の見本と台本の時間の多くを使う
-[profile.dev.package.jc-cam-program]
+[profile.dev.package.kmb-cam-program]
 opt-level = 2
 
 # 流れの格子の計算は最適化なしだと 20 倍ほど遅く、試験が長くなる
-[profile.dev.package.jc-flow]
+[profile.dev.package.kmb-flow]
 opt-level = 2
 
 # 四面体の網づくりと代数的マルチグリッドは最適化なしだと 10 倍以上遅く、曲面の検算が長くなる
-[profile.dev.package.jc-fea]
+[profile.dev.package.kmb-fea]
 opt-level = 2
 
 # 結果の見せ方(断面・流線・帯の切り分け)はコマを送るたびに作るので、最適化なしだと再生が重い
-[profile.dev.package.jc-study]
+[profile.dev.package.kmb-study]
 opt-level = 2
 
 # truck のカーネルでの試験(`JC_KERNEL=truck`)が約 3 割速くなる(2026-10-15 測定)
-[profile.dev.package.jc-kernel-truck]
+[profile.dev.package.kmb-kernel-truck]
 opt-level = 2
 
 [workspace.lints.rust]
@@ -212,5 +212,5 @@ unsafe_code = "forbid"
 [patch.crates-io]
 truck-shapeops = { path = "third_party/truck-shapeops" }
 
-[profile.dev.package.jc-sketch-solver]
+[profile.dev.package.kmb-sketch-solver]
 opt-level = 2

@@ -47,7 +47,7 @@ pub fn parse(args: &[String]) -> Result<SweepOptions, String> {
     Ok(o)
 }
 
-/// 名前の終わりの `-<16 桁の 16 進>`(拡張子の前)。`libjc_ui-0123456789abcdef.rlib` → その 16 桁。
+/// 名前の終わりの `-<16 桁の 16 進>`(拡張子の前)。`libkmb_ui-0123456789abcdef.rlib` → その 16 桁。
 pub fn fingerprint_of(name: &str) -> Option<&str> {
     let stem = name.split('.').next().unwrap_or(name);
     let (_, h) = stem.rsplit_once('-')?;
@@ -294,9 +294,9 @@ fn ask(
 fn release_apps(target: &Path) -> Vec<&'static str> {
     let exe = if cfg!(windows) { ".exe" } else { "" };
     [
-        ("jc-app", "kie-monobench"),
-        ("jc-cli", "kmb"),
-        ("jc-mcp", "kmb-mcp"),
+        ("kmb-app", "kie-monobench"),
+        ("kmb-cli", "kmb"),
+        ("kmb-mcp", "kmb-mcp"),
     ]
     .into_iter()
     .filter(|(_, bin)| target.join("release").join(format!("{bin}{exe}")).is_file())
@@ -428,25 +428,25 @@ mod tests {
     #[test]
     fn fingerprints_are_read_from_artifact_names() {
         assert_eq!(
-            fingerprint_of("libjc_ui-0123456789abcdef.rlib"),
+            fingerprint_of("libkmb_ui-0123456789abcdef.rlib"),
             Some("0123456789abcdef")
         );
         assert_eq!(
-            fingerprint_of("jc-ui-0123456789abcdef"),
+            fingerprint_of("kmb-ui-0123456789abcdef"),
             Some("0123456789abcdef")
         );
         assert_eq!(
-            fingerprint_of("jc_ui-0123456789abcdef.pdb"),
+            fingerprint_of("kmb_ui-0123456789abcdef.pdb"),
             Some("0123456789abcdef")
         );
         assert_eq!(fingerprint_of("kie-monobench.exe"), None);
-        assert_eq!(fingerprint_of("jc_ui-1sc38580bcvvp"), None);
+        assert_eq!(fingerprint_of("kmb_ui-1sc38580bcvvp"), None);
     }
 
     #[test]
     fn only_listed_fingerprints_are_kept() {
         let lines = [
-            r#"{"reason":"compiler-artifact","fresh":true,"filenames":["/t/debug/deps/libjc_core-00000000000000aa.rlib"],"executable":null}"#,
+            r#"{"reason":"compiler-artifact","fresh":true,"filenames":["/t/debug/deps/libkmb_core-00000000000000aa.rlib"],"executable":null}"#,
             r#"{"reason":"compiler-artifact","fresh":false,"filenames":["/t/debug/build/smlib-sys-00000000000000bb/build-script-build"]}"#,
             r#"{"reason":"build-script-executed","out_dir":"/t/debug/build/smlib-sys-00000000000000cc/out"}"#,
             "not json",
@@ -462,15 +462,15 @@ mod tests {
         assert!(keep.targets.is_empty());
         assert_eq!(rebuilt, ["?(?)"]);
 
-        let dir = std::env::temp_dir().join(format!("jc-sweep-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-sweep-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         for f in [
-            "deps/libjc_core-00000000000000aa.rlib",
-            "deps/libjc_core-00000000000000dd.rlib",
+            "deps/libkmb_core-00000000000000aa.rlib",
+            "deps/libkmb_core-00000000000000dd.rlib",
             "build/smlib-sys-00000000000000cc/out/x",
             "build/smlib-sys-00000000000000ee/out/x",
-            ".fingerprint/jc-core-00000000000000dd/lib",
-            "incremental/jc_core-1sc38580bcvvp/s-1/x",
+            ".fingerprint/kmb-core-00000000000000dd/lib",
+            "incremental/kmb_core-1sc38580bcvvp/s-1/x",
         ] {
             let p = dir.join(f);
             fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -494,10 +494,10 @@ mod tests {
             [
                 (
                     ".fingerprint",
-                    ".fingerprint/jc-core-00000000000000dd".to_string()
+                    ".fingerprint/kmb-core-00000000000000dd".to_string()
                 ),
                 ("build", "build/smlib-sys-00000000000000ee".to_string()),
-                ("deps", "deps/libjc_core-00000000000000dd.rlib".to_string()),
+                ("deps", "deps/libkmb_core-00000000000000dd.rlib".to_string()),
             ]
         );
         // 使っていない日数を越えた incremental は消す候補
@@ -511,9 +511,9 @@ mod tests {
     }
     #[test]
     fn only_the_newest_finished_incremental_session_is_kept() {
-        let dir = std::env::temp_dir().join(format!("jc-sweep-inc-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-sweep-inc-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let c = dir.join("incremental/jc_core-1sc38580bcvvp");
+        let c = dir.join("incremental/kmb_core-1sc38580bcvvp");
         for d in [
             "s-hngrz1pi1r-0ejr8ys-1v55np94xv04z",
             "s-hngs88nqt9-0dmgt06-1v55np94xv04z",
@@ -563,7 +563,7 @@ mod tests {
         assert!(keep.hashes.is_empty());
         assert_eq!(keep.targets, ["bin-xtask".to_string()].into());
 
-        let dir = std::env::temp_dir().join(format!("jc-sweep-bin-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("kmb-sweep-bin-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         for f in [
             "deps/xtask.exe",

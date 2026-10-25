@@ -1,0 +1,26 @@
+[package]
+name = "kmb-io-dxf"
+description = "DXF(ASCII)の読み込みと書き出し、スケッチへの挿入と DXF での保存の操作"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# DXF・SVG はスケッチの形を読み書きするので CAD の層(G-code を読む kmb-gcode-read が CAM の層なのと同じ)
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-interchange.workspace = true
+kmb-sketch.workspace = true
+kmb-format.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-io-svg.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

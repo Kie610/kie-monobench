@@ -194,7 +194,7 @@ fn main() {
         println!("cargo:rustc-link-lib={stdlib}");
     }
 
-    // 中継層(jc-kernel-smlib)も書き直した見出しを先に探す
+    // 中継層(kmb-kernel-smlib)も書き直した見出しを先に探す
     // 中継層は別のフォルダで動くので、絶対のパスで渡す
     println!(
         "cargo:include={};{};{}",

@@ -105,7 +105,7 @@ const SOURCES: &[&str] = &[
 /// 名前を書いてよいファイルと理由。
 const ALLOWED_FILES: &[(&str, &str)] = &[
     (
-        "crates/jc-cam-tool/src/exchange.rs",
+        "crates/kmb-cam-tool/src/exchange.rs",
         "ほかの CAM の工具ライブラリの形式を読み書きする(保存したデータの鍵の名前も残す)",
     ),
     (
@@ -294,7 +294,7 @@ fn private_doc_in(line: &str) -> Vec<String> {
         }
         let t = token(&line[at..]);
         let rest = &t["design/".len()..];
-        // 作業空間の名前の `design/…`(設定の頁・ピンの鍵・jc-ui のフォルダ)は数えない
+        // 作業空間の名前の `design/…`(設定の頁・ピンの鍵・kmb-ui のフォルダ)は数えない
         if rest.starts_with(|c: char| c.is_ascii_digit())
             || rest.starts_with("特許")
             || DOC_EXTENSIONS
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn allowed_phrases_are_not_reported_but_patent_sections_are() {
-        assert!(problems("crates/jc-io-dxf/src/lib.rs", "b\"AutoCAD Binary DXF\"").is_empty());
+        assert!(problems("crates/kmb-io-dxf/src/lib.rs", "b\"AutoCAD Binary DXF\"").is_empty());
         // 特許の点検の記録も公開する物に載せないので、断片の中でも許さない
         let frag = "# 題\n\n## 作った物\n\n働き。\n\n## 特許の点検\n\nMakino の特許。\n";
         let ps = problems("docs/機能/2026-10-24-題-abcdef.md", frag);
@@ -402,7 +402,7 @@ mod tests {
         );
         assert_eq!(sources_in("ウィキペディアの表"), vec!["ウィキペディア"]);
         assert!(sources_in("amazonite xzenn ゼン").is_empty());
-        let ps = problems("crates/jc-x/src/lib.rs", "a\n/// 出典は Wikipedia\n");
+        let ps = problems("crates/kmb-x/src/lib.rs", "a\n/// 出典は Wikipedia\n");
         assert!(
             ps.len() == 1 && ps[0].contains(":2:") && ps[0].contains("出典"),
             "{ps:?}"
@@ -466,8 +466,8 @@ mod tests {
         for line in [
             r#"page(Tab::Design, "design/view", "3D の表示")"#,
             r#""design/スケッチ/直す": ["trim"]"#,
-            "jc-ui の `design/`・`assembly/` に分けた",
-            "crates/jc-strategy-drill/src/hole_ops/mod.rs",
+            "kmb-ui の `design/`・`assembly/` に分けた",
+            "crates/kmb-strategy-drill/src/hole_ops/mod.rs",
             "find(\"design/sketch.display\")",
         ] {
             assert!(private_doc_in(line).is_empty(), "{line}");
@@ -501,7 +501,7 @@ mod tests {
     fn third_party_licences_and_data_are_skipped() {
         assert!(skipped("third_party/truck-shapeops/src/lib.rs"));
         assert!(skipped("crates/smlib-sys/LICENSE-APACHE"));
-        assert!(skipped("crates/jc-kernel-truck/testdata/reference.step"));
-        assert!(!skipped("crates/jc-ui/src/lib.rs"));
+        assert!(skipped("crates/kmb-kernel-truck/testdata/reference.step"));
+        assert!(!skipped("crates/kmb-ui/src/lib.rs"));
     }
 }

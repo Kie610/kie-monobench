@@ -1,0 +1,40 @@
+[package]
+name = "kmb-solid"
+description = "CAD の機能を全部通した試験(試験だけの crate。ほかの crate からは使わない)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-look.workspace = true
+kmb-core.workspace = true
+kmb-sketch.workspace = true
+kmb-cad.workspace = true
+kmb-cad-extrude.workspace = true
+kmb-cad-revolve.workspace = true
+kmb-cad-sweep.workspace = true
+kmb-cad-boolean.workspace = true
+kmb-cad-hole.workspace = true
+kmb-cad-pattern.workspace = true
+kmb-cad-modify.workspace = true
+kmb-asm.workspace = true
+kmb-interchange.workspace = true
+kmb-cad-edge.workspace = true
+kmb-cad-import-step.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+kmb-samples.workspace = true
+kmb-text.workspace = true
+kmb-kernel-truck.workspace = true
+kmb-kernel-smlib.workspace = true
+kmb-contract.workspace = true
+
+[lints]
+workspace = true

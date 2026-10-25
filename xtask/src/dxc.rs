@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn places_the_dll_and_its_license_next_to_each_profile() {
-        let root = std::env::temp_dir().join(format!("jc-dxc-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("kmb-dxc-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let from = root.join("x");
         fs::create_dir_all(from.join("bin/x64")).unwrap();

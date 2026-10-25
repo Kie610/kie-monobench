@@ -1,0 +1,23 @@
+# 読み込んだ STEP に穴: ほかの CAD で作った見本の部品の STEP を、挿入の
+# 「STEP を読み込む…」で読み、板の上の面に直径 4 mm・深さ 3 mm の穴を空けると体積が減ること。
+# 前は SMLib でも STEP を網で読んだので、足し引きに使えなかった。
+# 体積は作った CAD の値 22806.876 mm³(crates/kmb-kernel-truck/testdata/README.md)。
+#! sample empty
+#! open ../../crates/kmb-kernel-truck/testdata/reference.step
+
+click "STEP を読み込む…"
+click "このまま"
+click "全体表示"
+click "体積を計測"
+until ~"体積 22806.8" 60s
+shot 読み込んだ後
+# 計測を閉じる(開いている間に面を押すと、計測する面になる)
+key Escape
+
+# 板の上の面(z = 10)を選び、その面の (20, 30) に穴を空ける
+pick step0:f16
+expect ~"選んだ面:" exists
+run cad.hole_on_face point=[20,30,10] diameter=4 depth=3
+click "体積を計測"
+until ~"体積 22769.1" 60s
+shot 穴を空けた後

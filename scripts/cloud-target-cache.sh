@@ -35,7 +35,7 @@ lock_stale_min=${JC_CACHE_LOCK_STALE_MIN:-90}
 # save が読み終わりを待つ長さ。過ぎたら前の組を消さずに置くのをやめる
 wait_s=${JC_CACHE_WAIT_S:-900}
 cd "$(dirname "$0")/.."
-hack_sum() { sha256sum crates/jc-workspace-hack/Cargo.toml | cut -c1-16; }
+hack_sum() { sha256sum crates/kmb-workspace-hack/Cargo.toml | cut -c1-16; }
 # 置かず戻さない物の型(tar の --exclude)。自前の crate のテストと実行ファイル(deps/<名前>-<16 桁>)、
 # lib(deps/lib<名前>-<16 桁>.rlib・.rmeta)、target/debug の直下の実行ファイル(deps の物と同じ実体)。
 # 置いた後に足した crate の物は残るが、次の save で除かれる。型を作れなければ何も除かない
@@ -110,7 +110,7 @@ restore)
         echo "空きが足りないので戻しません(空き $(( avail_kb / 1000000 )) GB、戻すと $(( need_kb / 1000000 )) GB + 残す ${margin_gb} GB)"
         exit 0
     fi
-    # 揃えた依存(jc-workspace-hack)が置いた時と違えば、自前の crate は全部別の指紋で作り直すので
+    # 揃えた依存(kmb-workspace-hack)が置いた時と違えば、自前の crate は全部別の指紋で作り直すので
     # incremental は使われない。戻さずに場所を空けておく
     skip=""
     saved_hack=$(printf '%s\n' "$snap" | sed -n 's/^hack: //p')

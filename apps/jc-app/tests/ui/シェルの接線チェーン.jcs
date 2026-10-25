@@ -1,9 +1,0 @@
-# シェルの編集パネルに「接線チェーン」が出て、既定で入。
-# 丸めでつながる面をたどる形は crates/jc-solid の the_tangent_chain_opens_the_faces_joined_smoothly で確かめる。
-#! sample part
-
-click "シェル"
-expect "接線チェーン" = "入"
-wait
-shot シェルの欄
-key Escape

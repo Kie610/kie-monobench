@@ -1,0 +1,35 @@
+[package]
+name = "kmb-cam-program"
+description = "セットアップごとのプログラムの組み立て・G-code の書き出し・シミュレーションのつなぎ・段取り表(画面の操作は kmb-cam-commands)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cam"
+
+[dependencies]
+kmb-core.workspace = true
+kmb-look.workspace = true
+kmb-format.workspace = true
+kmb-cam-tool.workspace = true
+kmb-cam-setup.workspace = true
+kmb-toolpath.workspace = true
+kmb-post.workspace = true
+kmb-sim.workspace = true
+kmb-gcode-read.workspace = true
+log.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-strategy-contour2d.workspace = true
+kmb-strategy-chamfer.workspace = true
+kmb-strategy-pocket2d.workspace = true
+kmb-strategy-face.workspace = true
+kmb-strategy-drill.workspace = true
+kmb-post-carvera-air.workspace = true
+
+[lints]
+workspace = true

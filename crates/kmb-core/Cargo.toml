@@ -1,0 +1,23 @@
+[package]
+name = "kmb-core"
+description = "文書モデル、タイムライン、依存の再計算、パラメータ、取り消し、イベント、保存形式、モジュールの区画"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "core"
+
+[dependencies]
+kmb-expr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

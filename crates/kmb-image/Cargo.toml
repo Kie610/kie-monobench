@@ -1,0 +1,20 @@
+[package]
+name = "kmb-image"
+description = "写真や図の絵(PNG・JPEG・BMP)を画素に読み、大きすぎる絵を縮めて書き直す(下絵のキャンバスやデカールが使う)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "core"
+
+[dependencies]
+image.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+kmb-format.workspace = true
+
+[lints]
+workspace = true
