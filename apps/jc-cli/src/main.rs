@@ -12,7 +12,7 @@ use std::process::ExitCode;
 
 #[derive(Parser)]
 #[command(
-    name = "jc",
+    name = "kmb",
     version,
     about = "kieMonoBench の文書を操作する",
     after_help = "終了の番号: 0 成功、1 入力の誤り、2 再計算の誤り、3 確かめで問題を見つけた(食い込みなど)、4 今は使えない操作、5 ファイルを読めない・書けない"
@@ -169,7 +169,7 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// 操作を ID で実行する(`jc actions` の一覧の ID)。文書を変える操作は保存し、書き出しは `--out` へ書く
+    /// 操作を ID で実行する(`kmb actions` の一覧の ID)。文書を変える操作は保存し、書き出しは `--out` へ書く
     Run {
         file: PathBuf,
         id: String,
@@ -239,12 +239,12 @@ enum ParamCommand {
     /// 書き出した表を読み込む(同じ名前のパラメータは上書き、無ければ足す。寸法・機能の値は
     /// この文書にある物だけ直す)
     Import { file: PathBuf, table: PathBuf },
-    /// 機能の値(押し出しの距離など)の式を変える。例: `jc param value part.json 5 distance 12`
+    /// 機能の値(押し出しの距離など)の式を変える。例: `kmb param value part.json 5 distance 12`
     Value {
         file: PathBuf,
         /// 機能の ID
         feature: u64,
-        /// 値の欄(`jc param views part.json --id 0` の行の `機能の ID:欄` の欄)
+        /// 値の欄(`kmb param views part.json --id 0` の行の `機能の ID:欄` の欄)
         key: String,
         /// 式(数だけなら今の単位を補う)
         expr: String,
@@ -292,7 +292,7 @@ enum ParamCommand {
 
 #[derive(Subcommand)]
 enum FeatureCommand {
-    /// 種類(`type_id`)の一覧は `jc types`、データの形は種類ごとの記述子。
+    /// 種類(`type_id`)の一覧は `kmb types`、データの形は種類ごとの記述子。
     Add {
         file: PathBuf,
         type_id: String,
@@ -320,13 +320,13 @@ enum FeatureCommand {
         id: u64,
     },
     /// 機能を写してタイムラインの今の位置に貼る。面・辺の選ぶ欄は空にする(`feature set` で選び直す)。
-    /// 貼った機能の ID を出す。例: `jc feature paste part.json 3 4`
+    /// 貼った機能の ID を出す。例: `kmb feature paste part.json 3 4`
     Paste {
         file: PathBuf,
         #[arg(required = true)]
         ids: Vec<u64>,
     },
-    /// 機能をまとめて、機能 `target` の前(`--after` なら後ろ)へ動かす。例: `jc feature move part.json 7 3 4`
+    /// 機能をまとめて、機能 `target` の前(`--after` なら後ろ)へ動かす。例: `kmb feature move part.json 7 3 4`
     Move {
         file: PathBuf,
         target: u64,
@@ -339,7 +339,7 @@ enum FeatureCommand {
 
 #[derive(Subcommand)]
 enum ComponentCommand {
-    /// 部品を中の部品ごと移す。先を付けなければ文書の直下へ。例: `jc component move part.json 3 --into 2`
+    /// 部品を中の部品ごと移す。先を付けなければ文書の直下へ。例: `kmb component move part.json 3 --into 2`
     Move {
         file: PathBuf,
         id: u64,
@@ -354,7 +354,7 @@ enum ComponentCommand {
         after: Option<u64>,
     },
     /// ボディ(そのボディを作った・変えたどれかの機能の ID)を部品へ移す。`--to` を省くと部品から外す。
-    /// 例: `jc component bodies part.json 5 7 --to 2`
+    /// 例: `kmb component bodies part.json 5 7 --to 2`
     Bodies {
         file: PathBuf,
         #[arg(required = true)]
@@ -370,7 +370,7 @@ enum ComponentCommand {
 enum ViewCommand {
     /// 名前を付けた視点の一覧を JSON で表示する
     List { file: PathBuf },
-    /// 視点に名前を付けて保存する。番号を出す。例: `jc view save part.json 斜め --target 0,0,0 --yaw -60 --pitch 30 --height 100`
+    /// 視点に名前を付けて保存する。番号を出す。例: `kmb view save part.json 斜め --target 0,0,0 --yaw -60 --pitch 30 --height 100`
     Save {
         file: PathBuf,
         /// 視点の名前(空なら「視点N」)
@@ -600,7 +600,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 activate(&mut w, component)?;
                 let id = w
                     .add_feature(&type_id, name.as_deref(), data)
-                    .map_err(|e| e.replace("(types で一覧)", "(`jc types` で一覧)"))?;
+                    .map_err(|e| e.replace("(types で一覧)", "(`kmb types` で一覧)"))?;
                 w.save(None)?;
                 println!("{id}");
             }
@@ -1056,10 +1056,10 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
 
 fn main() -> ExitCode {
     // ログとクラッシュ報告を手元に残す(送信しない)。残せなくても動く
-    jc_session::logging::init(jc_session::default_data_dir().as_deref(), "jc-cli");
+    jc_session::logging::init(jc_session::default_data_dir().as_deref(), "kmb-cli");
     log::info!("引数: {:?}", std::env::args().skip(1).collect::<Vec<_>>());
     let _crash = jc_session::default_data_dir().and_then(|d| {
-        jc_session::crash::install(&d, "jc-cli")
+        jc_session::crash::install(&d, "kmb-cli")
             .map_err(|e| eprintln!("クラッシュ報告を残せません: {e}"))
             .ok()
     });

@@ -18,8 +18,8 @@ We treat issues like these as vulnerabilities:
 
 - 読んだファイル(文書・STEP・DXF・メッシュ・画像・ポストのプラグイン)で、許した範囲の外へ書く・外のコードを動かす・情報を外へ出す
   A file that is opened (document, STEP, DXF, mesh, image, post-processor plug-in) writes outside the allowed folders, runs outside code, or leaks information
-- MCP のサーバ(`jc-mcp`)や画面の「AI との接続」から、許したフォルダの外を読み書きできる
-  The MCP server (`jc-mcp`) or the "connect to AI" setting can read or write outside the allowed folders
+- MCP のサーバ(`kmb-mcp`)や画面の「AI との接続」から、許したフォルダの外を読み書きできる
+  The MCP server (`kmb-mcp`) or the "connect to AI" setting can read or write outside the allowed folders
 - WASM のポストのプラグインが、ファイル・ネットワーク・時計に触れられる
   A WASM post-processor plug-in can reach files, the network or the clock
 

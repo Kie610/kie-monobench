@@ -1,4 +1,4 @@
-//! CLI(`jc`)を実際に起動して確かめる試験。画面の無い同じ道(`jc_session::Headless`)と結果を比べ、
+//! CLI(`kmb`)を実際に起動して確かめる試験。画面の無い同じ道(`jc_session::Headless`)と結果を比べ、
 //! CLI だけが別の作り方をして結果が変わる所を捕まえる。
 
 use serde_json::Value;
@@ -13,15 +13,15 @@ fn temp_dir(name: &str) -> PathBuf {
     d
 }
 
-/// `jc` を引数 `args` で走らせ、(成功したか, 標準出力, 標準エラー)を返す。
+/// `kmb` を引数 `args` で走らせ、(成功したか, 標準出力, 標準エラー)を返す。
 fn jc(dir: &Path, args: &[&str]) -> (bool, String, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_jc"))
+    let out = Command::new(env!("CARGO_BIN_EXE_kmb"))
         .args(args)
         .current_dir(dir)
         .env("XDG_DATA_HOME", dir.join("data"))
         .env("APPDATA", dir.join("data"))
         .output()
-        .expect("jc を起動できる");
+        .expect("kmb を起動できる");
     (
         out.status.success(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -31,19 +31,19 @@ fn jc(dir: &Path, args: &[&str]) -> (bool, String, String) {
 
 fn ok(dir: &Path, args: &[&str]) -> String {
     let (ok, out, err) = jc(dir, args);
-    assert!(ok, "jc {args:?} が失敗した: {out}{err}");
+    assert!(ok, "kmb {args:?} が失敗した: {out}{err}");
     out
 }
 
-/// `jc` を走らせ、終了の番号を返す。
+/// `kmb` を走らせ、終了の番号を返す。
 fn exit_code(dir: &Path, args: &[&str]) -> i32 {
-    Command::new(env!("CARGO_BIN_EXE_jc"))
+    Command::new(env!("CARGO_BIN_EXE_kmb"))
         .args(args)
         .current_dir(dir)
         .env("XDG_DATA_HOME", dir.join("data"))
         .env("APPDATA", dir.join("data"))
         .output()
-        .expect("jc を起動できる")
+        .expect("kmb を起動できる")
         .status
         .code()
         .expect("終了の番号")

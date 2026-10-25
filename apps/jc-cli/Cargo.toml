@@ -10,7 +10,7 @@ rust-version.workspace = true
 layer = "app"
 
 [[bin]]
-name = "jc"
+name = "kmb"
 path = "src/main.rs"
 
 [dependencies]

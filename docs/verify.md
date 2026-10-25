@@ -131,7 +131,7 @@ Cargo は、選んだ crate の組み合わせごとに依存先の機能(featur
   - 利用者の PC と同じ大きさと倍率で撮る: `SHOT_SIZE=3840x2068 SHOT_SCALE=2`(4K・表示倍率 200%)。決まった場面の試験(`apps/jc-app/tests/screens.rs`)は `JC_SCREENS_SIZE=1920x1034 JC_SCREENS_SCALE=2`。
   - 手順のファイルは bash で、`shot 名前`・`click x y`・`rclick`・`move`・`key`・`type`・`wait` が使える(座標は 1280×760 の画面)。
   - 要るもの: Xvfb、xdotool、ImageMagick、mesa-vulkan-drivers(lavapipe)、libxkbcommon-x11-0、fonts-ipafont-gothic。描画は `WGPU_BACKEND=vulkan` と lavapipe(スクリプトの中で設定する)。
-- 絵と動画(2026-10-19): 材質の表示とレンダリングの作業空間の写真は `JC_SCREENS_OUT=out cargo test -p jc-app --test screens write_render_screens -- --ignored`(96〜101。96 は「材質の質感」を切った前と同じ描き方)。削る様子の動画の見本は同じ所の `write_sim_video_sample`(102 の GIF)。人の手順で確かめる文書 `基準部品-ウォルナット.json` も同じ所に書く。CLI では `jc export <文書> out.png`(静止画)・`out.gif`・`out.mp4`(回す動画)・`out.glb`。
+- 絵と動画(2026-10-19): 材質の表示とレンダリングの作業空間の写真は `JC_SCREENS_OUT=out cargo test -p jc-app --test screens write_render_screens -- --ignored`(96〜101。96 は「材質の質感」を切った前と同じ描き方)。削る様子の動画の見本は同じ所の `write_sim_video_sample`(102 の GIF)。人の手順で確かめる文書 `基準部品-ウォルナット.json` も同じ所に書く。CLI では `kmb export <文書> out.png`(静止画)・`out.gif`・`out.mp4`(回す動画)・`out.glb`。
   - glTF は Khronos の glTF-Validator(npm の `gltf-validator`)で誤り 0 を確かめる。MP4 は ffprobe と ffmpeg で読み、AV1 は絵に戻して元の絵と比べる(試験 `av1::tests::frames_become_a_readable_av1_mp4`。ffmpeg が無ければ中身は飛ばす)。
   - Windows の H.264(Media Foundation)は Windows でしか動かないので PC で: `cargo test -p jc-io-render mf`(`--all` にも入る。Media Foundation の無い Windows では理由を出して飛ばす)。アプリでは回す動画を .mp4 で書き、知らせに「H.264」と出て再生できるかを見る。
   - 光線追跡と動画のコマは開発ビルドでも最適化する(ルートの Cargo.toml の `profile.dev.package.jc-render`・`jc-io-render`)。
@@ -155,7 +155,7 @@ Cargo は、選んだ crate の組み合わせごとに依存先の機能(featur
 | Windows | `%APPDATA%\kie-monobench\logs\` |
 | Linux | `~/.local/share/kie-monobench/logs/`(`XDG_DATA_HOME` があればその下) |
 
-- 画面(`kie-monobench`)・CLI(`jc-cli`)・MCP(`jc-mcp`)の起動ごとに 1 ファイル(`<アプリ>-<UTC の日時>-<pid>.log`)。どこへも送らない。
+- 画面(`kie-monobench`)・CLI(`kmb`。ログの名前は `kmb-cli`)・MCP(`kmb-mcp`)の起動ごとに 1 ファイル(`<アプリ>-<UTC の日時>-<pid>.log`)。どこへも送らない。
 - アプリごとに新しい 20 ファイルを残す(CLI を何度呼んでも画面のログは消えない)。1 ファイルが 20 MB を超えたら、それ以降は書かない。
 - 1 行ずつ書くので、SMLib の C++ の中で落ちても直前の行まで残る。
 - 時刻は UTC(日本時間は 9 時間足す)。行の形: `2026-10-14T12:34:56.789Z INFO  [スレッド名] jc_core::document: 変更: 押し出し`
@@ -333,7 +333,7 @@ cargo は、依存の機能・プロファイル(`Cargo.toml` の `[profile]`)�
 | `deps`・`build`・`.fingerprint`・`examples` | 名前の指紋が、今の組み立てに無いもの |
 | `incremental`(自前の crate のコンパイルの途中結果) | 名前から指紋が分からないので、`--keep-days`(既定 3)日より前から使っていないもの |
 
-- 問い合わせる組み立て: テスト(`cargo test --workspace --no-run`)、clippy(`--workspace --all-targets -- -D warnings`)、xtask。`target/release` にアプリ(`kie-monobench`・`jc-cli`・`jc-mcp`)があれば、その `cargo build --release -p ...` も(`cargo xtask release` と同じパスの置き換えの引数を付ける。12 節)。足りないものがあれば、問い合わせの中で作る(次のビルドで作るはずだったもの)。
+- 問い合わせる組み立て: テスト(`cargo test --workspace --no-run`)、clippy(`--workspace --all-targets -- -D warnings`)、xtask。`target/release` にアプリ(`kie-monobench`・`kmb`・`kmb-mcp`)があれば、その `cargo build --release -p ...` も(`cargo xtask release` と同じパスの置き換えの引数を付ける。12 節)。足りないものがあれば、問い合わせの中で作る(次のビルドで作るはずだったもの)。
 - 既定は見積もりだけ(分類ごとの GB を出し、何も消さない)。`--yes` で消し、消した後にもう一度問い合わせて、作り直した crate の数を出す(0 なら次のビルドは遅くならない)。
 - 次のビルドへの影響: deps・build・.fingerprint は今の組み立てが使わないものだけなので、無い。incremental を消した crate は、次にその crate を直した時に 1 回だけ全部をコンパイルし直す。rust-analyzer の `cargo check` の結果は問い合わせに入らないので消え、次に開いた時に自前の crate を調べ直す。
 - SMLib の C++ の取っておき(`target/smlib-cache`)は build.rs が新しい 4 つ・512 MB までに保つので、対象にしない。
@@ -357,7 +357,7 @@ cargo は、依存の機能・プロファイル(`Cargo.toml` の `[profile]`)�
 
 ## 9. 計算の速さ(2026-10-19)
 
-G-code(`jc gcode`)とシミュレーションの報告(`jc sim`)を変えずに、再計算・面取り・フィレット・仕上げ・シミュレーションを速くした時の決まり。
+G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えずに、再計算・面取り・フィレット・仕上げ・シミュレーションを速くした時の決まり。
 
 - 加工の操作とセットアップは、互いに依存しなければ別々のスレッドで計算する(jc-core の `CONCURRENT` の印。結果は機能の順に並べる)。数は既定で CPU の数、`JC_RECOMPUTE_THREADS=1` で 1 つずつ(比べる時)。ログは `JC_LOG=info,jc_core::recompute=debug` で「同時に計算した: …」。
 - 面取り・フィレット・穴は、ブーリアンの前後の体積を比べて壊れた形を見つける。前は表面積と外形の箱まで求める `mass` を毎回 2 回呼んでいた(この時間が 9 割)。体積だけの `Kernel::volume` を使い、SMLib は形ごとに覚える。

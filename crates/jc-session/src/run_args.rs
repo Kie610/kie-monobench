@@ -1,4 +1,4 @@
-//! CLI の `jc run`・`jc actions` とコマンド欄の `run` が共有する、操作の引数の読み方と一覧の文。
+//! CLI の `kmb run`・`kmb actions` とコマンド欄の `run` が共有する、操作の引数の読み方と一覧の文。
 //! 引数の確かめ(知らない鍵・型・単位)は操作の宣言([`jc_core::Action::args`])で核が行う。
 
 use jc_core::{Action, Arg, ArgKind, FieldUnit};
