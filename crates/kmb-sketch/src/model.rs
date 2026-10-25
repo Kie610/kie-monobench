@@ -556,11 +556,35 @@ pub enum SketchPlane {
         #[serde(default, skip_serializing_if = "FaceOrigin::is_world")]
         origin: FaceOrigin,
     },
+    /// 作業平面(機能 `feature` の出力 [`kmb_interchange::DATUM_OUTPUT`])の上。原点と X・Y の
+    /// 向きは作業平面のまま。作業平面を作れなければ、このスケッチも誤りになる(ほかの平面へ移さない)
+    Datum { feature: kmb_core::FeatureId },
 }
 
 impl SketchPlane {
     pub fn is_xy(&self) -> bool {
         *self == SketchPlane::Xy
+    }
+
+    /// 平面を決めるのに読む出力(面ならボディ、作業平面ならその形)。
+    pub fn inputs(&self) -> Vec<kmb_core::InputRef> {
+        let (feature, slot) = match self {
+            SketchPlane::Face { feature, .. } => (*feature, "body"),
+            SketchPlane::Datum { feature } => (*feature, kmb_interchange::DATUM_OUTPUT),
+            _ => return Vec::new(),
+        };
+        vec![kmb_core::InputRef::Output {
+            feature,
+            slot: slot.into(),
+        }]
+    }
+
+    /// 平面の元の機能(面のボディか作業平面)。XY・YZ・ZX は `None`。
+    pub fn source(&self) -> Option<kmb_core::FeatureId> {
+        match self {
+            SketchPlane::Face { feature, .. } | SketchPlane::Datum { feature } => Some(*feature),
+            _ => None,
+        }
     }
 
     /// 面の上の平面(原点は世界の原点を写した点。[`FaceOrigin::World`])。

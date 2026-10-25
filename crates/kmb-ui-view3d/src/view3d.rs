@@ -542,7 +542,12 @@ pub fn view3d(
     // 全部の面の後に描き、重ならないよう下へずらす
     let mut tags: Vec<(Rect, std::sync::Arc<egui::Galley>, Color32)> = Vec::new();
     for pl in &overlay.planes {
-        let color = colors.inks.height(pl.ink);
+        // 作業平面は基準面と同じ灰色、ほかは加工の高さの色
+        let color = if pl.ink == kmb_interchange::ink::plane::DATUM {
+            colors.machine
+        } else {
+            colors.inks.height(pl.ink)
+        };
         let pts: Vec<Pos2> = pl
             .corners
             .iter()

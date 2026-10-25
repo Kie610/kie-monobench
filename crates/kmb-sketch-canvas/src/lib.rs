@@ -151,10 +151,7 @@ fn key_of(image: &str) -> u64 {
 
 impl Feature for Canvas {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v = Vec::new();
-        if let SketchPlane::Face { feature, .. } = &self.plane {
-            v.push(kmb_cad::output(*feature, "body"));
-        }
+        let mut v = self.plane.inputs();
         v.extend(expr_refs(self)?);
         Ok(v)
     }

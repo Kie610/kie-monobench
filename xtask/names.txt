@@ -37,6 +37,7 @@ asm.new_rigid_group	kmb-asm
 asm.position@1	kmb-asm
 asm.rigid_group@1	kmb-asm
 asm.snap_joint	kmb-asm
+cad.add.datum_plane	kmb-cad-datum
 cad.add.sketch	kmb-sketch
 cad.add.sketch3d	kmb-sketch-3d
 cad.canvas@1	kmb-sketch-canvas
@@ -51,6 +52,7 @@ cad.config.remove_column	kmb-config
 cad.config.remove_row	kmb-config
 cad.config.set	kmb-config
 cad.config.update_row	kmb-config
+cad.datum_plane@1	kmb-cad-datum
 cad.draft_plane	kmb-cad-modify
 cad.extrude	kmb-cad-extrude
 cad.extrude_regions	kmb-cad-extrude
