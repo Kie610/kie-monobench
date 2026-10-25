@@ -10,13 +10,13 @@
   <a href="README.md">日本語</a> · English
 </p>
 
-![The Design workspace with the sample plate with holes and a pocket open, and its hole pattern selected](docs/screenshots/design.png)
+![The Design workspace editing the extrusion of the sample plate, previewing it in both directions](docs/screenshots/design.png)
 
-*The Design workspace: a tabbed toolbar per workspace at the top, the browser on the left, the timeline at the bottom and the edit panel on the right. The user interface is currently in Japanese only.*
+*The Design workspace: a tabbed toolbar per workspace at the top, the browser on the left, the timeline at the bottom and the edit panel on the right. Here the extrusion of the sample plate is being edited: setting the direction to both sides and typing the back distance previews the new shape in blue. The user interface is currently in Japanese only.*
 
-![The Machining workspace showing the toolpaths of a setup for the same plate](docs/screenshots/machining.png)
+![The Machining workspace previewing a 3D roughing toolpath while its settings are edited](docs/screenshots/machining.png)
 
-*The Machining workspace: facing, contour, pocket and drilling toolpaths for the same plate, drawn with the stock, the work origin and the machine's travel. Clicking an operation in the strip at the bottom shows the shape after that operation.*
+*The Machining workspace: operations made from the design model are listed in the setup tree on the left. Linking the 3D roughing passes into a spiral and rounding its corners regenerates the toolpath, shown with the clearance, retract, top and bottom heights.*
 
 This is work in progress and there are no prebuilt downloads yet. Build it from source.
 
