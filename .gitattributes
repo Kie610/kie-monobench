@@ -1,0 +1,12 @@
+# 改行をそろえる。文字のファイルはリポジトリでも作業場でも LF にし、Windows で CRLF に変えて
+# 点検・スナップショット・G-code の比べ合わせが揺れないようにする。
+* text=auto eol=lf
+
+# 文字として扱わない物
+*.png  binary
+*.gif  binary
+*.jpg  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.wasm binary

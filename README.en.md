@@ -7,6 +7,15 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Kie610/kie-monobench/releases/latest"><img alt="Download (Windows, Linux)" src="https://img.shields.io/badge/Download-Windows%20%C2%B7%20Linux-2ea44f?style=for-the-badge" /></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Kie610/kie-monobench/releases/latest"><img alt="latest release" src="https://img.shields.io/github/v/release/Kie610/kie-monobench?label=latest%20release" /></a>
+  <a href="#licence"><img alt="licence: MIT OR Apache-2.0" src="https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue" /></a>
+</p>
+
+<p align="center">
   <a href="README.md">日本語</a> · English
 </p>
 
@@ -22,7 +31,7 @@
 
 *The Machining workspace: operations made from the design model are listed in the setup tree on the left. Linking the 3D roughing passes into a spiral and rounding its corners regenerates the toolpath, shown with the clearance, retract, top and bottom heights.*
 
-This is work in progress and there are no prebuilt downloads yet. Build it from source.
+Prebuilt packages (Windows 10/11 x64 and Linux x86_64) are on the [latest release page](https://github.com/Kie610/kie-monobench/releases/latest). Extract and run; there is no installer. They are not signed yet, so Windows may show a confirmation window on first start. This is still work in progress; what it cannot do yet and what is planned are listed (in Japanese) in [docs/できないことと予定.md](docs/できないことと予定.md). To build from source, see "Building".
 
 The desktop app is `kie-monobench`, the CLI is `kmb` and the MCP server is `kmb-mcp` (the crates are still `kmb-cli` and `kmb-mcp`). Documents use the `.kmb` extension (the content is JSON). On first start, the data folder of the earlier working name (`jisaku-cadcam`) is carried over, and `.json` documents still open.
 
