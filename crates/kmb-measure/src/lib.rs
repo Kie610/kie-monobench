@@ -8,6 +8,7 @@
 //! 円の辺は網の点から円を求め直して径・中心を出す(網の点は円の上にある)。
 //! 円柱の面(穴の壁)も網の点から軸と径を求め、穴は中心(円の辺)か軸(円柱の面)から測る。
 
+use kmb_core::kernel::{cross, dot};
 use kmb_core::{FacePick as Pick, FeatureId, Kernel, MassProps, Mesh, ShapeHandle};
 use serde::Serialize;
 
@@ -194,18 +195,6 @@ fn add(a: P, b: P) -> P {
 
 fn scale(a: P, s: f64) -> P {
     [a[0] * s, a[1] * s, a[2] * s]
-}
-
-fn dot(a: P, b: P) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn cross(a: P, b: P) -> P {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
 }
 
 fn len(a: P) -> f64 {

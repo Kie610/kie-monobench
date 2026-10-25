@@ -112,6 +112,15 @@ const UI_EXTENSIONS: &[(&str, &[&str])] = &[
     ("kmb-ui-text", &["kmb-text"]),
 ];
 
+/// 加工の層の上の段: 戦略を使う側(戦略はこれらに依存しない。ポストは別に見る)。
+const CAM_TOP: &[&str] = &[
+    "kmb-cam-commands",
+    "kmb-cam-program",
+    "kmb-sim",
+    "kmb-gcode-read",
+    "kmb-plugin-host",
+];
+
 /// 他の層の crate を出し直してよい所(層が違っても、使う側がその層を直接使ってよい物)。
 /// (crate, 出し直す crate, 理由)
 const REEXPORT_KNOWN: &[(&str, &str, &str)] = &[];
@@ -292,6 +301,13 @@ impl<'a> Graph<'a> {
                     if d == "kmb-post" || d.starts_with("kmb-post-") {
                         out.push(format!(
                             "{n} が {d} に依存している。戦略が使う機械の値は kmb_cam_setup::MachineView に足して入力で受け取る"
+                        ));
+                    }
+                    // 加工の上の段(操作・プログラム・シミュレーション・読み戻し・プラグイン)は戦略を使う側
+                    if CAM_TOP.contains(&d) {
+                        out.push(format!(
+                            "{n} が加工の上の段 {d} に依存している。戦略が使ってよいのは加工の土台(工具・幾何・\
+                             セットアップ・経路)だけ"
                         ));
                     }
                 }
@@ -750,6 +766,26 @@ mod tests {
         let p = problems(&bad);
         assert_eq!(p.len(), 1, "{p:?}");
         assert!(p[0].contains("kmb-strategy-x が kmb-post に依存している"));
+    }
+
+    #[test]
+    fn strategies_do_not_depend_on_the_upper_cam_crates_except_in_tests() {
+        let ok = [
+            pkg("kmb-expr", "core", &[]),
+            pkg("kmb-core", "core", &[("kmb-expr", Normal)]),
+            pkg("kmb-cam-commands", "cam", &[("kmb-core", Normal)]),
+            pkg(
+                "kmb-strategy-x",
+                "cam",
+                &[("kmb-core", Normal), ("kmb-cam-commands", Dev)],
+            ),
+        ];
+        assert_eq!(problems(&ok), Vec::<String>::new());
+        let mut bad = ok.to_vec();
+        bad[3] = pkg("kmb-strategy-x", "cam", &[("kmb-cam-commands", Normal)]);
+        let p = problems(&bad);
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert!(p[0].contains("kmb-strategy-x が加工の上の段 kmb-cam-commands に依存している"));
     }
 
     #[test]

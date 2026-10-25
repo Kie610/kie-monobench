@@ -14,6 +14,7 @@
 //! - docs に取り込みの衝突の印(`<<<<<<<`・`>>>>>>>`)が残る。表が見出しと区切りの行で始まらない
 //! - docs/地図.md の crate の一覧が Cargo.toml と合わない
 //! - 断片の「決定:」が plan.md・policy.md の「(決定: 名前)」に無い。同じ名前の決定が 2 つある
+//! - 資料のリンク(`[字](相対のパス)`)の先のファイルが無い(docs・直下の資料・分野の決まり)
 //!
 //! Kie が作ると決めた事は plan.md・policy.md の行に「(決定: 名前)」を付け、作った断片の頭に
 //! 「- 決定: 名前」を書く。まだ断片の無い決定は `cargo xtask docs` が一覧に出す(2026-10-23、
@@ -435,6 +436,31 @@ pub fn check(root: &Path, packages: &[Package], base: &Base, changed: &[String])
         };
         out.extend(markdown_problems(&rel, &text));
     }
+    // 資料のリンクの先
+    let mut linked = md_files(&root.join("docs"));
+    linked.extend(md_files(&root.join(".claude/rules")));
+    for f in ["AGENTS.md", "CLAUDE.md", "README.md"] {
+        linked.push(root.join(f));
+    }
+    for f in linked {
+        let Ok(text) = fs::read_to_string(&f) else {
+            continue;
+        };
+        let rel = f.strip_prefix(root).unwrap_or(&f);
+        let dir = rel.parent().unwrap_or(Path::new(""));
+        for (line, target) in local_links(&text) {
+            let path = match target.strip_prefix('/') {
+                Some(t) => PathBuf::from(t),
+                None => dir.join(&target),
+            };
+            if !root.join(&path).exists() {
+                out.push(format!(
+                    "{}:{line}: リンクの先 {target} が無い",
+                    rel.to_string_lossy().replace('\\', "/")
+                ));
+            }
+        }
+    }
     // 地図.md の crate の一覧
     match fs::read_to_string(root.join("docs/地図.md")) {
         Ok(map) => match map_with_list(&map, &crate_list(packages)) {
@@ -529,6 +555,63 @@ pub fn markdown_problems(file: &str, text: &str) -> Vec<String> {
     out
 }
 
+/// リポジトリの中を指すリンク(行の番号、`#` の前のパスを %xx から戻した物)。
+/// 外への URL・同じ資料の中の `#見出し`・コードの中は除く。
+pub fn local_links(text: &str) -> Vec<(usize, String)> {
+    let mut out = vec![];
+    let mut fence = false;
+    for (i, l) in text.lines().enumerate() {
+        if l.trim_start().starts_with("```") {
+            fence = !fence;
+            continue;
+        }
+        if fence {
+            continue;
+        }
+        // `…` の中を除く
+        let plain: String = l.split('`').step_by(2).collect::<Vec<_>>().join(" ");
+        let mut rest = plain.as_str();
+        while let Some(at) = rest.find("](") {
+            rest = &rest[at + 2..];
+            let Some(end) = rest.find(')') else {
+                break;
+            };
+            let target = rest[..end].split_whitespace().next().unwrap_or("");
+            rest = &rest[end..];
+            let path = target.split('#').next().unwrap_or("");
+            let external = target
+                .split_once(':')
+                .is_some_and(|(s, _)| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphabetic()));
+            if path.is_empty() || external {
+                continue;
+            }
+            out.push((i + 1, percent_decoded(path)));
+        }
+    }
+    out
+}
+
+/// `%E5%9B%B3` のような書き方を元の字に戻す(戻せない所はそのまま)。
+fn percent_decoded(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && let Some(v) = s
+                .get(i + 1..i + 3)
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+        {
+            out.push(v);
+            i += 3;
+            continue;
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
+}
+
 fn md_files(dir: &Path) -> Vec<PathBuf> {
     let mut out = vec![];
     let Ok(rd) = fs::read_dir(dir) else {
@@ -551,6 +634,21 @@ mod tests {
     use super::*;
 
     const GOOD: &str = "# トレース\n\n- 日付: 2026-10-21\n\n## 作った物\n\n線をなぞる。\n";
+
+    #[test]
+    fn local_links_skip_urls_anchors_and_code() {
+        let text = "[a](地図.md) [b](https://x.jp/y) [c](#節)\n\
+                    `[d](無い.md)` [e](../AGENTS.md#1-何を作るか)\n\
+                    ```\n[f](無い.md)\n```\n[g](%E5%9C%B0%E5%9B%B3.md \"題\")\n";
+        assert_eq!(
+            local_links(text),
+            vec![
+                (1, "地図.md".to_string()),
+                (2, "../AGENTS.md".to_string()),
+                (6, "地図.md".to_string()),
+            ]
+        );
+    }
 
     #[test]
     fn fragment_shape() {
