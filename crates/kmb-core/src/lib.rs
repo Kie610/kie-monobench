@@ -32,11 +32,11 @@ pub use document::{
 };
 pub use extension::{
     Action, ActionRole, BoxInk, BoxKind, Context, Dof, Drag, DragMotion, EdgePick, Edit, Extension,
-    Extensions, FacePick, Frame, FrameBar, Gesture, Handle, HandleChoice, Input, Job, JobReport,
-    KindRole, LineInk, LineKind, LinkInfo, LinkStatus, MarkKind, Outcome, Overlay, OverlayPicture,
-    OverlayPlane, OverlayShape, Place, PlaneInk, Playback, RunState, RunTone, Series, Settings,
-    SettingsRole, ShapeInk, Stage, StageBand, StepMark, Table, TableColumn, TableMark, TableOption,
-    sibling_path,
+    Extensions, FacePick, FileGate, Frame, FrameBar, Gesture, Handle, HandleChoice, Input, Job,
+    JobReport, KindRole, LineInk, LineKind, LinkInfo, LinkStatus, MarkKind, Outcome, Overlay,
+    OverlayPicture, OverlayPlane, OverlayShape, Place, PlaneInk, Playback, RunState, RunTone,
+    Series, Settings, SettingsRole, ShapeInk, Stage, StageBand, StepMark, Table, TableColumn,
+    TableMark, TableOption, sibling_path,
 };
 pub use extension::{JobControl, JobProgress};
 pub use feature::{

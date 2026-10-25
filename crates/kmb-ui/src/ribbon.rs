@@ -45,6 +45,7 @@ fn tab_plan(space: Space) -> &'static [(&'static str, &'static [&'static str])] 
             &[
                 "作成",
                 "修正",
+                "構築",
                 "パターン",
                 "組立",
                 "検査",

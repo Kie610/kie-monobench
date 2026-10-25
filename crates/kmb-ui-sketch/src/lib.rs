@@ -330,6 +330,12 @@ fn sketch_plane(host: &EditorHost<'_>, plane: &kmb_sketch::SketchPlane) -> Optio
                 .ok()?
                 .0
         }
+        P::Datum { feature } => {
+            <kmb_interchange::DatumPlane as kmb_core::Payload>::from_value(
+                host.output(*feature, kmb_interchange::DATUM_OUTPUT)?,
+            )?
+            .plane
+        }
     })
 }
 
@@ -517,6 +523,7 @@ fn plane_label(plane: &kmb_sketch::SketchPlane) -> &'static str {
         P::Yz => "YZ 平面",
         P::Zx => "ZX 平面",
         P::Face { .. } => "面の上",
+        P::Datum { .. } => "作業平面の上",
     }
 }
 

@@ -58,6 +58,7 @@ pub fn all() -> Vec<Module> {
         kmb_cad_revolve::module(),
         kmb_cad_sweep::module(),
         kmb_cad_boolean::module(),
+        kmb_cad_datum::module(),
         kmb_cad::module(),
         kmb_cad_edge::module(),
         kmb_cad_pattern::module(),

@@ -33,11 +33,11 @@ Report the result as counts (passed, failed, skipped) in the pull request. [docs
 
 ## How changes are merged
 
-A maintainer reads the pull request, runs the full check (`cargo xtask verify --all`) locally and then merges it into main. The merge button on GitHub is not used.
+A maintainer reads the pull request, runs the full check (`cargo xtask verify --all`) locally and then merges it into main. The merge button on GitHub is not used. How incoming issues and pull requests are triaged and answered is described in [docs/受け方.md](docs/受け方.md) (Japanese).
 
 ## Licence
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 licence, shall be dual licensed under MIT and Apache-2.0, without any additional terms or conditions. No contributor licence agreement (CLA) is required.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 licence, shall be dual licensed under MIT and Apache-2.0, without any additional terms or conditions. No contributor licence agreement (CLA) is required. The product name and the icon are covered by [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Conduct
 

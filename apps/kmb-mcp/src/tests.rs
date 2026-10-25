@@ -204,6 +204,49 @@ fn every_file_field_of_every_setting_stays_inside_the_allowed_folders() {
     }
 }
 
+// 確かめること(文書のデータにあるパス):
+// - リンクの元のパスを set_feature で外へ書き換えて「最新にする」を押しても、外の文書を読まずに断る
+// - 文書の要約でリンクの様子を調べる時も、外の元を読まない
+// - 中のパスなら今までどおり最新にできる
+#[test]
+fn a_link_rewritten_to_point_outside_is_not_read() {
+    let root = temp_root("link-outside");
+    let outside = temp_root("link-outside-src");
+    let name = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
+    let mut part = Session::new(root.clone());
+    part.sample(false, false).unwrap();
+    part.save(Some(&name), true).unwrap();
+    // 外にも読めば通る同じ文書を置く(確かめが無ければ読んで差し替えてしまう)
+    std::fs::copy(root.join(&name), outside.join(&name)).unwrap();
+    let mut s = Session::new(root.clone());
+    s.run_action_at("asm.link_insert", None, Some(&name), &Value::Null, None)
+        .unwrap();
+    let link = s
+        .document()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == "asm.link@1")
+        .map(|f| (f.id.0, f.data.clone()))
+        .unwrap();
+    let mut data = link.1.clone();
+    data["path"] = json!(outside.join(&name).display().to_string());
+    let r = s.set_feature(link.0, data).unwrap();
+    // 様子を調べる時も外の元を読まない(元が無い時と同じに見せる)
+    assert_eq!(r["links"][0]["status"], json!("missing"), "{r}");
+    let e = s
+        .run_action_at("asm.link_update", Some(link.0), None, &Value::Null, None)
+        .unwrap_err();
+    assert!(e.message.contains("外"), "{e}");
+    // 中を指すパスに戻せば最新にできる
+    s.set_feature(link.0, link.1).unwrap();
+    s.run_action_at("asm.link_update", Some(link.0), None, &Value::Null, None)
+        .unwrap();
+    for d in [root, outside] {
+        std::fs::remove_dir_all(&d).ok();
+    }
+}
+
 #[test]
 fn paths_outside_the_root_and_allowed_folders_are_refused() {
     let root = temp_root("allow");

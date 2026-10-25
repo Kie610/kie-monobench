@@ -25,7 +25,7 @@ pub use solve::{
 use kmb_core::{
     EvalCtx, EvalError, Feature, InputRef, Outputs, Plane, Registry, Value, expr_inputs,
 };
-use kmb_sketch::{SketchPlane, resolve_plane_noting};
+use kmb_sketch::resolve_plane_noting;
 
 pub const SKETCH3D: &str = "cad.sketch3d@1";
 
@@ -133,13 +133,7 @@ pub fn basis(normal: P3) -> (P3, P3) {
 
 impl Feature for Sketch3d {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut out: Vec<InputRef> = Vec::new();
-        if let SketchPlane::Face { feature, .. } = &self.plane {
-            out.push(InputRef::Output {
-                feature: *feature,
-                slot: "body".into(),
-            });
-        }
+        let mut out: Vec<InputRef> = self.plane.inputs();
         // 取り込んだ形と、線を求めるボディ
         let bodies = self
             .includes

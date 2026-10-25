@@ -42,6 +42,7 @@ impl Headless {
             also_selected: picks.also_selected,
             bodies_picked: picks.bodies_picked,
             doc: picks.doc,
+            files: picks.files,
             ..self.context(picks.selected, file, args)
         }
     }
@@ -163,28 +164,7 @@ impl Headless {
             selected,
             ..Picks::default()
         };
-        Ok(match self.run_with(id, &picks, file, args)? {
-            Handled::Changed(added) => Ran::Changed(added),
-            Handled::Other(outcome) => match *outcome {
-                kmb_core::Outcome::Change { .. } => unreachable!("文書の変更は run_with が適用する"),
-                kmb_core::Outcome::File {
-                    suffix,
-                    contents,
-                    info,
-                } => Ran::File {
-                    suffix,
-                    contents,
-                    info,
-                },
-                kmb_core::Outcome::Files { files, info } => Ran::Files { files, info },
-                kmb_core::Outcome::Message(m) => Ran::Message(m),
-                kmb_core::Outcome::Text { title, body } => Ran::Message(format!("{title}\n{body}")),
-                kmb_core::Outcome::Table { title, table } => {
-                    Ran::Message(format!("{title}\n{}", table.text()))
-                }
-                kmb_core::Outcome::Job(job) => Ran::Report(job(&kmb_core::JobControl::new())),
-            },
-        })
+        Ok(self.run_with(id, &picks, file, args)?.into_ran())
     }
 
     /// 操作 `id` を、画面で選んでいる物 `picks` で実行する。使えない操作は断り、文書の変更は
@@ -242,5 +222,34 @@ impl Headless {
                 Ok(out)
             })
             .collect()
+    }
+}
+
+impl Handled {
+    /// 画面の扱わない結果を CLI・MCP の形にする(時間のかかる仕事は終わるまで待つ)。
+    /// MCP は許したフォルダを `Picks::files` に入れて [`Headless::run_with`] を呼び、これで受ける。
+    pub fn into_ran(self) -> Ran {
+        match self {
+            Handled::Changed(added) => Ran::Changed(added),
+            Handled::Other(outcome) => match *outcome {
+                kmb_core::Outcome::Change { .. } => unreachable!("文書の変更は run_with が適用する"),
+                kmb_core::Outcome::File {
+                    suffix,
+                    contents,
+                    info,
+                } => Ran::File {
+                    suffix,
+                    contents,
+                    info,
+                },
+                kmb_core::Outcome::Files { files, info } => Ran::Files { files, info },
+                kmb_core::Outcome::Message(m) => Ran::Message(m),
+                kmb_core::Outcome::Text { title, body } => Ran::Message(format!("{title}\n{body}")),
+                kmb_core::Outcome::Table { title, table } => {
+                    Ran::Message(format!("{title}\n{}", table.text()))
+                }
+                kmb_core::Outcome::Job(job) => Ran::Report(job(&kmb_core::JobControl::new())),
+            },
+        }
     }
 }

@@ -505,6 +505,8 @@ impl Workspace {
         // 作る前の履歴の長さ(作っている途中をキャンセルした時に戻る所)
         let before = self.cur.work.doc().undo_labels().len();
         let doc = self.tab_uid();
+        // AI から来た頼みなら、操作が文書のデータから開くファイルも許したフォルダに限る
+        let roots = self.ai_roots_now();
         let picks = kmb_session::Picks {
             selected,
             picked: self.cur.picked.as_ref(),
@@ -514,6 +516,7 @@ impl Workspace {
             also_selected: &self.cur.also,
             bodies_picked: self.win.pick_filter.body || self.cur.browser_bodies,
             doc,
+            files: roots.as_ref().map(|r| r as &dyn kmb_core::FileGate),
         };
         let handled = self
             .cur

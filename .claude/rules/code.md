@@ -18,4 +18,4 @@ paths:
 - 依存や crate を足したら `cargo hakari generate`。新しい crate には `description` と `layer` を書き `cargo xtask docs` を流す(点検: 資料・層の向き)。
 - コアの公開の項目が変わると契約テストを使う crate が全部選ばれる(`cargo xtask api`。ファイルを分けただけでも変わったと見なす)。`CORE_API_VERSION` は公開まで上げない(点検: コアの API)。
 - テストを環境が無くて飛ばす時は `kmb_contract::skip!` と理由で書く(点検: 飛ばし)。verify は同じ target で同時に 2 つ流さない(点検: 検査の錠)。
-- AI(MCP)は作業フォルダと許したフォルダの外を読み書きしない。操作がファイルを読む引数は `Arg::file`、設定のパスの欄は `Field::file` で宣言し、文字でパスを受けない。MCP と、MCP から画面へ送る頼みは `kmb_session::roots::Roots` で確かめる(点検: 許したフォルダ)。
+- AI(MCP)は作業フォルダと許したフォルダの外を読み書きしない。操作がファイルを読む引数は `Arg::file`、設定のパスの欄は `Field::file` で宣言し、文字でパスを受けない。MCP と、MCP から画面へ送る頼みは `kmb_session::roots::Roots` で確かめる(点検: 許したフォルダ)。操作が文書のデータに書いたパス(リンクの元など)を開く時は `Context::open_path` を通す(AI から動く時は `Roots` が確かめる)。

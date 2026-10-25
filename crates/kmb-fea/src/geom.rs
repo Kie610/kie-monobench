@@ -3,25 +3,8 @@
 
 pub type P3 = [f64; 3];
 
-pub fn sub(a: P3, b: P3) -> P3 {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-pub fn add(a: P3, b: P3) -> P3 {
-    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-}
-pub fn scale(a: P3, s: f64) -> P3 {
-    [a[0] * s, a[1] * s, a[2] * s]
-}
-pub fn dot(a: P3, b: P3) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-pub fn cross(a: P3, b: P3) -> P3 {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
+pub use kmb_core::kernel::{add, cross, dot, scale, sub};
+
 pub fn norm(a: P3) -> f64 {
     dot(a, a).sqrt()
 }

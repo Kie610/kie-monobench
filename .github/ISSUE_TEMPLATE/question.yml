@@ -1,0 +1,21 @@
+name: 質問 / Question
+description: 使い方が分からない / How do I ...?
+labels: [question]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: したいこと / What you want to do
+      description: 作りたい物と、どこまでできたか / What you are making and how far you got
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: 試したこと / What you tried
+      description: 押した所、読んだ資料(docs/使い方.md など) / What you clicked and which documents you read (docs/使い方.md etc.)
+  - type: input
+    id: version
+    attributes:
+      label: 版 / Version
+      description: コミット(git rev-parse --short HEAD)か配った版 / Commit (git rev-parse --short HEAD) or release

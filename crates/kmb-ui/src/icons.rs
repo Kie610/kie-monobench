@@ -395,6 +395,7 @@ const PATHS: &[(&str, &str)] = &[
         "M4 9v11h11M13 11l7-7M15 4h5v5M6 19c1-5 4-5 6-6M6 19h.01M12 13h.01",
     ), // SVG を書き出す
     ("splitbody", "M4 5h16v14H4z"),                             // ボディを分割
+    ("datumPlane", "M3 19l4-4h14l-4 4z"),                       // 作業平面
     ("skoffboth", "M8 20v-9a3 3 0 0 1 3-3h9"),                  // 両側へオフセット
     ("skmove", "M12 3v18M3 12h18"),                             // 移動(スケッチ)
     ("polycons", "M12 3l8 6-3 10H7L4 9z"),                      // ポリゴン(拘束)
@@ -519,6 +520,7 @@ const ACCENTS: &[(&str, IconRole, &str)] = &[
         "M7 20c1.5-6 8.5-6 10 0M10.5 20c.5-2.5 2.5-2.5 3 0",
     ), // スキャロップ
     ("splitbody", IconRole::Modify, "M2 14l20-5"),    // ボディを分割
+    ("datumPlane", IconRole::Make, "M3 10l4-4h14l-4 4z"), // 作業平面
     ("midline", IconRole::Make, "M3 19L21 5"),        // 中点の線分
     ("rect3", IconRole::Make, "M3 14l9-9 8 8-9 9z"),  // 3 点指定の長方形
     ("crect", IconRole::Make, "M4 6h16v12H4z"),       // 中心指定の長方形

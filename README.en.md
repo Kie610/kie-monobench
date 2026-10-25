@@ -118,6 +118,8 @@ Licensed under either the MIT licence ([LICENSE-MIT](LICENSE-MIT)) or the Apache
 
 This software is developed independently and is not affiliated with any machine maker or CAD/CAM vendor. Names of machines, file formats and software are trademarks of their respective owners and are used only to describe compatibility.
 
+The product name "kieMonoBench" and the application icon are not covered by the code licences. See [TRADEMARKS.md](TRADEMARKS.md) for what you may do with them and how to distribute a modified build.
+
 ### Bundled third-party software and data
 
 - `third_party/usd-brep/`: SMLib and SM_API from NVIDIA usd-brep 1.0.0 (Apache-2.0, Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES; full text in `third_party/usd-brep/LICENSE`).
