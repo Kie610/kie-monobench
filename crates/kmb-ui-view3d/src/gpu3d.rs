@@ -10,7 +10,7 @@
 //! 前は GPU があれば番号の絵で拾っていたが、PC によって拾う辺が変わらないよう 1 本にした(2026-10-24 Kie)。
 
 use crate::Shading;
-use crate::view3d::{Camera, Colors, Ghost, GhostLayer, Guides, Pick, Scene};
+use crate::view3d::{Behind, Camera, Colors, Ghost, GhostLayer, Guides, Pick, Scene};
 use egui::Rect;
 use egui_wgpu::wgpu;
 use std::collections::HashMap;
@@ -68,6 +68,11 @@ struct Pipes {
     lines_over: wgpu::RenderPipeline,
     /// 格子と軸・透かす道具の稜線(深度を見ず、断面でも切らない)
     guides: wgpu::RenderPipeline,
+    /// 本体の奥のスケッチ・作業平面(Q6 v1): 手前に見える所だけ透かして塗る面、手前の線、
+    /// 隠れた所の点線(隠れた辺と同じ刻みと濃さ)
+    seen_faces: wgpu::RenderPipeline,
+    seen_edges: wgpu::RenderPipeline,
+    seen_hidden: wgpu::RenderPipeline,
 }
 
 #[derive(Default)]
@@ -322,6 +327,17 @@ struct LineVertex {
     c: [u8; 4],
 }
 
+/// 太さを持つ線分(本体の奥のスケッチ・作業平面の縁)。
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct WideSegment {
+    a: [f32; 3],
+    c: [u8; 4],
+    b: [f32; 3],
+    /// 太さ(point)
+    w: f32,
+}
+
 impl Gpu {
     /// 描画装置から作る。シェーダーを作れなければ `None`(CPU の描画を使う)。
     pub fn new(rs: &egui_wgpu::RenderState) -> Option<Gpu> {
@@ -496,6 +512,7 @@ impl Gpu {
         shading: Shading,
         guides: Guides,
         ghosts: &[Ghost],
+        behind: &Behind,
     ) -> egui::TextureId {
         let size = [size[0].max(1) as u32, size[1].max(1) as u32];
         let settings = crate::render::current();
@@ -626,6 +643,54 @@ impl Gpu {
             }
         };
 
+        // 本体の奥のスケッチ・作業平面。小さいので毎回送る
+        let seen_faces = (!behind.tris.is_empty()).then(|| {
+            let n = |t: &[[f32; 3]; 3]| normalize3(cross3(sub3(t[1], t[0]), sub3(t[2], t[0])));
+            let geometry: Vec<Corner> = behind
+                .tris
+                .iter()
+                .flat_map(|(t, _)| t.map(|p| Corner { p, n: n(t) }))
+                .collect();
+            let colors: Vec<[u8; 4]> = behind
+                .tris
+                .iter()
+                .flat_map(|(_, c)| [c.to_srgba_unmultiplied(); 3])
+                .collect();
+            let buf = |label: &str, contents: &[u8]| {
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(label),
+                        contents,
+                        usage: wgpu::BufferUsages::VERTEX,
+                    })
+            };
+            (
+                buf("kmb-view3d-seen-faces", bytemuck::cast_slice(&geometry)),
+                buf("kmb-view3d-seen-colors", bytemuck::cast_slice(&colors)),
+                geometry.len() as u32,
+            )
+        });
+        let seen_lines = (!behind.lines.is_empty()).then(|| {
+            let v: Vec<WideSegment> = behind
+                .lines
+                .iter()
+                .map(|([a, b], c, w)| WideSegment {
+                    a: *a,
+                    c: c.to_srgba_unmultiplied(),
+                    b: *b,
+                    w: *w,
+                })
+                .collect();
+            let b = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("kmb-view3d-seen-lines"),
+                    contents: bytemuck::cast_slice(&v),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+            (b, v.len() as u32)
+        });
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -734,6 +799,20 @@ impl Gpu {
                 pass.draw(0..6, 0..sb.edge_vertices / 2);
             }
             draw_ghosts(&mut pass, GhostLayer::Solid);
+            // 本体の奥のスケッチ・作業平面: 面を塗ってから、隠れた所の点線、手前の線の順に
+            if let Some((geometry, colors, corners)) = &seen_faces {
+                pass.set_pipeline(&pipes.seen_faces);
+                pass.set_vertex_buffer(0, geometry.slice(..));
+                pass.set_vertex_buffer(1, colors.slice(..));
+                pass.draw(0..*corners, 0..1);
+            }
+            if let Some((b, n)) = &seen_lines {
+                pass.set_vertex_buffer(0, b.slice(..));
+                pass.set_pipeline(&pipes.seen_hidden);
+                pass.draw(0..6, 0..*n);
+                pass.set_pipeline(&pipes.seen_edges);
+                pass.draw(0..6, 0..*n);
+            }
             draw_ghosts(&mut pass, GhostLayer::Over);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -1086,6 +1165,16 @@ fn make_pipes(
             4 => Float32x3,
         ],
     };
+    let wide_w = wgpu::VertexBufferLayout {
+        array_stride: std::mem::size_of::<WideSegment>() as u64,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &wgpu::vertex_attr_array![
+            0 => Float32x3,
+            1 => Unorm8x4,
+            4 => Float32x3,
+            5 => Float32,
+        ],
+    };
     let target = [Some(wgpu::ColorTargetState {
         format: COLOR_FORMAT,
         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -1140,6 +1229,7 @@ fn make_pipes(
     let face_buffers = [Some(corner), Some(color)];
     let line_buffers = [Some(line)];
     let wide_buffers = [Some(wide)];
+    let wide_w_buffers = [Some(wide_w)];
     let tri = wgpu::PrimitiveTopology::TriangleList;
     let lines = wgpu::PrimitiveTopology::LineList;
     Pipes {
@@ -1216,6 +1306,33 @@ fn make_pipes(
             lines,
             None,
             depth(false, wgpu::CompareFunction::Always),
+        ),
+        seen_faces: pipeline(
+            "kmb-view3d-seen-faces",
+            "vs_seen_face",
+            "fs_flat",
+            &face_buffers,
+            tri,
+            None,
+            depth(false, wgpu::CompareFunction::LessEqual),
+        ),
+        seen_edges: pipeline(
+            "kmb-view3d-seen-edges",
+            "vs_wide_w",
+            "fs_wide",
+            &wide_w_buffers,
+            tri,
+            None,
+            depth(false, wgpu::CompareFunction::LessEqual),
+        ),
+        seen_hidden: pipeline(
+            "kmb-view3d-seen-hidden",
+            "vs_wide_w",
+            "fs_wide_hidden",
+            &wide_w_buffers,
+            tri,
+            None,
+            depth(false, wgpu::CompareFunction::Greater),
         ),
     }
 }

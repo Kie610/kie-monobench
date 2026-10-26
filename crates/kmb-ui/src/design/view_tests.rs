@@ -427,6 +427,58 @@ fn hidden_lines_are_dashed_and_follow_their_strength() {
 }
 
 #[test]
+fn sketch_lines_behind_a_body_are_faint_dashes() {
+    // Q6 v1: 本体の奥のスケッチの線は薄い点線、手前の線は今の色のまま
+    let part = kmb_samples::reference_part();
+    let ws = Workspace::new(part.doc, None, reg());
+    let rect = egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(320.0, 240.0));
+    let mut cam = ws.cur.camera;
+    cam.fit(&ws.cur.scene, rect);
+    let colors = view3d::Colors::from_look(&crate::theme::Look::default());
+    let (lo, hi) = ws.cur.scene.bounds();
+    let mid: [f32; 3] = std::array::from_fn(|i| (lo[i] + hi[i]) / 2.0);
+    let (right, _, eye) = cam.basis_pub();
+    let reach = (0..3).map(|i| hi[i] - lo[i]).fold(0.0, f32::max);
+    // 本体の真ん中を通り、視線の向きに本体の大きさだけ手前・奥へずらした、画面の左右の線
+    let line = |toward: f32| {
+        let at = |s: f32| -> [f32; 3] {
+            std::array::from_fn(|i| mid[i] + eye[i] * toward * reach + right[i] * s * reach * 0.3)
+        };
+        view3d::Behind {
+            lines: vec![([at(-1.0), at(1.0)], colors.sketch, view3d::SKETCH_WIDTH)],
+            tris: vec![],
+        }
+    };
+    let draw = |b: &view3d::Behind| {
+        view3d::render_guided(
+            &ws.cur.scene,
+            &cam,
+            [320, 240],
+            1.0,
+            &[],
+            None,
+            &colors,
+            Shading::ShadedEdges,
+            view3d::Guides::default(),
+            &[],
+            b,
+        )
+        .pixels
+    };
+    let plain = draw(&view3d::Behind::default());
+    let front = draw(&line(1.0));
+    let back = draw(&line(-1.0));
+    let full = |p: &[egui::Color32]| p.iter().filter(|c| **c == colors.sketch).count();
+    let changed =
+        |a: &[egui::Color32], b: &[egui::Color32]| a.iter().zip(b).filter(|(x, y)| x != y).count();
+    assert!(full(&front) > 100, "手前の線は今の色 {}", full(&front));
+    assert_eq!(full(&back), 0, "奥の線は今の色で描かない");
+    let dashed = changed(&plain, &back);
+    assert!(dashed > 20, "奥の線は点線で出る {dashed}");
+    assert!(dashed < full(&front), "点線は実線より少ない {dashed}");
+}
+
+#[test]
 fn a_section_hides_one_side_and_paints_the_cut_without_changing_the_shape() {
     // M48: 断面は平面の片側を描かず、選ぶこともできない。形(網)は変えない
     let part = kmb_samples::reference_part();
@@ -762,6 +814,7 @@ fn cpu_render_time() {
                     crate::layout::Shading::ShadedEdges,
                     guides,
                     &[],
+                    &view3d::Behind::default(),
                 );
             }
             println!(

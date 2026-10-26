@@ -367,6 +367,9 @@ pub struct Layout {
     pub grid: bool,
     /// 3D のビューに原点と軸を描くか(空の文書では基準面も)
     pub origin: bool,
+    /// 本体の奥のスケッチ・作業平面も普通の線で描くか(表示の「全部透かす」。既定は切で、
+    /// 隠れた所は薄い点線)
+    pub see_through: bool,
     /// 測る道具で、距離の X・Y・Z ごとの成分を出すか(表の行とビューの線)
     pub measure_xyz: bool,
     /// 3D のビューの右下に画面の速さ(fps と 1 回の処理の時間)を出すか
@@ -450,6 +453,7 @@ impl Default for Layout {
             projection: Projection::Parallel,
             grid: true,
             origin: true,
+            see_through: false,
             measure_xyz: true,
             show_fps: false,
             autosave_minutes: 5,
@@ -541,6 +545,7 @@ impl Layout {
             projection: self.projection,
             grid: self.grid,
             origin: self.origin,
+            see_through: self.see_through,
             show_fps: self.show_fps,
             autosave_minutes: self.autosave_minutes,
             appearance: self.appearance.clone(),
