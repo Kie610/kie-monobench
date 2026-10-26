@@ -31,6 +31,7 @@ pub fn render(
         shading,
         Guides::default(),
         &[],
+        &Behind::default(),
     )
 }
 
@@ -58,6 +59,7 @@ pub fn render_guided(
     shading: Shading,
     guides: Guides,
     ghosts: &[Ghost],
+    behind: &Behind,
 ) -> egui::ColorImage {
     let [w, h] = size;
     let mut buf = Raster {
@@ -373,6 +375,46 @@ pub fn render_guided(
             }
         }
     }
+    // 本体の奥のスケッチ・作業平面: 面は手前に見える所だけ透かして塗り、線は手前の所を普通に、
+    // 隠れた所を隠れた辺と同じ点線で描く(GPU の描画と同じ。Q6 v1)
+    for (t, c) in &behind.tris {
+        let v = t.map(&to_px);
+        if near.is_some_and(|zmax| v.iter().any(|q| q.1 > zmax)) {
+            continue;
+        }
+        buf.blend_front(v.map(|(q, z)| (q, key(z + bias))), *c);
+    }
+    let (dash_on, dash_period) = (
+        (DASH_ON * ppp).round().max(1.0) as usize,
+        ((DASH_ON + DASH_OFF) * ppp).round().max(2.0) as usize,
+    );
+    for ([p, q], c, width) in &behind.lines {
+        let Some((p, q)) = cam.clip_segment(*p, *q, rect) else {
+            continue;
+        };
+        let ((a, da), (e, de)) = (to_px(p), to_px(q));
+        let (ka, ke) = (key(da + bias), key(de + bias));
+        let steps = (e - a).length().ceil().clamp(1.0, 100_000.0) as usize;
+        let copies = (width * ppp).round().max(1.0) as usize;
+        let side = (e - a).normalized().rot90();
+        for o in 0..copies {
+            let shift = side * (o as f32 - (copies - 1) as f32 / 2.0);
+            for s in 0..=steps {
+                let t = s as f32 / steps as f32;
+                let x = a.x + (e.x - a.x) * t + shift.x;
+                let y = a.y + (e.y - a.y) * t + shift.y;
+                if x < 0.0 || y < 0.0 || x >= w as f32 || y >= h as f32 {
+                    continue;
+                }
+                let i = y as usize * w + x as usize;
+                if ka + (ke - ka) * t >= buf.depth[i] {
+                    buf.color[i] = *c;
+                } else if s % dash_period < dash_on {
+                    buf.color[i] = crate::mix(buf.color[i], *c, hidden_alpha);
+                }
+            }
+        }
+    }
     for g in ghosts.iter().filter(|g| g.layer == GhostLayer::Over) {
         ghost_free(&mut buf, g);
     }
@@ -571,6 +613,45 @@ impl Raster {
                     |s: u8, t: u8| (f32::from(t) * (1.0 - a) + f32::from(s) * a).round() as u8;
                 self.color[i] =
                     Color32::from_rgb(mix(c.r(), d.r()), mix(c.g(), d.g()), mix(c.b(), d.b()));
+            }
+        }
+    }
+
+    /// 三角形(画素の位置、深度の値)を、手前に見える所だけ `base` の透明度で混ぜて塗る(深度は書かない)。
+    fn blend_front(&mut self, v: [(Pos2, f32); 3], base: Color32) {
+        let (w, h) = (self.w, self.h);
+        let (p0, p1, p2) = (v[0].0, v[1].0, v[2].0);
+        let area = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+        if area.abs() < 1e-12 {
+            return;
+        }
+        let [r, g, b, a] = base.to_srgba_unmultiplied();
+        let a = f32::from(a) / 255.0;
+        let x0 = p0.x.min(p1.x).min(p2.x).floor().max(0.0) as usize;
+        let x1 = (p0.x.max(p1.x).max(p2.x).ceil() as isize).min(w as isize - 1);
+        let y0 = p0.y.min(p1.y).min(p2.y).floor().max(0.0) as usize;
+        let y1 = (p0.y.max(p1.y).max(p2.y).ceil() as isize).min(h as isize - 1);
+        if x1 < 0 || y1 < 0 {
+            return;
+        }
+        for y in y0..=y1 as usize {
+            let py = y as f32 + 0.5;
+            for x in x0..=x1 as usize {
+                let px = x as f32 + 0.5;
+                let e0 = ((p2.x - p1.x) * (py - p1.y) - (p2.y - p1.y) * (px - p1.x)) / area;
+                let e1 = ((p0.x - p2.x) * (py - p2.y) - (p0.y - p2.y) * (px - p2.x)) / area;
+                let e2 = 1.0 - e0 - e1;
+                if e0 < 0.0 || e1 < 0.0 || e2 < 0.0 {
+                    continue;
+                }
+                let i = y * w + x;
+                if e0 * v[0].1 + e1 * v[1].1 + e2 * v[2].1 < self.depth[i] {
+                    continue;
+                }
+                let d = self.color[i];
+                let mix =
+                    |s: u8, t: u8| (f32::from(t) * (1.0 - a) + f32::from(s) * a).round() as u8;
+                self.color[i] = Color32::from_rgb(mix(r, d.r()), mix(g, d.g()), mix(b, d.b()));
             }
         }
     }

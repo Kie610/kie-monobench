@@ -322,6 +322,17 @@ fn vs_face(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) c:
     return o;
 }
 
+// 本体の奥の作業平面: 稜線と同じだけ手前へ寄せる(ボディの面と重なっても手前に見える)
+@vertex
+fn vs_seen_face(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) c: vec4<f32>) -> FaceOut {
+    var o: FaceOut;
+    o.pos = clip(p, u.misc.y);
+    o.normal = n;
+    o.color = c;
+    o.world = p;
+    return o;
+}
+
 // 切り口(裏の面): 少し手前へ寄せる(view3d::CAP_BIAS。接するボディの面と競わない)
 @vertex
 fn vs_cap(@location(0) p: vec3<f32>, @location(1) n: vec3<f32>, @location(2) c: vec4<f32>) -> FaceOut {
@@ -490,6 +501,12 @@ fn fs_ghost(i: FaceOut) -> @location(0) vec4<f32> {
     return vec4<f32>(clamp(i.color.rgb * k, vec3<f32>(0.0), vec3<f32>(1.0)), i.color.a);
 }
 
+// 本体の奥の作業平面: 陰を付けず、色の透明度のまま混ぜる
+@fragment
+fn fs_flat(i: FaceOut) -> @location(0) vec4<f32> {
+    return i.color;
+}
+
 struct LineOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) color: vec4<f32>,
@@ -547,6 +564,8 @@ struct WideOut {
     @location(3) @interpolate(linear) at: vec2<f32>,
     // 線の真ん中からの距離(描く先の画素)
     @location(4) @interpolate(linear) side: f32,
+    // 太さ(描く先の画素)
+    @location(5) @interpolate(flat) width: f32,
 };
 
 @vertex
@@ -556,6 +575,23 @@ fn vs_wide(
     @location(1) c: vec4<f32>,
     @location(4) p1: vec3<f32>,
 ) -> WideOut {
+    return wide(k, p0, c, p1, u.misc.w);
+}
+
+// 太さを線ごとに持つ線(本体の奥のスケッチ・作業平面の縁。w は point)
+@vertex
+fn vs_wide_w(
+    @builtin(vertex_index) k: u32,
+    @location(0) p0: vec3<f32>,
+    @location(1) c: vec4<f32>,
+    @location(4) p1: vec3<f32>,
+    @location(5) w: f32,
+) -> WideOut {
+    return wide(k, p0, c, p1, w * u.misc.z);
+}
+
+// width は描く先の画素での太さ
+fn wide(k: u32, p0: vec3<f32>, c: vec4<f32>, p1: vec3<f32>, width: f32) -> WideOut {
     let a = clip(p0, u.misc.y);
     let b = clip(p1, u.misc.y);
     let px = u.proj.zw * u.misc.z;
@@ -573,7 +609,7 @@ fn vs_wide(
     let end = q.x > 0.5;
     let base = select(a, b, end);
     // 縁のなめらかさの分だけ 1 画素広げ、端は半画素伸ばしてつなぎ目を埋める
-    let half = 0.5 * u.misc.w + 1.0;
+    let half = 0.5 * width + 1.0;
     let off = nrm * q.y * half + dir * (q.x * 2.0 - 1.0) * 0.5;
     var o: WideOut;
     o.pos = vec4<f32>(base.xy + off / px * base.w, base.zw);
@@ -582,12 +618,13 @@ fn vs_wide(
     o.start = screen(a);
     o.at = screen(base);
     o.side = q.y * half;
+    o.width = width;
     return o;
 }
 
 // 太さの中にかかる割合(縁は 1 画素でなめらかに落とす)
-fn wide_cover(side: f32) -> f32 {
-    return clamp(0.5 * u.misc.w + 0.5 - abs(side), 0.0, 1.0);
+fn wide_cover(side: f32, width: f32) -> f32 {
+    return clamp(0.5 * width + 0.5 - abs(side), 0.0, 1.0);
 }
 
 @fragment
@@ -595,7 +632,7 @@ fn fs_wide(i: WideOut) -> @location(0) vec4<f32> {
     if (cut(i.world)) {
         discard;
     }
-    return vec4<f32>(i.color.rgb, i.color.a * wide_cover(i.side));
+    return vec4<f32>(i.color.rgb, i.color.a * wide_cover(i.side, i.width));
 }
 
 // 隠れた辺(fs_hidden と同じ点線)
@@ -608,7 +645,7 @@ fn fs_wide_hidden(i: WideOut) -> @location(0) vec4<f32> {
     if (d - floor(d / u.extra.w) * u.extra.w > u.extra.z) {
         discard;
     }
-    return vec4<f32>(i.color.rgb, i.color.a * u.extra.y * wide_cover(i.side));
+    return vec4<f32>(i.color.rgb, i.color.a * u.extra.y * wide_cover(i.side, i.width));
 }
 
 // 入り隅の陰の前の段: 見えている面の位置を残す。断面で切り取った所は描かない

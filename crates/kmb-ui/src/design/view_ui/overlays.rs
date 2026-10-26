@@ -460,6 +460,10 @@ impl Workspace {
             .on_hover_text("XY 平面の格子。間隔は拡大に合わせて変わる(左下に今の間隔)");
         ui.checkbox(&mut self.win.layout.origin, "原点と軸")
             .on_hover_text("原点と X(赤)・Y(緑)・Z(青)の軸。空の文書では基準面も");
+        ui.checkbox(&mut self.win.layout.see_through, "全部透かす")
+            .on_hover_text(
+                "本体の奥にあるスケッチと作業平面も普通の線で見せる。切ると、隠れた所は薄い点線",
+            );
         ui.separator();
         ui.label(
             egui::RichText::new("効果")

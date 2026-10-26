@@ -180,6 +180,7 @@ impl Workspace {
             // 部品を引いてジョイントを動かしている間は、範囲で選ばない
             no_box: self.joint_dragging(),
             free_orbit: self.win.layout.free_orbit,
+            see_through: self.win.layout.see_through,
         };
         let colors = view3d::Colors::from_look(&self.win.look);
         self.sync_ai_glow(ui.ctx());

@@ -51,6 +51,81 @@ impl Ghost {
     }
 }
 
+/// 本体の奥では薄い点線で描く線と面(スケッチの線・作業平面。Q6 v1)。手前に見える所は今の線のまま
+/// 描き、本体に隠れた所は隠れた辺と同じ刻みと濃さの点線にする。面は手前に見える所だけ塗る。
+/// 表示の「全部透かす」を入れた時は使わず、今まで通り形の上に重ねる。
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Behind {
+    /// 線分の両端・色・太さ(point)
+    pub lines: Vec<([[f32; 3]; 2], Color32, f32)>,
+    /// 半透明に塗る三角形と色(透明度で混ぜる)
+    pub tris: Vec<([[f32; 3]; 3], Color32)>,
+}
+
+/// 3D のビューのスケッチの線の太さ(point)と、作業平面の縁の太さ。
+pub const SKETCH_WIDTH: f32 = 1.6;
+pub const PLANE_EDGE_WIDTH: f32 = 1.0;
+/// 作業平面の塗りの濃さ(縁の色に掛ける)。
+pub const PLANE_FILL: f32 = 0.16;
+
+impl Behind {
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty() && self.tris.is_empty()
+    }
+
+    /// 重ねる物のうち、スケッチの線(2 点以上の作図の線)と作業平面を取り出す。
+    pub fn from_overlay(overlay: &kmb_core::Overlay, colors: &Colors) -> Behind {
+        let f32s = |p: [f64; 3]| p.map(|v| v as f32);
+        let mut b = Behind::default();
+        for (pts, _) in overlay.lines.iter().filter(|(_, k)| behind_line(k.ink)) {
+            for w in pts.windows(2) {
+                b.lines
+                    .push(([f32s(w[0]), f32s(w[1])], colors.sketch, SKETCH_WIDTH));
+            }
+        }
+        for pl in overlay.planes.iter().filter(|p| behind_plane(p.ink)) {
+            let c = pl.corners.map(f32s);
+            let fill = colors.machine.gamma_multiply(PLANE_FILL);
+            b.tris.push(([c[0], c[1], c[2]], fill));
+            b.tris.push(([c[0], c[2], c[3]], fill));
+            for k in 0..4 {
+                b.lines
+                    .push(([c[k], c[(k + 1) % 4]], colors.machine, PLANE_EDGE_WIDTH));
+            }
+        }
+        b
+    }
+
+    /// 見た目が変わったかを比べる値。
+    pub fn key(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (e, c, w) in &self.lines {
+            e.as_flattened()
+                .iter()
+                .for_each(|v| v.to_bits().hash(&mut h));
+            (c.to_array(), w.to_bits()).hash(&mut h);
+        }
+        for (t, c) in &self.tris {
+            t.as_flattened()
+                .iter()
+                .for_each(|v| v.to_bits().hash(&mut h));
+            c.to_array().hash(&mut h);
+        }
+        h.finish()
+    }
+}
+
+/// 本体の奥で点線にする線の役割(スケッチの作図の線)。
+pub(crate) fn behind_line(ink: kmb_core::LineInk) -> bool {
+    ink == kmb_interchange::ink::line::CONSTRUCTION
+}
+
+/// 本体の奥で点線にする面の役割(作業平面)。
+pub(crate) fn behind_plane(ink: kmb_core::PlaneInk) -> bool {
+    ink == kmb_interchange::ink::plane::DATUM
+}
+
 /// 3D のビューの色(画面の色の一揃いから作る)。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Colors {

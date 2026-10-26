@@ -52,7 +52,9 @@ fn take_nav(ctx: &egui::Context, view: egui::Id, hovered: bool) -> Option<Nav> {
             m.insert_temp(last, view);
         }
         let mine = m.get_temp::<egui::Id>(last).is_none_or(|v| v == view);
-        let nav = m.get_temp::<Nav>(nav_id()).filter(|n| mine && !n.is_none())?;
+        let nav = m
+            .get_temp::<Nav>(nav_id())
+            .filter(|n| mine && !n.is_none())?;
         m.remove::<Nav>(nav_id());
         if m.get_temp::<egui::Id>(last).is_none() {
             m.insert_temp(last, view);
@@ -234,11 +236,19 @@ pub fn view3d(
         );
         return (ev, resp, rect);
     }
+    // 本体の奥のスケッチ・作業平面は、形と一緒に深度を見て描き、隠れた所を薄い点線にする(Q6 v1)。
+    // 線だけの表示と「全部透かす」では、今まで通り形の上に重ねる
+    let behind = if !controls.see_through && !scene.is_empty() && shading.faces() {
+        Behind::from_overlay(overlay, colors)
+    } else {
+        Behind::default()
+    };
+    let deep = !behind.is_empty();
     if !scene.is_empty() || guides.any() {
         let moving = resp.dragged() || cam.turning();
         paint_scene(
             ui, &painter, rect, resp.id, moving, cam, scene, picked, &hover, overlay, ghosts,
-            colors, shading, guides,
+            &behind, colors, shading, guides,
         );
     }
     // 下絵(キャンバス)は形の上に半透明で重ね、ほかの線はその上に描く
@@ -318,6 +328,10 @@ pub fn view3d(
         painter.circle_filled(p0, 3.5, colors.edge);
     }
     for (pts, kind) in &overlay.lines {
+        // 形と一緒に描いた線(本体の奥で点線にする線)は重ねない
+        if deep && pts.len() > 1 && behind_line(kind.ink) {
+            continue;
+        }
         // 1 点だけの線は点として描く(スケッチの単独の点)
         if let [p] = pts.as_slice() {
             let p = f32s(*p);
@@ -361,11 +375,14 @@ pub fn view3d(
             .iter()
             .map(|p| cam.project(f32s(*p), rect).0)
             .collect();
-        painter.add(egui::Shape::convex_polygon(
-            pts.clone(),
-            color.gamma_multiply(0.16),
-            egui::Stroke::new(1.0, color),
-        ));
+        // 形と一緒に描いた面(作業平面)は、名前の札だけを重ねる
+        if !(deep && behind_plane(pl.ink)) {
+            painter.add(egui::Shape::convex_polygon(
+                pts.clone(),
+                color.gamma_multiply(PLANE_FILL),
+                egui::Stroke::new(PLANE_EDGE_WIDTH, color),
+            ));
+        }
         let [r8, g8, b8, _] = color.to_array();
         let light = 0.299 * r8 as f32 + 0.587 * g8 as f32 + 0.114 * b8 as f32 > 150.0;
         let ink = if light {
@@ -480,6 +497,7 @@ pub fn paint_bodies(
         &None,
         &kmb_core::Overlay::default(),
         &[],
+        &Behind::default(),
         colors,
         shading,
         guides,
@@ -501,6 +519,7 @@ fn paint_scene(
     hover: &Option<Pick>,
     overlay: &kmb_core::Overlay,
     ghosts: &[Ghost],
+    behind: &Behind,
     colors: &Colors,
     shading: Shading,
     guides: Guides,
@@ -605,6 +624,7 @@ fn paint_scene(
         scene.effects.hash(&mut h);
         overlay.shape.as_ref().map(|s| s.key).hash(&mut h);
         ghosts.iter().map(Ghost::key).for_each(|k| k.hash(&mut h));
+        behind.key().hash(&mut h);
         if let Some(sec) = scene.section {
             sec.hash_into(&mut h);
         }
@@ -646,6 +666,7 @@ fn paint_scene(
                                 shading,
                                 guides,
                                 &[],
+                                behind,
                             )
                         }
                         None => g.render(
@@ -661,6 +682,7 @@ fn paint_scene(
                             shading,
                             guides,
                             ghosts,
+                            behind,
                         ),
                     };
                     ui.ctx().data_mut(|d| d.insert_temp(gid, (key, t)));
@@ -690,6 +712,7 @@ fn paint_scene(
                                 shading,
                                 guides,
                                 &[],
+                                behind,
                             )
                         }
                         None => render_guided(
@@ -703,6 +726,7 @@ fn paint_scene(
                             shading,
                             guides,
                             ghosts,
+                            behind,
                         ),
                     };
                     let t = match other {
@@ -861,7 +885,7 @@ fn draw_overlay_line(
         kmb_interchange::ink::line::CONSTRUCTION => {
             painter.add(egui::Shape::line(
                 line,
-                egui::Stroke::new(1.6, colors.sketch),
+                egui::Stroke::new(SKETCH_WIDTH, colors.sketch),
             ));
         }
         // 入りは少し太く、リードは切削と同じ太さ、つなぎは細い破線(早送りより詰めた破線)
