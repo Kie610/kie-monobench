@@ -17,6 +17,9 @@ fn reference_document_opens_in_3d() {
     h.run();
     assert_eq!(h.state().report().error_count(), 0);
     h.get_by_label("全体表示");
+    // 選んだだけの編集パネルの「体積を計測」を押す
+    h.state_mut().win.layout.panel_always = true;
+    h.run();
     h.get_all_by_label("体積を計測").next().unwrap().click();
     h.run();
     assert!(

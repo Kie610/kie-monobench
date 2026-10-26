@@ -1,0 +1,27 @@
+# 右の編集パネルは道具を使う間(作る途中・直す途中)だけ出て、OK・キャンセルで閉じる。
+# 選んだだけでは出さず、ダブルクリックで開き直す。作っている途中の × はキャンセルと同じ。
+#! sample part
+
+expect "編集パネルを隠す" missing
+shot 前
+click "シェル"
+expect "編集パネルを隠す" exists
+expect "接線チェーン" = "入"
+shot 作っている途中
+click ~OK
+wait
+expect "編集パネルを隠す" missing
+shot OKの後
+# 選んだだけでは出さない
+click "button:穴の並び"
+expect "編集パネルを隠す" missing
+# ダブルクリックで直し始めると出て、キャンセルで閉じる
+dclick "button:穴の並び"
+expect "編集パネルを隠す" exists
+key Escape
+expect "編集パネルを隠す" missing
+# 作っている途中の × は作る前へ戻す
+click "シェル"
+click "編集パネルを隠す"
+expect "編集パネルを隠す" missing
+expect "シェル2" missing

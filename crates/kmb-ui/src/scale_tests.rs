@@ -105,7 +105,7 @@ fn the_view_the_timeline_and_the_panel_keep_apart_at_the_largest_size() {
 
     // 編集パネル: 機能を選ぶと見出しの × がアイコンの倍率で大きくなり、見出しの帯に収まる
     let id = data.features.last().unwrap().id;
-    h.state_mut().select(id);
+    h.state_mut().open_edit(id);
     h.run();
     h.run();
     let x = h.get_by_label("編集パネルを隠す").rect();

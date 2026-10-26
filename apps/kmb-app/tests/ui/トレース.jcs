@@ -20,7 +20,7 @@ click ~OK
 shot 後
 # G-code を見て、終わり(この加工)まで巻く。V ビットに替え、縁の上(上面は Z-1)から 0.3 mm 下りて、
 # 縁の円を円弧(G3)でなぞる
-click "G-code を見る"#2
+click "G-code を見る"
 scroll ~"(kieMonoBench / Carvera Air)" 1000000
 expect ~"M6 T5" exists
 expect ~"G1 Z-1.3 F150" exists

@@ -524,16 +524,45 @@ mod tests {
     /// 正面・右・上・裏から見て置くと、見ている向きの原点の平面に、上を画面の上・表を手前にして置く。
     #[test]
     fn a_canvas_faces_the_view_it_is_placed_from() {
-        let blank = || Canvas::from_bytes("a.png", &kmb_format::png::write_rgba(1, 1, &[0; 4])).unwrap();
+        let blank =
+            || Canvas::from_bytes("a.png", &kmb_format::png::write_rgba(1, 1, &[0; 4])).unwrap();
         for (eye, up, plane, angle, flip) in [
-            ([0.0, -1.0, 0.0], [0.0, 0.0, 1.0], SketchPlane::Zx, "-90 deg", true),
-            ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0], SketchPlane::Yz, "0 deg", false),
-            ([0.0, 0.0, 1.0], [0.0, 1.0, 0.0], SketchPlane::Xy, "0 deg", false),
-            ([0.0, 0.0, -1.0], [0.0, 1.0, 0.0], SketchPlane::Xy, "0 deg", true),
+            (
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                SketchPlane::Zx,
+                "-90 deg",
+                true,
+            ),
+            (
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+                SketchPlane::Yz,
+                "0 deg",
+                false,
+            ),
+            (
+                [0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                SketchPlane::Xy,
+                "0 deg",
+                false,
+            ),
+            (
+                [0.0, 0.0, -1.0],
+                [0.0, 1.0, 0.0],
+                SketchPlane::Xy,
+                "0 deg",
+                true,
+            ),
         ] {
             let mut c = blank();
             face_view(&mut c, &json!({"eye": eye, "up": up})).unwrap();
-            assert_eq!((c.plane, c.angle.as_str(), c.flip_h), (plane, angle, flip), "{eye:?}");
+            assert_eq!(
+                (c.plane, c.angle.as_str(), c.flip_h),
+                (plane, angle, flip),
+                "{eye:?}"
+            );
         }
         let mut c = blank();
         assert!(face_view(&mut c, &json!({"eye": "前"})).is_err());

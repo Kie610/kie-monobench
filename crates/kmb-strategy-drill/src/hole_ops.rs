@@ -341,7 +341,7 @@ fn actions(cx: &Context<'_>) -> Vec<Action> {
                     .menu("穴")
                     .icon("drill")
                     .hint("選んだ穴を外し、上から削れる丸い穴をすべて削る")
-                    .at(&[Place::Panel]),
+                    .at(&[Place::Panel, Place::FeatureMenu]),
             );
         }
     } else if picked.is_some() && setup.is_some() && tools.is_some() {

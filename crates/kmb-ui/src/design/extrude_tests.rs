@@ -59,8 +59,12 @@ fn extrude_button_makes_a_body_and_3d_view_shows_it() {
     let m = ws.cur.work.kernel().mass(bodies[0].1).unwrap();
     let v = 60.0 * 40.0 * 10.0 - std::f64::consts::PI * 16.0 * 10.0;
     assert!((m.volume - v).abs() < 1e-3 * v, "{}", m.volume);
-    // 押し出しを選ぶと 3D のビューと設定欄が出る
+    // OK で決めると編集パネルは閉じる。開き直すと設定欄が出る
     h.get_by_label("全体表示");
+    assert!(h.query_by_label("距離").is_none());
+    let last = h.state().document().data().features.last().unwrap().id;
+    h.state_mut().open_edit(last);
+    h.run();
     h.get_by_label("距離");
     assert!(!h.state().cur.scene.is_empty());
 }

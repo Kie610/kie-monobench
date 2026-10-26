@@ -210,18 +210,18 @@ impl Workspace {
                 self.remember_dock_for_focus(false);
                 self.win.layout.browser_open = b;
                 self.win.layout.timeline_open = t;
-                self.win.layout.panel_open = p;
+                self.win.layout.panel_always = p;
             }
             None => {
                 self.remember_dock_for_focus(true);
                 self.win.focus_mode = Some((
                     self.win.layout.browser_open,
                     self.win.layout.timeline_open,
-                    self.win.layout.panel_open,
+                    self.win.layout.panel_always,
                 ));
                 self.win.layout.browser_open = false;
                 self.win.layout.timeline_open = false;
-                self.win.layout.panel_open = false;
+                self.win.layout.panel_always = false;
             }
         }
     }

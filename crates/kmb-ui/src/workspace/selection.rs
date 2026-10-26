@@ -67,7 +67,6 @@ impl Workspace {
         if self.cur.editing != Some(id) {
             self.cur.editing = Some(id);
             self.cur.edit_start = Some((id, self.cur.work.doc().undo_labels().len()));
-            self.win.layout.panel_open = true;
             // 履歴の印より後の機能は計算されないので、直しても形に出ない。印をその機能の後ろまで
             // 進める。直し始めの後に入れるので、キャンセルで印も戻る
             let data = self.cur.work.doc().data();

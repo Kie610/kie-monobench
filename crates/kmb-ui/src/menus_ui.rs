@@ -758,6 +758,23 @@ impl Workspace {
             self.open_edit(id);
             done = true;
         }
+        // 2 つ以上を選んでいれば、共通の欄をまとめて直す(編集パネルは道具の間だけ出るので、入口をここにも置く)
+        let sel = self.selection();
+        if sel.len() >= 2
+            && sel.contains(&id)
+            && crate::theme::menu_row(
+                ui,
+                "copy",
+                &format!("{} 個をまとめて編集", sel.len()),
+                "",
+                !self.cur.multi_edit && self.can_multi_edit(&sel),
+            )
+            .on_hover_text("共通の欄を、選んだ全部に入れて直す(同じ種類の機能を選ぶと直せる)")
+            .clicked()
+        {
+            self.cur.multi_edit = true;
+            done = true;
+        }
         // 押し出し・回転などの元のスケッチ(探さずに一手で入る)
         let sketches: Vec<kmb_core::FeatureEntry> =
             edit::used_features(self.cur.work.doc().data(), &self.win.registry, id)
@@ -806,17 +823,49 @@ impl Workspace {
             .into_iter()
             .filter(|a| a.is_at(Place::FeatureMenu) && self.belongs_here(a))
             .collect();
+        // 同じまとまりで同じアイコンの操作(工具ごとの「T○ を順番に足す」のように、同じ操作を相手ごとに
+        // 並べた物)が 3 つ以上なら、横に開く一覧にまとめる(メニューが画面の下へはみ出さないように)
+        let mut picked = None;
+        let mut shown_groups: Vec<&str> = Vec::new();
         for a in &actions {
-            if crate::action_row(ui, a, &self.key_of(&crate::CommandId::Action(a.id.clone())))
-                .clicked()
-            {
-                if self.cur.selected != Some(id) {
-                    self.select(id);
+            let same: Vec<_> = actions
+                .iter()
+                .filter(|b| !a.menu.is_empty() && b.menu == a.menu && b.icon == a.icon)
+                .collect();
+            if same.len() >= 3 {
+                if shown_groups.contains(&a.menu.as_str()) {
+                    continue;
                 }
-                // クリックで値を決める手順がある操作(押し出しなど)は、その流れに入る
-                self.start_action(&a.id);
-                done = true;
+                shown_groups.push(&a.menu);
+                if let Some(Some(hit)) = crate::theme::menu_sub(ui, &a.icon, &a.menu, |ui| {
+                    let mut hit = None;
+                    for b in &same {
+                        let keys = self.key_of(&crate::CommandId::Action(b.id.clone()));
+                        if crate::action_row(ui, b, &keys).clicked() {
+                            hit = Some(b.id.clone());
+                        }
+                    }
+                    hit
+                }) {
+                    picked = Some(hit);
+                }
+            } else if crate::action_row(
+                ui,
+                a,
+                &self.key_of(&crate::CommandId::Action(a.id.clone())),
+            )
+            .clicked()
+            {
+                picked = Some(a.id.clone());
             }
+        }
+        if let Some(action) = picked {
+            if self.cur.selected != Some(id) {
+                self.select(id);
+            }
+            // クリックで値を決める手順がある操作(押し出しなど)は、その流れに入る
+            self.start_action(&action);
+            done = true;
         }
         if !actions.is_empty() {
             ui.separator();

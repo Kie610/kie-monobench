@@ -34,4 +34,6 @@ wait
 shot 角度の行
 click ~OK
 wait
+# OK で編集パネルは閉じる。Enter で開き直して行を見る
+key Return
 expect ~"角度。部品 1" exists

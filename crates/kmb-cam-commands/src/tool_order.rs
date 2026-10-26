@@ -173,7 +173,7 @@ pub fn actions(cx: &Context<'_>, all: &[Strategy]) -> Vec<Action> {
                 .menu("工具の順番")
                 .icon("tool")
                 .hint("前の工具が削り残した所だけを、この工具で削る操作を後ろに足す")
-                .at(&[Place::Panel])
+                .at(&[Place::Panel, Place::FeatureMenu])
                 .disabled_if(why),
             );
         }

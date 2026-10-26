@@ -90,7 +90,10 @@ fn a_canvas_placed_from_the_side_faces_the_view() {
         ws.wait();
         let ctx = egui::Context::default();
         let f = facing(&ws, &ctx);
-        assert!(f > 0.5, "ヨー {yaw}°・ピッチ {pitch}° で絵が視点を向かない(内積 {f:.3})");
+        assert!(
+            f > 0.5,
+            "ヨー {yaw}°・ピッチ {pitch}° で絵が視点を向かない(内積 {f:.3})"
+        );
     }
     std::fs::remove_file(path).ok();
 }

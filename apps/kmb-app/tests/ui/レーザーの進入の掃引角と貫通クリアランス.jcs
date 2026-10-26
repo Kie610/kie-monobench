@@ -19,5 +19,7 @@ expect "進入の掃引角" = "180 deg"
 expect "貫通クリアランス" = "1 mm"
 shot 欄
 click ~OK
+# OK で編集パネルは閉じる。Enter で開き直して計算の札を見る
+key Return
 until ~"計算できた" 120s
 shot 後
