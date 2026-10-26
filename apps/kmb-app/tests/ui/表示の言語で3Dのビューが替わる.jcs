@@ -1,0 +1,28 @@
+# 表示の言語(2026-10-27): English にすると、3D のビューの下の帯(オービット・全体表示・正面・表示)、
+# 右上の等角と全画面のボタン、表示のメニューが英語になり、日本語に戻すと戻る。
+#! sample part
+
+expect "オービット"
+expect "等角"
+shot 日本語の3Dのビュー
+click "設定"
+select "表示の言語" "English"
+click "Close window"
+expect "Orbit"
+expect "ISO"
+expect "Look At"
+expect "オービット" missing
+shot 英語の3Dのビュー
+click "Display"
+expect "Reset layout"
+expect "Orthographic"
+shot 英語の表示のメニュー
+key Escape
+
+# 日本語に戻すと戻る
+click "Preferences"
+select "Display language" "日本語"
+click "Close window"
+expect "オービット"
+expect "全体表示"
+expect "Orbit" missing
