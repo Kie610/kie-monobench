@@ -111,26 +111,38 @@ impl Workspace {
         out
     }
 
-    /// すべてのボディを出す(選択表示をやめ、ボディの目とボディのまとまりの目を開ける)。
+    /// すべてのボディを出す(選択表示をやめ、ボディの目とボディのまとまりの目を開ける。目は 1 回の
+    /// 変更)。
     pub fn show_all_bodies(&mut self) {
         self.cur.isolated.clear();
-        self.cur.hidden_bodies.clear();
-        self.cur.hidden_folders.remove(&browser_ui::Kind::Body);
-        let lasts: Vec<FeatureId> = self.body_roots().into_iter().map(|(l, _)| l).collect();
-        for l in lasts {
-            self.cur.hidden.remove(&l);
+        let roots: Vec<u64> = self
+            .body_roots()
+            .into_iter()
+            .filter(|(_, r)| self.is_body_hidden(*r))
+            .map(|(_, r)| r.0)
+            .collect();
+        let folder = self.is_folder_hidden(browser_ui::Kind::Body);
+        if roots.is_empty() && !folder {
+            self.refresh_hidden();
+            return;
         }
-        self.refresh_hidden();
+        let mut args = serde_json::json!({ "features": roots, "show": true });
+        if folder {
+            args["folder"] = "bodies".into();
+        }
+        if !self.run_visibility(args) {
+            self.refresh_hidden();
+        }
     }
 
     /// 隠しているボディがあるか(「すべてのボディを表示」を使えるか)。
     pub(crate) fn any_body_hidden(&self) -> bool {
         !self.cur.isolated.is_empty()
-            || self.cur.hidden_folders.contains(&browser_ui::Kind::Body)
+            || self.is_folder_hidden(browser_ui::Kind::Body)
             || self
                 .body_roots()
                 .iter()
-                .any(|(last, root)| self.is_body_hidden(*root, *last))
+                .any(|(_, root)| self.is_body_hidden(*root))
     }
 
     /// 選択表示の間、3D のビューの上の真ん中に出す札(どのボディか、やめるボタン)。

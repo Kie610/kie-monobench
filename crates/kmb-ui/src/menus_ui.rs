@@ -553,7 +553,7 @@ impl Workspace {
         ui.separator();
         done |= self.body_component_menu(ui, root);
         ui.separator();
-        let hidden = self.is_body_hidden(root, last);
+        let hidden = self.is_body_hidden(root);
         if crate::theme::menu_row(
             ui,
             if hidden { "eye" } else { "eyeoff" },

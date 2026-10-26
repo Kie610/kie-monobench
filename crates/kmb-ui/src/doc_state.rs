@@ -150,23 +150,13 @@ pub(crate) struct DocState {
     pub(crate) context_hit: Option<select_ui::Hit>,
     /// マウスの下の面が平らか(面を選べる手順でのホバー。面が変わった時だけ問い合わせる)
     pub(crate) planar_hover: Option<(view3d::Pick, bool)>,
-    /// 3D のビューで隠している機能(ブラウザの目で替える。画面の状態で、文書には入れない。
-    /// 隠しても計算と加工には使う)
-    pub(crate) hidden: HashSet<FeatureId>,
-    /// 後の機能(押し出しなど)が使っているスケッチ。使われた時に隠す
-    pub(crate) used_sketches: HashSet<FeatureId>,
-    /// `used_sketches` のために自動で隠したもの(使われなくなったら出し直す)
-    pub(crate) auto_hidden: HashSet<FeatureId>,
-    /// `hidden_now` を決め直した時に直していた機能(直す機能が替われば、使って隠したスケッチの
-    /// 見せ方を決め直す)
+    /// 文書の目(区画 `cad.visibility` を読んだ写し。文書が変わるたびに読み直す。替えるのは操作
+    /// 「表示/非表示」)
+    pub(crate) visibility: kmb_interchange::visibility::Visibility,
+    /// `hidden_now` を決め直した時に直していた機能(直す機能が替われば、直す間に一時的に見せる物を
+    /// 決め直す)
     pub(crate) shown_for_edit: Option<FeatureId>,
-    /// 隠しているボディ(最初に作った機能で持つ。後から機能を足しても隠したまま)
-    pub(crate) hidden_bodies: HashSet<FeatureId>,
-    /// ブラウザのまとまり(スケッチ・ボディ)の目で隠しているもの。中の行の目はそのまま残す
-    pub(crate) hidden_folders: HashSet<browser_ui::Kind>,
-    /// ブラウザの「原点」の目: 原点の平面をいつも 3D のビューに出す
-    pub(crate) origin_shown: bool,
-    /// 3D のビューで実際に隠している機能(行の目・ボディの目・まとまりの目を合わせた物)
+    /// 3D のビューで実際に隠している機能(文書の目・一時の見せ・選択表示を合わせた物)
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
     pub(crate) measure: Option<measure_ui::Measure>,
@@ -294,13 +284,8 @@ impl DocState {
             context_point: None,
             context_hit: None,
             planar_hover: None,
-            hidden: HashSet::new(),
-            used_sketches: HashSet::new(),
-            auto_hidden: HashSet::new(),
+            visibility: Default::default(),
             shown_for_edit: None,
-            hidden_bodies: HashSet::new(),
-            hidden_folders: HashSet::new(),
-            origin_shown: false,
             hidden_now: HashSet::new(),
             measure: None,
             section: None,

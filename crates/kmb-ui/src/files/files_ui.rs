@@ -335,12 +335,7 @@ impl Workspace {
             c.cancel();
         }
         self.cur.picked = None;
-        self.cur.hidden_bodies.clear();
-        self.cur.hidden_folders.clear();
-        self.cur.origin_shown = false;
-        self.set_all_hidden(Default::default());
-        self.cur.used_sketches.clear();
-        self.cur.auto_hidden.clear();
+        self.refresh_hidden();
         self.cur.data_edit = None;
         self.cur.modified = false;
         // 寸法の名前をそろえてから覚える(名前を付けただけでは変更にしない)

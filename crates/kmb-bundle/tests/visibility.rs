@@ -7,7 +7,7 @@
 //! - 保存して開き直しても目は閉じたまま。
 //! - 引数を省くと、1 つでも見えていれば隠し、全部隠れていれば出す。知らない機能は入力の誤り。
 //! - 機能を足すか直して、スケッチと作業平面を初めて使うと同じ変更で隠し、取り消せば目も戻る。目を
-//!   開けた後に別の機能が使っても隠さない。区画の無い文書には区画を書かない。
+//!   開けた後に別の機能が使っても隠さない。区画の無い文書は、初めて使った時に区画を書き始める。
 
 use kmb_core::{FeatureId, ProblemKind, category};
 use kmb_interchange::visibility::Visibility;
@@ -161,12 +161,25 @@ fn a_feature_hides_what_it_first_uses_in_the_same_undo_step() {
         d
     };
 
-    // 区画の無い文書: 区画は書かず、使ったスケッチは区画の無い時の決まりで隠れる
+    // 区画の無い文書(新しい文書も): 初めて使った時に、区画の無い時の見え方で区画を書き始める。
+    // 後で使うのをやめても出し直さない(区画が無いままだと、使われなくなった物が出てしまう)
     let s2 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
-    h.add_feature(&e.type_id, None, extrude(s2)).unwrap();
-    assert!(!h.doc().data().sections.contains_key("cad.visibility"));
-    assert!(h.hidden_features().contains(&s2));
+    let ex = h.add_feature(&e.type_id, None, extrude(s2)).unwrap();
+    assert!(h.doc().data().sections.contains_key("cad.visibility"));
+    assert!(hidden_of(&h).contains(&s2) && hidden_of(&h).contains(&sketch));
+    h.apply_edits(
+        "輪郭を戻す",
+        vec![kmb_core::Edit::SetData {
+            id: ex,
+            data: extrude(sketch),
+        }],
+    )
+    .unwrap();
+    assert!(hidden_of(&h).contains(&s2), "使うのをやめたら出し直した");
     h.undo().unwrap();
+    h.undo().unwrap();
+    // 取り消せば区画の無い文書へ戻る
+    assert!(!h.doc().data().sections.contains_key("cad.visibility"));
     h.undo().unwrap();
 
     // 使っているスケッチの目を開ける。別の機能が同じスケッチを使っても、もう隠さない
