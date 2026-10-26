@@ -37,14 +37,10 @@ pub fn face_profile(
     };
     let p0 = planar(first)?;
     let plane = Plane::from_point_normal(p0.point, p0.normal);
-    let n = plane.normal();
     for name in &faces[1..] {
         let p = planar(name)?;
-        let len = dot(p.normal, p.normal).sqrt().max(1e-12);
-        if dot(p.normal, n) / len < 1.0 - 1e-6 || dot(sub(p.point, plane.origin), n).abs() > 1e-6 {
-            return Err(
-                "選んだ面が同じ平面にありません(押し出す面は 1 つの平面に揃えてください)".into(),
-            );
+        if !same_plane(&plane, p.point, p.normal) {
+            return Err("選んだ面が同じ平面にありません".into());
         }
     }
     let mut edges = kernel.edges(shape).unwrap_or_default();
@@ -73,6 +69,64 @@ pub fn face_profile(
         profile: Profile { plane, regions },
         approximated,
     })
+}
+
+/// 選んだ面を平面ごとに分けた組。`faces` はその平面にある面の名前(選んだ順)。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaneFaces {
+    pub faces: Vec<String>,
+    pub profile: FaceProfile,
+}
+
+/// ボディ `shape` の平らな面 `faces` を同じ平面の組に分け(最初に出た順)、組ごとの縁の輪郭。
+/// 平面が違う面は、それぞれの面の外向きの法線へ押し出す。
+pub fn face_profiles(
+    kernel: &dyn Kernel,
+    shape: ShapeHandle,
+    faces: &[String],
+) -> Result<Vec<PlaneFaces>, String> {
+    if faces.is_empty() {
+        return Err("押し出す面を選んでください".into());
+    }
+    let infos = kernel.faces(shape).map_err(|e| e.to_string())?;
+    let mut groups: Vec<(Plane, Vec<String>)> = Vec::new();
+    for name in faces {
+        let f = infos.iter().find(|f| &f.name == name).ok_or_else(|| {
+            format!(
+                "面 {name} が見つかりません(形が変わって面が無くなった時は、選び直してください)"
+            )
+        })?;
+        let p = f
+            .planar
+            .ok_or_else(|| format!("面 {name} は平らではありません(平らな面だけ押し出せます)"))?;
+        match groups
+            .iter_mut()
+            .find(|(pl, _)| same_plane(pl, p.point, p.normal))
+        {
+            Some((_, v)) => v.push(name.clone()),
+            None => groups.push((
+                Plane::from_point_normal(p.point, p.normal),
+                vec![name.clone()],
+            )),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(_, names)| {
+            let profile = face_profile(kernel, shape, &names)?;
+            Ok(PlaneFaces {
+                faces: names,
+                profile,
+            })
+        })
+        .collect()
+}
+
+/// 点 `point`・法線 `normal` の面が平面 `plane` の上にあり、外向きもそろうか。
+fn same_plane(plane: &Plane, point: P3, normal: P3) -> bool {
+    let n = plane.normal();
+    let len = dot(normal, normal).sqrt().max(1e-12);
+    dot(normal, n) / len >= 1.0 - 1e-6 && dot(sub(point, plane.origin), n).abs() <= 1e-6
 }
 
 /// 外周(囲む面積がいちばん大きい輪)と穴に分け、向きを揃える。

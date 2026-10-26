@@ -16,7 +16,7 @@ pub mod thin;
 mod timeline;
 pub use axis::AxisRef;
 pub use chain::{TANGENT_DEG, smooth_faces, tangent_chain, tangent_chains};
-pub use face_profile::{FaceProfile, face_profile};
+pub use face_profile::{FaceProfile, PlaneFaces, face_profile, face_profiles};
 pub use flush::{EXTENSIONS, extend_flush};
 pub use inspect::{InspectCommands, MEASURE};
 
