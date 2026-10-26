@@ -268,3 +268,22 @@ fn a_body_hidden_with_the_eye_is_not_a_reference_in_the_sketch() {
     h.run();
     assert!(refs(&mut h) > 1, "出すと戻る");
 }
+
+#[test]
+fn a_body_hidden_with_the_browser_body_eye_is_not_a_reference_in_the_sketch() {
+    // ブラウザのボディの行の目(最初に作った機能で覚える)で隠したボディも、スケッチの中で
+    // 描かず吸い付かない。行の目だけを見ていた時は、スケッチの中にだけ出ていた
+    let mut h = later_sketch(|_, _| {});
+    let refs =
+        |h: &mut Harness<'static, Workspace>| editor(h.state_mut()).refs.as_ref().unwrap().1.len();
+    assert!(refs(&mut h) > 1, "原点とボディの角・辺");
+    let root = h.state().body_roots()[0].1;
+    h.state_mut().set_body_hidden(root, true);
+    h.run();
+    h.run();
+    assert_eq!(refs(&mut h), 1, "原点だけ");
+    h.state_mut().set_body_hidden(root, false);
+    h.run();
+    h.run();
+    assert!(refs(&mut h) > 1, "出すと戻る");
+}

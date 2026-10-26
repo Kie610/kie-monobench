@@ -265,3 +265,21 @@ fn a_face_picked_or_pointed_in_3d_marks_its_body_row() {
         "ブラウザを描くと印の対象を集める"
     );
 }
+
+#[test]
+fn the_folder_eyes_reach_the_feature_editors() {
+    // まとまりの目で隠したボディとスケッチは、編集器(スケッチの中)にも隠した物として渡る
+    let part = kmb_samples::reference_part();
+    let (plate, sketch) = (part.plate, part.top_sketch);
+    let mut ws = Workspace::new(part.doc, None, reg());
+    ws.wait();
+    // 使って自動で隠したスケッチを、目を開けて出しておく
+    ws.set_hidden(sketch, false);
+    assert!(!ws.with_editors(|_, host| host.body_hidden(plate) || host.hidden.contains(&sketch)));
+    ws.set_folder_hidden(browser_ui::Kind::Body, true);
+    ws.set_folder_hidden(browser_ui::Kind::Sketch, true);
+    assert!(ws.with_editors(|_, host| host.body_hidden(plate) && host.hidden.contains(&sketch)));
+    ws.set_folder_hidden(browser_ui::Kind::Body, false);
+    ws.set_folder_hidden(browser_ui::Kind::Sketch, false);
+    assert!(!ws.with_editors(|_, host| host.body_hidden(plate) || host.hidden.contains(&sketch)));
+}

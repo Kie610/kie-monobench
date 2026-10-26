@@ -473,7 +473,8 @@ impl Workspace {
             message: &mut self.win.message,
             then: &mut self.cur.then_action,
             dialogs: &*self.win.dialogs,
-            hidden: &self.cur.hidden,
+            // 行の目だけでなく、ボディ・まとまりの目と選択表示も合わせた実際の見え方を渡す
+            hidden: &self.cur.hidden_now,
             projection: self.win.layout.projection,
         };
         let r = f(&mut eds, &mut host);
