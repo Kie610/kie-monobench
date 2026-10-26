@@ -372,7 +372,15 @@ fn a_feature_made_with_component_goes_into_that_component() {
     ok(&d, &["sample", "a.json"]);
     ok(
         &d,
-        &["run", "a.json", "asm.new_component", "--arg", "name=空", "--arg", "selection=[]"],
+        &[
+            "run",
+            "a.json",
+            "asm.new_component",
+            "--arg",
+            "name=空",
+            "--arg",
+            "selection=[]",
+        ],
     );
     let doc = read(&d.join("a.json"));
     let c = doc["components"][0]["id"].as_u64().unwrap();
@@ -387,13 +395,29 @@ fn a_feature_made_with_component_goes_into_that_component() {
     let data = format!(r#"{{"body": {pocket}, "copy": true, "z": "50 mm"}}"#);
     let (done, _, _) = jc(
         &d,
-        &["feature", "add", "a.json", "solid.move@1", &data, "--component", "9999"],
+        &[
+            "feature",
+            "add",
+            "a.json",
+            "solid.move@1",
+            &data,
+            "--component",
+            "9999",
+        ],
     );
     assert!(!done, "無い部品は誤り");
     let c_arg = c.to_string();
     let made: u64 = ok(
         &d,
-        &["feature", "add", "a.json", "solid.move@1", &data, "--component", &c_arg],
+        &[
+            "feature",
+            "add",
+            "a.json",
+            "solid.move@1",
+            &data,
+            "--component",
+            &c_arg,
+        ],
     )
     .trim()
     .trim_start_matches('F')

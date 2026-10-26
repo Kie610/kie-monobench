@@ -502,7 +502,10 @@ fn a_design_is_renamed_classified_trashed_and_restored_and_a_folder_is_made() {
         .type_text("A5052");
     h.key_press(egui::Key::Enter);
     h.run_ok();
-    assert_eq!(kmb_session::projects::model_info(&renamed).material, "A5052");
+    assert_eq!(
+        kmb_session::projects::model_info(&renamed).material,
+        "A5052"
+    );
     assert_eq!(kmb_session::history::list(&renamed)[0].note, "分類を変更");
     // ごみ箱へ(確かめの帯で一覧を出してから)と、元に戻す
     card_of(&h, "台座2").click_secondary();
@@ -589,9 +592,13 @@ fn in_panel<'a>(h: &'a Harness<'static, Workspace>, name: &'a str) -> egui_kitte
 fn the_data_panel_lists_designs_and_inserts_them_by_button_and_by_dragging() {
     let d = temp_dir("panel");
     let (proj, data) = project_fixture(&d);
-    let ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-        .with_home(Library::new())
-        .with_data_dir(data);
+    let ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    )
+    .with_home(Library::new())
+    .with_data_dir(data);
     let mut h = home(ws, [1400.0, 820.0]);
     let bodies = h.state().body_roots().len();
     assert!(h.query_by_label("すべての場所").is_none(), "初めは隠す");

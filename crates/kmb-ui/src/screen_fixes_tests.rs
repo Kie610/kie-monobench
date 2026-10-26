@@ -95,7 +95,11 @@ fn a_long_name_cut_short_in_the_browser_shows_whole_in_a_tooltip() {
 fn enter_in_the_new_parameter_expression_adds_it() {
     // 新しいパラメータは、式の欄で Enter を押しても足せる
     // (「追加」ボタンだけでなく)
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.win.show_params = true;
     ws.wait();
     let mut h = harness(ws);

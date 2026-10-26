@@ -198,3 +198,28 @@ fn a_written_png_is_read_back_the_same() {
     assert_eq!(back.rgb, p.rgb);
     assert!(Picture::from_png(b"not a png").is_none());
 }
+
+/// 絵の画素の位置を調べると、そこに描いた面の名前・当たった点(mm)・外向きの法線を返す。
+/// 何も描いていない画素は何も返さない(m4)。
+#[test]
+fn a_pixel_of_the_picture_tells_the_face_the_point_and_the_normal() {
+    let m = cube(10.0);
+    let b = [Body {
+        feature: FeatureId(3),
+        mesh: &m,
+    }];
+    let o = top(Options::default());
+    let p = render(&b, &o);
+    let hit = probe(&b, &o, 100, 50).expect("真ん中は上の面");
+    assert_eq!(hit.feature, FeatureId(3));
+    assert_eq!(hit.face, "+z");
+    assert!((hit.point[2] - 10.0).abs() < 1e-3, "{:?}", hit.point);
+    assert!((hit.point[0] - 5.0).abs() < 0.2 && (hit.point[1] - 5.0).abs() < 0.2);
+    assert!((hit.normal[2] - 1.0).abs() < 1e-4, "{:?}", hit.normal);
+    assert_ne!(p.at(100, 50), BACKGROUND);
+    // 背景の画素
+    assert_eq!(p.at(2, 2), BACKGROUND);
+    assert!(probe(&b, &o, 2, 2).is_none());
+    // 絵の外
+    assert!(probe(&b, &o, 500, 50).is_none());
+}

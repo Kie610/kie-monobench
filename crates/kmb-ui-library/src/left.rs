@@ -1,11 +1,11 @@
 //! 左: 始め方(新規デザイン・開く…・プロジェクトを追加)と場所(ホームの 3 つ、プロジェクトの
 //! フォルダの木)。木の行は押すとそのフォルダを開き、デザインを引いて離すとそこへ移す。
 
-use kmb_ui::theme::RightMenu as _;
 use crate::middle::drop_target;
 use crate::{Library, Place, big_button, file_name, heading, place_row};
 use kmb_session::projects::Folder;
 use kmb_ui::theme;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::{HomeHost, HomeRequest};
 use std::path::{Path, PathBuf};
 

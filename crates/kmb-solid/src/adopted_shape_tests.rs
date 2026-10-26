@@ -178,7 +178,9 @@ fn a_drafted_cut_to_a_face_leaves_no_skin_on_that_face() {
 fn joining_a_box_of_the_same_height_leaves_no_extra_plate() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(同じ高さの箱の上下の面)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(同じ高さの箱の上下の面)"
+        );
     }
     let mut b = DocBuilder::new();
     let a = block(&mut b, "左", [0.0, 0.0, 20.0, 20.0], 10.0);
@@ -210,7 +212,9 @@ fn joining_a_box_of_the_same_height_leaves_no_extra_plate() {
 fn a_through_hole_passes_a_slanted_wall() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck のブーリアンは斜めの面と円筒の交わりを粗く近づけ、削る体積が 0.2% ずれる");
+        kmb_contract::skip!(
+            "truck のブーリアンは斜めの面と円筒の交わりを粗く近づけ、削る体積が 0.2% ずれる"
+        );
     }
     let mut b = DocBuilder::new();
     // ZX 平面(スケッチの X は世界の z、Y は世界の x)の平行四辺形を y の向きに 20 押し出す
@@ -247,7 +251,10 @@ fn a_through_hole_passes_a_slanted_wall() {
     );
     let mut doc = b.finish("傾いた壁の穴");
     let m = final_mass(&mut doc, &k);
-    assert!(close(m.min[1], 0.0, 1e-6) && close(m.max[1], 20.0, 1e-6), "{m:?}");
+    assert!(
+        close(m.min[1], 0.0, 1e-6) && close(m.max[1], 20.0, 1e-6),
+        "{m:?}"
+    );
     let removed = 10.0 * 20.0 * 20.0 - m.volume;
     let want = PI * 2.5 * 2.5 * 10.0;
     assert!(close(removed, want, 1e-3), "{removed} vs {want}");
@@ -349,7 +356,11 @@ fn chamfering_a_pin_in_a_hole_leaves_the_hole_wall() {
     // 小さい方がピン、大きい方が板
     assert!(close(v1[1], v0[1], 1e-9), "板 {} → {}", v0[1], v1[1]);
     let want = 0.5 * 2.0 * PI * (5.0 - 1.0 / 3.0);
-    assert!(close(v0[0] - v1[0], want, 1e-2), "ピン {} vs {want}", v0[0] - v1[0]);
+    assert!(
+        close(v0[0] - v1[0], want, 1e-2),
+        "ピン {} vs {want}",
+        v0[0] - v1[0]
+    );
 }
 
 fn block_from(b: &mut DocBuilder, profile: kmb_core::FeatureId) -> kmb_core::FeatureId {

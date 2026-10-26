@@ -1054,7 +1054,10 @@ fn the_tool_of_an_extrude_is_drawn_as_a_solid_in_the_colour_of_its_operation() {
     let join = at(&mut ws, 5.0);
     assert_eq!(join.layer, view3d::GhostLayer::Over);
     assert_eq!(join.edge_color, ws.win.look.pal.inks.ghost_join_edge);
-    assert!(join.color.a() < 255 && join.color.b() > join.color.r(), "青く透かす");
+    assert!(
+        join.color.a() < 255 && join.color.b() > join.color.r(),
+        "青く透かす"
+    );
     let up = volume(&join);
     assert!(up > 0.0, "外向きの面で閉じた立体 {up}");
     let cut = at(&mut ws, -5.0);

@@ -1155,15 +1155,26 @@ mod tests {
         let names = |cs: Vec<&kmb_core::Component>| -> Vec<String> {
             cs.into_iter().map(|c| c.name.clone()).collect()
         };
-        assert_eq!(names(components_emptied(doc.data(), &[ids[1], ids[2]])), ["腕", "台の中"]);
+        assert_eq!(
+            names(components_emptied(doc.data(), &[ids[1], ids[2]])),
+            ["腕", "台の中"]
+        );
         assert_eq!(names(components_emptied(doc.data(), &[ids[1]])), ["腕"]);
         // 台は子の「台の中」が残るので、台のボディだけ消えても残す
-        assert_eq!(names(components_emptied(doc.data(), &[ids[0]])), Vec::<String>::new());
+        assert_eq!(
+            names(components_emptied(doc.data(), &[ids[0]])),
+            Vec::<String>::new()
+        );
         let reg = Registry::new();
         let tx = remove_features_with_users(doc.data(), &reg, &[ids[1], ids[2]]);
         doc.apply(tx).unwrap();
         assert_eq!(doc.data().features.len(), 1);
-        let left: Vec<&str> = doc.data().components.iter().map(|c| c.name.as_str()).collect();
+        let left: Vec<&str> = doc
+            .data()
+            .components
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
         assert_eq!(left, ["台"]);
         // 1 回の取り消しで機能も部品も戻る
         doc.undo();

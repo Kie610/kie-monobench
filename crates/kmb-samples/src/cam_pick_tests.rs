@@ -258,13 +258,11 @@ fn a_contour_on_the_top_face_cuts_its_holes_first_and_leaves_the_boss() {
         .fold(f64::INFINITY, f64::min);
     assert!(in_hole <= 1e-6, "{in_hole}");
     // らせんの入りは G2・G3 の円弧で、入りの印が付く
-    assert!(
-        tp.moves
-            .iter()
-            .zip(tp.roles())
-            .any(|(m, r)| matches!(m, kmb_toolpath::Move::Arc { .. })
-                && r == Some(kmb_toolpath::Role::Entry))
-    );
+    assert!(tp.moves.iter().zip(tp.roles()).any(|(m, r)| matches!(
+        m,
+        kmb_toolpath::Move::Arc { .. }
+    ) && r
+        == Some(kmb_toolpath::Role::Entry)));
     let sim = simulate(kernel, &s, SimOptions::default()).unwrap();
     assert!(sim.is_ok(), "{}", sim.summary());
 }

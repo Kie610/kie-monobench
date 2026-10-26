@@ -34,7 +34,11 @@ fn feature_values_are_edited_and_body_tables_are_made_in_the_parameter_window() 
     // - 機能の値を表でその場で直し、取り消し 1 回で戻る(元 a_feature_value_is_edited_in_the_parameter_table)
     // - ボディの右クリックで表を作り、行を表に入れる・外す、表の名前を変える・消す
     //   (元 a_body_table_is_made_from_the_body_menu_and_rows_are_put_in_and_out)
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
     let pocket = extrude_with(&ws, "pocket_depth");
     let plate = extrude_with(&ws, "thickness");

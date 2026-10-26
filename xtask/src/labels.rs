@@ -69,11 +69,7 @@ pub fn parse(text: &str) -> Result<Vec<Label>, Vec<String>> {
             errs.push(format!("{FILE}: {} を 2 回定義した", w[0]));
         }
     }
-    if errs.is_empty() {
-        Ok(out)
-    } else {
-        Err(errs)
-    }
+    if errs.is_empty() { Ok(out) } else { Err(errs) }
 }
 
 /// ひな型の `labels: [a, b]` の名前。

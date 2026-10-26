@@ -145,10 +145,7 @@ mod tests {
         assert_eq!(a.at(t0)[..3], [0.5, -1.0, 1.0]);
 
         let both = bytes(1, &[0, 0, 0, 35, 0, -35]);
-        assert_eq!(
-            parse(&both, false),
-            Report::Both([0, 0, 0, 35, 0, -35])
-        );
+        assert_eq!(parse(&both, false), Report::Both([0, 0, 0, 35, 0, -35]));
         a.apply(&parse(&both, false), t0);
         assert!((a.at(t0)[3] - 0.1).abs() < 1e-6);
         assert!((a.at(t0)[5] + 0.1).abs() < 1e-6);

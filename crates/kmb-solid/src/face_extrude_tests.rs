@@ -819,7 +819,11 @@ fn a_union_that_leaves_no_solid_is_refused_by_the_kernel() {
     let k = SmlibKernel::new();
     let reg = super::tests::registry();
     let mut doc = kmb_samples::reference_cam_3d_document();
-    let cam = doc.data().features.iter().position(|f| f.type_id.starts_with("cam."));
+    let cam = doc
+        .data()
+        .features
+        .iter()
+        .position(|f| f.type_id.starts_with("cam."));
     doc.apply(kmb_core::Transaction::new(
         "加工の手前まで",
         vec![kmb_core::Op::SetRollback { rollback: cam }],

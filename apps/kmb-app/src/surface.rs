@@ -64,11 +64,20 @@ mod tests {
     #[test]
     fn surface_errors_retry_next_frame() {
         use wgpu::CurrentSurfaceTexture as S;
-        assert!(matches!(surface_action(&S::Occluded), SurfaceErrorAction::SkipFrame));
-        assert!(matches!(surface_action(&S::Lost), SurfaceErrorAction::RecreateSurface));
+        assert!(matches!(
+            surface_action(&S::Occluded),
+            SurfaceErrorAction::SkipFrame
+        ));
+        assert!(matches!(
+            surface_action(&S::Lost),
+            SurfaceErrorAction::RecreateSurface
+        ));
         // 待ちの切れ・確かめの誤りも描かずに捨てたままにせず、設定し直して次の回を頼む
         for s in [S::Outdated, S::Timeout, S::Validation] {
-            assert!(matches!(surface_action(&s), SurfaceErrorAction::Reconfigure));
+            assert!(matches!(
+                surface_action(&s),
+                SurfaceErrorAction::Reconfigure
+            ));
         }
     }
 

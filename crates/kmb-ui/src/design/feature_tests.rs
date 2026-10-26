@@ -511,7 +511,11 @@ fn a_bare_number_takes_the_unit_of_the_current_value() {
     // 欄の名前からは推し量らない(「温度(℃)」に 50 と打って 50 mm になっていた。2026-10-20)
     use crate::feature_ui::typed_expr;
     use kmb_core::Field;
-    let ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     let typed = |f: Field, v: &str| typed_expr(&ws, &f, "", v);
     assert_eq!(
         typed(Field::opt_expr("depth", "深さ").length(), "5"),
@@ -534,7 +538,11 @@ fn ratio_and_rpm_fields_take_bare_numbers_and_percent() {
     // Z20(網羅の調べ J51): 「切削ピッチ(工具径の比)」に 0.3 と打つと 0.3 mm になり単位の誤り、30% も通らなかった
     use crate::feature_ui::typed_expr;
     use kmb_core::Field;
-    let ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     let typed = |f: Field, v: &str| typed_expr(&ws, &f, "", v);
     let pitch = || Field::expr("stepover", "切削ピッチ(工具径の比)").ratio();
     assert_eq!(typed(pitch(), "0.3"), "0.3");

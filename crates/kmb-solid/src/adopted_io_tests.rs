@@ -37,7 +37,9 @@ fn plate(b: &mut DocBuilder, [x, y, w, h]: [f64; 4], t: f64) -> kmb_core::Featur
 fn a_plate_with_tapped_holes_writes_to_step_and_reads_back() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck が書いた STEP は、読み込みの網づくりが 60 秒で終わらない(SMLib が書いた STEP は同じ読み込みで読める)");
+        kmb_contract::skip!(
+            "truck が書いた STEP は、読み込みの網づくりが 60 秒で終わらない(SMLib が書いた STEP は同じ読み込みで読める)"
+        );
     }
     let mut b = DocBuilder::new();
     let p = plate(&mut b, [0.0, 0.0, 30.0, 20.0], 10.0);
@@ -96,7 +98,9 @@ fn a_plate_with_tapped_holes_writes_to_step_and_reads_back() {
 fn a_mesh_of_a_shape_with_a_thin_face_has_no_gaps() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(隣り合う 2 枚の板の側面と下の面)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(隣り合う 2 枚の板の側面と下の面)"
+        );
     }
     let mut b = DocBuilder::new();
     let a = plate(&mut b, [0.0, 0.0, 20.0, 20.0], 10.0);

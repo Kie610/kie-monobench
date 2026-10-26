@@ -269,7 +269,10 @@ fn the_example_plugin_lock_follows_the_workspace() {
         );
         checked += 1;
     }
-    assert!(checked >= 2, "kmb-post・kmb-toolpath を見ている: {plugin:?}");
+    assert!(
+        checked >= 2,
+        "kmb-post・kmb-toolpath を見ている: {plugin:?}"
+    );
 }
 
 /// 見本のプラグインは画面の部品を組まない。揃えた依存(kmb-workspace-hack)は画面の部品を抱えるので、
@@ -283,7 +286,10 @@ fn the_example_plugin_builds_without_screen_parts() {
         .filter_map(|l| l.strip_prefix("name = "))
         .map(|n| n.trim_matches('"'))
         .collect();
-    assert!(names.contains(&"kmb-post"), "Cargo.lock を読めている: {names:?}");
+    assert!(
+        names.contains(&"kmb-post"),
+        "Cargo.lock を読めている: {names:?}"
+    );
     let bad: Vec<&&str> = names
         .iter()
         .filter(|n| {

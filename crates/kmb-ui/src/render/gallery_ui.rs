@@ -4,10 +4,10 @@
 //! (kmb-session の `gallery`)。絵を押すと大きく見る窓、右クリックで書き出す・版を開く・消す。
 //! 版の履歴の窓からも、その版の絵だけを出せる。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::layout::Space;
 use crate::theme;
+use crate::theme::RightMenu as _;
 use kmb_session::gallery::{self, Render};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

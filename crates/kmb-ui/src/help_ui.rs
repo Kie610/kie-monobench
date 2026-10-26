@@ -190,7 +190,9 @@ impl Workspace {
                     // 報告は開発者へファイルで渡す(どこへも送らない)
                     if ui
                         .small_button("報告の入ったフォルダを開く")
-                        .on_hover_text("報告のファイルを OS のファイルの窓で開く(メールなどに付けて渡せる)")
+                        .on_hover_text(
+                            "報告のファイルを OS のファイルの窓で開く(メールなどに付けて渡せる)",
+                        )
                         .clicked()
                     {
                         open_dir = true;
@@ -213,7 +215,9 @@ impl Workspace {
                             }
                             if ui
                                 .button("写す")
-                                .on_hover_text("この報告の中身をクリップボードへ写す(貼り付けて渡せる)")
+                                .on_hover_text(
+                                    "この報告の中身をクリップボードへ写す(貼り付けて渡せる)",
+                                )
                                 .clicked()
                             {
                                 copy = Some(s.name.clone());

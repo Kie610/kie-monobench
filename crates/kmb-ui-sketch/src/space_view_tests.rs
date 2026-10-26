@@ -217,8 +217,14 @@ fn finishing_a_sketch_keeps_the_view_it_was_seen_from() {
     h.state_mut().finish_sketch();
     h.run();
     let after = view_angles(&mut h);
-    assert!(same_angles(after, seen), "平らな図の向き {seen:?} で戻る: {after:?}");
-    assert!((after[1].abs() - 90.0).abs() < 0.5, "XY 平面を真上から: {after:?}");
+    assert!(
+        same_angles(after, seen),
+        "平らな図の向き {seen:?} で戻る: {after:?}"
+    );
+    assert!(
+        (after[1].abs() - 90.0).abs() < 0.5,
+        "XY 平面を真上から: {after:?}"
+    );
 
     // 右ドラッグで回してから終える: その向きのまま
     let mut h = empty_sketch();
@@ -228,5 +234,8 @@ fn finishing_a_sketch_keeps_the_view_it_was_seen_from() {
     h.state_mut().finish_sketch();
     h.run();
     let after = view_angles(&mut h);
-    assert!(same_angles(after, seen), "回した向き {seen:?} で戻る: {after:?}");
+    assert!(
+        same_angles(after, seen),
+        "回した向き {seen:?} で戻る: {after:?}"
+    );
 }

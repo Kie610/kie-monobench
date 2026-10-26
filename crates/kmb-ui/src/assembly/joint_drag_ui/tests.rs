@@ -371,7 +371,11 @@ fn turning_a_joint_moves_only_the_view_until_released() {
         ws.joint_drag_show();
         ws.sync_drag_pose();
         jd = ws.cur.joint_drag.take().unwrap();
-        assert_eq!(ws.cur.work.doc().undo_depth(), depth, "引く間は文書を変えない");
+        assert_eq!(
+            ws.cur.work.doc().undo_depth(),
+            depth,
+            "引く間は文書を変えない"
+        );
         assert_eq!(ws.report().stamp(), stamp, "引く間は計算し直さない");
         assert!(ws.cur.scene.is_posed(), "ビューのボディは動く");
     }
@@ -383,7 +387,11 @@ fn turning_a_joint_moves_only_the_view_until_released() {
         ws.cur.work.doc().data().feature(j).unwrap().data["angle"],
         json!("45 deg")
     );
-    assert_eq!(ws.cur.work.doc().undo_depth(), depth + 1, "1 つの取り消し単位");
+    assert_eq!(
+        ws.cur.work.doc().undo_depth(),
+        depth + 1,
+        "1 つの取り消し単位"
+    );
     assert!(!ws.cur.scene.is_posed(), "形が直ったら見せていた動きを外す");
     assert!(ws.cur.drag_pose.is_none());
 }

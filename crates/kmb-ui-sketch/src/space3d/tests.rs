@@ -901,7 +901,10 @@ fn label_center(h: &mut Harness<'static, Workspace>, id: ConstraintId) -> egui::
 fn line_mid(h: &mut Harness<'static, Workspace>, line: EntityId) -> egui::Pos2 {
     let (sk, sol) = (current(h.state()), solution(h.state()));
     let (a, b) = sk.line_ends(line).unwrap();
-    let m = kmb_sketch_3d::geom::scale(kmb_sketch_3d::geom::add(sol.points[&a], sol.points[&b]), 0.5);
+    let m = kmb_sketch_3d::geom::scale(
+        kmb_sketch_3d::geom::add(sol.points[&a], sol.points[&b]),
+        0.5,
+    );
     ed(h.state_mut()).screen_of(m)
 }
 

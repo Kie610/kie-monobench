@@ -25,7 +25,12 @@ fn a_rest_pocket_with_a_thinner_tool_cuts_only_the_corners() {
     // 3.175 mm の後に、2 mm で隅だけ
     data["tool"] = serde_json::json!(3);
     data["rest_tool"] = serde_json::json!(2);
-    let rest = insert_op(&mut cam, kmb_strategy_pocket2d::POCKET, "隅の残り削り", data);
+    let rest = insert_op(
+        &mut cam,
+        kmb_strategy_pocket2d::POCKET,
+        "隅の残り削り",
+        data,
+    );
     let report = cam.part.doc.recompute(&reg, kernel);
     assert_eq!(report.error_count(), 0, "{:?}", report.features);
     let s = &setups(cam.part.doc.data(), &report, &reg)[0];

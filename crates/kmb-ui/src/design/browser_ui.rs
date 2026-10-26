@@ -88,8 +88,11 @@ pub(crate) fn plain_row(ui: &mut egui::Ui, depth: usize, icon: &str, name: &str)
 
 /// 1 行を描く。(行の応答、開閉の印を押したか、目を押したか)を返す。
 /// ブラウザの原点の下の平面(行の順。XY・YZ・ZX)。
-pub(crate) const ORIGIN_PLANES: [kmb_core::Plane; 3] =
-    [kmb_core::Plane::XY, kmb_core::Plane::YZ, kmb_core::Plane::ZX];
+pub(crate) const ORIGIN_PLANES: [kmb_core::Plane; 3] = [
+    kmb_core::Plane::XY,
+    kmb_core::Plane::YZ,
+    kmb_core::Plane::ZX,
+];
 
 fn row(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool) {
     let (resp, twisty, eye, _) = row_radio(ui, r);
@@ -314,7 +317,8 @@ pub(crate) struct BrowserPart {
 pub(crate) fn mark_row(ui: &egui::Ui, rect: egui::Rect) {
     let l = theme::look(ui.ctx());
     let bar = egui::Rect::from_min_size(rect.left_top(), egui::vec2(3.0, rect.height()));
-    ui.painter().rect_filled(bar.shrink2(egui::vec2(0.0, 2.0)), 1.0, l.ws());
+    ui.painter()
+        .rect_filled(bar.shrink2(egui::vec2(0.0, 2.0)), 1.0, l.ws());
 }
 
 impl Workspace {

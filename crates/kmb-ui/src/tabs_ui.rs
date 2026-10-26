@@ -10,9 +10,9 @@
 //! 「今の文書に無い形」を捨てるので、1 つを分け合うと、片方の計算でもう片方の形が消える。
 //! 作り方を渡されていない時(テスト)は分け合い、戻ったタブを一から計算し直す。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::doc_state::DocState;
+use crate::theme::RightMenu as _;
 use kmb_core::Document;
 use std::path::Path;
 use std::sync::Arc;

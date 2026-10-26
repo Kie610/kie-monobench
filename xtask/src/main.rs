@@ -1275,7 +1275,10 @@ mod tests {
             with_dependents(&set(&["kmb-cam"]), &ws()),
             set(&["kmb-cam", "kmb-cam-commands", "kmb-app"])
         );
-        assert_eq!(with_dependents(&set(&["kmb-app"]), &ws()), set(&["kmb-app"]));
+        assert_eq!(
+            with_dependents(&set(&["kmb-app"]), &ws()),
+            set(&["kmb-app"])
+        );
         assert_eq!(with_dependents(&set(&["kmb-core"]), &ws()).len(), 5);
     }
 

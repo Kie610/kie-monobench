@@ -40,7 +40,11 @@ pub(crate) fn draw_axes(painter: &egui::Painter, rect: Rect, t: &Transform, colo
 
 /// 欄に出す式(`12.5 mm`、`30 deg`)を、図の寸法と同じ桁数と単位で書く。数で始まらなければそのまま。
 /// 長さは書いた単位(`0.5 in`)で読み、文書の単位で出す。
-pub(crate) fn input_shown(fmt: &kmb_sketch::DimFormat, kind: &ConstraintKind, text: &str) -> String {
+pub(crate) fn input_shown(
+    fmt: &kmb_sketch::DimFormat,
+    kind: &ConstraintKind,
+    text: &str,
+) -> String {
     if !kind.is_angle()
         && let Some(mm) = super::length_mm(text)
     {

@@ -136,9 +136,27 @@ mod tests {
         let root = std::env::temp_dir().join(format!("kmb-mouse3d-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let class = root.join("class");
-        node(&class, "hidraw0", "0003:0000046D:0000C31C", "Keyboard", &KEYBOARD);
-        node(&class, "hidraw1", "0003:0000256F:0000C635", "Mouse A", &MULTI_AXIS);
-        node(&class, "hidraw2", "0003:00001234:00000001", "Other", &MULTI_AXIS);
+        node(
+            &class,
+            "hidraw0",
+            "0003:0000046D:0000C31C",
+            "Keyboard",
+            &KEYBOARD,
+        );
+        node(
+            &class,
+            "hidraw1",
+            "0003:0000256F:0000C635",
+            "Mouse A",
+            &MULTI_AXIS,
+        );
+        node(
+            &class,
+            "hidraw2",
+            "0003:00001234:00000001",
+            "Other",
+            &MULTI_AXIS,
+        );
         // 用途を頁つきの 4 バイトで書いた記述
         node(
             &class,
@@ -150,7 +168,14 @@ mod tests {
         let found = scan_in(&class, Path::new("/dev"));
         let got: Vec<_> = found
             .iter()
-            .map(|d| (d.path.to_string_lossy().into_owned(), d.name.as_str(), d.vendor, d.product))
+            .map(|d| {
+                (
+                    d.path.to_string_lossy().into_owned(),
+                    d.name.as_str(),
+                    d.vendor,
+                    d.product,
+                )
+            })
             .collect();
         assert_eq!(
             got,

@@ -386,8 +386,10 @@ impl<'a> Graph<'a> {
         // 呼ぶと、CLI・MCP・画面で同じ処理が別々に育つため。役割の印の語彙(kmb-interchange)は読んでよい
         for app in self.p.keys().filter(|n| self.layer(n) == "app") {
             for d in self.deps(app, false) {
-                if !(matches!(d, "kmb-core" | "kmb-interchange" | "kmb-session" | "kmb-bundle")
-                    || (*app == "kmb-app" && d.starts_with("kmb-ui")))
+                if !(matches!(
+                    d,
+                    "kmb-core" | "kmb-interchange" | "kmb-session" | "kmb-bundle"
+                ) || (*app == "kmb-app" && d.starts_with("kmb-ui")))
                 {
                     out.push(format!("{app} が {d} に直接依存している"));
                 }
@@ -492,7 +494,12 @@ const STATIC_KNOWN: &[(&str, &str, &str, &str)] = &[
         "MAP",
         "一度だけ作る不変の環境の絵(書き換えない)",
     ),
-    ("kmb-io-render", "src/mf.rs", "N", "一時ファイルの名前の採番"),
+    (
+        "kmb-io-render",
+        "src/mf.rs",
+        "N",
+        "一時ファイルの名前の採番",
+    ),
     (
         "kmb-kernel-smlib",
         "src/ffi.rs",

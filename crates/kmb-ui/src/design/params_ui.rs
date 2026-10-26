@@ -547,7 +547,10 @@ impl Workspace {
                         }
                         users_cell(
                             ui,
-                            crate::doc_id(ui.ctx(), ("model_param_users", p.feature, p.name.as_str())),
+                            crate::doc_id(
+                                ui.ctx(),
+                                ("model_param_users", p.feature, p.name.as_str()),
+                            ),
                             &users_of(&p.name),
                         );
                         ui.end_row();
@@ -601,7 +604,8 @@ impl Workspace {
                         crate::doc_id(ui.ctx(), ("model_param_users", p.feature, p.name.as_str())),
                         &users,
                     );
-                    let rect = egui::Rect::from_two_pos(top, egui::pos2(ui.max_rect().right(), top.y + h));
+                    let rect =
+                        egui::Rect::from_two_pos(top, egui::pos2(ui.max_rect().right(), top.y + h));
                     ui.data_mut(|d| d.insert_temp(row, rect));
                     ui.end_row();
                     if open {

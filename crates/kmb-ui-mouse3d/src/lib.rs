@@ -339,12 +339,18 @@ impl<'a> Reader<'a> {
                 Report::Unknown { .. } => {
                     log::warn!("3D マウスの読めない報告: 番号 {id}、中身 {len} バイト")
                 }
-                Report::Translate(_) => log::info!("3D マウスの報告 {id}(中身 {len} バイト)を移動と読む"),
-                Report::Rotate(_) => log::info!("3D マウスの報告 {id}(中身 {len} バイト)を回転と読む"),
+                Report::Translate(_) => {
+                    log::info!("3D マウスの報告 {id}(中身 {len} バイト)を移動と読む")
+                }
+                Report::Rotate(_) => {
+                    log::info!("3D マウスの報告 {id}(中身 {len} バイト)を回転と読む")
+                }
                 Report::Both(_) => {
                     log::info!("3D マウスの報告 {id}(中身 {len} バイト)を移動と回転と読む")
                 }
-                Report::Buttons(_) => log::info!("3D マウスの報告 {id}(中身 {len} バイト)をボタンと読む"),
+                Report::Buttons(_) => {
+                    log::info!("3D マウスの報告 {id}(中身 {len} バイト)をボタンと読む")
+                }
             }
         }
         let was_still = s.axes.at(now) == [0.0; 6];

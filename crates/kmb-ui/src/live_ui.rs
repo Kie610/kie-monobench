@@ -4,7 +4,7 @@
 //! 人が機能を編集している間(スケッチ・編集の欄・押し出しの手順など)は、文書を変える要求を断る
 //! (読むだけの要求は通す)。下の帯に「Claude 待ち受け中・接続中・操作中」を出し、そこから切れる。
 //!
-//! 道具(`tool`): status・screenshot・selection・set_param・add_param・set_value・undo・redo。
+//! 道具(`tool`): status・screenshot・probe(絵の画素に見える面・点・法線)・selection・set_param・add_param・set_value・undo・redo。
 //! 画面の部品を人と同じ入力で操作する ui_find・ui_tree・ui_click・ui_type・ui_key・ui_select・
 //! ui_pick・ui_expect と、コマンド欄のコマンドを流す command(1 行)・script(何行も)。これらは
 //! コマンド欄のスクリプトとして流し、流し終えたら行ごとの結果で答える(`crate::cmdline`)。
@@ -412,6 +412,7 @@ impl Workspace {
             }
             "selection" => return Ok(Answer::Now(self.live_selection())),
             "screenshot" => return Ok(Answer::Later(self.live_screenshot(a))),
+            "probe" => return Ok(Answer::Later(self.live_probe(a)?)),
             // 画面の部品を名前で操作する(人と同じ入力で。コマンド欄のコマンドとして流す)
             "ui_find" | "ui_tree" | "ui_click" | "ui_type" | "ui_key" | "ui_select" | "ui_pick"
             | "ui_expect" | "command" | "script" => {
@@ -649,6 +650,40 @@ impl Workspace {
             let b: Vec<_> = meshes.iter().map(|(f, m)| (*f, m)).collect();
             Ok(live::screenshot(&b, (w, h), yaw, pitch, picked))
         })
+    }
+
+    /// `screenshot` の絵の画素 (x, y) に見えている面・点・法線。絵と同じ大きさ・向きで調べ、
+    /// 選択・視点・文書は変えない。網にするのは重いので、絵と同じく画面のスレッドの外で計算する。
+    fn live_probe(
+        &self,
+        a: &Value,
+    ) -> Result<Box<dyn FnOnce() -> Result<Value, String> + Send>, String> {
+        let at = |k: &str| {
+            a[k].as_u64()
+                .map(|v| v.min(u32::MAX as u64) as u32)
+                .ok_or_else(|| format!("probe には {k}(screenshot の絵の画素の位置)が要ります"))
+        };
+        let (x, y) = (at("x")?, at("y")?);
+        let w = a["width"].as_u64().unwrap_or(800).clamp(64, 2048) as u32;
+        let h = a["height"].as_u64().unwrap_or(600).clamp(64, 2048) as u32;
+        let tol = self.win.layout.render.mesh.tolerance();
+        let bodies = self.visible_bodies();
+        let kernel = self.cur.work.kernel().clone();
+        let (yaw, pitch) = (
+            self.cur.camera.yaw.to_degrees(),
+            self.cur.camera.pitch.to_degrees(),
+        );
+        Ok(Box::new(move || {
+            let meshes: Vec<_> = bodies
+                .into_iter()
+                .filter_map(|(f, s)| Some((f, kernel.mesh(s, tol).ok()?)))
+                .collect();
+            if meshes.is_empty() {
+                return Err("見えているボディがありません".into());
+            }
+            let b: Vec<_> = meshes.iter().map(|(f, m)| (*f, m)).collect();
+            Ok(live::probe(&b, (w, h), yaw, pitch, (x, y)))
+        }))
     }
 
     /// 下の帯の「Claude」の札(待ち受けていなければ何も出さない)。押すと切る。

@@ -272,7 +272,9 @@ pub fn render_guided(
                                 view,
                             )
                         }
-                        Some(look) => kmb_render::raster::shade_surface(&env, look, p, n, view, 1.0),
+                        Some(look) => {
+                            kmb_render::raster::shade_surface(&env, look, p, n, view, 1.0)
+                        }
                         None => kmb_render::EnvMap::viewport().shade(
                             &env_frame,
                             [base.r(), base.g(), base.b()].map(kmb_render::math::srgb_to_linear),

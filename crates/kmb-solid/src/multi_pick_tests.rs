@@ -73,7 +73,9 @@ fn by_hand2(bosses: &[f64], cuts: &[f64]) -> f64 {
 fn patterns_and_mirrors_repeat_every_listed_feature() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(板と柱の下の面が同じ平面)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(板と柱の下の面が同じ平面)"
+        );
     }
     let mut b = DocBuilder::new();
     let (boss, cut) = plate_boss_cut(&mut b, &[2.0]);
@@ -200,7 +202,9 @@ fn kept_tool(keep_tools: bool) -> (usize, f64) {
 #[test]
 fn a_boolean_can_keep_its_tools() {
     if TestKernel::new().is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(台と道具の上下の面が同じ高さ)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(台と道具の上下の面が同じ高さ)"
+        );
     }
     // 道具を使い切る(前と同じ): 残るのは切った台だけ
     let (n, v) = kept_tool(false);

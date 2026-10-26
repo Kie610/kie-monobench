@@ -1302,7 +1302,9 @@ impl Workspace {
         let cam = self.win.registry.descriptor(&f.type_id).is_some_and(|d| {
             matches!(
                 d.category.as_str(),
-                kmb_core::category::OPERATION | kmb_core::category::SETUP | kmb_core::category::TOOLS
+                kmb_core::category::OPERATION
+                    | kmb_core::category::SETUP
+                    | kmb_core::category::TOOLS
             )
         });
         let v = self.win.timeline_vertical;
@@ -1548,7 +1550,8 @@ impl Workspace {
         }
         if ui.input(|i| i.pointer.any_down()) {
             // 引いている間は、落とす先に線を引く(文書のタブの並べ替えと同じ見せ方)
-            if let Some((a, b)) = pos.and_then(|p| drop_line(self.win.timeline_vertical, chips, p)) {
+            if let Some((a, b)) = pos.and_then(|p| drop_line(self.win.timeline_vertical, chips, p))
+            {
                 let ink = egui::Stroke::new(2.0, theme::look(ui.ctx()).ws());
                 ui.painter().line_segment([a, b], ink);
             }

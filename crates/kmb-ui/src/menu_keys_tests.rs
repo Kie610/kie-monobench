@@ -18,7 +18,11 @@ fn harness(ws: Workspace) -> Harness<'static, Workspace> {
 
 #[test]
 fn esc_closes_the_undo_history_and_the_parameters_one_step_at_a_time() {
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
     let first = ws.document().data().features[0].id;
     ws.select(first);
@@ -28,8 +32,15 @@ fn esc_closes_the_undo_history_and_the_parameters_one_step_at_a_time() {
     h.run();
     h.key_press(egui::Key::Escape);
     h.run();
-    assert!(!h.state().undo_history_open(), "取り消しの履歴は Esc で閉じる");
-    assert_eq!(h.state().selection(), [first], "窓を閉じた Esc は選びを外さない");
+    assert!(
+        !h.state().undo_history_open(),
+        "取り消しの履歴は Esc で閉じる"
+    );
+    assert_eq!(
+        h.state().selection(),
+        [first],
+        "窓を閉じた Esc は選びを外さない"
+    );
     // 編集パネルのパラメータも Esc で閉じる
     h.state_mut().win.show_params = true;
     h.run();
@@ -44,7 +55,11 @@ fn esc_closes_the_undo_history_and_the_parameters_one_step_at_a_time() {
 
 #[test]
 fn a_second_right_click_moves_the_menu_instead_of_closing_it() {
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
     let mut h = harness(ws);
     h.get_by_label("ボディ1").click_secondary();
@@ -54,13 +69,17 @@ fn a_second_right_click_moves_the_menu_instead_of_closing_it() {
     h.get_by_label("ボディ1").click_secondary();
     h.run();
     assert!(
-        h.query_by_label("このボディのパラメータの表を作る").is_some(),
+        h.query_by_label("このボディのパラメータの表を作る")
+            .is_some(),
         "2 回目の右クリックでメニューが消えた"
     );
     // Esc では今までどおり閉じる
     h.key_press(egui::Key::Escape);
     h.run();
-    assert!(h.query_by_label("このボディのパラメータの表を作る").is_none());
+    assert!(
+        h.query_by_label("このボディのパラメータの表を作る")
+            .is_none()
+    );
 }
 
 #[test]
@@ -90,7 +109,11 @@ fn right_clicking_a_picked_edge_keeps_all_picked_edges() {
 /// 一覧も同じ行で出し、行を押せば今までどおり働く(10-19 M17)。
 #[test]
 fn right_menu_rows_line_up_and_open_their_lists() {
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
     let mut h = harness(ws);
     h.get_by_label("ボディ1").click_secondary();
@@ -99,7 +122,11 @@ fn right_menu_rows_line_up_and_open_their_lists() {
     let short = rect(&h, "名前変更");
     let long = rect(&h, "このボディのパラメータの表を作る");
     assert_eq!(short.left(), long.left(), "行の頭がそろわない");
-    assert_eq!(short.width(), long.width(), "行がメニューの幅いっぱいでない");
+    assert_eq!(
+        short.width(),
+        long.width(),
+        "行がメニューの幅いっぱいでない"
+    );
     // 横に開く一覧(物理材料)は、行に載せると開く
     h.get_by_label("物理材料").hover();
     h.run();
@@ -110,5 +137,8 @@ fn right_menu_rows_line_up_and_open_their_lists() {
     // 行を押すと働き、メニューは閉じる
     h.get_by_label("名前変更").click();
     h.run();
-    assert!(h.query_by_label("このボディのパラメータの表を作る").is_none());
+    assert!(
+        h.query_by_label("このボディのパラメータの表を作る")
+            .is_none()
+    );
 }

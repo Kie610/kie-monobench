@@ -167,7 +167,8 @@ pub struct Dwell {
 impl Toolpath {
     /// レーザーの経路なら、その出力(0〜1)。レーザーの工具では `rpm` に出力(%)を入れる。
     pub fn laser_power(&self) -> Option<f64> {
-        (self.tool.kind == kmb_cam_tool::ToolKind::Laser).then(|| (self.rpm / 100.0).clamp(0.0, 1.0))
+        (self.tool.kind == kmb_cam_tool::ToolKind::Laser)
+            .then(|| (self.rpm / 100.0).clamp(0.0, 1.0))
     }
 
     /// 動き `m` の終わりで止まる秒数(止まらなければ 0)。早送りでは止まらない。

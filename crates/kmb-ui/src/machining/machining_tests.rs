@@ -70,10 +70,11 @@ fn a_broken_face_reference_stops_with_a_reason_and_can_be_repaired() {
         }
         other => panic!("止まるはず: {other:?}"),
     }
-    let setup = kmb_cam_commands::setups(ws.document().data(), ws.report(), &kmb_bundle::registry())
-        .into_iter()
-        .next()
-        .unwrap();
+    let setup =
+        kmb_cam_commands::setups(ws.document().data(), ws.report(), &kmb_bundle::registry())
+            .into_iter()
+            .next()
+            .unwrap();
     assert!(
         kmb_cam_commands::gcode(
             &setup,
@@ -202,7 +203,9 @@ fn a_rest_pocket_is_added_with_the_next_thinner_flat_tool() {
     // 3.175 mm の次に細い平は 2 mm(3 番)
     ws.select(op);
     assert!(can(&ws, kmb_cam_commands::REST_POCKET));
-    let rest = ws.run_action(kmb_cam_commands::REST_POCKET).expect("足せる");
+    let rest = ws
+        .run_action(kmb_cam_commands::REST_POCKET)
+        .expect("足せる");
     assert!(
         matches!(ws.report().feature(rest), Some(FeatureStatus::Ok { .. })),
         "{:?}",
@@ -232,7 +235,9 @@ fn a_rest_contour_is_added_with_the_next_thinner_flat_tool() {
     ws.set_feature_data(op, d);
     ws.select(op);
     assert!(can(&ws, kmb_cam_commands::REST_POCKET));
-    let rest = ws.run_action(kmb_cam_commands::REST_POCKET).expect("足せる");
+    let rest = ws
+        .run_action(kmb_cam_commands::REST_POCKET)
+        .expect("足せる");
     assert!(
         matches!(ws.report().feature(rest), Some(FeatureStatus::Ok { .. })),
         "{:?}",
@@ -715,7 +720,9 @@ fn a_rest_pocket_does_not_carry_over_the_cutting_overrides() {
         .unwrap();
     let mut ws = Workspace::new(cam.part.doc, None, reg());
     ws.select(op);
-    let rest = ws.run_action(kmb_cam_commands::REST_POCKET).expect("足せる");
+    let rest = ws
+        .run_action(kmb_cam_commands::REST_POCKET)
+        .expect("足せる");
     let d = &ws.cur.work.doc().data().feature(rest).unwrap().data;
     assert_eq!(d["tool"], 3);
     assert_eq!(d["rest_tool"], 2);

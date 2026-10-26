@@ -511,51 +511,50 @@ impl Workspace {
                 .last()
         });
         let id = |s: &str| egui::Id::new(s);
-        let closed = match top.map(|l| l.id) {
-            Some(t) if t == id("undo_history") && self.win.undo_history_open => {
-                self.win.undo_history_open = false;
-                true
-            }
-            Some(t) if t == id("text_viewer") && self.cur.viewer.is_some() => {
-                self.cur.viewer = None;
-                true
-            }
-            Some(t) if t == id("versions_window") && self.cur.versions.open => {
-                self.cur.versions.open = false;
-                self.cur.versions.naming = None;
-                true
-            }
-            Some(t) if t == id("render_viewer") && self.cur.gallery.viewing.is_some() => {
-                self.cur.gallery.viewing = None;
-                true
-            }
-            Some(t) if t == id("操作の手引き") && self.win.guide_open => {
-                self.win.guide_open = false;
-                true
-            }
-            Some(t)
-                if t == egui::Id::new(("compare_window", self.tab_uid()))
-                    && self.cur.versions.compare.is_some() =>
-            {
-                self.cur.versions.compare = None;
-                true
-            }
-            Some(t)
-                if self
-                    .cur
-                    .table_view
-                    .as_ref()
-                    .is_some_and(|v| t == egui::Id::new(("table_view", v.table.key.as_str()))) =>
-            {
-                self.cur.table_view = None;
-                true
-            }
-            _ if self.win.show_params => {
-                self.win.show_params = false;
-                true
-            }
-            _ => false,
-        };
+        let closed =
+            match top.map(|l| l.id) {
+                Some(t) if t == id("undo_history") && self.win.undo_history_open => {
+                    self.win.undo_history_open = false;
+                    true
+                }
+                Some(t) if t == id("text_viewer") && self.cur.viewer.is_some() => {
+                    self.cur.viewer = None;
+                    true
+                }
+                Some(t) if t == id("versions_window") && self.cur.versions.open => {
+                    self.cur.versions.open = false;
+                    self.cur.versions.naming = None;
+                    true
+                }
+                Some(t) if t == id("render_viewer") && self.cur.gallery.viewing.is_some() => {
+                    self.cur.gallery.viewing = None;
+                    true
+                }
+                Some(t) if t == id("操作の手引き") && self.win.guide_open => {
+                    self.win.guide_open = false;
+                    true
+                }
+                Some(t)
+                    if t == egui::Id::new(("compare_window", self.tab_uid()))
+                        && self.cur.versions.compare.is_some() =>
+                {
+                    self.cur.versions.compare = None;
+                    true
+                }
+                Some(t)
+                    if self.cur.table_view.as_ref().is_some_and(|v| {
+                        t == egui::Id::new(("table_view", v.table.key.as_str()))
+                    }) =>
+                {
+                    self.cur.table_view = None;
+                    true
+                }
+                _ if self.win.show_params => {
+                    self.win.show_params = false;
+                    true
+                }
+                _ => false,
+            };
         if closed {
             log::info!("Esc で窓を閉じた: {:?}", top.map(|l| l.id));
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));

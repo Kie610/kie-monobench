@@ -229,9 +229,10 @@ fn the_regions_of_a_made_extrude_are_picked_again_in_the_view() {
     let one = volume(&ws);
     // 右クリック(と編集の欄)の「領域を選び直す」: 今の領域を選んだまま始まる
     assert!(
-        ws.actions_for(id).iter().any(
-            |a| a.id == kmb_cad_extrude::EXTRUDE_REGIONS && a.is_at(kmb_core::Place::FeatureMenu)
-        )
+        ws.actions_for(id)
+            .iter()
+            .any(|a| a.id == kmb_cad_extrude::EXTRUDE_REGIONS
+                && a.is_at(kmb_core::Place::FeatureMenu))
     );
     ws.start_action(kmb_cad_extrude::EXTRUDE_REGIONS);
     let g = ws.cur.gesture.as_ref().expect("領域を選ぶ手順に入る");
@@ -519,7 +520,10 @@ fn a_sketch_of_open_lines_is_extruded_as_a_thin_wall() {
     let mut ws = Workspace::new(b.finish("薄い押し出し"), None, reg());
     ws.wait();
     ws.clear_selection();
-    assert!(can(&ws, kmb_cad_extrude::EXTRUDE_SKETCH), "線だけでも押せる");
+    assert!(
+        can(&ws, kmb_cad_extrude::EXTRUDE_SKETCH),
+        "線だけでも押せる"
+    );
     let n = ws.document().data().features.len();
     ws.start_action(kmb_cad_extrude::EXTRUDE_SKETCH);
     let h = ws.cur.gesture.as_ref().unwrap().current().unwrap().clone();

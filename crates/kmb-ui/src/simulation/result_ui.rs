@@ -294,10 +294,7 @@ pub(crate) fn badge_ui(ui: &egui::Ui, rect: Rect, top: f32, badge: &str, look: &
     let g = p.layout_no_wrap(badge.to_string(), theme::prop(11.0), look.pal.ink2);
     let pad = egui::vec2(8.0, 4.0);
     let r = Rect::from_min_size(
-        egui::pos2(
-            rect.right() - 12.0 - g.size().x - 2.0 * pad.x,
-            top,
-        ),
+        egui::pos2(rect.right() - 12.0 - g.size().x - 2.0 * pad.x, top),
         g.size() + 2.0 * pad,
     );
     p.rect(

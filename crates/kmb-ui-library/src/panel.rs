@@ -9,13 +9,13 @@
 //! 場所・広げた行・名前を変える途中などはホームと別に持つ(ホームを開いても、パネルの場所は変わらない)。
 //! デザインの概要とフォルダの木の控えはホームと同じ物を使う。
 
-use kmb_ui::theme::RightMenu as _;
 use crate::middle::drop_target;
 use crate::{
     Drag, Filter, Item, Library, Place, file_name, key_button, paint_fit, place_row, plate,
 };
 use kmb_session::library::{Period, Summary, ago_label, date_label};
 use kmb_ui::theme;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::{HomeHost, HomeRequest, RecentAction};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
