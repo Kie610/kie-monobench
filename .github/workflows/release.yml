@@ -1,0 +1,75 @@
+# タグ(v<版>)を押すと、配る物を Linux と Windows で組み立てる(docs/verify.md の 15 節)。
+# - 組み立ては `cargo xtask release`(この PC のパスを exe に残さない引数と数え、許諾文の一覧)。
+#   タグはワークスペースの版と合うかを xtask が先に確かめる。
+# - 検査は main へのプッシュの回(verify.yml)が済ませているので、ここでは流さない。
+# - できた物は成果物(artifact)に置くだけで、GitHub のリリースは作らない。
+name: リリース
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: release (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust(rust-toolchain.toml の版)
+        run: rustup toolchain install
+
+      # タグの回で残した物はほかのタグから使えないので、残すのは main で手で流した時だけ
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # SMLib の C++ の結果は main の検査の回(verify.yml)が残した物を戻すだけにする
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/smlib-cache
+          key: smlib-${{ runner.os }}-${{ hashFiles('crates/smlib-sys/build.rs', 'third_party/smlibpy-patches/**', 'third_party/usd-brep/VERSION') }}
+          restore-keys: smlib-${{ runner.os }}-
+
+      - name: cargo xtask release
+        shell: bash
+        env:
+          SMLIB_CACHE_DIR: ${{ runner.temp }}/smlib-cache
+        run: |
+          set -eu
+          tag=""
+          if [ "${{ github.ref_type }}" = tag ]; then
+            tag="--tag ${{ github.ref_name }}"
+          fi
+          cargo xtask release $tag -p kmb-app -p kmb-cli -p kmb-mcp
+
+      - name: 配る物をまとめる
+        id: dist
+        shell: bash
+        run: |
+          set -eu
+          name="kie-monobench-${{ github.ref_name }}-${{ runner.os }}"
+          name="${name//\//-}"
+          ext=""
+          if [ "${{ runner.os }}" = Windows ]; then ext=".exe"; fi
+          mkdir -p "dist/$name"
+          for b in kie-monobench kmb kmb-mcp; do cp "target/release/$b$ext" "dist/$name/"; done
+          cp target/release/THIRD-PARTY-LICENSES.txt LICENSE-MIT LICENSE-APACHE "dist/$name/"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dist.outputs.name }}
+          path: dist/${{ steps.dist.outputs.name }}/
+          if-no-files-found: error

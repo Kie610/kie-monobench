@@ -417,3 +417,10 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - 道具の版は 1 節の入れ方とそろえる(cargo-nextest・cargo-deny・cargo-hakari)。
 - 組み立て済みの物は main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
+
+## 15. タグで配る物を組み立てる(GitHub の CI)
+
+- `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
+- タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
+- できた物は「kie-monobench-<タグ>-<OS>」の成果物に置く(3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)。GitHub のリリースは作らない。
+- 検査は main へのプッシュの回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は main の回が残した物を使う。

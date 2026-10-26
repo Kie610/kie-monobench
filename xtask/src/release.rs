@@ -1,7 +1,9 @@
 //! `cargo xtask release`: アプリを release で作り、実行ファイルにビルドした PC のパスが残っていないかを数える。
 //!
 //! ```text
-//! cargo xtask release [--check] [cargo の引数...]   既定は -p kmb-app。--check は cargo check だけ(数えない)
+//! cargo xtask release [--check] [--tag <タグ>] [cargo の引数...]
+//!                                                   既定は -p kmb-app。--check は cargo check だけ(数えない)
+//!                                                   --tag はタグがワークスペースの版(v<版>)と合うかを先に確かめる
 //! cargo xtask paths <ファイル>...                     ファイルに残るこの PC のパスを数える
 //! ```
 //!
@@ -20,6 +22,8 @@
 //! - C と C++ の `__FILE__` は、同じ頭をコンパイラの引数(`CFLAGS`・`CXXFLAGS`)でも消す(`c_env`)。
 //!   SMLib は smlib-sys の build.rs がソースと見出しを相対のパスで渡すので、引数が無くても入らない。
 //! - 組み立てた後、exe の横に他者の部品の許諾文の一覧(THIRD-PARTY-LICENSES.txt、licenses.rs)を置く。
+//! - 数えるのは、選んだ crate のうち配る exe を作る物(`APPS`)の全部。タグで組み立てる CI
+//!   (`.github/workflows/release.yml`)は画面・CLI・MCP の 3 つを作る。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -244,31 +248,80 @@ pub fn paths(root: &Path, target: &Path, files: &[String]) -> Result<ExitCode, S
     })
 }
 
-/// `cargo xtask release [--check] [cargo の引数...]`。
+/// 配る exe を作る crate と、その exe の名前(拡張子なし)。
+pub const APPS: [(&str, &str); 3] = [
+    ("kmb-app", "kie-monobench"),
+    ("kmb-cli", "kmb"),
+    ("kmb-mcp", "kmb-mcp"),
+];
+
+/// ワークスペースの版(Cargo.toml の `[workspace.package] version`)。
+fn workspace_version(root: &Path) -> Result<String, String> {
+    let path = root.join("Cargo.toml");
+    let text =
+        fs::read_to_string(&path).map_err(|e| format!("{} を読めません: {e}", path.display()))?;
+    let v: toml::Table = toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    v.get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| format!("{} に [workspace.package] version がありません", path.display()))
+}
+
+/// タグが版と合うか(`v<版>`)。合わないタグで組み立てると、exe の名乗る版と配る物の名前が食い違う。
+pub fn check_tag(tag: &str, version: &str) -> Result<(), String> {
+    if tag.strip_prefix('v') == Some(version) {
+        Ok(())
+    } else {
+        Err(format!(
+            "タグ {tag} がワークスペースの版 {version} と合いません(v{version} にするか、Cargo.toml の [workspace.package] version を直す)"
+        ))
+    }
+}
+
+/// `cargo xtask release [--check] [--tag <タグ>] [cargo の引数...]`。
 pub fn run(
     root: &Path,
     target: &Path,
     args: &[String],
     cargo: &dyn Fn() -> Command,
 ) -> Result<ExitCode, String> {
-    let check = args.iter().any(|a| a == "--check");
-    let mut rest: Vec<String> = args.iter().filter(|a| *a != "--check").cloned().collect();
+    let mut check = false;
+    let mut tag = None;
+    let mut rest: Vec<String> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--check" => check = true,
+            "--tag" => tag = Some(it.next().ok_or("--tag の後にタグがありません")?.clone()),
+            _ => rest.push(a.clone()),
+        }
+    }
+    if let Some(t) = &tag {
+        check_tag(t, &workspace_version(root)?)?;
+    }
     if !rest.iter().any(|a| a == "-p" || a.starts_with("--package")) {
         rest.extend(["-p".into(), "kmb-app".into()]);
     }
-    let exe = target.join("release").join(if cfg!(windows) {
-        "kie-monobench.exe"
-    } else {
-        "kie-monobench"
-    });
+    let exes: Vec<PathBuf> = APPS
+        .iter()
+        .filter(|(pkg, _)| rest.windows(2).any(|w| w[0] == "-p" && w[1] == *pkg))
+        .map(|(_, bin)| {
+            target
+                .join("release")
+                .join(format!("{bin}{}", std::env::consts::EXE_SUFFIX))
+        })
+        .collect();
     let n = needles(root, target);
-    let app = rest.windows(2).any(|w| w[0] == "-p" && w[1] == "kmb-app");
     // 作り直す前の exe を数えておき、直した後と並べる
-    let before = (!check && app && exe.is_file())
-        .then(|| read(&exe).map(|b| scan(&b, &n)))
-        .transpose()?;
-    if let Some(h) = &before {
-        report("前", &exe, h);
+    let mut before = None;
+    if !check {
+        for exe in exes.iter().filter(|e| e.is_file()) {
+            let h = scan(&read(exe)?, &n);
+            report("前", exe, &h);
+            *before.get_or_insert(0) += h.len();
+        }
     }
     let mut c = cargo();
     c.arg(if check { "check" } else { "build" })
@@ -290,17 +343,20 @@ pub fn run(
     let list = target.join("release").join(crate::licenses::FILE);
     let k = crate::licenses::write(root, crate::licenses::host_target(), &list, cargo)?;
     println!("書いた: {}(他者の crate {k} 件)", list.display());
-    if !app {
+    if exes.is_empty() {
         return Ok(ExitCode::SUCCESS);
     }
-    let after = scan(&read(&exe)?, &n);
-    report("後", &exe, &after);
+    let mut after = 0;
+    for exe in &exes {
+        let h = scan(&read(exe)?, &n);
+        report("後", exe, &h);
+        after += h.len();
+    }
     println!(
-        "パス: 前 {} 件 → 後 {} 件",
-        before.map_or("(exe なし)".to_string(), |h| h.len().to_string()),
-        after.len()
+        "パス: 前 {} 件 → 後 {after} 件",
+        before.map_or("(exe なし)".to_string(), |k| k.to_string()),
     );
-    Ok(if after.is_empty() {
+    Ok(if after == 0 {
         ExitCode::SUCCESS
     } else {
         println!("exe にこの PC のパスが残っています。出どころは上の見本(docs/verify.md の 12 節)");
@@ -364,6 +420,21 @@ mod tests {
         };
         assert!(cflags.split(' ').any(|f| f == want), "{cflags}");
         assert!(env.iter().any(|(k, _)| k == "CXXFLAGS"));
+    }
+
+    #[test]
+    fn tag_must_match_the_version() {
+        assert!(check_tag("v0.1.0", "0.1.0").is_ok());
+        for bad in ["0.1.0", "v0.1.1", "v0.1.0-rc1", "release"] {
+            assert!(check_tag(bad, "0.1.0").is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn workspace_version_is_read() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let v = workspace_version(root).unwrap();
+        assert!(v.split('.').count() == 3, "{v}");
     }
 
     #[test]
