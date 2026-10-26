@@ -1041,7 +1041,8 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::choice("plane_ref.kind", "対称の平面", &kmb_cad::plane::plane_ref_choices("通る点と法線で指定"))
                     .pick_on("face", MIRROR_PLANE)
-                    .help("原点の平面か、ボディの平らな面(クリックで選ぶ)。「数で指定」なら通る点と法線"),
+                    .hide_choice("datum")
+                    .help("原点の平面か、ボディの平らな面(クリックで選ぶ)。作業平面は「対称の平面を選ぶ」でクリックする。「数で指定」なら通る点と法線"),
             )
             .field(Field::info("plane_ref.face", "対称の面").only("plane_ref.kind", "face", "vector"))
             .field(
@@ -1291,7 +1292,7 @@ fn selected_mirror(cx: &Context<'_>) -> Option<(FeatureId, Mirror)> {
     Some((id, parse::<Mirror>(&entry.data).ok()?))
 }
 
-/// ミラーの対称の平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。face なら
+/// ミラーの対称の平面を、手順で選んだ値(`plane` が xy・yz・zx・face か作業平面)にする。face なら
 /// クリックした面(CLI・MCP は引数 `face` と `feature`)。面はミラーより前の形から探す
 /// (ミラーの後のボディの面を選んでも、元のボディの同じ面を使う)。
 fn mirror_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
@@ -1378,7 +1379,7 @@ impl Extension for MirrorCommands {
                 .menu("パターン")
                 .icon("mirror")
                 .aliases("みらー たいしょう へいめん 平面 めん mirror plane")
-                .hint("選んでいるミラーの対称の平面を、原点の XY・YZ・ZX 平面の四角か、ボディの平らな面をクリックして決める")
+                .hint("選んでいるミラーの対称の平面を、原点の XY・YZ・ZX 平面の四角か作業平面か、ボディの平らな面をクリックして決める")
                 .keep_edit()
                 .at(if mirror {
                     &[Place::FeatureMenu, Place::Panel]
@@ -1406,18 +1407,15 @@ impl Extension for MirrorCommands {
 
     fn handles(&self, id: &str, cx: &Context<'_>) -> Option<Vec<Handle>> {
         if id == MIRROR_PLANE {
-            selected_mirror(cx)?;
-            // スケッチの平面を選ぶ時と同じく、原点の平面の四角とボディの平らな面をクリックで選べる
+            let (mid, _) = selected_mirror(cx)?;
+            // スケッチの平面を選ぶ時と同じく、原点の平面・作業平面の四角とボディの平らな面を
+            // クリックで選べる
             return Some(vec![Handle {
-                choices: ["xy", "yz", "zx"]
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| kmb_core::HandleChoice::origin_plane(i, json!(v)))
-                    .collect(),
+                choices: kmb_cad::plane::plane_choices(cx, mid),
                 faces: true,
                 ..Handle::new(
                     "plane",
-                    "対称の平面にする原点の平面(XY・YZ・ZX の四角)か、ボディの平らな面をクリック",
+                    "対称の平面にする原点の平面(XY・YZ・ZX の四角)か作業平面か、ボディの平らな面をクリック",
                     Gesture::Choice,
                 )
             }]);

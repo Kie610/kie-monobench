@@ -314,11 +314,12 @@ impl Feature for DeleteFaces {
 }
 
 /// 引き出し方向の平面の選択肢(数の欄では決めない)。
-const PULL_PLANES: [(&str, &str); 4] = [
+const PULL_PLANES: [(&str, &str); 5] = [
     ("origin_xy", "原点の XY 平面"),
     ("origin_yz", "原点の YZ 平面"),
     ("origin_zx", "原点の ZX 平面"),
     ("face", "平らな面(クリックで選ぶ)"),
+    ("datum", "作業平面"),
 ];
 
 pub fn register(reg: &mut Registry) {
@@ -337,6 +338,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::choice("plane_ref.kind", "引き出し方向", &PULL_PLANES)
                     .pick_on("face", DRAFT_PLANE)
+                    .hide_choice("datum")
                     .help("この平面の法線が引き出し方向。面はこの平面との交わりの線を軸に回る"),
             )
             .field(
