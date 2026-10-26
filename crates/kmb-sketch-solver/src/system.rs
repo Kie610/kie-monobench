@@ -5,6 +5,7 @@
 //! なるべく動かない。自由度はヤコビ行列の階数から求める。
 
 use crate::curve::Shape;
+use crate::sparse::{Factor, Row};
 use crate::{ConstraintId, EntityId};
 use nalgebra::{DMatrix, DVector};
 use std::collections::BTreeMap;
@@ -683,7 +684,33 @@ pub fn jacobian_of(
     x: &[f64],
     cols: &[usize],
 ) -> DMatrix<f64> {
-    let mut j = DMatrix::zeros(eqs.len(), cols.len());
+    to_dense(&sparse_jacobian_of(eqs, x, cols), cols.len())
+}
+
+/// 疎な行を密な行列にする。
+pub fn to_dense(rows: &[Row], n: usize) -> DMatrix<f64> {
+    let mut j = DMatrix::zeros(rows.len(), n);
+    for (i, row) in rows.iter().enumerate() {
+        for &(c, v) in row {
+            j[(i, c)] = v;
+        }
+    }
+    j
+}
+
+/// [`jacobian`] を疎な行で。
+pub fn sparse_jacobian(eqs: &[(Option<ConstraintId>, Residual)], x: &[f64]) -> Vec<Row> {
+    let all: Vec<usize> = (0..x.len()).collect();
+    sparse_jacobian_of(eqs, x, &all)
+}
+
+/// [`jacobian_of`] を疎な行で(行ごとに、0 でない値を列の順に持つ)。
+pub fn sparse_jacobian_of(
+    eqs: &[(Option<ConstraintId>, Residual)],
+    x: &[f64],
+    cols: &[usize],
+) -> Vec<Row> {
+    let mut j: Vec<Row> = vec![vec![]; eqs.len()];
     let mut users: Vec<Vec<usize>> = vec![vec![]; x.len()];
     let mut vs = vec![];
     for (i, (_, r)) in eqs.iter().enumerate() {
@@ -716,17 +743,21 @@ pub fn jacobian_of(
         let fm = at(&xp);
         xp[col] = x[col];
         for (k, &i) in users[col].iter().enumerate() {
-            j[(i, out)] = (fp[k] - fm[k]) / (2.0 * h);
+            let d = (fp[k] - fm[k]) / (2.0 * h);
+            if d != 0.0 {
+                j[i].push((out, d));
+            }
         }
     }
     #[cfg(any(test, feature = "check"))]
     if x.len() <= 40 {
         // 式が使う変数の書き漏らしがないか、すべての式を計り直した行列と比べる
         let dense = dense_jacobian(eqs, x).select_columns(cols.iter());
+        let got = to_dense(&j, cols.len());
         assert!(
-            (&dense - &j).amax() == 0.0,
+            (&dense - &got).amax() == 0.0,
             "ヤコビ行列の変数の書き漏らし: {}",
-            (&dense - &j).amax()
+            (&dense - &got).amax()
         );
     }
     j
@@ -874,19 +905,21 @@ pub fn gauss_newton(
             break;
         }
         // 重みで変数を測り直す(y = x / w)。重みの小さい変数ほど動かない
-        let mut j = jacobian_of(eqs, &x, &cols);
-        for (k, &v) in cols.iter().enumerate() {
-            j.column_mut(k).scale_mut(w[v]);
+        let mut j = sparse_jacobian_of(eqs, &x, &cols);
+        for row in &mut j {
+            for (k, d) in row.iter_mut() {
+                *d *= w[cols[*k]];
+            }
         }
         let step = match near {
-            // 最小ノルムの更新: 拘束が足りない方向には動かさない
-            None => match j.svd(true, true).solve(&(-&f), 1e-12) {
-                Ok(d) => d,
-                Err(_) => break,
-            },
+            // 最小ノルムの更新: 拘束が足りない方向には動かさない(疎な QR 分解で解く)
+            None => {
+                let rhs: Vec<f64> = f.iter().map(|v| -v).collect();
+                DVector::from_vec(Factor::new(&j, cols.len(), Some(&rhs)).min_norm())
+            }
             // ドラッグ: 拘束を満たす向きに加えて、拘束の式を変えない向き(零空間)の中で
             // 始めの形にいちばん近い所へ寄せる
-            Some(g) => match g.step(&j, &f, &x, &reference, &w, &cols) {
+            Some(g) => match g.step(&to_dense(&j, cols.len()), &f, &x, &reference, &w, &cols) {
                 Some(d) => d,
                 None => break,
             },

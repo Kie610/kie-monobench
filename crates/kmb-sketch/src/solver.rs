@@ -9,6 +9,7 @@ use crate::model::{
     Constraint, ConstraintId, ConstraintKind, Entity, EntityId, OffsetPart, Sketch,
 };
 use crate::pattern::{PatternAxis, PatternCenter, Placement};
+use kmb_sketch_solver::sparse::Factor;
 use kmb_sketch_solver::system::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1114,8 +1115,8 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
     let max_residual = max_abs(&f);
     let converged = max_residual <= RESIDUAL_OK;
 
-    let j = jacobian(eqs, &x);
-    let space = RowSpace::of(&j);
+    // 1 つの疎な分解から、階数・余分な式・決まった変数を求める(密な SVD をしない)
+    let mut space = Factor::new(&sparse_jacobian(eqs, &x), x.len(), None);
     let r = space.rank();
     let dof = x.len() - r;
 
@@ -1127,8 +1128,8 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
         .filter(|c| c.kind.tolerates_overlap())
         .map(|c| c.id)
         .collect();
+    // (分解は式を順に入れ、前の式の張る空間を広げたかを覚えている)
     let mut redundant = Vec::new();
-    let mut span = RowSpace::empty_like(&j);
     let mut i = 0;
     while i < eqs.len() {
         let tag = eqs[i].0;
@@ -1136,17 +1137,11 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
         while k < eqs.len() && eqs[k].0 == tag {
             k += 1;
         }
-        let mut trial = span.clone();
-        let added = (i..k)
-            .filter(|&row| trial.add(j.row(row).transpose()))
-            .count();
+        let added = (i..k).filter(|&row| space.grew(row)).count();
         if let Some(id) = tag
             && (added == 0 || (added < k - i && !overlap_ok.contains(&id)))
         {
             redundant.push(id);
-        }
-        if added > 0 {
-            span = trial;
         }
         i = k;
     }
@@ -1170,7 +1165,7 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
     };
 
     // 変数 v が決まっている ⇔ 単位ベクトル e_v が J の行空間にある
-    let determined: Vec<bool> = (0..x.len()).map(|v| space.has_unit(v, x.len())).collect();
+    let determined = space.determined();
     let fixed = sys
         .entity_vars
         .iter()
