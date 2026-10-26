@@ -55,6 +55,19 @@ impl Headless {
             .collect()
     }
 
+    /// 文書の目の状態(区画の無い文書は、後の機能が使っているスケッチと作業平面などを隠した状態)。
+    /// 目を替えるのは操作「表示/非表示」(役割 `SET_VISIBILITY`)。
+    pub fn visibility(&self) -> kmb_interchange::visibility::Visibility {
+        kmb_interchange::visibility::of(&self.context(None, None, &Json::Null))
+    }
+
+    /// 3D で隠す機能(行の目・部品の目・まとまりの目を合わせた物。タイムラインの順。ボディは
+    /// そのボディの機能を全部入れる)。画面の選択表示と、直す間の一時の見せは入らない。
+    pub fn hidden_features(&self) -> Vec<FeatureId> {
+        let cx = self.context(None, None, &Json::Null);
+        kmb_interchange::visibility::of(&cx).hidden_features(&cx)
+    }
+
     /// 出力の値を言葉で(スケッチの解の状態など、モジュールの知る型はモジュールに聞く)。
     fn describe(&self, v: &Value) -> String {
         match v {
@@ -79,6 +92,7 @@ impl Headless {
         // 読む値も、書く数だけの値と同じ文書の長さの単位で出す(画面のパラメータの表と同じ)。
         // 値は文書の単位で出す(書く時も文書の単位で読むので、読んだ数を書き戻しても変わらない)
         let units = self.doc.data().properties.units;
+        let hidden = self.hidden_features();
         let params: Vec<Json> = self
             .doc
             .data()
@@ -129,6 +143,10 @@ impl Headless {
                 o["status"] = json!(state);
                 if let Some(d) = detail {
                     o["reason"] = json!(d);
+                }
+                // 目を閉じて 3D で隠している(計算と加工には使う)
+                if hidden.contains(&f.id) {
+                    o["hidden"] = json!(true);
                 }
                 o
             })
