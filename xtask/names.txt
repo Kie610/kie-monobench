@@ -203,6 +203,7 @@ flow.section@1	kmb-flow
 flow.volume@1	kmb-flow
 flow.wing@1	kmb-flow
 io.export_3mf	kmb-io-stl
+io.export_obj	kmb-io-stl
 io.export_step	kmb-io-stl
 io.export_step_each	kmb-io-stl
 io.export_stl	kmb-io-stl
