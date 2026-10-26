@@ -1354,3 +1354,7 @@ pub(crate) fn independent(
 /// [`independent`] で、行が残りを持つとみなす大きさ(長さ 1 にした行の、外した後の残り)。
 /// 差分で求めたヤコビ行列の誤差より十分大きく、ほぼ平行な別の拘束より十分小さい
 const INDEPENDENT_TOL: f64 = 1e-6;
+
+#[cfg(test)]
+#[path = "solver_speed_tests.rs"]
+mod speed_tests;
