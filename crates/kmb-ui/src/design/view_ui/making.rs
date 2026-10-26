@@ -18,6 +18,18 @@ impl Workspace {
         (!front).then_some(hit)
     }
 
+    /// 面を選ぶ手順に候補(作業平面の四角)があれば、画面の点 `p` の候補の値。当たる面がその候補より
+    /// 手前にあれば `None`(面を選ぶ)。
+    fn choice_before_face(&self, rect: Rect, p: egui::Pos2) -> Option<serde_json::Value> {
+        let h = self.cur.gesture.as_ref()?.current()?;
+        let k = gesture::choice_at(h, &self.cur.camera, rect, p)?;
+        let front = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p)
+            .into_iter()
+            .next()
+            .is_none_or(|(_, at)| gesture::choice_in_front(h, &self.cur.camera, rect, p, at));
+        front.then(|| h.choices[k].value.clone())
+    }
+
     pub(crate) fn gesture_events(&mut self, ev: &view3d::ViewEvents, rect: Rect) {
         // 辺を選ぶ手順: クリックした辺(面も受ける手順は面も)を足す・外す。足したら次の手順へ進む
         // (Ctrl を押していれば進まずに続けて足す。Enter で次へ)
@@ -86,6 +98,15 @@ impl Workspace {
                 self.gesture_commit_step(
                     serde_json::json!({"vertex": v.vertex, "feature": v.feature.0}),
                 );
+                return;
+            }
+            // 候補も受ける手順(押し出しの「対象まで」の作業平面): 面より手前の四角を押したら候補を選ぶ
+            if let Some(p) = ev.click
+                && let Some(v) = self.choice_before_face(rect, p)
+            {
+                self.cur.picked = None;
+                self.cur.picked_vertices.clear();
+                self.gesture_commit_step(v);
                 return;
             }
             if let Some(p) = ev.click {
@@ -465,8 +486,19 @@ impl Workspace {
         // 閉じた候補(スケッチを描く原点の平面)は、灰色の半透明の板にして、マウスの下の板を
         // 選ぶ色で塗る(面を選んでいると分かるように)。
         // 色のある候補(原点の軸)は、その色の太い線にする
+        // 面を選ぶ手順に候補(作業平面)があれば、その四角も同じく描く(マウスの下の四角を明るく)
+        let face_with_choices = g
+            .current()
+            .is_some_and(|h| matches!(h.gesture, kmb_core::Gesture::Face) && !h.choices.is_empty());
+        let hover_choice = if face_with_choices {
+            ui.input(|i| i.pointer.hover_pos())
+                .filter(|p| rect.contains(*p))
+                .and_then(|p| self.choice_before_face(rect, p))
+        } else {
+            None
+        };
         if let Some(h) = g.current()
-            && matches!(h.gesture, kmb_core::Gesture::Choice)
+            && (matches!(h.gesture, kmb_core::Gesture::Choice) || face_with_choices)
         {
             let soft = crate::theme::mix(self.win.look.pal.panel, color, 0.55);
             let pal = &self.win.look.pal;
@@ -477,7 +509,7 @@ impl Workspace {
             }
             for c in &h.choices {
                 // マウスが候補に乗っていなければ、手順が始めから選んだ候補(回転の自動の軸)を明るく
-                let hot = match &g.live {
+                let hot = match g.live.as_ref().or(hover_choice.as_ref()) {
                     Some(v) => *v == c.value,
                     None => g.picks.contains(&c.value),
                 };

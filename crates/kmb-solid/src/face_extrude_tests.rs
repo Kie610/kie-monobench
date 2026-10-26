@@ -583,6 +583,7 @@ fn extrude_to_a_slanted_face_ends_or_cuts_along_that_face() {
             feature: ch,
             face: slant.clone(),
             vertex: None,
+            datum: false,
         }),
         to_offset: offset.map(String::from),
         ..Default::default()

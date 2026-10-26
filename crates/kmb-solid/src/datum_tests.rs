@@ -699,3 +699,84 @@ fn set_feature_data(doc: &mut Document, id: FeatureId, data: serde_json::Value) 
     ))
     .unwrap();
 }
+
+#[test]
+fn an_extrude_stops_at_a_datum_plane_and_follows_its_distance() {
+    use kmb_core::{Context, Extension, Outcome};
+    let k: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(SmlibKernel::new());
+    let mut p = plate();
+    p.b.param("h", "25 mm");
+    let before =
+        p.b.feature(DATUM_PLANE, "止める平面", offset(Base::Xy, "h"));
+    let mut s = SketchBuilder::new(SketchPlane::Xy);
+    rect(&mut s, 50.0, 0.0, 20.0, 10.0);
+    let sk = p.b.feature(kmb_sketch::SKETCH, "柱の形", s.build());
+    let mut e = extrude(sk, "5 mm", Direction::Normal, Operation::New, None);
+    e.extent = kmb_cad::Extent::ToFace;
+    e.to_face = Some(ToFace {
+        feature: before,
+        face: String::new(),
+        vertex: None,
+        datum: true,
+    });
+    let post = p.b.feature(EXTRUDE, "柱", e);
+    let after = p.b.feature(DATUM_PLANE, "後", offset(Base::Xy, "40 mm"));
+    let mut doc = p.b.finish("板");
+    // 柱は z = 25 の作業平面まで。作業平面を動かすと付いて来る
+    let (lo, hi) = k.bounds(body_handle(&mut doc, &*k, post)).unwrap();
+    assert!(
+        lo[2].abs() < 1e-3 && (hi[2] - 25.0).abs() < 1e-3,
+        "{lo:?} {hi:?}"
+    );
+    set_param(&mut doc, "h", "35 mm");
+    let (_, hi) = k.bounds(body_handle(&mut doc, &*k, post)).unwrap();
+    assert!((hi[2] - 35.0).abs() < 1e-3, "{hi:?}");
+
+    // 操作で選べるのは押し出しより前の作業平面だけ
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    let run = |args: serde_json::Value| {
+        let cx = Context {
+            args: &args,
+            selected: Some(post),
+            ..Context::new(doc.data(), &report, &reg, &k)
+        };
+        ExtrudeCommands
+            .run(EXTRUDE_TO_FACE, &cx)
+            .expect("押し出しの操作")
+    };
+    let Ok(Outcome::Change { edits, .. }) = run(serde_json::json!({"face": {"datum": before.0}}))
+    else {
+        panic!("前の作業平面を選べない");
+    };
+    let kmb_core::Edit::SetData { data, .. } = &edits[0] else {
+        panic!("{edits:?}");
+    };
+    assert_eq!(
+        data["to_face"],
+        serde_json::json!({"feature": before.0, "datum": true})
+    );
+    let Err(e) = run(serde_json::json!({"datum": after.0})) else {
+        panic!("後ろの作業平面を選べてしまう");
+    };
+    assert!(e.to_string().contains("前の作業平面ではありません"), "{e}");
+
+    // 作業平面を作れない時は、別の平面に替えず止まる
+    set_feature_data(
+        &mut doc,
+        before,
+        serde_json::to_value(offset(
+            Base::Face {
+                feature: p.plate,
+                face: "無い面".into(),
+            },
+            "h",
+        ))
+        .unwrap(),
+    );
+    assert!(
+        matches!(status(&mut doc, &*k, post), FeatureStatus::Blocked { feature: Some(f), .. } if f == before),
+        "{:?}",
+        status(&mut doc, &*k, post)
+    );
+}
