@@ -1,0 +1,50 @@
+### 欄で足す機能の名前と説明(ツールバー)
+### ID は機能の種類の版(@1)を外し、「.」と「_」を「-」にして頭に feature- を付けた物。説明は後ろに -tip。
+### 日本語はモジュールが付けた名前と同じにする(kmb-ui の試験が比べる)。
+
+feature-solid-hole = 穴
+feature-solid-hole-tip = スケッチの単独の点(線や円に使っていない点)すべてに穴をあける
+feature-solid-shell = シェル
+feature-solid-shell-tip = 立体をくり抜いて殻にする。選んだ面は取り除いて開け、ボディを選ぶと中を空洞にする
+feature-solid-boolean = ブーリアン
+feature-solid-boolean-tip = 対象のボディに、道具のボディを結合、切り取り、交差する(道具はいくつでも)
+feature-solid-split = ボディを分割
+feature-solid-split-tip = ボディを平面で 2 つに割る(表と裏を別の段取りで削る時など)。法線の側が元のボディの名前を受け継ぎ、反対の側は新しいボディになる
+feature-solid-move = 移動/コピー
+feature-solid-move-tip = ボディを値で動かす・回す(コピーを入れると元を残して写す)。値を打つまで動かない
+feature-solid-delete-faces = 面を削除
+feature-solid-delete-faces-tip = 選んだ面を消し、まわりの面を延ばしてふさぐ(フィレットの丸めや面取りの面を消すと角に戻る)
+feature-solid-draft = 勾配
+feature-solid-draft-tip = 選んだ平らな面を、引き出し方向の平面との交わりを軸に傾ける(型から抜くための勾配)。まわりの面は延びるか縮む
+feature-solid-offset-faces = 面をオフセット
+feature-solid-offset-faces-tip = 選んだ面を法線の向きへ動かす。正で肉を足し、負で削る(曲がった面にも使える。穴の壁を負にすると穴が広がる)
+feature-solid-replace-face = 面を置換
+feature-solid-replace-face-tip = 選んだ平らな面(ソース面)を、ターゲット面の平面に置き換える。まわりの面は延びるか縮む
+feature-solid-scale = 尺度
+feature-solid-scale-tip = ボディの大きさを、基準の点を中心に倍率で変える(不均一なら X・Y・Z を別々に)
+feature-cad-datum-axis = 作業軸
+feature-cad-datum-axis-tip = 回転やパターンの軸にする直線を作る(2 点を通る、辺に沿う、円筒の軸、2 平面の交わり)
+feature-cad-datum-plane = 作業平面
+feature-cad-datum-plane-tip = スケッチや機能の基準にする平面を作る(面・平面から浮かせる、軸のまわりに傾ける、2 つの面の真ん中、3 点を通る)
+feature-cad-datum-point = 作業点
+feature-cad-datum-point-tip = 作業平面や作業軸の基準にする点を作る(ボディの角、円の辺の中心、座標)
+feature-solid-mirror = ミラー
+feature-solid-mirror-tip = 機能の形を、平面の反対側に写して作る(新しいボディの機能なら結合、切り取りなら切り取り)
+feature-solid-linear-pattern = 矩形状パターン
+feature-solid-linear-pattern-tip = 機能の形を一定の間隔で並べる
+feature-solid-circular-pattern = 円形状パターン
+feature-solid-circular-pattern-tip = 機能の形を軸まわりに並べる
+feature-fea-static = 静的応力
+feature-fea-static-tip = 固定する面と荷重を付けて、応力・変位・安全率を色で見る(線形・小変形の目安)
+feature-fea-thermal = 熱
+feature-fea-thermal-tip = 温度を決める面・熱が入る面・空気へ逃げる面を付けて、定常の温度の分布を色で見る
+feature-fea-modal = 固有振動
+feature-fea-modal-tip = 固定する面を付けて、揺れやすい周波数(共振)と揺れの形を見る。主軸の回転(約 170〜400 Hz)と比べる
+feature-fea-topology = 軽い形の参考
+feature-fea-topology-tip = 固定と荷重から、力を伝えるのに要る所だけ残した形を参考に見る(形は変えない。見て肉抜きを描く)
+feature-flow-wing = 翼の揚力
+feature-flow-wing-tip = 翼のボディ(主翼・尾翼)の揚力・誘導抗力・中立点を渦格子法で出す(上は +Z)
+feature-flow-section = 2D の流れ
+feature-flow-section-tip = ボディを断面で切り、まわりの流れ(速さ・圧力・渦)と抗力を見る(格子ボルツマン法)
+feature-flow-volume = 3D の流れ
+feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)

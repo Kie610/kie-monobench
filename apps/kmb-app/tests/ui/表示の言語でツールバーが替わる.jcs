@@ -1,0 +1,36 @@
+# 表示の言語(2026-10-27): English にすると、ツールバーの作業空間の箱・タブ・まとまり・操作の名前と
+# ファイルのメニューの操作が英語になり、日本語に戻すと戻る。
+#! sample part
+
+expect "押し出し"
+shot 日本語のツールバー
+click "設定"
+select "表示の言語" "English"
+click "Close window"
+expect ~"Workspace"
+expect "Solid"
+expect "Extrude"
+expect "Modify ▾"
+expect "Measure"
+expect "押し出し" missing
+shot 英語のツールバー
+click "File"
+expect "Import STEP…"
+shot 英語のファイルのメニュー
+key Escape
+click ~"Workspace"
+click "Manufacture"
+expect "Milling"
+expect "Setup"
+expect "Adaptive Clearing"
+shot 英語の加工のツールバー
+click ~"Workspace"
+click "Design"
+
+# 日本語に戻すとツールバーも戻る
+click "Preferences"
+select "Display language" "日本語"
+click "Close window"
+expect "押し出し"
+expect "作業空間: 設計"
+expect "Extrude" missing

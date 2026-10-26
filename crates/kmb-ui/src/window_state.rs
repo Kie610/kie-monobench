@@ -117,6 +117,39 @@ impl WinState {
         self.texts.text(self.lang(), id)
     }
 
+    /// 今の言語の文言があればその文、無ければ `fallback`(訳の無い名前を画面がそのまま出す時。
+    /// 日本語では引かずに `fallback` を出す)。
+    pub(crate) fn t_or(&self, id: Option<&str>, fallback: &str) -> String {
+        match (self.lang(), id) {
+            (kmb_i18n::Lang::Ja, _) | (_, None) => fallback.to_string(),
+            (lang, Some(id)) => self
+                .texts
+                .find(lang, id)
+                .unwrap_or_else(|| fallback.to_string()),
+        }
+    }
+
+    /// 操作の名前と説明を今の言語にする(分野 `action`、ID は [`kmb_i18n::action_id`])。日本語と、
+    /// 訳の無い操作(後から足したモジュールの操作など)は、モジュールが付けた字のまま。
+    pub(crate) fn localize_action(&self, a: &mut kmb_core::Action) {
+        let id = kmb_i18n::action_id(&a.id);
+        a.label = self.t_or(Some(&id), &a.label);
+        if !a.hint.is_empty() {
+            a.hint = self.t_or(Some(&format!("{id}-tip")), &a.hint);
+        }
+    }
+
+    /// 作業空間の名前(ツールバーの左の箱と一覧)。
+    pub(crate) fn space_name(&self, s: Space) -> String {
+        self.t(match s {
+            Space::Design => "toolbar-space-design",
+            Space::Machining => "toolbar-space-machining",
+            Space::Render => "toolbar-space-render",
+            Space::Animation => "toolbar-space-animation",
+            Space::Simulation => "toolbar-space-simulation",
+        })
+    }
+
     /// 差し込み口のある文言。
     pub(crate) fn t_with(&self, id: &str, args: &[(&str, kmb_i18n::Arg)]) -> String {
         self.texts.text_with(self.lang(), id, args)

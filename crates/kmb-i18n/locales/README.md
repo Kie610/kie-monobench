@@ -25,3 +25,10 @@ Other languages only need the IDs that have been translated; missing ones fall b
 - 意味が変わったら ID を替える。字の誤りの直しだけなら替えない。
   Change the ID when the meaning changes; keep it for typo fixes.
 - 文を切って継ぎ合わせない。 Never build sentences by joining fragments.
+
+## 操作と機能の名前 / Command and feature names
+
+- `action.ftl` の ID は操作の ID の `.` と `_` を `-` にした物(`cad.extrude` → `action-cad-extrude`)。`feature.ftl` は機能の種類から版を外した物(`solid.hole@1` → `feature-solid-hole`)。説明は後ろに `-tip`。
+  `action.ftl` IDs come from command IDs (`cad.extrude` → `action-cad-extrude`); `feature.ftl` IDs from feature types without the version (`solid.hole@1` → `feature-solid-hole`). Descriptions add `-tip`.
+- 日本語の文はモジュールが付けた名前と同じにする(試験が比べる)。名前を変える時はモジュールと `ja/` を一緒に直す。
+  The Japanese text must match the module's own name (a test compares them).

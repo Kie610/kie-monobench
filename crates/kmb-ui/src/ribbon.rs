@@ -80,6 +80,58 @@ fn tab_plan(space: Space) -> &'static [(&'static str, &'static [&'static str])] 
     }
 }
 
+/// タブの名前の文言の ID(名前はタブの順の鍵にも使うので、出す時だけ訳す)。表に無い名前は訳さない。
+pub fn tab_id(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "ソリッド" => "toolbar-tab-solid",
+        "スケッチ" => "toolbar-tab-sketch",
+        "レンダリング" => "toolbar-tab-render",
+        "アニメーション" => "toolbar-tab-animation",
+        "フライス" => "toolbar-tab-milling",
+        "解析" => "toolbar-tab-simulation",
+        _ => return None,
+    })
+}
+
+/// まとまりの名前の文言の ID(名前はピンの鍵とモジュールの操作の置き場にも使うので、出す時だけ訳す)。
+/// 表に無い名前(後から足したモジュールのまとまり)は訳さない。
+pub fn group_id(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "作成" => "toolbar-group-create",
+        "修正" => "toolbar-group-modify",
+        "構築" => "toolbar-group-construct",
+        "パターン" => "toolbar-group-pattern",
+        "組立" => "toolbar-group-assemble",
+        "検査" => "toolbar-group-inspect",
+        "挿入" => "toolbar-group-insert",
+        "書き出し" => "toolbar-group-export",
+        "設定" => "toolbar-group-setup",
+        "キャンバス内レンダリング" => "toolbar-group-canvas-render",
+        "レンダリング" => "toolbar-group-render",
+        "変換" => "toolbar-group-transform",
+        "ビュー" => "toolbar-group-view",
+        "公開" => "toolbar-group-publish",
+        "セットアップ" => "toolbar-group-cam-setup",
+        "2D" => "toolbar-group-2d",
+        "3D" => "toolbar-group-3d",
+        "穴" => "toolbar-group-drilling",
+        "確かめる" => "toolbar-group-check",
+        "NC プログラム" => "toolbar-group-nc-program",
+        "出力" => "toolbar-group-output",
+        "管理" => "toolbar-group-manage",
+        "研究" => "toolbar-group-study",
+        "流れ" => "toolbar-group-flow",
+        "実行" => "toolbar-group-solve",
+        "結果" => "toolbar-group-results",
+        "拘束" => "toolbar-group-constraints",
+        "寸法" => "toolbar-group-dimension",
+        "立体" => "toolbar-group-solid",
+        "選択" => "toolbar-group-select",
+        "その他" => "toolbar-group-more",
+        _ => return None,
+    })
+}
+
 /// 項目をタブに分ける。`items` は(まとまりの名前、項目)。どのタブにもないまとまりは最初のタブの後ろに足す。
 /// 同じまとまりの中では、渡した順に並べる。
 pub fn tabs(space: Space, items: Vec<(String, Item)>, layout: &Layout) -> Vec<Tab> {

@@ -127,7 +127,9 @@ macro_rules! files {
     };
 }
 
-pub const FILES: &[(Lang, &str, &str)] = files!("common", "settings", "frame", "menu");
+pub const FILES: &[(Lang, &str, &str)] = files!(
+    "common", "settings", "frame", "menu", "toolbar", "action", "feature"
+);
 
 /// 全言語の文言。作るのは起動の時に 1 回(画面は窓の状態に持つ)。
 pub struct Catalog {
@@ -218,7 +220,20 @@ impl Catalog {
         self.format(lang, id, Some(&a))
     }
 
+    /// 文言があれば、その文(探す順は [`Catalog::text`] と同じ)。無ければ `None`(モジュールが付けた
+    /// 名前のように、訳の無い時の字を呼ぶ側が持つ時)。
+    pub fn find(&self, lang: Lang, id: &str) -> Option<String> {
+        self.lookup(lang, id, None)
+    }
+
     fn format(&self, lang: Lang, id: &str, args: Option<&FluentArgs>) -> String {
+        self.lookup(lang, id, args).unwrap_or_else(|| {
+            log::warn!("文言 {id} がどの言語にも無い");
+            id.to_string()
+        })
+    }
+
+    fn lookup(&self, lang: Lang, id: &str, args: Option<&FluentArgs>) -> Option<String> {
         for l in [lang, Lang::En, Lang::Ja] {
             let b = self.bundle(l);
             if let Some(p) = b.get_message(id).and_then(|m| m.value()) {
@@ -227,11 +242,10 @@ impl Catalog {
                 if !errs.is_empty() {
                     log::warn!("文言 {id}({})の差し込みが足りない: {errs:?}", l.code());
                 }
-                return s.into_owned();
+                return Some(s.into_owned());
             }
         }
-        log::warn!("文言 {id} がどの言語にも無い");
-        id.to_string()
+        None
     }
 }
 
@@ -270,6 +284,25 @@ impl From<usize> for Arg {
     fn from(n: usize) -> Arg {
         Arg::Number(n as f64)
     }
+}
+
+/// 操作(モジュールの `Action`)の名前の文言の ID。操作の ID(`cad.add.extrude`)の `.` と `_` を
+/// `-` にして頭に `action-` を付ける。説明はその後ろに `-tip`。
+pub fn action_id(action: &str) -> String {
+    format!(
+        "action-{}",
+        action.replace(['.', '_'], "-").to_ascii_lowercase()
+    )
+}
+
+/// 機能の種類(`solid.hole@1`)の名前の文言の ID。版(`@1`)を外し、`.` と `_` を `-` にして頭に
+/// `feature-` を付ける。説明はその後ろに `-tip`。
+pub fn feature_id(type_id: &str) -> String {
+    let kind = type_id.split('@').next().unwrap_or(type_id);
+    format!(
+        "feature-{}",
+        kind.replace(['.', '_'], "-").to_ascii_lowercase()
+    )
 }
 
 /// Fluent のファイルの中の文言の ID(行頭の `名前 =`。`-` で始まる用語は数えない)。
