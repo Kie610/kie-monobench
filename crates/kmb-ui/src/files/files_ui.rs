@@ -124,6 +124,12 @@ impl Workspace {
         self
     }
 
+    /// 3D マウスの読み手を渡す(設定の「マウス」に状態を出す)。
+    pub fn with_mouse3d(mut self, m: kmb_ui_mouse3d::Mouse3d) -> Self {
+        self.win.mouse3d = Some(m);
+        self
+    }
+
     /// ユーザーのデータフォルダ(最近使ったファイル、自動保存の写し)を使う。
     pub fn with_data_dir(mut self, dir: PathBuf) -> Self {
         self.home.recent = kmb_session::Recent::load(&dir);

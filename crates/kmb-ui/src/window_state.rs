@@ -34,6 +34,8 @@ pub(crate) struct WinState {
     pub(crate) safe_mode: bool,
     /// 今使っている描画の API と装置(設定の窓に出す。起動の時にアプリが決める)
     pub(crate) renderer_note: Option<String>,
+    /// 3D マウスの読み手(画面のアプリが渡す。無ければ使わない)
+    pub(crate) mouse3d: Option<kmb_ui_mouse3d::Mouse3d>,
     /// 最後に描いた 3D のビューの枠(名前付きの視点を取り出す・戻すのに使う)
     pub(crate) view_rect: egui::Rect,
     /// 落ちた時の知らせ(開始画面と「ヘルプ」に出す)

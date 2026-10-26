@@ -28,6 +28,7 @@ kmb-ui = { path = "crates/kmb-ui" }
 kmb-ui-sketch = { path = "crates/kmb-ui-sketch" }
 kmb-ui-tools = { path = "crates/kmb-ui-tools" }
 kmb-ui-text = { path = "crates/kmb-ui-text" }
+kmb-ui-mouse3d = { path = "crates/kmb-ui-mouse3d" }
 kmb-ui-library = { path = "crates/kmb-ui-library" }
 kmb-ui-view3d = { path = "crates/kmb-ui-view3d" }
 kmb-measure = { path = "crates/kmb-measure" }

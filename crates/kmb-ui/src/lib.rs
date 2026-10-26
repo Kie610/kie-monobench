@@ -279,6 +279,7 @@ impl Workspace {
                 data_dir: None,
                 safe_mode: false,
                 renderer_note: None,
+                mouse3d: None,
                 view_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
                 history: Vec::new(),
                 history_at: Vec::new(),
@@ -600,6 +601,10 @@ impl Workspace {
         kmb_core::set_display_unit(self.length_unit());
         if self.win.repaint.is_none() {
             self.win.repaint = Some(ui.ctx().clone());
+            if let Some(m) = &self.win.mouse3d {
+                let ctx = ui.ctx().clone();
+                m.set_wake(move || ctx.request_repaint());
+            }
             // 右クリックとドラッグを分ける動き(4 px 以下ならクリック)
             ui.ctx()
                 .options_mut(|o| o.input_options.max_click_dist = 4.0);
