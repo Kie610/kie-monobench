@@ -127,6 +127,55 @@ pub fn parse_size(name: &str) -> Option<Size> {
     })
 }
 
+/// 表に無い呼び `name` の誤りの文。
+/// 径が表にあればその径のピッチ、無ければ近い呼び(上下 1 つずつ)と細目の書き方の例を言う(10-26 k6)。
+pub fn unknown_size(name: &str) -> String {
+    let head = format!("ねじの呼び「{name}」は表にありません");
+    let s: String = name
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect::<String>()
+        .to_ascii_uppercase()
+        .replace('×', "X");
+    let d = s
+        .strip_prefix('M')
+        .and_then(|r| r.split('X').next())
+        .and_then(|d| d.parse::<f64>().ok());
+    let Some(d) = d else {
+        return format!("{head}。M と呼び径で書き、細目はピッチを付けます(例: M6、M6x0.75)");
+    };
+    let pitches = |(major, coarse, fine): &(f64, f64, &[f64])| {
+        let fine: Vec<String> = fine.iter().map(|p| num(*p)).collect();
+        format!(
+            "M{} のピッチは {}(並目)・{}(細目)",
+            num(*major),
+            num(*coarse),
+            fine.join("・")
+        )
+    };
+    if let Some(row) = METRIC.iter().find(|r| (r.0 - d).abs() < 1e-9) {
+        return format!("{head}。{}", pitches(row));
+    }
+    let below = METRIC.iter().rev().find(|r| r.0 < d);
+    let above = METRIC.iter().find(|r| r.0 > d);
+    let near: Vec<String> = below
+        .into_iter()
+        .chain(above)
+        .map(|(m, c, fine)| {
+            let fine: Vec<String> = fine.iter().map(|p| num(*p)).collect();
+            format!("M{}(並目 {}・細目 {})", num(*m), num(*c), fine.join("・"))
+        })
+        .collect();
+    let example = below
+        .or(above)
+        .map(|(m, _, fine)| format!("M{}x{}", num(*m), num(fine[0])))
+        .unwrap_or_default();
+    format!(
+        "{head}。近い呼びは {}。細目はピッチを付けて書きます(例: {example})",
+        near.join(" と ")
+    )
+}
+
 /// 面の径 `diameter` に近い順の呼び(同じ近さなら並目)。おねじもめねじも呼び径で比べる
 /// (穴もねじの呼び径の概形で作ることが多いので、6 mm の穴は M6。Kie 2026-10-17)。
 pub fn suggest(diameter: f64) -> Vec<Size> {
@@ -282,8 +331,8 @@ fn resolve(t: &Thread, c: &Cylinder) -> Result<(Size, Vec<String>), String> {
     } else {
         parse_size(&t.size).ok_or_else(|| {
             format!(
-                "ねじの呼び「{}」は表にありません(例: M6、M6x0.75。面の径に近いのは {})",
-                t.size,
+                "{}(面の径に近いのは {})",
+                unknown_size(&t.size),
                 near[0].label()
             )
         })?
@@ -413,9 +462,7 @@ fn thread_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         hand: Hand::Right,
     };
     data.size = match cx.arg("size").and_then(|v| v.as_str()) {
-        Some(s) => parse_size(s)
-            .ok_or_else(|| format!("ねじの呼び「{s}」は表にありません"))?
-            .name(),
+        Some(s) => parse_size(s).ok_or_else(|| unknown_size(s))?.name(),
         None => match hole_size(cx, &data.face) {
             Some(s) => s.name(),
             None => suggest_for(&c)[0].name(),
@@ -545,6 +592,23 @@ mod tests {
         assert!(parse_size("M7").is_none(), "表にない径");
         assert!(parse_size("M6x2").is_none(), "表にないピッチ");
         assert!(parse_size("6").is_none());
+    }
+
+    #[test]
+    fn an_unknown_size_names_the_nearest_sizes_and_a_fine_pitch() {
+        // 表に無い呼びは、近い呼びと細目の書き方の例まで言う(10-26 k6)
+        let m = unknown_size("M28");
+        assert!(m.contains("M27(並目 3・細目 2) と M30"), "{m}");
+        assert!(m.contains("M27x2"), "細目の例: {m}");
+        // 径は表にあってピッチだけ違う時は、その径のピッチを並べる
+        let m = unknown_size("M6x0.8");
+        assert!(m.contains("M6 のピッチは 1(並目)・0.75(細目)"), "{m}");
+        // 読めない書き方は書き方の例
+        assert!(
+            unknown_size("6mm").contains("M6"),
+            "{}",
+            unknown_size("6mm")
+        );
     }
 
     #[test]

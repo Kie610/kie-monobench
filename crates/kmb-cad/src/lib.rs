@@ -195,14 +195,28 @@ pub fn angle(ctx: &EvalCtx<'_>, src: &str, what: &str) -> Result<f64, EvalError>
 }
 
 pub fn count(ctx: &EvalCtx<'_>, src: &str) -> Result<usize, EvalError> {
-    let q = ctx.expr(src)?;
+    count_of(ctx.expr(src)?, src)
+}
+
+/// 個数の式の値を確かめる。誤りの文は直し方の例まで言う(10-26 k5)。
+fn count_of(q: kmb_core::Quantity, src: &str) -> Result<usize, EvalError> {
     let n = q.value.round();
-    if q.dim != Dim::NONE || (q.value - n).abs() > 1e-9 || !(1.0..=1000.0).contains(&n) {
-        return Err(EvalError::InvalidData(format!(
-            "個数 `{src}` は 1 から 1000 までの整数にしてください(値: {q})"
-        )));
-    }
-    Ok(n as usize)
+    let why = if q.dim == Dim::LENGTH {
+        format!(
+            "が長さになっています(値: {q})。長さで割って個数にしてください(例: `floor(({src}) / 10 mm)` は 10 mm ごとに 1 つ)"
+        )
+    } else if q.dim != Dim::NONE {
+        format!("に単位が残っています(値: {q})。同じ単位の量で割って、単位の無い数にしてください")
+    } else if (q.value - n).abs() > 1e-9 {
+        format!(
+            "が整数ではありません(値: {q})。丸めるなら `round({src})`、切り捨てるなら `floor({src})`"
+        )
+    } else if !(1.0..=1000.0).contains(&n) {
+        format!("は 1 から 1000 までにしてください(値: {q})")
+    } else {
+        return Ok(n as usize);
+    };
+    Err(EvalError::InvalidData(format!("個数 `{src}` {why}")))
 }
 
 pub fn kernel_err(e: kmb_core::KernelError) -> EvalError {
@@ -760,4 +774,30 @@ pub fn module() -> kmb_core::Module {
     })
     .with_extension(InspectCommands)
     .with_extension(timeline::TimelineCommands)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kmb_core::Quantity;
+
+    fn msg(q: Quantity, src: &str) -> String {
+        count_of(q, src).unwrap_err().to_string()
+    }
+
+    #[test]
+    fn a_count_that_is_a_length_says_to_divide_by_a_length() {
+        // 個数の式が長さになった時は、長さで割る例まで言う(10-26 k5)
+        let m = msg(Quantity::mm(420.0), "W");
+        assert!(m.contains("長さ"), "{m}");
+        assert!(m.contains("floor((W) / 10 mm)"), "{m}");
+    }
+
+    #[test]
+    fn a_count_that_is_not_whole_says_how_to_round() {
+        let m = msg(Quantity::scalar(2.5), "n / 2");
+        assert!(m.contains("round(n / 2)"), "{m}");
+        assert_eq!(count_of(Quantity::scalar(4.0), "4").unwrap(), 4);
+        assert!(msg(Quantity::scalar(0.0), "0").contains("1 から 1000"));
+    }
 }
