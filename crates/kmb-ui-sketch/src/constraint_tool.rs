@@ -65,8 +65,15 @@ const SYM_SHAPES: &str = "対称(図形)";
 const POLYGON: &str = "ポリゴン";
 
 /// 図形の固定・図形どうしの対称・ポリゴンを、いくつかの拘束(と補助の円)で付ける。
-/// 付けられなければ `false`(スケッチは変えない)。
-pub(crate) fn apply_multi(as_name: &str, s: &mut Sketch, sol: &Solution, sel: &[EntityId]) -> bool {
+/// 付けられなければ `false`(スケッチは変えない)。`last` は道具で最後に押した要素(図形どうしの
+/// 対称では、それが線分なら軸にする。前から選んであった時は `None` で、形から軸を推す)。
+pub(crate) fn apply_multi(
+    as_name: &str,
+    s: &mut Sketch,
+    sol: &Solution,
+    sel: &[EntityId],
+    last: Option<EntityId>,
+) -> bool {
     use kmb_sketch::{ConstraintKind as K, Entity};
     let pt = |id: EntityId| sol.points.get(&id).copied();
     fn ends(s: &Sketch, id: EntityId) -> Option<(EntityId, EntityId)> {
@@ -133,9 +140,14 @@ pub(crate) fn apply_multi(as_name: &str, s: &mut Sketch, sol: &Solution, sel: &[
             if lines.len() != 3 {
                 return false;
             }
-            // どれが軸か: 残りの 2 本が鏡に写り合う(端の点が近い)ものを軸にする。中心線があれば中心線
+            // どれが軸か: 最後に押した線分。前から選んであった時は、残りの 2 本が鏡に写り合う
+            // (端の点が近い)ものを軸にする。中心線があれば中心線。長方形の縦 2 辺は付ける前は
+            // 軸から離れているので、形からは辺の 1 本を軸と取り違える(10-24 t4)
             let mut best: Option<(f64, usize, bool)> = None;
             for (i, axis) in lines.iter().enumerate() {
+                if last.is_some_and(|l| lines.contains(&l) && l != *axis) {
+                    continue;
+                }
                 let others: Vec<EntityId> = lines.iter().copied().filter(|x| x != axis).collect();
                 let (Some((aa, ab)), Some((p1, q1)), Some((p2, q2))) =
                     (ends(s, *axis), ends(s, others[0]), ends(s, others[1]))
@@ -411,7 +423,7 @@ pub(crate) fn pick(
         editor.selection.insert(id);
     }
     let sel: Vec<EntityId> = editor.selection.iter().copied().collect();
-    if let Some(out) = try_multi(name, editor, sketch, sol, values, &sel) {
+    if let Some(out) = try_multi(name, editor, sketch, sol, values, &sel, Some(id)) {
         return out;
     }
     let (label, k) = complete(name, editor, sketch, sol, &sel)?;
@@ -448,6 +460,7 @@ pub(crate) fn try_multi(
     sol: &Solution,
     values: Option<&DimValues>,
     sel: &[EntityId],
+    last: Option<EntityId>,
 ) -> Option<Option<Sketch>> {
     // いくつかの拘束で付ける組(図形の固定・図形どうしの対称・ポリゴン)
     let have = kinds(sketch, sel);
@@ -459,7 +472,7 @@ pub(crate) fn try_multi(
         editor.selection.clear();
         let mut s = sketch.clone();
         s.adopt_solution(sol);
-        if !apply_multi(as_name, &mut s, sol, sel) {
+        if !apply_multi(as_name, &mut s, sol, sel, last) {
             editor.notice = Some(match *as_name {
                 POLYGON => "ポリゴンにできません: 線分だけで閉じた輪の 1 本を押してください".into(),
                 _ => format!("{as_name}を付けられません"),

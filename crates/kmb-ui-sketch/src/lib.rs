@@ -1574,6 +1574,7 @@ impl FeatureEditor for SketchEditor {
             &solution,
             values.as_ref(),
             &sel,
+            None,
         ) {
             if out.is_none() {
                 *host.message = self.editor.notice.take();

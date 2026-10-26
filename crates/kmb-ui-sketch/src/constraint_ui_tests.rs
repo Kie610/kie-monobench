@@ -286,6 +286,15 @@ fn a_rectangle_takes_symmetry_of_its_two_sides() {
     let ConstraintKind::SymmetricPairs { a1, b1, line, .. } = pairs[0].kind else {
         unreachable!()
     };
+    // 軸は最後に押した縦の線(後から引いた線)。長方形の右の辺を軸と取り違えない
+    let drawn = s
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Line { .. }))
+        .map(Entity::id)
+        .max()
+        .unwrap();
+    assert_eq!(line, drawn, "{:?}", pairs[0].kind);
     let Some(Entity::Line { a: axis, .. }) = s.entity(line) else {
         panic!("軸が線でない")
     };
