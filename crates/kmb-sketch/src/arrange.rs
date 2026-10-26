@@ -69,6 +69,19 @@ pub(crate) fn remap(kind: &K, m: &BTreeMap<EntityId, EntityId>) -> Option<K> {
             b: g(b)?,
             line: g(line)?,
         },
+        K::SymmetricPairs {
+            a1,
+            b1,
+            a2,
+            b2,
+            line,
+        } => K::SymmetricPairs {
+            a1: g(a1)?,
+            b1: g(b1)?,
+            a2: g(a2)?,
+            b2: g(b2)?,
+            line: g(line)?,
+        },
         K::Distance { a, b, value } => K::Distance {
             a: g(a)?,
             b: g(b)?,

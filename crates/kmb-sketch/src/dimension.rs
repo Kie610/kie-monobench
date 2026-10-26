@@ -370,7 +370,7 @@ pub(crate) fn kind_word(kind: &crate::ConstraintKind) -> &'static str {
         K::Concentric { .. } => "同心円",
         K::Collinear { .. } => "同一直線上",
         K::Midpoint { .. } => "中点",
-        K::Symmetric { .. } => "対称",
+        K::Symmetric { .. } | K::SymmetricPairs { .. } => "対称",
         K::Distance { .. } => "距離",
         K::PointLineDistance { .. } => "点と直線の距離",
         K::HorizontalDistance { .. } => "水平の距離",

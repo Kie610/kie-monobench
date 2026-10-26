@@ -42,7 +42,7 @@ pub(crate) fn icon(sketch: &Sketch, k: &K) -> Option<&'static str> {
         K::Tangent { .. } | K::TangentCircles { .. } => "tangent",
         K::Concentric { .. } => "concentric",
         K::Collinear { .. } => "collinear",
-        K::Symmetric { .. } => "symmetric",
+        K::Symmetric { .. } | K::SymmetricPairs { .. } => "symmetric",
         _ => return None,
     })
 }
@@ -81,6 +81,13 @@ pub(crate) fn members(sketch: &Sketch, k: &K) -> Vec<EntityId> {
         K::PointOnCircle { point, circle } => vec![*point, *circle],
         K::Tangent { line, circle } => vec![*line, *circle],
         K::Symmetric { a, b, line } => vec![*a, *b, *line],
+        K::SymmetricPairs {
+            a1,
+            b1,
+            a2,
+            b2,
+            line,
+        } => vec![*a1, *b1, *a2, *b2, *line],
         _ => vec![],
     }
 }
@@ -107,7 +114,7 @@ fn hosts(sketch: &Sketch, k: &K) -> Vec<EntityId> {
         | K::PointOnLine { point, .. }
         | K::PointOnCircle { point, .. }
         | K::Midpoint { point, .. } => vec![*point],
-        K::Symmetric { line, .. } => vec![*line],
+        K::Symmetric { line, .. } | K::SymmetricPairs { line, .. } => vec![*line],
         _ => members(sketch, k),
     }
 }

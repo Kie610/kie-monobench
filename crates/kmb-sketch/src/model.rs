@@ -317,6 +317,16 @@ pub enum ConstraintKind {
         b: EntityId,
         line: EntityId,
     },
+    /// 点 a1 と b1、点 a2 と b2 がそれぞれ線 line について対称(図形どうしの対称で、2 本の線の
+    /// 端を組にして 1 つの拘束にしたもの)。一部がほかの拘束で既に決まっていても(長方形の縦 2 辺
+    /// など)、新しく決める分があれば余分としない
+    SymmetricPairs {
+        a1: EntityId,
+        b1: EntityId,
+        a2: EntityId,
+        b2: EntityId,
+        line: EntityId,
+    },
     /// 2 点間の距離
     Distance {
         a: EntityId,
@@ -475,6 +485,16 @@ impl OffsetPart {
 }
 
 impl ConstraintKind {
+    /// 式の一部がほかの拘束で既に決まっていても、新しく決める式が 1 つでもあれば余分としない
+    /// 種類(対称)。点の対称の「結ぶ線が軸に直角」は、水平な辺と縦の軸では辺の水平で既に決まる。
+    /// 全部が決まっている時(同じ対称を重ねて付けた時)は余分とする
+    pub fn tolerates_overlap(&self) -> bool {
+        matches!(
+            self,
+            ConstraintKind::Symmetric { .. } | ConstraintKind::SymmetricPairs { .. }
+        )
+    }
+
     /// 寸法の式。寸法でない拘束は `None`。
     pub fn value(&self) -> Option<&str> {
         match self {

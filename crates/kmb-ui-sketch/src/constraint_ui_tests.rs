@@ -51,9 +51,9 @@ fn two_lines_become_symmetric_about_a_third() {
     let syms = s
         .constraints
         .iter()
-        .filter(|c| matches!(c.kind, ConstraintKind::Symmetric { .. }))
+        .filter(|c| matches!(c.kind, ConstraintKind::SymmetricPairs { .. }))
         .count();
-    assert_eq!(syms, 2, "{:?}", s.constraints);
+    assert_eq!(syms, 1, "{:?}", s.constraints);
     // 解くと 2 本は軸について鏡に写り合う(端の y がそろい、x が軸から同じだけ離れる)
     let sol = solution(&h);
     let lines: Vec<_> = s
@@ -100,9 +100,9 @@ fn a_line_drawn_the_other_way_is_not_turned_over_by_symmetry() {
     let syms = s
         .constraints
         .iter()
-        .filter(|c| matches!(c.kind, ConstraintKind::Symmetric { .. }))
+        .filter(|c| matches!(c.kind, ConstraintKind::SymmetricPairs { .. }))
         .count();
-    assert_eq!(syms, 2, "{:?}", s.constraints);
+    assert_eq!(syms, 1, "{:?}", s.constraints);
     let sol = solution(&h);
     let lines: Vec<_> = s
         .entities
@@ -253,4 +253,52 @@ fn horizontal_or_vertical_aligns_two_circle_centers() {
         let i = if name == "水平" { 1 } else { 0 };
         assert!((p[i] - q[i]).abs() < 1e-6, "{name} {p:?} {q:?}");
     }
+}
+
+#[test]
+fn a_rectangle_takes_symmetry_of_its_two_sides() {
+    // 10-24 t4: 長方形の縦 2 辺と離れた縦の軸に対称(図形)を付けても、過剰と断られない。
+    // 2 組の点の対称は 1 つの拘束になり、長方形は軸の真ん中へ寄る
+    let mut h = sketch_with_rectangle();
+    draw_line(&mut h, [20.0, 18.0], [20.0, 6.0]);
+    editor(h.state_mut()).set_tool(Tool::Constraint("対称"));
+    h.run();
+    click_at(&mut h, [1.19, 12.45]);
+    click_at(&mut h, [11.62, 12.45]);
+    click_at(&mut h, [20.0, 15.0]);
+    let s = current_sketch(h.state());
+    let pairs: Vec<_> = s
+        .constraints
+        .iter()
+        .filter(|c| matches!(c.kind, ConstraintKind::SymmetricPairs { .. }))
+        .collect();
+    assert_eq!(pairs.len(), 1, "{:?}", s.constraints);
+    let sol = solution(&h);
+    assert!(
+        !matches!(
+            sol.status,
+            kmb_sketch::SolveStatus::OverConstrained { .. }
+                | kmb_sketch::SolveStatus::Inconsistent { .. }
+        ),
+        "{:?}",
+        sol.status
+    );
+    let ConstraintKind::SymmetricPairs { a1, b1, line, .. } = pairs[0].kind else {
+        unreachable!()
+    };
+    // 軸は最後に押した縦の線(後から引いた線)。長方形の右の辺を軸と取り違えない
+    let drawn = s
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Line { .. }))
+        .map(Entity::id)
+        .max()
+        .unwrap();
+    assert_eq!(line, drawn, "{:?}", pairs[0].kind);
+    let Some(Entity::Line { a: axis, .. }) = s.entity(line) else {
+        panic!("軸が線でない")
+    };
+    let x = sol.points[axis][0];
+    let (p, q) = (sol.points[&a1], sol.points[&b1]);
+    assert!((p[0] + q[0] - 2.0 * x).abs() < 1e-6, "{p:?} {q:?} 軸 {x}");
 }
