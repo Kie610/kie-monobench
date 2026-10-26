@@ -22,7 +22,7 @@ pub fn video_outcome(
     fps: u32,
     what: &'static str,
     make: impl FnOnce() -> Result<Vec<Rgba>, String> + Send + 'static,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     let run = move || -> Result<(Files, Value), String> {
         let t = std::time::Instant::now();
         let frames = make()?;
@@ -213,7 +213,7 @@ pub fn animation_times(total: f64, fps: u32) -> Vec<f64> {
     (0..n).map(|k| total * k as f64 / (n - 1) as f64).collect()
 }
 
-pub(crate) fn animation_video(cx: &Context<'_>) -> Result<Outcome, String> {
+pub(crate) fn animation_video(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let steps = &kmb_interchange::animation::steps(cx.data);
     if steps.is_empty() {
         return Err(

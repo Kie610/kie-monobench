@@ -107,7 +107,7 @@ pub fn run(
     id: &str,
     cx: &Context<'_>,
     info: Option<&SetupInfo>,
-) -> Option<Result<Outcome, String>> {
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     if id != ADD_FIXTURE && id != CLEAR_FIXTURES {
         return None;
     }

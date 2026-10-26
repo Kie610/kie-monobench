@@ -95,7 +95,7 @@ fn selected_text(cx: &Context<'_>) -> Option<(kmb_core::FeatureId, Text)> {
 /// 今の文字の線(`curves`)を、同じ平面の新しいスケッチの線分・円弧にする。字の中でつながる端は
 /// 1 つの点にまとめる。元の文字は抑制する(消さない。抑制を外せば戻る)。文字を使っていた機能は
 /// 新しいスケッチを選び直す。
-fn explode_text(cx: &Context<'_>) -> Result<Outcome, String> {
+fn explode_text(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, text) = selected_text(cx).ok_or("文字を選んでいません")?;
     let curves = cx
         .output(id, "curves")
@@ -209,7 +209,10 @@ pub fn refresh_glyphs(
 }
 
 /// 選んでいる文字のフォントを替える。名前が空なら 1 本線に戻す。
-fn set_font(cx: &Context<'_>, fonts: &mut crate::fonts::FontIndex) -> Result<Outcome, String> {
+fn set_font(
+    cx: &Context<'_>,
+    fonts: &mut crate::fonts::FontIndex,
+) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut text) = selected_text(cx).ok_or("文字を選んでいません")?;
     let name = cx.arg_str("name").unwrap_or("").trim();
     let style = cx.arg_str("style").unwrap_or("").trim();
@@ -366,7 +369,7 @@ impl Extension for TextCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             // 面の中心に、中央揃えで置く(面の平面の座標で)。面の代表点は面の外のこともあり、
             // そこに左下揃えで置くと文字が面からはみ出す

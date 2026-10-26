@@ -174,9 +174,18 @@ fn origin_geom(to: &str, who: &str) -> Result<Option<Geom>, EvalError> {
     Ok(Some(match to {
         "part" => return Ok(None),
         "origin" => Geom::Point { p },
-        "origin_xy" => Geom::Plane { p, n: [0.0, 0.0, 1.0] },
-        "origin_yz" => Geom::Plane { p, n: [1.0, 0.0, 0.0] },
-        "origin_zx" => Geom::Plane { p, n: [0.0, 1.0, 0.0] },
+        "origin_xy" => Geom::Plane {
+            p,
+            n: [0.0, 0.0, 1.0],
+        },
+        "origin_yz" => Geom::Plane {
+            p,
+            n: [1.0, 0.0, 0.0],
+        },
+        "origin_zx" => Geom::Plane {
+            p,
+            n: [0.0, 1.0, 0.0],
+        },
         other => return Err(bad(format!("{who}の相手 {other} は知らない相手です"))),
     }))
 }
@@ -188,9 +197,10 @@ fn geom_of(ctx: &EvalCtx<'_>, r: &Ref, who: &str) -> Result<Geom, EvalError> {
         Ref::Edge { feature, faces } => {
             let shape = body_of(ctx, *feature)?;
             let edges = ctx.kernel().edges(shape).map_err(kernel_err)?;
-            let Some(e) = edges.iter().find(|e| {
-                e.faces == *faces || (e.faces[0] == faces[1] && e.faces[1] == faces[0])
-            }) else {
+            let Some(e) = edges
+                .iter()
+                .find(|e| e.faces == *faces || (e.faces[0] == faces[1] && e.faces[1] == faces[0]))
+            else {
                 return Err(bad(format!(
                     "{who}の辺 {}|{} がボディに無いか、まっすぐな辺ではありません。選び直してください",
                     faces[0], faces[1]
@@ -751,16 +761,16 @@ pub fn register(reg: &mut Registry) {
 
 /// 選んでいる面(先に選んだ面が部品 1、後の面が部品 2。中央は部品 2 の面を 2 つ)か、引数 `a`・`b` から
 /// 拘束を作る。
-pub fn new_constraint(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn new_constraint(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let kind = cx
         .arg("kind")
         .and_then(|v| v.as_str())
         .unwrap_or("align")
         .to_string();
     if !KINDS.iter().any(|(k, _)| *k == kind) {
-        return Err(format!(
-            "種類 {kind} は知らない種類です(align・angle・center・tangent)"
-        ));
+        return Err(
+            format!("種類 {kind} は知らない種類です(align・angle・center・tangent)").into(),
+        );
     }
     let refs = |key: &str| -> Result<Option<Vec<Ref>>, String> {
         match cx.arg(key) {

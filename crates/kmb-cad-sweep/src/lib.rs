@@ -496,7 +496,7 @@ fn path_from(v: &serde_json::Value) -> Result<PathRef, String> {
 }
 
 /// スイープを作る(輪郭と経路は手順の値か CLI・MCP の指定)。
-fn add_sweep(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_sweep(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (sketch, keys) = regions::chosen_in_args(cx)
         .ok_or("動かす輪郭(閉じた輪郭のあるスケッチの領域)を選んでいません")?;
     regions::chosen_profile(cx, sketch, &keys)?;
@@ -508,9 +508,9 @@ fn add_sweep(cx: &Context<'_>) -> Result<Outcome, String> {
     let twist = cx.arg_f64("twist")?.filter(|d| *d != 0.0);
     let scale = cx.arg_f64("scale")?.filter(|f| *f != 1.0);
     if scale.is_some_and(|f| !(f > 0.0 && f <= MAX_SCALE)) {
-        return Err(format!(
-            "終わりの大きさは 0 より大きく {MAX_SCALE} 倍までにしてください"
-        ));
+        return Err(
+            format!("終わりの大きさは 0 より大きく {MAX_SCALE} 倍までにしてください").into(),
+        );
     }
     let data = Sweep {
         profile: sketch,
@@ -565,7 +565,7 @@ fn tidy(cx: &Context<'_>, mut s: Section) -> Section {
 }
 
 /// ロフトを作る(断面は最初の手順と次の手順の値をつないだ並び)。
-fn add_loft(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_loft(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut sections = Vec::new();
     if let Some(v) = cx.arg("first").filter(|v| !v.is_null()) {
         sections.extend(sections_from(&serde_json::Value::Array(vec![v.clone()]))?);
@@ -717,7 +717,7 @@ impl Extension for SweepCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             SWEEP_SKETCH => Some(add_sweep(cx)),
             LOFT_SKETCH => Some(add_loft(cx)),

@@ -248,7 +248,7 @@ pub fn closure(cx: &Context<'_>, mut set: Vec<FeatureId>) -> Vec<FeatureId> {
 }
 
 /// 選んでいるボディ(`roots`、最初に作った機能)の部品を剛性グループにする。
-pub fn new_group(cx: &Context<'_>, roots: &[FeatureId]) -> Result<Outcome, String> {
+pub fn new_group(cx: &Context<'_>, roots: &[FeatureId]) -> Result<Outcome, kmb_core::Problem> {
     let data = cx.data;
     let mut members: Vec<Part> = Vec::new();
     for r in roots {
@@ -288,7 +288,8 @@ pub fn new_group(cx: &Context<'_>, roots: &[FeatureId]) -> Result<Outcome, Strin
             return Err(format!(
                 "{} で動く部品と、その土台が同じグループで一緒に動きます(ジョイントが輪になります)",
                 name_of(id)
-            ));
+            )
+            .into());
         }
         follows.push((id, moved));
     }

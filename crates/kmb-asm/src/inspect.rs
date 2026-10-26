@@ -323,7 +323,7 @@ pub fn interference_table(
     }
 }
 
-pub(crate) fn interference_outcome(cx: &Context<'_>) -> Result<Outcome, String> {
+pub(crate) fn interference_outcome(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let n = cx.visible_bodies().len();
     if n < 2 {
         return Err("ボディが 2 つ以上いります".into());

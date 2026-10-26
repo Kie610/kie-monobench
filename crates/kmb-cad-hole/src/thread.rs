@@ -147,9 +147,9 @@ pub fn suggest_for(c: &Cylinder) -> Vec<Size> {
     if c.internal
         && let Some(i) = v.iter().position(|s| {
             s.coarse
-                && crate::THREADS
-                    .iter()
-                    .any(|t| (t.major - s.major).abs() < 1e-9 && (t.tap_drill - c.diameter).abs() < 1e-3)
+                && crate::THREADS.iter().any(|t| {
+                    (t.major - s.major).abs() < 1e-9 && (t.tap_drill - c.diameter).abs() < 1e-3
+                })
         })
     {
         let s = v.remove(i);
@@ -387,7 +387,7 @@ pub struct ThreadCommands;
 
 /// クリックした円筒の面にねじを付ける(呼びは面の径に近いもの。CLI・MCP は引数 `face` と `feature`、
 /// `size` で指定もできる)。
-fn thread_on_face(cx: &Context<'_>) -> Result<Outcome, String> {
+fn thread_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let face = cx
         .arg("face")
         .and_then(|v| v.as_str())
@@ -402,7 +402,7 @@ fn thread_on_face(cx: &Context<'_>) -> Result<Outcome, String> {
         .or_else(|| cx.visible_bodies().last().map(|b| b.0))
         .ok_or("ボディがありません")?;
     let Some(Value::Shape(body)) = cx.output(feature, "body") else {
-        return Err(format!("{feature} はボディではありません"));
+        return Err(format!("{feature} はボディではありません").into());
     };
     let c = cylinder_of(cx.kernel.as_ref(), *body, &face)?;
     let mut data = Thread {
@@ -505,7 +505,7 @@ impl Extension for ThreadCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         (id == THREAD_ON_FACE).then(|| thread_on_face(cx))
     }
 

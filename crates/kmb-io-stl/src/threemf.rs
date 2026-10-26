@@ -300,7 +300,8 @@ mod tests {
         let mut b = body("板", boxed([0.0; 3], [10.0; 3]), [140, 140, 140], "鋼");
         b.faces.insert("f1".into(), ("赤".into(), [200, 70, 64]));
         // 網に無い面の名前(形を直して消えた面)は書かず、ほかの面に付け替えない
-        b.faces.insert("消えた面".into(), ("青".into(), [0, 0, 255]));
+        b.faces
+            .insert("消えた面".into(), ("青".into(), [0, 0, 255]));
         let m = model_xml(&[b], LengthUnit::Mm, &[]);
         assert_eq!(m.matches("<base ").count(), 2, "{m}");
         assert!(m.contains("<base name=\"赤\" displaycolor=\"#C84640FF\"/>"));

@@ -150,7 +150,7 @@ fn cut_extent(moves: &[Move]) -> Option<[f64; 2]> {
     (lo[0] <= hi[0]).then(|| [hi[0] - lo[0], hi[1] - lo[1]])
 }
 
-fn add_manual_nc(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_manual_nc(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let setup = selected_setup(cx)
         .or_else(|| last_setup(cx))
         .ok_or("セットアップがありません")?;
@@ -168,7 +168,7 @@ fn add_manual_nc(cx: &Context<'_>) -> Result<Outcome, String> {
     ))
 }
 
-fn add_pattern(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_pattern(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let src = selected_path_op(cx).ok_or("経路のできた加工を選んでいません")?;
     let (setup, tp) = cx
         .output(src, "toolpath")
@@ -202,7 +202,7 @@ impl CamCommands {
         &self,
         id: &str,
         cx: &Context<'_>,
-    ) -> Option<Result<Outcome, String>> {
+    ) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             ADD_MANUAL_NC => add_manual_nc(cx),
             ADD_PATTERN => add_pattern(cx),
@@ -251,13 +251,14 @@ impl CamCommands {
         }
     }
 
-    fn export_selected(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn export_selected(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let ids = chosen_ops(cx)?;
         let setup = setup_of(cx, ids[0]).ok_or("加工のセットアップが分かりません")?;
         if let Some(other) = ids.iter().find(|i| setup_of(cx, **i) != Some(setup)) {
             return Err(format!(
                 "{other} は別のセットアップの加工です。一緒に書き出すのは同じセットアップの加工だけ"
-            ));
+            )
+            .into());
         }
         let s = self.setup_paths(cx, setup)?.only(&ids)?;
         let (g, post) = self.gcode_text(cx, &s)?;
@@ -278,7 +279,7 @@ impl CamCommands {
         ))
     }
 
-    fn export_all(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn export_all(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let all = self.paths_all(cx);
         let program = crate::chain_program(&all)?;
         let machine = crate::chain_machine(&all)?;
@@ -300,7 +301,7 @@ impl CamCommands {
         ))
     }
 
-    fn export_by_tool(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn export_by_tool(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let setup = self.target_setup(cx)?;
         let (mut s, before, after) = self.setup_paths(cx, setup)?.by_tool()?;
         s.name = format!("{}。工具交換 {before} → {after} 回", s.name);
@@ -319,7 +320,7 @@ impl CamCommands {
         ))
     }
 
-    fn sheet_html(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn sheet_html(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let setup = self.target_setup(cx)?;
         let s = self.setup_paths(cx, setup)?;
         Ok(Outcome::File {

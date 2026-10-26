@@ -5,8 +5,8 @@
 //! 画面は一覧を描いて実行するだけで、機能の中身を知らない。
 
 use crate::{
-    Arg, DocumentData, FeatureId, FeatureStatus, Kernel, PlanarFace, RecomputeReport, Registry,
-    ShapeHandle, Value,
+    Arg, DocumentData, FeatureId, FeatureStatus, Kernel, PlanarFace, Problem, ProblemKind,
+    RecomputeReport, Registry, ShapeHandle, Value,
 };
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -298,7 +298,11 @@ pub trait Extension: Send + Sync {
     fn actions(&self, cx: &Context<'_>) -> Vec<Action>;
 
     /// 操作 `id` を実行する。自分の操作でなければ `None`。
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>>;
+    ///
+    /// 誤りは種類つきで返す(CLI の終了の番号と MCP の `kind` になる)。文字列の誤りは `?` や
+    /// `.into()` で入力の誤り([`ProblemKind::Input`])になるので、ファイル・計算・使えない場面の
+    /// 誤りだけ [`Problem::new`] で種類を書く。
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, Problem>>;
 
     /// 一覧([`Extension::actions`])に出さない自分の操作 `id`(画面の部品が中から呼ぶ物。部品を
     /// 引いて動かす、など)の引数の宣言。`None` の操作は引数を受け取らない(段の帯の段のように、値を
@@ -548,7 +552,7 @@ impl Extensions {
         self.actions(cx).into_iter().find(|a| a.id == id)
     }
 
-    fn run_checked(&self, id: &str, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn run_checked(&self, id: &str, cx: &Context<'_>) -> Result<Outcome, Problem> {
         // 一覧に出さずに画面の部品が呼ぶ操作(段の帯の段・コマを移す操作など。値は ID の後ろに付ける)は、
         // unlisted で宣言しなければ引数を受け取らない操作として扱う(引数を読めば下で誤りになる)
         let decl = match self.action(id, cx) {
@@ -565,7 +569,12 @@ impl Extensions {
             self.0
                 .iter()
                 .find_map(|e| e.run(id, &cx))
-                .unwrap_or_else(|| Err(format!("操作 {id} はありません")))
+                .unwrap_or_else(|| {
+                    Err(Problem::new(
+                        ProblemKind::Input,
+                        format!("操作 {id} はありません"),
+                    ))
+                })
         });
         let undeclared: Vec<&str> = read
             .iter()
@@ -580,7 +589,7 @@ impl Extensions {
             );
             log::error!("{e}");
             if cfg!(debug_assertions) {
-                return Err(e);
+                return Err(Problem::new(ProblemKind::Compute, e));
             }
         }
         r
@@ -591,7 +600,7 @@ impl Extensions {
     /// 引数は操作の宣言 [`Action::args`] で確かめ(知らない鍵・型の違いは誤り)、単位つきの式を数に
     /// 直し、省いた引数に既定を入れてから渡す。一覧に無い操作は [`Extension::unlisted`] の宣言で確かめる
     /// (宣言が無ければ引数を受け取らない)。
-    pub fn run(&self, id: &str, cx: &Context<'_>) -> Result<Outcome, String> {
+    pub fn run(&self, id: &str, cx: &Context<'_>) -> Result<Outcome, Problem> {
         let t = std::time::Instant::now();
         let r = self.run_checked(id, cx);
         let ms = t.elapsed().as_secs_f64() * 1e3;

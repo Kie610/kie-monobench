@@ -108,7 +108,11 @@ pub fn actions(cx: &Context<'_>, all: &[Strategy]) -> Vec<Action> {
     v
 }
 
-pub fn run(id: &str, cx: &Context<'_>, all: &[Strategy]) -> Option<Result<Outcome, String>> {
+pub fn run(
+    id: &str,
+    cx: &Context<'_>,
+    all: &[Strategy],
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     if ![ADD_FACES, REMOVE_FACES].contains(&id) {
         return None;
     }

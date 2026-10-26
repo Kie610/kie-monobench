@@ -9,7 +9,7 @@ pub const INSERT_SVG: &str = "cad.sketch.insert_svg";
 pub const EXPORT_SVG: &str = "cad.sketch.export_svg";
 
 /// 選んでいるスケッチを SVG にする(既定は補助線を書かない。「DXF として保存」と同じ)。
-fn export_svg(cx: &Context<'_>) -> Result<Outcome, String> {
+fn export_svg(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, sketch) = kmb_sketch::selected_sketch(cx).ok_or("スケッチを選んでから使う")?;
     let sol = cx
         .output(id, "sketch")
@@ -77,7 +77,7 @@ impl Extension for SvgCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             INSERT_SVG => kmb_sketch::insert_file(cx, "SVG", crate::from_svg),
             EXPORT_SVG => export_svg(cx),

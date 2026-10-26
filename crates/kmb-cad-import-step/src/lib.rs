@@ -59,15 +59,16 @@ pub const STAND_UP: kmb_core::kernel::Matrix4 = [
 
 impl ImportStep {
     /// ファイルを読んで機能のデータを作る。
-    pub fn from_file(path: &std::path::Path) -> Result<ImportStep, String> {
-        let bytes =
-            std::fs::read(path).map_err(|e| format!("{} を読めません: {e}", path.display()))?;
+    pub fn from_file(path: &std::path::Path) -> Result<ImportStep, kmb_core::Problem> {
+        let bytes = std::fs::read(path).map_err(|e| {
+            kmb_core::Problem::new(
+                kmb_core::ProblemKind::File,
+                format!("{} を読めません: {e}", path.display()),
+            )
+        })?;
         let step = decode_text(&bytes);
         if !step.trim_start().starts_with("ISO-10303-21") {
-            return Err(format!(
-                "{} は STEP(ISO-10303-21)ではありません",
-                path.display()
-            ));
+            return Err(format!("{} は STEP(ISO-10303-21)ではありません", path.display()).into());
         }
         Ok(ImportStep {
             file: path
@@ -119,7 +120,7 @@ pub fn register(reg: &mut Registry) {
 use kmb_core::{Action, Context, Extension, Input, Outcome, Place};
 
 /// STEP のファイルを読み込む機能を足す(中身は文書に入れる)。
-fn import_step(cx: &Context<'_>) -> Result<Outcome, String> {
+fn import_step(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let path = cx.file.ok_or("ファイルを選んでいません")?;
     let data = ImportStep::from_file(path)?;
     let stem = path
@@ -157,7 +158,7 @@ impl Extension for ImportStepCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             IMPORT_STEP_FILE => import_step(cx),
             _ => return None,

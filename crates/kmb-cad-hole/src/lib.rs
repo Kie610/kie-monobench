@@ -581,7 +581,10 @@ impl Feature for Hole {
             .and_then(Recipe::from_value)
             .and_then(|r| self.info(&r))
         {
-            out.insert(kmb_interchange::HOLE_OUTPUT.into(), Payload::to_value(&info));
+            out.insert(
+                kmb_interchange::HOLE_OUTPUT.into(),
+                Payload::to_value(&info),
+            );
         }
         // 黙った失敗を防ぐ: 何も削れなければ誤りにする(点が形の外にある時など)
         if let Some(Value::Shape(body)) = out.get("body")
@@ -813,7 +816,7 @@ fn hole_args() -> Vec<Arg> {
 
 /// 面の上の点 `point` に、径 `diameter`・深さ `depth`(省くと貫通)の穴をあける
 /// (点だけのスケッチと穴を 1 回で足す)。
-fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, String> {
+fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (pick, face) = chosen_face(cx)?;
     let pick = &pick;
     let point = match cx.arg("point").and_then(|v| v.as_array()) {
@@ -1003,7 +1006,7 @@ fn inside_face(cx: &Context<'_>, pick: &kmb_core::FacePick, plane: &k::Plane, p:
 }
 
 /// 選んでいる穴の点のスケッチに、点 `point` を足す(同じ穴が 1 つ増える)。
-fn hole_add(cx: &Context<'_>) -> Result<Outcome, String> {
+fn hole_add(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let h = hole_face(cx).ok_or("面の上のスケッチの点にあけた穴を選んでいません")?;
     let point = match cx.arg("point").and_then(|v| v.as_array()) {
         Some(a) if a.len() == 3 && a.iter().all(|x| x.is_f64() || x.is_i64()) => {
@@ -1074,7 +1077,7 @@ fn selected_hole(cx: &Context<'_>) -> Option<(FeatureId, Hole)> {
 
 /// 穴 `id` の深さを、クリックした面(CLI・MCP は引数 `face` と `feature`)までにする。面は穴より
 /// 前の形から探す(穴をあけた後のボディの面を選んでも、元の対象のボディの同じ面を使う)。
-fn hole_to_face(cx: &Context<'_>) -> Result<Outcome, String> {
+fn hole_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut h) = selected_hole(cx).ok_or("穴を選んでいません")?;
     let (pick, given) =
         stop_at::stop_pick(cx).ok_or("穴を止める平らな面か頂点をクリックしてください")?;
@@ -1158,7 +1161,7 @@ impl Extension for HoleCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             HOLE_ON_FACE => Some(hole_on_face(cx)),
             HOLE_ADD => Some(hole_add(cx)),

@@ -60,7 +60,7 @@ impl Extension for ChamferEdges {
         v
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         if id != USE_EDGES && id != ALL_EDGES {
             return None;
         }

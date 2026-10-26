@@ -254,15 +254,22 @@ fn same_file(a: &Path, b: &Path) -> bool {
 
 /// 元のファイルを読んで、組み込む写しと絶対パスを作る。組み込む文書の中(入れ子も)に、元自身か
 /// 今の文書(`cx.doc_path`)を組み込んだリンクがあれば、輪になるので断る。
-fn read_source(path: &Path, cx: &Context<'_>) -> Result<(serde_json::Value, PathBuf), String> {
+fn read_source(
+    path: &Path,
+    cx: &Context<'_>,
+) -> Result<(serde_json::Value, PathBuf), kmb_core::Problem> {
     // AI から動く時は許したフォルダの外を読まない(元のパスは文書のデータにあり、書き換えられる)
     let path = &cx.open_path(path)?;
     let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
     if cx.doc_path.is_some_and(|d| same_file(d, &abs)) {
         return Err("開いている文書そのものは組み込めません(輪になります)".into());
     }
-    let src = std::fs::read_to_string(path)
-        .map_err(|e| format!("{} を読めません: {e}", path.display()))?;
+    let src = std::fs::read_to_string(path).map_err(|e| {
+        kmb_core::Problem::new(
+            kmb_core::ProblemKind::File,
+            format!("{} を読めません: {e}", path.display()),
+        )
+    })?;
     let doc = design_copy(&src, cx.registry).map_err(|e| format!("{}: {e}", path.display()))?;
     if let Some(back) = std::iter::once(abs.as_path())
         .chain(cx.doc_path)
@@ -272,7 +279,8 @@ fn read_source(path: &Path, cx: &Context<'_>) -> Result<(serde_json::Value, Path
             "{} は {} をリンクで組み込んでいます(組み込むと輪になります)",
             path.display(),
             back.display()
-        ));
+        )
+        .into());
     }
     Ok((doc, abs))
 }
@@ -290,12 +298,12 @@ fn stem(path: &Path) -> String {
 }
 
 /// リンクで挿入する: リンクの機能と、ボディごとのボディの機能を足し、ファイルの名前の部品にまとめる。
-fn insert(cx: &Context<'_>) -> Result<Outcome, String> {
+fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let path = cx.file.ok_or("ファイルを選んでいません")?;
     let (doc, abs) = read_source(path, cx)?;
     let bodies = copy_bodies(&doc, cx)?;
     if bodies.is_empty() {
-        return Err(format!("{} にはボディがありません", path.display()));
+        return Err(format!("{} にはボディがありません", path.display()).into());
     }
     let name = stem(path);
     let link = Link {
@@ -346,7 +354,7 @@ fn selected_link(cx: &Context<'_>) -> Result<(FeatureId, Link), String> {
 }
 
 /// 最新にする: 写しを元のファイル(`cx.file`、無ければ保存した絶対パス)の今の中身に差し替える。
-fn update(cx: &Context<'_>) -> Result<Outcome, String> {
+fn update(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, link) = selected_link(cx)?;
     if link.broken {
         return Err("リンクを切った部品です(元のファイルとはつながっていません)".into());
@@ -363,7 +371,7 @@ fn update(cx: &Context<'_>) -> Result<Outcome, String> {
 
 /// 元のファイルを選び直す: 選んだファイル(`cx.file`)を新しい元にして写しを差し替える。
 /// 固定はそのまま残す(選び直しは使う人がはっきり頼んだ差し替え)。
-fn relink(cx: &Context<'_>) -> Result<Outcome, String> {
+fn relink(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, link) = selected_link(cx)?;
     if link.broken {
         return Err("リンクを切った部品です(元のファイルとはつながっていません)".into());
@@ -384,11 +392,11 @@ fn replace(
     link: Link,
     path: &Path,
     mut label: String,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     let (doc, abs) = read_source(path, cx)?;
     let bodies = copy_bodies(&doc, cx)?;
     if bodies.is_empty() {
-        return Err(format!("{} にはボディがありません", path.display()));
+        return Err(format!("{} にはボディがありません", path.display()).into());
     }
     let have = bodies_of(cx.data, id);
     // 前の写しのボディの名前(番号で見つからない物を名前で探すため)
@@ -401,7 +409,10 @@ fn replace(
         .iter()
         .filter_map(|(b, _)| {
             let n = &cx.data.feature(*b)?.name;
-            Some((*b, n.rsplit_once(": ").map_or(n.as_str(), |x| x.1).to_string()))
+            Some((
+                *b,
+                n.rsplit_once(": ").map_or(n.as_str(), |x| x.1).to_string(),
+            ))
         })
         .collect();
     let have: Vec<(FeatureId, u64, String)> = have
@@ -505,7 +516,11 @@ fn replace(
     Ok(Outcome::Change { label, edits })
 }
 
-fn set_link(cx: &Context<'_>, label: &str, f: impl FnOnce(&mut Link)) -> Result<Outcome, String> {
+fn set_link(
+    cx: &Context<'_>,
+    label: &str,
+    f: impl FnOnce(&mut Link),
+) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut link) = selected_link(cx)?;
     f(&mut link);
     Ok(Outcome::Change {
@@ -594,7 +609,7 @@ impl kmb_core::Extension for LinkCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             LINK_INSERT => insert(cx),
             LINK_UPDATE => update(cx),
@@ -602,7 +617,7 @@ impl kmb_core::Extension for LinkCommands {
             LINK_PIN => {
                 let (_, l) = match selected_link(cx) {
                     Ok(x) => x,
-                    Err(e) => return Some(Err(e)),
+                    Err(e) => return Some(Err(e.into())),
                 };
                 let label = if l.pinned {
                     "リンクの固定を外す"

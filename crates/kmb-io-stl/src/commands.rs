@@ -75,7 +75,7 @@ fn stl_bytes(meshes: &[kmb_core::Mesh], ascii: bool) -> Result<Vec<u8>, String> 
 }
 
 /// ボディごとの STL。
-fn stl_each(cx: &Context<'_>, tol: f64, ascii: bool) -> Result<Outcome, String> {
+fn stl_each(cx: &Context<'_>, tol: f64, ascii: bool) -> Result<Outcome, kmb_core::Problem> {
     let mut files = Vec::new();
     let mut triangles = 0;
     for (name, h) in named_bodies(cx)? {
@@ -91,7 +91,7 @@ fn stl_each(cx: &Context<'_>, tol: f64, ascii: bool) -> Result<Outcome, String> 
 }
 
 /// ボディごとの STEP。
-fn step_each(cx: &Context<'_>) -> Result<Outcome, String> {
+fn step_each(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut files = Vec::new();
     for (name, h) in named_bodies(cx)? {
         let s = cx
@@ -107,7 +107,7 @@ fn step_each(cx: &Context<'_>) -> Result<Outcome, String> {
     })
 }
 
-fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, String> {
+fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
     let tol = cx.arg_f64("tolerance")?.unwrap_or(MESH_TOLERANCE);
     if !(tol > 0.0001 && tol <= 1.0) {
         return Err("許容差は 0.0001〜1 mm にしてください".into());
@@ -131,7 +131,7 @@ fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, String> {
     })
 }
 
-fn step(cx: &Context<'_>, id: &str) -> Result<Outcome, String> {
+fn step(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
     if each(cx, id) {
         return step_each(cx);
     }
@@ -205,7 +205,7 @@ fn meta_3mf(cx: &Context<'_>) -> Vec<(&'static str, String)> {
     ]
 }
 
-fn threemf(cx: &Context<'_>) -> Result<Outcome, String> {
+fn threemf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let tol = cx.arg_f64("tolerance")?.unwrap_or(MESH_TOLERANCE);
     if !(tol > 0.0001 && tol <= 1.0) {
         return Err("許容差は 0.0001〜1 mm にしてください".into());
@@ -348,7 +348,7 @@ impl Extension for ExportCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             EXPORT_STL | EXPORT_STL_EACH => Some(stl(cx, id)),
             EXPORT_STEP | EXPORT_STEP_EACH => Some(step(cx, id)),

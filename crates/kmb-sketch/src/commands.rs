@@ -111,17 +111,22 @@ fn plane_arg(cx: &Context<'_>) -> Result<Option<SketchPlane>, String> {
     };
     if let Some(n) = v.as_u64() {
         let id = kmb_core::FeatureId(n);
-        if kmb_interchange::datum_planes(cx).iter().all(|(f, ..)| *f != id) {
+        if kmb_interchange::datum_planes(cx)
+            .iter()
+            .all(|(f, ..)| *f != id)
+        {
             return Err(format!("機能 {n} は作業平面ではありません"));
         }
         return Ok(Some(SketchPlane::Datum { feature: id }));
     }
     match v.as_str() {
         Some("face") => Ok(None),
-        Some(key) => base_plane(key)
-            .map(Some)
-            .ok_or_else(|| format!("平面 {key} はありません(xy・yz・zx・face か作業平面の機能の番号)")),
-        None => Err(format!("平面 {v} はありません(xy・yz・zx・face か作業平面の機能の番号)")),
+        Some(key) => base_plane(key).map(Some).ok_or_else(|| {
+            format!("平面 {key} はありません(xy・yz・zx・face か作業平面の機能の番号)")
+        }),
+        None => Err(format!(
+            "平面 {v} はありません(xy・yz・zx・face か作業平面の機能の番号)"
+        )),
     }
 }
 
@@ -144,7 +149,7 @@ pub fn insert_file(
     cx: &Context<'_>,
     kind: &str,
     read: fn(&str) -> Result<Imported, String>,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     let path = cx
         .file
         .ok_or_else(|| format!("{kind} のファイルを選んでから使う"))?;
@@ -152,7 +157,7 @@ pub fn insert_file(
         .map_err(|e| format!("{} を読めません: {e}", path.display()))?;
     let read = read(&text)?;
     if read.shapes.is_empty() {
-        return Err(format!("{kind} に読める形がありません"));
+        return Err(format!("{kind} に読める形がありません").into());
     }
     let label = format!("{kind} を挿入");
     let (target, mut sketch) = match selected_sketch(cx) {
@@ -163,9 +168,7 @@ pub fn insert_file(
         .insert_shapes(&read.shapes, crate::Place::default())
         .is_empty()
     {
-        return Err(format!(
-            "{kind} の形が小さすぎるか長さ 0 で、足せる線がありません"
-        ));
+        return Err(format!("{kind} の形が小さすぎるか長さ 0 で、足せる線がありません").into());
     }
     let data = serde_json::to_value(&sketch).expect("JSON にできる");
     Ok(match target {
@@ -183,7 +186,7 @@ pub fn insert_file(
 }
 
 /// 自動拘束: 選んでいるスケッチに、候補を全部付ける(画面では候補を予告して種類ごとに外せる)。
-fn auto_constrain(cx: &Context<'_>) -> Result<Outcome, String> {
+fn auto_constrain(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, sketch) = selected_sketch(cx).ok_or("スケッチを選んでから使う")?;
     let mut sol = cx
         .output(id, "sketch")
@@ -211,7 +214,8 @@ fn auto_constrain(cx: &Context<'_>) -> Result<Outcome, String> {
         return Err(format!(
             "付けられる拘束がありません(自由度 {}。今の位置で成り立つ物は既に決まっています)",
             r.dof_before
-        ));
+        )
+        .into());
     }
     let out = crate::apply_suggestions(&s, &sol, &r.suggestions);
     Ok(Outcome::Change {
@@ -231,7 +235,7 @@ fn auto_constrain(cx: &Context<'_>) -> Result<Outcome, String> {
 /// スケッチ平面を再定義: 選んでいるスケッチの平面を、クリックした面か XY・YZ・ZX に替える。
 /// 線と拘束はそのまま(平面の座標で同じ位置)、平面からの距離も残す。スケッチより後にできた
 /// ボディの面は選べない(計算の順が逆になる)。
-fn redefine_plane(cx: &Context<'_>) -> Result<Outcome, String> {
+fn redefine_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut sketch) = selected_sketch(cx).ok_or("スケッチを選んでから使う")?;
     let plane = match picked_sketch_plane(cx) {
         Some(p) => p,
@@ -366,28 +370,30 @@ impl Extension for SketchCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             // 平らな面を選んでいれば、その面に(面を選んでから押せばそこに描く)
             // 平面を選ぶ手順で選んだ平面(`plane` が xy・yz・zx)。指定がなければ XY
             // 選んでいる作業平面か、手順で選んだ作業平面(`plane` が機能の番号)にも描ける
-            ADD_SKETCH => plane_arg(cx).map(|given| {
-                insert_feature(
-                    "スケッチを作成",
-                    SKETCH,
-                    format!("スケッチ{}", cx.count_of(SKETCH) + 1),
-                    &with_face_edges(
-                        cx,
-                        Sketch {
-                            plane: picked_sketch_plane(cx)
-                                .or(given)
-                                .or_else(|| selected_datum_plane(cx))
-                                .unwrap_or_default(),
-                            ..Default::default()
-                        },
-                    ),
-                )
-            }),
+            ADD_SKETCH => plane_arg(cx)
+                .map(|given| {
+                    insert_feature(
+                        "スケッチを作成",
+                        SKETCH,
+                        format!("スケッチ{}", cx.count_of(SKETCH) + 1),
+                        &with_face_edges(
+                            cx,
+                            Sketch {
+                                plane: picked_sketch_plane(cx)
+                                    .or(given)
+                                    .or_else(|| selected_datum_plane(cx))
+                                    .unwrap_or_default(),
+                                ..Default::default()
+                            },
+                        ),
+                    )
+                })
+                .map_err(Into::into),
             SKETCH_ON_FACE => match picked_sketch_plane(cx) {
                 Some(plane) => Ok(insert_feature(
                     "面にスケッチを追加",
@@ -422,7 +428,10 @@ impl Extension for SketchCommands {
         }
         // 軸の正の向きへ広がる正方形を原点から少し浮かせる(描く四角と同じ)。
         // 大きさは画面の上で一定(ビューが原点の目安の大きさに伸ばす。長さ 1 がその大きさ)
-        let (a, b) = (kmb_core::Plane::ORIGIN_GAP, 1.0 + kmb_core::Plane::ORIGIN_GAP);
+        let (a, b) = (
+            kmb_core::Plane::ORIGIN_GAP,
+            1.0 + kmb_core::Plane::ORIGIN_GAP,
+        );
         let choices = BASE_PLANES
             .iter()
             .map(|(key, label, plane)| {

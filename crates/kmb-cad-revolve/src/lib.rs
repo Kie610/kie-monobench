@@ -675,10 +675,10 @@ const BEFORE_HOLE: &str = "cad.hole_to_face";
 
 /// 回転 `a` の範囲を、クリックした面か頂点(CLI・MCP は引数 `face` か `vertex` と `feature`)までに
 /// する。面は回転より前の形から探す。
-fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, String> {
+fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let a = selected_revolve(cx).ok_or("回転を選んでいません")?;
-    let (pick, given) =
-        kmb_cad::stop_at::stop_pick(cx).ok_or("回転を止める平らな面か頂点をクリックしてください")?;
+    let (pick, given) = kmb_cad::stop_at::stop_pick(cx)
+        .ok_or("回転を止める平らな面か頂点をクリックしてください")?;
     let at = |f: FeatureId| cx.data.index_of(f).unwrap_or(usize::MAX);
     let has = |f: FeatureId| {
         matches!(cx.output(f, "body"), Some(kmb_core::Value::Shape(b))
@@ -710,7 +710,7 @@ fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 回転を作る(輪郭・軸・角度は手順の値か CLI・MCP の指定。角度を省くと 360 度)。
-fn add_revolve(cx: &Context<'_>) -> Result<Outcome, String> {
+fn add_revolve(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (sketch, keys) = regions::chosen_in_args(cx)
         .ok_or("回す輪郭(閉じた輪郭のあるスケッチの領域)を選んでいません")?;
     let profile = regions::chosen_profile(cx, sketch, &keys)?;
@@ -885,7 +885,7 @@ impl Extension for RevolveCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         if id == REVOLVE_SKETCH {
             return Some(add_revolve(cx));
         }

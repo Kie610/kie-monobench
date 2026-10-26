@@ -385,81 +385,84 @@ pub fn run(
     id: &str,
     cx: &Context<'_>,
     info: Option<&SetupInfo>,
-) -> Option<Result<Outcome, String>> {
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     if !IDS.contains(&id) {
         return None;
     }
-    Some((|| {
-        let sid = picked_setup(cx).ok_or("セットアップを選んでいません")?;
-        let mut s = setup_of(cx, sid).ok_or("セットアップのデータが読めません")?;
-        let need_info = || info.ok_or("セットアップの計算ができていません");
-        let fixture = |s: &Setup| -> Result<usize, String> {
-            let k: usize = arg(cx, "fixture", "固定具")?;
-            (k < s.fixtures.len())
-                .then_some(k)
-                .ok_or_else(|| format!("固定具 {} がありません", k + 1))
-        };
-        let label = match id {
-            PICK_ORIGIN => {
-                let w: [f64; 3] = arg(cx, "point", "原点")?;
-                let o = origin_at(need_info()?, w);
-                s.origin_note = o.describe();
-                s.origin_at = Some(o);
-                "原点を 3D で選ぶ"
-            }
-            RESET_ORIGIN => {
-                s.origin_at = None;
-                s.origin_note.clear();
-                "原点を一覧の選び方に戻す"
-            }
-            ADD_BODY => {
-                let b: u64 = arg(cx, "body", "ボディ")?;
-                let b = FeatureId(b);
-                if !matches!(cx.output(b, "body"), Some(Value::Shape(_))) {
-                    return Err(format!("{b} はボディではありません"));
+    Some(
+        (|| {
+            let sid = picked_setup(cx).ok_or("セットアップを選んでいません")?;
+            let mut s = setup_of(cx, sid).ok_or("セットアップのデータが読めません")?;
+            let need_info = || info.ok_or("セットアップの計算ができていません");
+            let fixture = |s: &Setup| -> Result<usize, String> {
+                let k: usize = arg(cx, "fixture", "固定具")?;
+                (k < s.fixtures.len())
+                    .then_some(k)
+                    .ok_or_else(|| format!("固定具 {} がありません", k + 1))
+            };
+            let label = match id {
+                PICK_ORIGIN => {
+                    let w: [f64; 3] = arg(cx, "point", "原点")?;
+                    let o = origin_at(need_info()?, w);
+                    s.origin_note = o.describe();
+                    s.origin_at = Some(o);
+                    "原点を 3D で選ぶ"
                 }
-                if b != s.body && !s.more_bodies.contains(&b) {
-                    s.more_bodies.push(b);
+                RESET_ORIGIN => {
+                    s.origin_at = None;
+                    s.origin_note.clear();
+                    "原点を一覧の選び方に戻す"
                 }
-                "削るボディを足す"
-            }
-            CLEAR_BODIES => {
-                s.more_bodies.clear();
-                "足したボディを外す"
-            }
-            MOVE_FIXTURE => {
-                let k = fixture(&s)?;
-                let w: [f64; 3] = arg(cx, "point", "置く所")?;
-                let q = need_info()?.to_setup(w);
-                s.fixtures[k].at = [round_um(q[0]), round_um(q[1])];
-                "固定具を動かす"
-            }
-            RESIZE_FIXTURE => {
-                let k = fixture(&s)?;
-                let w: f64 = arg(cx, "width", "幅")?;
-                let d: f64 = arg(cx, "depth", "奥行")?;
-                let h: f64 = arg(cx, "height", "高さ")?;
-                if !(w > 0.0 && d > 0.0 && h > 0.0) {
-                    return Err("固定具の幅・奥行・高さは 0 より大きくしてください".into());
+                ADD_BODY => {
+                    let b: u64 = arg(cx, "body", "ボディ")?;
+                    let b = FeatureId(b);
+                    if !matches!(cx.output(b, "body"), Some(Value::Shape(_))) {
+                        return Err(format!("{b} はボディではありません"));
+                    }
+                    if b != s.body && !s.more_bodies.contains(&b) {
+                        s.more_bodies.push(b);
+                    }
+                    "削るボディを足す"
                 }
-                s.fixtures[k].size = [round_um(w), round_um(d), round_um(h)];
-                "固定具の大きさを変える"
-            }
-            REMOVE_FIXTURE => {
-                let k = fixture(&s)?;
-                s.fixtures.remove(k);
-                "固定具を 1 つ外す"
-            }
-            _ => unreachable!("IDS で絞った"),
-        };
-        Ok(Outcome::Change {
-            label: label.into(),
-            edits: vec![Edit::SetData {
-                id: sid,
-                data: serde_json::to_value(&s).expect("JSON にできる"),
-            }],
-        })
-    })())
+                CLEAR_BODIES => {
+                    s.more_bodies.clear();
+                    "足したボディを外す"
+                }
+                MOVE_FIXTURE => {
+                    let k = fixture(&s)?;
+                    let w: [f64; 3] = arg(cx, "point", "置く所")?;
+                    let q = need_info()?.to_setup(w);
+                    s.fixtures[k].at = [round_um(q[0]), round_um(q[1])];
+                    "固定具を動かす"
+                }
+                RESIZE_FIXTURE => {
+                    let k = fixture(&s)?;
+                    let w: f64 = arg(cx, "width", "幅")?;
+                    let d: f64 = arg(cx, "depth", "奥行")?;
+                    let h: f64 = arg(cx, "height", "高さ")?;
+                    if !(w > 0.0 && d > 0.0 && h > 0.0) {
+                        return Err("固定具の幅・奥行・高さは 0 より大きくしてください".into());
+                    }
+                    s.fixtures[k].size = [round_um(w), round_um(d), round_um(h)];
+                    "固定具の大きさを変える"
+                }
+                REMOVE_FIXTURE => {
+                    let k = fixture(&s)?;
+                    s.fixtures.remove(k);
+                    "固定具を 1 つ外す"
+                }
+                _ => unreachable!("IDS で絞った"),
+            };
+            Ok(Outcome::Change {
+                label: label.into(),
+                edits: vec![Edit::SetData {
+                    id: sid,
+                    data: serde_json::to_value(&s).expect("JSON にできる"),
+                }],
+            })
+        })()
+        .map_err(Into::into),
+    )
 }
 
 /// L 字の基準の角(セットアップの座標)。ストックの手前左の下の角から、ベッドの上の置き場所だけ戻した所。

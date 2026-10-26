@@ -21,7 +21,7 @@ impl Extension for Sketch3dCommands {
             .before(kmb_sketch::SKETCH_ON_FACE)]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         (id == ADD_SKETCH3D).then(|| {
             Ok(kmb_sketch::insert_feature(
                 "3D スケッチを追加",

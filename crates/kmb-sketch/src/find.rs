@@ -53,7 +53,7 @@ impl Extension for SketchFind {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         (id == FIND).then(|| find(cx))
     }
 }
@@ -154,7 +154,7 @@ fn points(e: &Entity, sol: &Solution) -> Vec<[f64; 2]> {
         .collect()
 }
 
-fn find(cx: &Context<'_>) -> Result<Outcome, String> {
+fn find(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, sketch) = match cx.arg("sketch").and_then(Value::as_u64) {
         Some(n) => {
             let f = cx

@@ -44,7 +44,7 @@ fn view_arg(cx: &Context<'_>) -> Result<View, String> {
     View::new(vec3("eye").ok_or_else(bad)?, vec3("up").ok_or_else(bad)?).ok_or_else(bad)
 }
 
-fn view_dxf(cx: &Context<'_>, hidden_default: bool) -> Result<Outcome, String> {
+fn view_dxf(cx: &Context<'_>, hidden_default: bool) -> Result<Outcome, kmb_core::Problem> {
     let view = view_arg(cx)?;
     let hidden = cx
         .arg("hidden")
@@ -72,7 +72,7 @@ fn view_dxf(cx: &Context<'_>, hidden_default: bool) -> Result<Outcome, String> {
     })
 }
 
-fn view_svg(cx: &Context<'_>) -> Result<Outcome, String> {
+fn view_svg(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let view = view_arg(cx)?;
     let hidden = cx.arg("hidden").and_then(|v| v.as_bool()) == Some(true);
     let tol = cx.arg_f64("tolerance")?.unwrap_or(VIEW_TOLERANCE);
@@ -209,7 +209,7 @@ impl Extension for ViewCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             EXPORT_VIEW_DXF => Some(view_dxf(cx, false)),
             EXPORT_VIEW_DXF_HIDDEN => Some(view_dxf(cx, true)),

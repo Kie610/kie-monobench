@@ -195,7 +195,7 @@ fn run_with(
             Ok(())
         }
         Ok(_) => Err("文書を変えない".into()),
-        Err(e) => Err(e),
+        Err(e) => Err(e.into()),
     }
 }
 

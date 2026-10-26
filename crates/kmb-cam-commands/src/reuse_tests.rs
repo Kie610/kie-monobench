@@ -72,7 +72,7 @@ fn run(
     id: &str,
     selected: Option<u64>,
     args: Json,
-) -> Result<Outcome, String> {
+) -> Result<Outcome, kmb_core::Problem> {
     let cx = Context {
         selected: selected.map(FeatureId),
         args: &args,
@@ -226,7 +226,16 @@ fn defaults_can_be_exported_and_imported() {
         file: Some(&p),
         ..Context::new(&d.data, &d.report, &d.reg, &d.kernel)
     };
-    assert!(cam.run(IMPORT_DEFAULTS, &cx).unwrap().is_err());
+    let e = cam.run(IMPORT_DEFAULTS, &cx).unwrap().unwrap_err();
+    assert_eq!(e.kind, kmb_core::ProblemKind::Input, "{e}");
+    // 読めないファイルはファイルの誤り(CLI の終了の番号 5)
+    let missing = dir.join("無い.json");
+    let cx = Context {
+        file: Some(&missing),
+        ..Context::new(&d.data, &d.report, &d.reg, &d.kernel)
+    };
+    let e = cam.run(IMPORT_DEFAULTS, &cx).unwrap().unwrap_err();
+    assert_eq!(e.kind, kmb_core::ProblemKind::File, "{e}");
     std::fs::remove_dir_all(dir).ok();
 }
 

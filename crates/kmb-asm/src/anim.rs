@@ -173,7 +173,7 @@ fn vec3(v: &serde_json::Value) -> Option<P3> {
     (c.len() == 3 && c.iter().all(|x| x.is_finite())).then(|| [c[0], c[1], c[2]])
 }
 
-fn with_step(cx: &Context<'_>, step: Step, label: String) -> Result<Outcome, String> {
+fn with_step(cx: &Context<'_>, step: Step, label: String) -> Result<Outcome, kmb_core::Problem> {
     anim::check_step(&step)?;
     let mut steps = anim::steps(cx.data);
     steps.push(step);
@@ -184,7 +184,7 @@ fn with_step(cx: &Context<'_>, step: Step, label: String) -> Result<Outcome, Str
 }
 
 /// 分解の段を足す。引数 `dir`(向き)と `distance`(mm)、動かす物は選んだ面の部品か `targets`。
-pub fn explode(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn explode(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let dir = cx
         .arg("dir")
         .and_then(vec3)
@@ -277,7 +277,7 @@ fn names(cx: &Context<'_>, targets: &[Target]) -> String {
 }
 
 /// ビューの段を足す。引数 `view`(視点 {target, yaw, pitch, height, perspective}。画面が今の視点を渡す)。
-pub fn view(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn view(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let v = cx.arg("view").ok_or("視点(view)がありません")?;
     let view: anim::ViewPose =
         serde_json::from_value(v.clone()).map_err(|e| format!("view: {e}"))?;
@@ -302,7 +302,7 @@ pub fn view(cx: &Context<'_>) -> Result<Outcome, String> {
 
 /// 表示/非表示の段を足す。引数 `visible`(省くと、最初の物が今の時刻に見えていれば隠し、
 /// 隠れていれば見せる)。
-pub fn visibility(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn visibility(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let targets = chosen_targets(cx)?;
     if targets.is_empty() {
         return Err("見せる・隠す部品を選んでいません".into());
@@ -331,7 +331,7 @@ pub fn visibility(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 外観の段を足す。引数 `appearance`(外観の名前。省くと、今の外観と違う最初の塗装の色)。
-pub fn appearance(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn appearance(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let targets = chosen_targets(cx)?;
     if targets.is_empty() {
         return Err("外観を替える部品を選んでいません".into());
@@ -418,7 +418,7 @@ pub fn drive_handles(cx: &Context<'_>) -> Vec<Handle> {
 
 /// ジョイントの動きの段を足す。引数 `joint`(ジョイントの番号)、`from`・`to`(度か mm。省くと
 /// 下限から上限、無ければ今の値から 90 度か動く部品の長さ)。
-pub fn drive(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn drive(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let id = FeatureId(
         cx.arg("joint")
             .and_then(|v| v.as_u64())
@@ -591,7 +591,7 @@ pub fn auto_moves(cx: &Context<'_>, all: bool, scale: f64) -> Vec<(Vec<Target>, 
 
 /// 自動分解の段を足す。引数 `sequential`(真なら部品ごとに 1 秒の段、偽なら全部同時の段 1 つ)・
 /// `trail`(跡の線。既定は真)・`scale`(分解の目盛。距離の倍率、既定 1)。
-pub fn auto_explode(cx: &Context<'_>, all: bool) -> Result<Outcome, String> {
+pub fn auto_explode(cx: &Context<'_>, all: bool) -> Result<Outcome, kmb_core::Problem> {
     let sequential = cx
         .arg("sequential")
         .and_then(|v| v.as_bool())
@@ -599,7 +599,7 @@ pub fn auto_explode(cx: &Context<'_>, all: bool) -> Result<Outcome, String> {
     let trail = cx.arg("trail").and_then(|v| v.as_bool()).unwrap_or(true);
     let scale = cx.arg("scale").and_then(|v| v.as_f64()).unwrap_or(1.0);
     if !(scale.is_finite() && scale > 0.0) {
-        return Err(format!("分解の目盛({scale})は 0 より大きくしてください"));
+        return Err(format!("分解の目盛({scale})は 0 より大きくしてください").into());
     }
     let moves = auto_moves(cx, all, scale);
     if moves.is_empty() {

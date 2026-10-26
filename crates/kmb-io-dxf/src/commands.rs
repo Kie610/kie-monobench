@@ -11,7 +11,7 @@ pub const EXPORT_DXF: &str = "cad.sketch.export_dxf";
 pub struct DxfCommands;
 
 /// 選んでいるスケッチを DXF にする(補助線は書かない)。
-fn export_dxf(cx: &Context<'_>) -> Result<Outcome, String> {
+fn export_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, sketch) = kmb_sketch::selected_sketch(cx).ok_or("スケッチを選んでから使う")?;
     let sol = cx
         .output(id, "sketch")
@@ -66,7 +66,7 @@ impl Extension for DxfCommands {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
             INSERT_DXF => kmb_sketch::insert_file(cx, "DXF", crate::from_dxf),
             EXPORT_DXF => export_dxf(cx),

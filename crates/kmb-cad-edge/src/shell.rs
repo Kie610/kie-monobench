@@ -138,7 +138,10 @@ impl Feature for Shell {
         })?;
         let mut out: Outputs = [("body".to_string(), Value::Shape(h))].into();
         if let Some(p) = src.and_then(|m| removed(ctx.kernel(), &m, h, &tag, self.direction)) {
-            out.insert(kmb_core::TOOL_PREVIEW.into(), kmb_core::Payload::to_value(&p));
+            out.insert(
+                kmb_core::TOOL_PREVIEW.into(),
+                kmb_core::Payload::to_value(&p),
+            );
         }
         Ok(out)
     }

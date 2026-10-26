@@ -34,7 +34,7 @@ impl Extension for HoleOps {
         actions(cx)
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         run(id, cx)
     }
 }
@@ -357,7 +357,7 @@ fn actions(cx: &Context<'_>) -> Vec<Action> {
     v
 }
 
-fn run(id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+fn run(id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
     if ![HOLE_OPS, HOLE_TOOLS, PICK_HOLE, SAME_DIAMETER, AUTO_HOLES].contains(&id) {
         return None;
     }
@@ -455,7 +455,7 @@ fn run(id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
                 }
             }
         }
-    })())
+    })().map_err(Into::into))
 }
 
 fn change(label: &str, id: FeatureId, d: &Drill) -> Outcome {

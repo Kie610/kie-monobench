@@ -344,7 +344,7 @@ impl CamCommands {
     }
 
     /// 削る様子の動画。経路の再生の格子で始めから削り、時刻を等しく分けたコマを描く。
-    fn sim_video(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn sim_video(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let format = kmb_io_render::commands::video_format(cx)?;
         let s = self.band_setup(cx).ok_or("セットアップがありません")?;
         if s.paths.is_empty() {
@@ -403,7 +403,11 @@ impl CamCommands {
         )
     }
 
-    pub(crate) fn play_run(&self, cx: &Context<'_>, id: &str) -> Result<Outcome, String> {
+    pub(crate) fn play_run(
+        &self,
+        cx: &Context<'_>,
+        id: &str,
+    ) -> Result<Outcome, kmb_core::Problem> {
         if id == EXPORT_STOCK {
             let (mesh, name) = self
                 .cut_shape(cx)
@@ -438,7 +442,7 @@ impl CamCommands {
                 "0" => Coloring::Material,
                 "1" => Coloring::Operation,
                 "2" => Coloring::Deviation,
-                _ => return Err(format!("色の付け方 {n} はありません")),
+                _ => return Err(format!("色の付け方 {n} はありません").into()),
             };
             return Ok(Outcome::Message(String::new()));
         }
@@ -466,13 +470,13 @@ impl CamCommands {
                 p.step_start(k.saturating_sub(1))
             }
         } else {
-            return Err(format!("操作 {id} はありません"));
+            return Err(format!("操作 {id} はありません").into());
         };
         p.seek(t);
         Ok(Outcome::Message(String::new()))
     }
 
-    fn play_start(&self, cx: &Context<'_>) -> Result<Outcome, String> {
+    fn play_start(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let s = self.band_setup(cx).ok_or("セットアップがありません")?;
         if s.paths.is_empty() {
             return Err("このセットアップには経路がありません".into());

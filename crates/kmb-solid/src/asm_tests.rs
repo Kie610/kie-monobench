@@ -215,7 +215,7 @@ fn a_new_component_goes_into_the_given_parent_or_the_common_one() {
                 }
                 e => panic!("部品の木の変更でない: {e:?}"),
             },
-            Some(Err(e)) => Err(e),
+            Some(Err(e)) => Err(e.into()),
             _ => panic!("部品の操作が無い"),
         }
     };
@@ -556,9 +556,9 @@ fn moving_a_part_by_value_adds_a_position_for_the_whole_part() {
     );
     assert_eq!(p.bodies.len(), 3, "箱と、箱を土台にした蓋とつまみ");
     let err = run(&t, lid).expect_err("蓋はジョイントで動く");
-    assert!(err.contains("ジョイント"), "{err}");
+    assert!(err.message.contains("ジョイント"), "{err}");
     let err = run(&t, roots[2]).expect_err("つまみは部品に入っていない");
-    assert!(err.contains("部品に入っていない"), "{err}");
+    assert!(err.message.contains("部品に入っていない"), "{err}");
 }
 
 /// 同じ寸法の板 2 枚は部品表で 1 行・2 個にまとまり、材料があれば質量を出す。
@@ -694,7 +694,7 @@ impl Bench {
         };
         let (label, edits) = match AsmCommands.run(NEW_SNAP_JOINT, &cx) {
             Some(Ok(Outcome::Change { label, edits })) => (label, edits),
-            Some(Err(e)) => return Err(e),
+            Some(Err(e)) => return Err(e.into()),
             _ => panic!("合わせるジョイントの操作が無い"),
         };
         let added = self.doc.apply_edits(&label, edits).unwrap();
@@ -727,12 +727,18 @@ fn a_face_given_as_a_snap_origin_is_refused_with_the_origins_on_it() {
     let bottom = t.face_facing(post, [0.0, 0.0, -1.0]);
     let e = run(json!({"feature": post.0, "face": bottom}));
     assert!(
-        e.contains("部品 1の原点に面") && e.contains("面の中心: {"),
+        e.message.contains("部品 1の原点に面") && e.message.contains("面の中心: {"),
         "{e}"
     );
-    assert!(e.contains("頂点") && e.contains("\"frame\""), "{e}");
+    assert!(
+        e.message.contains("頂点") && e.message.contains("\"frame\""),
+        "{e}"
+    );
     let e = run(json!(12));
-    assert!(e.contains("円の中心") && e.contains("\"frame\""), "{e}");
+    assert!(
+        e.message.contains("円の中心") && e.message.contains("\"frame\""),
+        "{e}"
+    );
 }
 
 /// 合わせるジョイント: 柱の下の面の中心を、台の上の面の中心に合わせると、
@@ -1259,7 +1265,7 @@ impl Bench {
         };
         let (label, edits) = match AsmCommands.run(kmb_asm::constraint::NEW_CONSTRAINT, &cx) {
             Some(Ok(Outcome::Change { label, edits })) => (label, edits),
-            Some(Err(e)) => return Err(e),
+            Some(Err(e)) => return Err(e.into()),
             _ => panic!("拘束の操作が無い"),
         };
         let added = self.doc.apply_edits(&label, edits).unwrap();
@@ -1326,7 +1332,7 @@ fn a_constraint_solves_its_rows_together_and_moves_the_post() {
         .unwrap();
     assert_ok(&t.report);
     let e = drag(&t).expect_err("拘束で置いた部品は引かない");
-    assert!(e.contains("拘束で置いた部品"), "{e}");
+    assert!(e.message.contains("拘束で置いた部品"), "{e}");
     let b = t.bounds(roots[1]);
     assert!(
         (b.0[2] - 5.0).abs() < 1e-3 && (b.1[2] - 15.0).abs() < 1e-3,

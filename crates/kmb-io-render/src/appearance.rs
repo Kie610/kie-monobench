@@ -50,7 +50,7 @@ pub fn action() -> Action {
 }
 
 /// 外観の操作を流す。
-pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn run(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let text = |k: &str| {
         cx.arg_str(k)
             .map(str::trim)
@@ -96,7 +96,7 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, String> {
 }
 
 /// 外観 `name` を付ける(`None` なら外す)。
-fn apply(cx: &Context<'_>, name: Option<&str>) -> Result<Outcome, String> {
+fn apply(cx: &Context<'_>, name: Option<&str>) -> Result<Outcome, kmb_core::Problem> {
     let name = match name {
         Some(n) => Some(
             looks::of(cx.data)
@@ -110,7 +110,7 @@ fn apply(cx: &Context<'_>, name: Option<&str>) -> Result<Outcome, String> {
     let face = match cx.arg_str("target").unwrap_or("body") {
         "face" => true,
         "body" => false,
-        t => return Err(format!("適用先 {t} は使えません(body か face)")),
+        t => return Err(format!("適用先 {t} は使えません(body か face)").into()),
     };
     if face {
         let faces = picked_faces(cx)?;
@@ -168,7 +168,7 @@ fn apply(cx: &Context<'_>, name: Option<&str>) -> Result<Outcome, String> {
     }
     for id in &comps {
         if cx.data.component(*id).is_none() {
-            return Err(format!("部品 {id} はありません"));
+            return Err(format!("部品 {id} はありません").into());
         }
         all.set_component(*id, name.as_deref());
     }
@@ -286,7 +286,7 @@ fn hex(c: [u8; 3]) -> String {
 }
 
 /// このデザイン内の外観 `name` を直す(ライブラリの外観なら写して直す)。
-fn edit(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
+fn edit(cx: &Context<'_>, name: &str) -> Result<Outcome, kmb_core::Problem> {
     let before = looks::of(cx.data);
     let r = before
         .resolve(name)
@@ -327,7 +327,7 @@ fn edit(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
         && new != old
     {
         if all.def(new).is_some() || material::library_look(new).is_some() {
-            return Err(format!("外観「{new}」はもうあります(別の名前にします)"));
+            return Err(format!("外観「{new}」はもうあります(別の名前にします)").into());
         }
         // 名前を替えたライブラリの写しは、木目を元のライブラリの外観から受け継ぐ
         if def.base.is_none() && material::library_look(&old).is_some() {
@@ -341,7 +341,7 @@ fn edit(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
         None => all.defs.push(def.clone()),
     }
     if all == before {
-        return Err(format!("外観「{old}」は変わりません"));
+        return Err(format!("外観「{old}」は変わりません").into());
     }
     log::info!(
         "外観「{old}」を直す: 名前 {} 色 {} 金属 {} 粗さ {}",
@@ -372,7 +372,7 @@ fn rename_users(all: &mut Appearances, old: &str, new: &str) {
 }
 
 /// 外観 `name` を「名前 (2)」の名前で複製する。
-fn duplicate(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
+fn duplicate(cx: &Context<'_>, name: &str) -> Result<Outcome, kmb_core::Problem> {
     let mut all = looks::of(cx.data);
     let r = all
         .resolve(name)
@@ -398,7 +398,7 @@ fn duplicate(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
 }
 
 /// 外観 `name` の割り当てを全部外し、このデザイン内から消す。
-fn delete(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
+fn delete(cx: &Context<'_>, name: &str) -> Result<Outcome, kmb_core::Problem> {
     let mut all = looks::of(cx.data);
     let (bodies, comps, faces) = all.users(cx.data, name);
     let had = all.def(name).is_some();
@@ -410,7 +410,7 @@ fn delete(cx: &Context<'_>, name: &str) -> Result<Outcome, String> {
     all.bodies.retain(|_, a| a != name);
     all.components.retain(|_, a| a != name);
     if !had && bodies.is_empty() && comps.is_empty() && faces.is_empty() {
-        return Err(format!("外観「{name}」はこのデザインにありません"));
+        return Err(format!("外観「{name}」はこのデザインにありません").into());
     }
     let edits = vec![cx.data.set_section(&all)?];
     log::info!(

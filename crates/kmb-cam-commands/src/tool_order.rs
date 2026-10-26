@@ -181,7 +181,11 @@ pub fn actions(cx: &Context<'_>, all: &[Strategy]) -> Vec<Action> {
     v
 }
 
-pub fn run(id: &str, cx: &Context<'_>, all: &[Strategy]) -> Option<Result<Outcome, String>> {
+pub fn run(
+    id: &str,
+    cx: &Context<'_>,
+    all: &[Strategy],
+) -> Option<Result<Outcome, kmb_core::Problem>> {
     let sel = cx.selected;
     if let Some(n) = id.strip_prefix(ADD_TOOL) {
         return Some((|| {

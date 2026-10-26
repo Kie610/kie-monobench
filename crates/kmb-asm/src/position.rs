@@ -193,7 +193,7 @@ fn mm(v: f64) -> String {
 
 /// 引いた量 `offset`(世界座標の mm)で、ボディ `body` の部品の位置の機能を足す(最後の機能が同じ
 /// 部品の位置なら、その値に足して直す)。
-pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, String> {
+pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let body = cx
         .arg("body")
         .and_then(|v| v.as_u64())
@@ -210,7 +210,7 @@ pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, String> {
     if constrained(cx, &part) {
         return Err(format!(
             "{name} は拘束で置いた部品なので、引いて動かしません。動かすには拘束の値を直すか、拘束を止めてください"
-        ));
+        ).into());
     }
     let set = moving_set(cx, &part);
     let label = format!("{name} を動かす");
@@ -289,7 +289,7 @@ pub fn move_target(cx: &Context<'_>, roots: &[FeatureId]) -> Result<Part, String
 
 /// 部品 `part` を値で動かす位置の機能(0 mm から)を足す。いつも新しく足すので、作っている途中で
 /// やめれば足す前に戻る。
-pub fn move_part(cx: &Context<'_>, part: Part) -> Result<Outcome, String> {
+pub fn move_part(cx: &Context<'_>, part: Part) -> Result<Outcome, kmb_core::Problem> {
     let name = part.label(cx.data, cx.registry, cx.report);
     let bodies = moving_set(cx, &part)
         .iter()

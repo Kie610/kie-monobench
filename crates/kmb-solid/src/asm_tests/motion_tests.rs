@@ -176,7 +176,7 @@ fn motion_study_moves_two_joints_together_from_its_keys() {
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
             Ok(o) => Err(format!("{o:?}")),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     };
     // 引数なし: 空のスタディを作る
@@ -509,7 +509,7 @@ fn motion_link_turns_the_knob_twice_as_far_as_the_lid() {
                 Ok(())
             }
             Ok(o) => Err(format!("{o:?}")),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     };
     // 同じジョイント・ジョイントでない物は断る
@@ -614,7 +614,7 @@ fn rigid_group_moves_its_parts_together() {
                 Ok(())
             }
             Ok(o) => Err(format!("{o:?}")),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     };
     let last = |t: &Bench, root: FeatureId| {

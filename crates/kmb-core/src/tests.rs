@@ -1793,7 +1793,7 @@ impl Extension for ArgModule {
         ]
     }
 
-    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, String>> {
+    fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, Problem>> {
         let msg = match id {
             "test.size" => format!("{:?}", cx.arg_f64("size")),
             "test.sloppy" => format!("{:?}", cx.arg("extra")),
@@ -1835,13 +1835,13 @@ fn actions_check_their_arguments_against_the_declaration() {
     // 知らない鍵(打ち間違い)と型の違いは誤り。前は黙って捨てて既定で動いた
     let e = run("test.size", json!({"sise": 3})).unwrap_err();
     assert!(
-        e.contains("引数 sise はありません") && e.contains("size"),
+        e.message.contains("引数 sise はありません") && e.message.contains("size"),
         "{e}"
     );
     assert!(run("test.size", json!({"size": true})).is_err());
     // 宣言しない鍵を読む操作は、作りの誤りとして試験で落ちる(debug の組み立て)
     let e = run("test.sloppy", json!(null)).unwrap_err();
-    assert!(e.contains("宣言していない引数 extra"), "{e}");
+    assert!(e.message.contains("宣言していない引数 extra"), "{e}");
     // 一覧に出さない操作は unlisted の宣言で確かめる。宣言の無い物(段の帯の段など、値を ID に
     // 付ける物)は引数を受け取らない
     assert_eq!(
@@ -1851,12 +1851,13 @@ fn actions_check_their_arguments_against_the_declaration() {
     assert!(run("test.hidden", json!({"other": 1})).is_err());
     assert_eq!(run("test.unknown_hidden", json!(null)).unwrap(), "");
     let e = run("test.unknown_hidden", json!({"x": 1})).unwrap_err();
-    assert!(e.contains("引数を受け取りません"), "{e}");
-    assert!(
-        run("no.such", json!(null))
-            .unwrap_err()
-            .contains("ありません")
-    );
+    assert!(e.message.contains("引数を受け取りません"), "{e}");
+    assert_eq!(e.kind, ProblemKind::Input);
+    // 知らない操作は入力の誤り、宣言しない鍵を読んだのは作りの誤りなので計算の誤り
+    let e = run("no.such", json!(null)).unwrap_err();
+    assert!(e.message.contains("ありません") && e.kind == ProblemKind::Input);
+    let e = run("test.sloppy", json!(null)).unwrap_err();
+    assert_eq!(e.kind, ProblemKind::Compute);
 }
 
 /// モジュールの共有の値は型で引き、組み立てた表ごとに別。同じ型を二度置くのは誤り(黙って
