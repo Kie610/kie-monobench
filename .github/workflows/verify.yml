@@ -2,8 +2,8 @@
 # - PR: 分かれ目から変えた crate と、それに依存する crate(`--dependents`)。検査の道具・Rust の版・
 #   cargo の設定を変えた PR は、全体(`--all`)。
 # - main は毎晩 1 回(日本時間 3:00)と手で流す時: 全体(`--all`)。組み立て済みの物をここで残し、PR はそれを使う
-#   (PR の中で残した物はほかの PR から使えない)。main へのプッシュでは流さない(取り込みの前に PC が
-#   `--all` を通している。プッシュごとに流すと、続けて来る取り込みが前の回を止め、ほとんど「取り消し」で終わっていた)。
+#   (PR の中で残した物はほかの PR から使えない)。main へのプッシュでは流さない(取り込みの前の検査は PR の回。
+#   プッシュごとに流すと、続けて来る取り込みが前の回を止め、ほとんど「取り消し」で終わっていた)。
 # - truck の回(形の計算の試験を JC_KERNEL=truck でもう一度)も PR と毎晩の両方で流す。PR で流さないと、
 #   truck だけで落ちる試験が取り込んだ後に初めて見つかる。
 name: 検査
@@ -86,6 +86,15 @@ jobs:
           fi
           echo "cargo xtask verify $args"
           cargo xtask verify $args
+
+      # 検査の間に main で core の API の版が変わっていたら、この PR は古い API で通ったことになるので落とす
+      # (自動の取り込みが古いまま入れないように。main に載せ直してプッシュすれば通る。docs/verify.md の 16 節)
+      - name: main の core の API との食い違い
+        if: github.event_name == 'pull_request' && runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/取り込み/core-api-stale.sh "${{ github.event.pull_request.head.sha }}"
 
       - uses: actions/cache/save@v4
         if: always() && steps.smlib.outputs.cache-hit != 'true'

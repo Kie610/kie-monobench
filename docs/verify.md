@@ -414,7 +414,7 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 
 - `.github/workflows/verify.yml` が、PR のたびと main で毎晩 1 回(日本時間 3:00)、`cargo xtask verify` を Linux(ubuntu-latest)と Windows(windows-latest)で流す。カーネルは SMLib(SMLib のソースは third_party にあり、そのまま組める)。
 - 範囲: PR は分かれ目から変えた crate とそれに依存する crate(`--dependents --base origin/<PR の向き先>`)。検査の道具(`.github/workflows/`)・Rust の版(`rust-toolchain.toml`)・cargo の設定(`.cargo/`)・nextest の設定を変えた PR と、毎晩の main の回・手で流す時は全体(`--all`)。PR も毎晩の回も `--truck` を付け、形の計算の試験を truck でも流す(対象に形の計算の試験が無い PR では truck の回は省かれる)。CI は時間の記録を持ち越さず `--all` が毎回 truck の回を足すので、PR で流さないと truck だけで落ちる試験が取り込んだ後に初めて見つかる。CI は利用者の PC を使わないので、1 節の「普段は SMLib だけ」の例外にする。
-- 同じ PR に新しいコミットが来たら前の回を止める。main へのプッシュでは流さない。取り込みの前に PC が `--all` を通しており、プッシュごとに流すと続けて来る取り込みが前の回を止めて、main の回がほとんど「取り消し」で終わっていた(10-26 は 26 回中 25 回)。公開のリポジトリなので標準の runner は無料だが、待ちと取り消しの知らせを減らす。
+- 同じ PR に新しいコミットが来たら前の回を止める。main へのプッシュでは流さない。プッシュごとに流すと続けて来る取り込みが前の回を止めて、main の回がほとんど「取り消し」で終わっていた(10-26 は 26 回中 25 回)。取り込みの前の検査は PR の回が受け持つ(16 節)。公開のリポジトリなので標準の runner は無料だが、待ちと取り消しの知らせを減らす。
 - 道具の版は 1 節の入れ方とそろえる(cargo-nextest・cargo-deny・cargo-hakari)。
 - 組み立て済みの物は毎晩の main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
@@ -424,4 +424,18 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
 - タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
 - できた物は OS ごとに「kie-monobench-<タグ>-<OS>.zip」(中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)にまとめて成果物に置く。両方の OS が済んだら、全部の zip の SHA256 を 1 つの `SHA256SUMS`(`sha256sum -c SHA256SUMS` で確かめられる形)にして「kie-monobench-<タグ>-SHA256SUMS」の成果物に置く。GitHub のリリースは作らない。
-- 検査は取り込みの前の PC の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。
+- 検査は取り込みの前の PR の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。
+
+## 16. PR を GitHub で取り込む
+
+- 取り込みは GitHub の上で行う。`.github/workflows/auto-merge.yml` が、このリポジトリ自身の `claude/project-thread-` で始まるブランチから、リポジトリの持ち主が出した PR にだけ、自動の取り込み(merge commit)を入れる。GitHub は必須の検査(`verify (ubuntu-latest)`・`verify (windows-latest)`)が通った時に取り込み、ブランチを消す。
+- 下書きの PR と、`hold` のラベルが付いた PR は入れない。作業が済んだら下書きを外す。見てから入れたい PR には `hold` を付ける。
+- ほかの PR(fork からの PR、外の人の PR)には何もしない。維持する人が中を見てから入れる(docs/受け方.md)。
+- リポジトリの変数 `AUTO_MERGE` が `on` の時だけ動く。取り込みを止める時は `off` にする。
+- 取り込む前に main へ追いついていることは求めない。求めると、1 本入るたびにほかの PR を全部載せ直して検査し直すことになる。食い違いは次のように拾う。
+  - core の API の版(`CORE_API_VERSION`)が、PR の分かれた後の main で変わっていたら、検査の回の最後と、自動の取り込みを入れる時に止める(`scripts/取り込み/core-api-stale.sh`)。main に載せ直してプッシュすると、検査し直して入る。版を上げた PR どうしは同じ行がぶつかるので、GitHub が後から来た方を止める。後の方は載せ直して次の版に上げる。
+  - それ以外の食い違いは、毎晩の main の回(14 節)と PC の release ビルドで拾い、別の PR で直す。
+- 生成した資料(`docs/入出力.md`・`docs/地図.md`・AGENTS.md の層の表)がぶつかったら、手で混ぜない。main に載せ直し、`cargo xtask io`・`cargo xtask docs` で作り直してプッシュする。混ぜた結果が古いままなら、点検(出し直し)が落とす。
+- PC は `scripts/最新を取る.ps1` で main を取り、前に取った時から後に入った PR の一覧(番号・題・URL)を出し、製品のコードが変わっていればアプリを `cargo xtask release` で作る(12 節)。release の時だけ出る失敗はここで拾う。
+- 自動の取り込みで入った変更は、main へのプッシュで動くワークフローを起こさない(合図が CI の鍵から出るため)。main のプッシュで動くワークフローは置かない。
+- GitHub の設定: 自動の取り込みを許す。merge commit を許す。取り込んだブランチを自動で消す。main の規則で、PR を通すこと・必須の検査 2 つ・強制プッシュと削除の禁止を求め、追いつきは求めない。fork の PR のワークフローは、外の人の分を承認してから流す。
