@@ -226,6 +226,34 @@ fn install_keeps_a_marker_with_recent_commands_until_dropped() {
 }
 
 #[test]
+fn a_panic_is_not_reported_again_as_an_abnormal_exit() {
+    let data = temp("crash-panic");
+    let guard = crash::install(&data, "test").unwrap();
+    let dir = crash::crash_dir(&data);
+    crash::note(&doc_with("10 mm"), None);
+    let _ = std::panic::catch_unwind(|| panic!("試しのパニック"));
+    // パニックで終わると印が鍵の外れたまま残る。その中身を持ち主のいない印として置く
+    let left = crash::read_marker().expect("印を読める");
+    let dead = dir.join("session-9-999.json");
+    std::fs::write(&dead, &left).unwrap();
+    assert_eq!(
+        crash::collect_abnormal_exits(&dir),
+        0,
+        "パニックの報告があるので重ねない: {left}"
+    );
+    assert!(!dead.exists(), "印は片付ける");
+    let kinds: Vec<String> = crash::list(&data).into_iter().map(|s| s.kind).collect();
+    assert_eq!(kinds, ["panic"]);
+    // パニックの後も動いて作業が進めば(ここでは作業中の部品が変わる)、この後の異常終了は報告する
+    crash::note(&doc_with("10 mm"), Some(3));
+    let kept: serde_json::Value =
+        serde_json::from_str(&crash::read_marker().expect("印を読める")).unwrap();
+    assert!(kept["panic_report"].is_null(), "{kept}");
+    drop(guard);
+    let _ = std::fs::remove_dir_all(&data);
+}
+
+#[test]
 fn the_log_filter_reads_levels_per_target() {
     use log::LevelFilter as L;
     let (f, bad) = logging::Filter::parse("");

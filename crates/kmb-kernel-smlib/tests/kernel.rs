@@ -11,11 +11,12 @@ fn kernel() -> SmlibKernel {
 }
 
 /// SMLib は円の側面を 1 面にする。
-const QUIRKS: kmb_contract::kernel::KernelQuirks<SmlibKernel> = kmb_contract::kernel::KernelQuirks {
-    shape_count: SmlibKernel::shape_count,
-    hole_side_faces: &["f1:side:e9"],
-    step_is_solid: true,
-};
+const QUIRKS: kmb_contract::kernel::KernelQuirks<SmlibKernel> =
+    kmb_contract::kernel::KernelQuirks {
+        shape_count: SmlibKernel::shape_count,
+        hole_side_faces: &["f1:side:e9"],
+        step_is_solid: true,
+    };
 
 kmb_contract::kernel_contract_tests!(kernel, QUIRKS);
 
@@ -821,4 +822,22 @@ fn step_records(text: &str) -> std::collections::BTreeMap<u64, String> {
             ))
         })
         .collect()
+}
+
+/// 質量は形ごとに 1 回だけ求める(AI が設計を調べるたびに、ボディごとに積分し直さない)。
+#[test]
+fn mass_is_computed_once_per_shape() {
+    let k = kernel();
+    let b = box_with_round_corner(&k, 3.0);
+    let t = std::time::Instant::now();
+    let first = k.mass(b).unwrap();
+    let once = t.elapsed();
+    let t = std::time::Instant::now();
+    let again = k.mass(b).unwrap();
+    let twice = t.elapsed();
+    assert_eq!(first, again);
+    assert!(
+        twice * 5 < once,
+        "2 回目は覚えた値を返す(1 回目 {once:?}、2 回目 {twice:?})"
+    );
 }

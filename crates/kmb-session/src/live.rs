@@ -352,19 +352,17 @@ fn serve(
     };
     if !same(v["token"].as_str().unwrap_or(""), token) {
         log::warn!("AI の接続: 合い言葉の違う要求を断った");
-        let _ = writeln!(
-            out,
-            "{}",
-            json!({ "error": "合い言葉が違います", "refused": "token", "pid": std::process::id() })
+        let _ = write_line(
+            &mut out,
+            &json!({ "error": "合い言葉が違います", "refused": "token", "pid": std::process::id() }),
         );
         return;
     }
     // 頼みの一覧は画面へ送らずここで答える(画面が固まった時こそ知りたいので)
     if v["tool"] == "running" {
-        let _ = writeln!(
-            out,
-            "{}",
-            json!({ "ok": { "running": running_json(&running.list()) } })
+        let _ = write_line(
+            &mut out,
+            &json!({ "ok": { "running": running_json(&running.list()) } }),
         );
         return;
     }
@@ -401,7 +399,16 @@ fn serve(
     } else {
         json!({ "error": "画面が接続を閉じています" })
     };
-    let _ = writeln!(out, "{answer}");
+    let _ = write_line(&mut out, &answer);
+}
+
+/// 1 行の JSON を 1 回で書く。`writeln!` で値をそのまま書くと、JSON の断片ごとに書き込みに
+/// なり(素の TcpStream では断片ごとに送る)、部品が何千もある答えの届くのが遅れる。
+fn write_line(out: &mut impl Write, v: &Value) -> std::io::Result<()> {
+    let mut buf = serde_json::to_vec(v).map_err(std::io::Error::other)?;
+    buf.push(b'\n');
+    out.write_all(&buf)?;
+    out.flush()
 }
 
 /// `live.json` を読む(無いか読めなければ `None`)。
@@ -491,7 +498,7 @@ fn send(data_dir: &Path, mut req: Value) -> Result<Value, String> {
         answer_wait(&tool, &req["args"]) + Duration::from_secs(5),
     ));
     req["token"] = json!(t.token);
-    writeln!(s, "{req}").map_err(|e| e.to_string())?;
+    write_line(&mut s, &req).map_err(|e| e.to_string())?;
     let mut line = String::new();
     BufReader::new(s)
         .read_line(&mut line)
@@ -529,6 +536,32 @@ fn stale_token(data_dir: &Path, t: &Ticket, listening: Option<u64>) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_long_answer_is_written_at_once() {
+        // 書き込みの回数を数える(素の TcpStream では 1 回が 1 つの送り)
+        struct Count(usize, Vec<u8>);
+        impl std::io::Write for Count {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0 += 1;
+                self.1.extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let parts: Vec<_> = (0..3000)
+            .map(|i| serde_json::json!({"id": i, "name": format!("部品{i}")}))
+            .collect();
+        let answer = serde_json::json!({ "ok": { "components": parts } });
+        let mut out = Count(0, Vec::new());
+        super::write_line(&mut out, &answer).unwrap();
+        assert_eq!(out.0, 1, "部品 3000 の答えを 1 回で書く");
+        let back: serde_json::Value = serde_json::from_slice(&out.1).unwrap();
+        assert_eq!(back, answer);
+        assert_eq!(out.1.last(), Some(&b'\n'));
+    }
+
     #[test]
     fn a_script_with_until_waits_as_long_as_its_untils() {
         use super::{ANSWER_WAIT, answer_wait};
