@@ -124,6 +124,9 @@ pub(crate) fn aimed(editor: &Editor, w: [f64; 2]) -> [f64; 2] {
             (None, None) => w,
         },
         (Tool::Circle, 1) => h.fixed("直径").map_or(w, |v| along(v / 2.0)),
+        // 長穴の 2 つ目: 全長は反対の先、中心からの長穴は片方の端の中心(中心の間の半分)
+        (Tool::OverallSlot, 1) => h.fixed("全長").map_or(w, along),
+        (Tool::CenterSlot, 1) => h.fixed("長さ").map_or(w, |v| along(v / 2.0)),
         // 2 点の円: 打った直径だけ、最初の端からカーソルの向きへ
         (Tool::TwoPointCircle, 1) => h.fixed("直径").map_or(w, along),
         (Tool::Rectangle | Tool::CenterRectangle | Tool::RoundedRectangle, 1) => {

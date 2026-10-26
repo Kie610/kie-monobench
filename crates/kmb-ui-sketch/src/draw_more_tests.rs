@@ -275,3 +275,48 @@ fn corner_defaults_follow_the_display_unit() {
     }
     kmb_core::set_display_unit(kmb_core::LengthUnit::Mm);
 }
+
+/// 全長の長穴と中心からの長穴も、2 つ目の位置を長さを打って決め、寸法が付く(10-25 t8)。
+#[test]
+fn straight_slots_take_a_typed_length() {
+    for (tool, length, centers) in [
+        (Tool::OverallSlot, "30", 24.0),
+        (Tool::CenterSlot, "20", 20.0),
+    ] {
+        let mut h = empty_sketch();
+        editor(h.state_mut()).set_tool(tool);
+        h.run();
+        click_at(&mut h, [-2.98, 10.1]);
+        move_to(&mut h, [5.36, 10.1]);
+        type_text(&mut h, length);
+        press_enter(&mut h);
+        type_text(&mut h, "6");
+        press_enter(&mut h);
+        stop(&mut h);
+        assert_eq!(arcs(&h), 2, "{tool:?}");
+        assert_eq!(
+            kinds(&h, |k| matches!(k, ConstraintKind::Length { .. })),
+            1,
+            "{tool:?}"
+        );
+        // 両端の中心の間(補助線の長さ)が、打った長さ(全長は幅を引いた長さ)になる
+        let s = current_sketch(h.state());
+        let sol = crate::tests::solved(h.state());
+        let axis = s
+            .entities
+            .iter()
+            .find_map(|e| match e {
+                Entity::Line {
+                    a,
+                    b,
+                    construction: true,
+                    ..
+                } => Some((*a, *b)),
+                _ => None,
+            })
+            .expect("中心を結ぶ補助線");
+        let (p, q) = (sol.points[&axis.0], sol.points[&axis.1]);
+        let d = (q[0] - p[0]).hypot(q[1] - p[1]);
+        assert!((d - centers).abs() < 1e-6, "{tool:?}: {d}");
+    }
+}

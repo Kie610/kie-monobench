@@ -110,6 +110,32 @@ pub(super) fn act(
         to_project: Vec::new(),
         origin_hover: None,
     };
+    // 寸法の道具の間に、付いた寸法の値の札を押す: 道具を抜けずに、その場で値を直す
+    // (選ぶ道具ではダブルクリック。続けて寸法を入れている途中に前の寸法を直せる)
+    if editor.tool == Tool::Dimension
+        && response.clicked()
+        && editor.placing.is_none()
+        && editor.edit_dim.is_none()
+        && editor.filter.dims
+        && let Some(p) = response.interact_pointer_pos()
+        && let Some(id) = state
+            .labels
+            .iter()
+            .find(|(_, r)| r.contains(p))
+            .map(|(id, _)| *id)
+        && let Some(value) = base_sketch
+            .constraints
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.kind.value())
+    {
+        editor.edit_dim = Some((id, value.to_string()));
+        editor.edit_dim_fresh = true;
+        editor.dim_error = None;
+        editor.selection.clear();
+        editor.ghost = None;
+        return out;
+    }
     match editor.tool {
         Tool::Dimension => dimension::act(ui, editor, input, &mut out),
         Tool::Select => select::act(ui, state, editor, input, &mut out),

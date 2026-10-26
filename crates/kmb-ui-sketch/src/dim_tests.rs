@@ -545,3 +545,42 @@ fn a_dimension_can_be_edited_from_the_parameter_list() {
     let v = h.state().report().param_values()[name.as_str()];
     assert!((v.value - 40.0).abs() < 1e-9, "{v:?}");
 }
+
+/// 寸法の道具のまま、付いた寸法の札を 1 回押すと値の欄が出て直せる。直した後も寸法の道具は続く
+/// (続けて寸法を入れる途中で前の寸法を直す。10-25 t3)。
+#[test]
+fn one_click_on_a_label_in_the_dimension_tool_edits_it_without_leaving() {
+    let mut h = sketch_with_rectangle();
+    let top = rectangle_with_top_length(&mut h);
+    press_key(&mut h, egui::Key::D);
+    assert_eq!(editor(h.state_mut()).editor.tool, Tool::Dimension);
+    let at = label_of(&mut h, top);
+    quick_click_px(&mut h, at);
+    h.run();
+    assert!(
+        editor(h.state_mut())
+            .editor
+            .edit_dim
+            .as_ref()
+            .is_some_and(|(c, _)| *c == top),
+        "1 回押すと値の欄が出る"
+    );
+    type_text(&mut h, "40");
+    press_enter(&mut h);
+    h.run();
+    let s = current_sketch(h.state());
+    let c = s.constraints.iter().find(|c| c.id == top).unwrap();
+    assert!(
+        c.kind.value().is_some_and(|v| v.starts_with("40")),
+        "{:?}",
+        c.kind.value()
+    );
+    // 寸法は増えず、道具は寸法のまま
+    let dims = s
+        .constraints
+        .iter()
+        .filter(|c| c.kind.value().is_some())
+        .count();
+    assert_eq!(dims, 1);
+    assert_eq!(editor(h.state_mut()).editor.tool, Tool::Dimension);
+}
