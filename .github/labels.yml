@@ -31,3 +31,6 @@
 - name: good first issue
   color: 7057ff
   description: 初めての人に向く小さな作業 / Small task for newcomers
+- name: hold
+  color: 5319e7
+  description: 自動で取り込まない(維持する人が見てから入れる)/ Do not merge automatically

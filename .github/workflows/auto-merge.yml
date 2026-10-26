@@ -1,0 +1,63 @@
+# 作業のブランチから出た PR を、検査(verify.yml)が通ったら GitHub が取り込むようにする(docs/verify.md の 16 節)。
+# - 対象: このリポジトリ自身のブランチ(fork でない)で、名前が claude/project-thread- で始まり、作者が
+#   リポジトリの持ち主の PR だけ。ほかの PR(外からの PR を含む)には何もしない。維持する人が中を見て入れる。
+# - 下書きの間と hold のラベルが付いている間は取り込まない。下書きを外すと自動の取り込みを入れる。
+# - 取り込み方は merge commit(1 PR が 1 つの取り込みのコミットになり、戻す時に 1 回で戻せる)。
+# - PR が分かれた後に main で core の API の版が変わっていたら入れない(載せ直してプッシュすると入る)。
+# - リポジトリの変数 AUTO_MERGE が on の時だけ動く。止める時は変数を off にする。
+name: 自動の取り込み
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
+
+permissions: {}
+
+jobs:
+  arm:
+    # fork からの PR はここで外す(その回の鍵は読むだけで、取り込みはできない)
+    if: >-
+      vars.AUTO_MERGE == 'on' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == github.repository_owner &&
+      startsWith(github.event.pull_request.head.ref, 'claude/project-thread-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: auto-merge-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/取り込み
+      - name: 自動の取り込みを入れる・外す
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          HOLD: ${{ contains(github.event.pull_request.labels.*.name, 'hold') }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          off() {
+            echo "自動の取り込みを外す: $1"
+            gh pr merge "$PR" --disable-auto 2>/dev/null || true
+          }
+          if [ "$DRAFT" = true ]; then off '下書き'; exit 0; fi
+          if [ "$HOLD" = true ]; then off 'hold のラベル'; exit 0; fi
+          if ! scripts/取り込み/core-api-stale.sh "$HEAD_SHA"; then off 'main で core の API の版が変わった'; exit 0; fi
+          if gh pr merge "$PR" --auto --merge; then exit 0; fi
+          # 検査がもう通っていて今すぐ入れられる PR には、自動の取り込みを入れられない。その時だけ、
+          # 必須の 2 つの検査がこの先頭で通っているのを確かめてから入れる(GitHub の設定が無くても検査を飛ばさない)
+          ok=$(gh pr view "$PR" --json headRefOid,statusCheckRollup --jq \
+            '[.statusCheckRollup[] | select(.name == "verify (ubuntu-latest)" or .name == "verify (windows-latest)") | select(.conclusion == "SUCCESS")] | length')
+          now=$(gh pr view "$PR" --json headRefOid --jq .headRefOid)
+          if [ "$ok" = 2 ] && [ "$now" = "$HEAD_SHA" ]; then
+            gh pr merge "$PR" --merge --match-head-commit "$HEAD_SHA"
+          else
+            echo "自動の取り込みを入れられず、検査もまだ通っていない(GitHub の設定を確かめる)"
+            exit 1
+          fi
