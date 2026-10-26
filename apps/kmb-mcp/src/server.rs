@@ -523,6 +523,20 @@ impl Server {
     }
 
     /// 絵と説明を返す(説明は JSON の文字、絵は PNG)。
+    /// 画面の道具(`app`)。文書の錠は道具の答えを待つ間は持たない。
+    async fn app_tool(&self, a: AppArg) -> Result<CallToolResult, ErrorData> {
+        let (dir, roots) = {
+            let s = self.session.lock().unwrap_or_else(|e| e.into_inner());
+            (
+                s.data_dir().map(std::path::Path::to_path_buf),
+                s.roots().clone(),
+            )
+        };
+        tokio::task::spawn_blocking(move || call_app(dir, &roots, a))
+            .await
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))
+    }
+
     async fn run_picture(
         &self,
         f: impl FnOnce(&mut Session) -> Result<(Vec<u8>, serde_json::Value), String> + Send + 'static,
@@ -562,493 +576,184 @@ impl Server {
     }
 }
 
-#[tool_router(router = tool_router)]
-impl Server {
-    #[tool(
-        description = "文書の要約(パラメータ、タイムラインの各機能の状態と止まった理由、セットアップ)"
-    )]
-    async fn status(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| Ok(s.status())).await
-    }
+/// 道具の表から、MCP の道具と batch の 1 手の読み方を一緒に作る(道具を足す所は表の 1 か所)。
+/// 1 つの道具は `"説明" fn 名前(s, a: 引数の型) 種類 => 中身;` と書く。`s` は文書の
+/// [`Session`](種類が server の時は [`Server`])、`a` は読んだ引数。種類は次のどれか。
+/// - `edit`: 文書を読む・変える道具。batch に入れられる
+/// - `value`: パラメータと機能の値の式を直すだけの道具。batch では続く間の作り直しを後へ回す
+/// - `picture`: 絵と説明を返す道具。batch の結果には説明だけを入れる
+/// - `outside "理由"`: batch に入れない道具
+/// - `server "理由"`: 文書の錠の外で動く道具(中身は `Server` の上で待つ)。batch に入れない
+macro_rules! tools {
+    ($(
+        $desc:literal
+        fn $name:ident($s:ident $(, $a:ident: $arg:ty)?) $kind:ident $($why:literal)? => $body:expr;
+    )*) => {
+        #[tool_router(router = tool_router)]
+        impl Server {
+            $(
+                #[tool(description = $desc)]
+                async fn $name(
+                    &self $(, Parameters($a): Parameters<$arg>)?
+                ) -> Result<CallToolResult, ErrorData> {
+                    tools!(@mcp $kind, self, $s, $body)
+                }
+            )*
+        }
 
-    #[tool(
-        description = "人が見ている動いている画面(kieMonoBench)の今のタブにつなぐ。画面で設定の「AI との接続」を入れている時だけ使える。status で文書の要約と人が選んでいる面や辺、screenshot で画面の向きの絵、probe でその絵の画素に見える面・点(mm)・法線、set_param・add_param・set_value・undo・redo で文書を変える(人の取り消しの履歴に「Claude: 」付きで入る)。人が機能を編集している間は変える要求を断る。ほかの道具は画面の無い別の文書を動かす"
-    )]
-    async fn app(&self, Parameters(a): Parameters<AppArg>) -> Result<CallToolResult, ErrorData> {
-        let (dir, roots) = {
-            let s = self.session.lock().unwrap_or_else(|e| e.into_inner());
-            (
-                s.data_dir().map(std::path::Path::to_path_buf),
-                s.roots().clone(),
-            )
-        };
-        tokio::task::spawn_blocking(move || call_app(dir, &roots, a))
-            .await
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))
-    }
+        /// batch に入れられない道具なら、その理由。
+        pub(crate) fn batch_refusal(tool: &str) -> Option<&'static str> {
+            match tool {
+                $(stringify!($name) => tools!(@why $kind $($why)?),)*
+                _ => None,
+            }
+        }
 
-    #[tool(
-        description = "文書ファイル(JSON)を開き、今の文書と置き換えて再計算し、status と同じ内容を返す。今の文書の保存されていない変更は確かめずに捨てるので、要るなら先に save する"
-    )]
-    async fn open(&self, Parameters(a): Parameters<PathArg>) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.open(&a.path)).await
-    }
+        /// batch の 1 手を読む。知らない道具は `None`、引数の誤りは理由を返す。
+        /// batch に入れられない道具かどうかは先に [`batch_refusal`] で確かめる。
+        pub(crate) fn batch_call(
+            tool: &str,
+            json: serde_json::Value,
+        ) -> Option<Result<crate::batch::Call, String>> {
+            Some(match tool {
+                $(stringify!($name) => tools!(@batch $kind, tool, json, $s, $body $(, $a: $arg)?),)*
+                _ => return None,
+            })
+        }
+    };
+    (@mcp picture, $me:tt, $s:ident, $body:expr) => {
+        $me.run_picture(move |$s| $body).await
+    };
+    (@mcp server, $me:tt, $s:ident, $body:expr) => {{
+        let $s = $me;
+        $body.await
+    }};
+    (@mcp $kind:ident, $me:tt, $s:ident, $body:expr) => {
+        $me.run(move |$s| $body).await
+    };
+    (@why outside $why:literal) => { Some($why) };
+    (@why server $why:literal) => { Some($why) };
+    (@why $kind:ident) => { None };
+    (@batch outside, $($rest:tt)*) => { unreachable!("batch_refusal で先に断る") };
+    (@batch server, $($rest:tt)*) => { unreachable!("batch_refusal で先に断る") };
+    (@batch picture, $tool:ident, $json:ident, $s:ident, $body:expr $(, $a:ident: $arg:ty)?) => {
+        tools!(@batch edit, $tool, $json, $s, $body.map(|(_, info)| info).map_err(Into::into) $(, $a: $arg)?)
+    };
+    (@batch $kind:ident, $tool:ident, $json:ident, $s:ident, $body:expr $(, $a:ident: $arg:ty)?) => {{
+        $(let $a: $arg = match crate::batch::args($tool, $json) {
+            Ok(a) => a,
+            Err(e) => return Some(Err(e)),
+        };)?
+        Ok(crate::batch::Call::new(
+            tools!(@values $kind),
+            Box::new(move |$s: &mut Session| -> Reply { $body }),
+        ))
+    }};
+    (@values value) => { true };
+    (@values $kind:ident) => { false };
+}
 
-    #[tool(description = "基準部品の文書で始める(cam=true で加工も入れる)")]
-    async fn sample(
-        &self,
-        Parameters(a): Parameters<SampleArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.sample(a.cam, a.three_d)).await
-    }
-
-    #[tool(
-        description = "文書を JSON のファイルに保存し、保存先を saved で返す。path を省くと開いたファイル(または前に保存した場所)へ上書きし、どちらも無ければ失敗する。path に別の既存ファイルを指すと、overwrite が真の時だけ上書きする。直前の版は .bak に残る"
-    )]
-    async fn save(&self, Parameters(a): Parameters<SaveArg>) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.save(a.path.as_deref(), a.overwrite))
-            .await
-    }
-
-    #[tool(
-        description = "パラメータの式を変える(なければ足す)。comment と unit を渡すと表のコメントと単位も入れる。スケッチの寸法の名前(d1 など。status の dimensions)なら、その寸法の式を変える。形状と加工の経路は作り直される"
-    )]
-    async fn set_param(
-        &self,
-        Parameters(a): Parameters<ParamArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| {
-            s.set_param_info(&a.name, &a.expr, a.comment.as_deref(), a.unit.as_deref())
-        })
-        .await
-    }
-
-    #[tool(
-        description = "機能の値(押し出しの距離など。status の values)の式を変える。数だけなら今の単位を補う"
-    )]
-    async fn set_value(
-        &self,
-        Parameters(a): Parameters<ValueArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.set_value(a.feature, &a.key, &a.expr))
-            .await
-    }
-
-    #[tool(
-        description = "パラメータの表(同じパラメータを見る窓。写しは持たない)。表ごとに行(row は行の書き方、label、expr、value)。id 0 は全部の表"
-    )]
-    async fn param_views(
-        &self,
-        Parameters(a): Parameters<ViewsArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.param_views(a.id)).await
-    }
-
-    #[tool(
-        description = "パラメータの表を作る・名前を変える・消す、行を入れる・外す(取り消せる)。body を付けて作ると、そのボディに関わるパラメータ・寸法・機能の値が決まりで入る"
-    )]
-    async fn edit_param_view(
-        &self,
-        Parameters(a): Parameters<EditViewArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.edit_param_view(&a)).await
-    }
-
-    #[tool(description = "パラメータ名か寸法の名前(d1 など)を変える。参照している式も書き換える")]
-    async fn rename_param(
-        &self,
-        Parameters(a): Parameters<RenameArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.rename_param(&a.name, &a.new_name))
-            .await
-    }
-
-    #[tool(
-        description = "機能の種類の一覧。種類ごとに区分、表示名、データの項目(key、種類、説明)を返す。add_feature のデータはこれに従って作る"
-    )]
-    async fn types(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| Ok(s.types())).await
-    }
-
-    #[tool(
-        description = "機能 1 つの id、name、type、suppressed と data(種類ごとの JSON)を返す。set_feature で置き換える前の下書きや、add_feature の data の例に使う"
-    )]
-    async fn get_feature(
-        &self,
-        Parameters(a): Parameters<IdArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.feature_data(a.id)).await
-    }
-
-    #[tool(
-        description = "タイムラインの最後に機能を 1 つ足して再計算し、status に足した機能の ID(added)を付けて返す。data の書き方は types、既存の例は get_feature で見る。省いた欄は画面から作った時と同じ既定で埋まる。対になる機能(ボディの分割の残りの側など)がある種類は、同じ取り消し単位で一緒に足す。未登録の種類は何も変えずに失敗する"
-    )]
-    async fn add_feature(
-        &self,
-        Parameters(a): Parameters<AddFeatureArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.add_feature(&a.type_id, a.name.as_deref(), a.data))
-            .await
-    }
-
-    #[tool(
-        description = "STEP ファイルを読み、タイムラインの最後に足す(形だけのボディ。ブーリアンや加工の元にはなるが、フィレット等はかけられない)"
-    )]
-    async fn import_step(
-        &self,
-        Parameters(a): Parameters<ImportArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.import_step(&a.path, a.stand_up)).await
-    }
-
-    #[tool(
-        description = "タイムラインのロールバックの位置を動かして再計算し、status を返す(画面のタイムラインの印・CLI の rollback と同じ操作。取り消せる)。position は先頭から効かせる機能の数で、省くと最後まで進める。範囲の外は何も変えずに失敗する"
-    )]
-    async fn roll_back(
-        &self,
-        Parameters(a): Parameters<RollBackArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.roll_back(a.position)).await
-    }
-
-    #[tool(
-        description = "設計の属性(部品名・部品番号・改訂・作者・材料・文書の長さの単位 units など)を見る・変える(取り消せる)。部品名・部品番号・改訂・材料は G-code の頭の注に入る。units(mm・cm・m・in)は画面の表示・status の値・数だけ打った長さの単位で、道具の数の引数と measure・mass はいつも mm"
-    )]
-    async fn properties(
-        &self,
-        Parameters(a): Parameters<PropertiesArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.properties(&a.set)).await
-    }
-
-    #[tool(
-        description = "保存した文書の版の履歴(保存のたびに文書の横の .jc/history に残る。新しい順に number・id・saved_at(UNIX 秒)・note・milestone・features)。milestone_of と milestone で節目の名前を付ける"
-    )]
-    async fn versions(
-        &self,
-        Parameters(a): Parameters<VersionsArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.versions(a.milestone_of.as_deref(), &a.milestone))
-            .await
-    }
-
-    #[tool(
-        description = "前の版を最新として戻して保存し、status を返す。戻したことも新しい版として残るので、versions からまた戻せる(undo の履歴は消える)"
-    )]
-    async fn restore_version(
-        &self,
-        Parameters(a): Parameters<RestoreVersionArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.restore_version(&a.id)).await
-    }
-
-    #[tool(
-        description = "機能のデータを data で丸ごと置き換えて再計算し、status を返す(一部の欄だけを足し合わせることはしない)。先に get_feature で今のデータを取り、直した全体を渡す。式 1 つだけ変えるなら set_value の方が安全。undo で戻せる"
-    )]
-    async fn set_feature(
-        &self,
-        Parameters(a): Parameters<SetFeatureArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.set_feature(a.id, a.data)).await
-    }
-
-    #[tool(
-        description = "機能をまとめてタイムラインの別の位置へ動かし、status を返す。使う機能より前へは動かせない(理由を返す)。undo で戻せる"
-    )]
-    async fn move_features(
-        &self,
-        Parameters(a): Parameters<MoveFeaturesArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.move_features(&a.ids, a.target, a.after))
-            .await
-    }
-
-    #[tool(description = "機能を抑制する、または戻す")]
-    async fn suppress(
-        &self,
-        Parameters(a): Parameters<SuppressArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.suppress(a.id, a.suppressed)).await
-    }
-
-    #[tool(
-        description = "機能をタイムラインから消して再計算し、status を返す。それを使っていた機能は理由つきで止まる(status の reason)。undo で戻せる。残したまま計算から外すだけなら suppress を使う"
-    )]
-    async fn remove_feature(
-        &self,
-        Parameters(a): Parameters<IdArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.remove_feature(a.id)).await
-    }
-
-    #[tool(
-        description = "タイムラインの機能をグループにまとめる(見せ方だけで、計算は変わらない)。status の groups に出る"
-    )]
-    async fn group(
-        &self,
-        Parameters(a): Parameters<GroupArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.group(&a.ids, &a.name, &a.mode)).await
-    }
-
-    #[tool(
-        description = "機能を写してタイムラインの今の位置に貼る(画面のコピー・貼り付けと同じ)。値と式は写し、面・辺の選ぶ欄は空にするので set_feature で選び直す。まとめて写すと、写した機能どうしのつながりは貼った写しの間でつなぎ直す。pasted が貼った機能の ID、cleared が空にした選ぶ欄の数。undo で戻せる"
-    )]
-    async fn paste_features(
-        &self,
-        Parameters(a): Parameters<PasteFeaturesArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.paste_features(&a.ids)).await
-    }
-
-    #[tool(
-        description = "部品を中の部品ごと、別の部品の中(into、省くと文書の直下)か、ある部品の前(before)・後ろ(after)へ移し、status を返す(画面の部品の木のドラッグと同じ)。自分や自分の中へは移せない(理由を返す)。undo で戻せる"
-    )]
-    async fn move_component(
-        &self,
-        Parameters(a): Parameters<MoveComponentArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.move_component(&a)).await
-    }
-
-    #[tool(
-        description = "部品をアクティブにし(component、省くと文書の直下へ戻す)、status を返す(画面のブラウザの部品の行の丸と同じ)。この後に作るボディと文書の直下に作る部品は、その部品に入る(作った変更と同じ取り消し単位)。今のアクティブな部品は status の active_component。文書には保存しない"
-    )]
-    async fn activate_component(
-        &self,
-        Parameters(a): Parameters<ActivateComponentArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.activate_component(a.component)).await
-    }
-
-    #[tool(
-        description = "ボディを部品(component、省くと部品から外す)へ移し、status を返す(画面のボディの行のドラッグと同じ)。undo で戻せる"
-    )]
-    async fn move_bodies(
-        &self,
-        Parameters(a): Parameters<MoveBodiesArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.move_bodies(&a.ids, a.component)).await
-    }
-
-    #[tool(
-        description = "部品を中の部品ごと複製し、status を返す(画面のブラウザの部品の右クリック「複製」と同じ)。中のボディは元の形を追う写しになり、元のすぐ後ろに並び、外形の幅と隙間だけ X へずらして置く。component が作った部品の番号。undo で戻せる"
-    )]
-    async fn duplicate_component(
-        &self,
-        Parameters(a): Parameters<IdArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.duplicate_component(a.id)).await
-    }
-
-    #[tool(
-        description = "名前を付けた視点の一覧(番号・名前・真ん中の点・向き・傾き・見える高さ・投影)。画面のブラウザの「名前の付いたビュー」と同じ"
-    )]
-    async fn named_views(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| Ok(s.named_views())).await
-    }
-
-    #[tool(
-        description = "視点に名前を付けて文書に保存し、その視点を返す。screenshot の named_view で描ける。undo で戻せる"
-    )]
-    async fn save_named_view(
-        &self,
-        Parameters(a): Parameters<SaveViewArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.save_named_view(&a)).await
-    }
-
-    #[tool(description = "名前を付けた視点の名前を変える")]
-    async fn rename_named_view(
-        &self,
-        Parameters(a): Parameters<RenameViewArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.rename_named_view(a.id, &a.name)).await
-    }
-
-    #[tool(description = "名前を付けた視点を消す。id は named_views の id")]
-    async fn remove_named_view(
-        &self,
-        Parameters(a): Parameters<IdArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.remove_named_view(a.id)).await
-    }
-
-    #[tool(description = "グループを解く(中身の機能は残す)。id は status の groups[].id")]
-    async fn ungroup(&self, Parameters(a): Parameters<IdArg>) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.ungroup(a.id)).await
-    }
-
-    #[tool(description = "最後の変更を取り消す")]
-    async fn undo(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| s.undo()).await
-    }
-
-    #[tool(description = "取り消した変更をやり直す")]
-    async fn redo(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| s.redo()).await
-    }
-
-    #[tool(
-        description = "取り消しの履歴。done は済んだ変更(古い順、最後が次に取り消される)、undone はやり直せる変更(次にやり直すものが先頭)"
-    )]
-    async fn history(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| Ok(s.history())).await
-    }
-
-    #[tool(
-        description = "PC 全体の設定(機械など)。fields が変えられる項目、value が今の値、default が初めの値、notes が変えられない事柄"
-    )]
-    async fn settings(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| Ok(s.settings())).await
-    }
-
-    #[tool(
-        description = "設定を変える(この接続の間だけ。PC に残すのは画面の「設定」)。正しくない値なら何も変えずに理由を返す"
-    )]
-    async fn set_settings(
-        &self,
-        Parameters(a): Parameters<SettingsArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.set_settings(&a.id, &a.value)).await
-    }
-
-    #[tool(
-        description = "今使えるモジュールの操作(画面のボタンやメニューと同じもの)。disabled は使えない理由、args は受け取る引数の宣言(key・kind・unit・default・required)"
-    )]
-    async fn actions(
-        &self,
-        Parameters(a): Parameters<ActionsArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| Ok(s.actions(a.selected))).await
-    }
-
-    #[tool(
-        description = "モジュールの操作を実行する(actions の id)。文書を変える操作は status と added を返す"
-    )]
-    async fn run_action(
-        &self,
-        Parameters(a): Parameters<RunActionArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| {
-            s.run_action_at(
-                &a.id,
-                a.selected,
-                a.file.as_deref(),
-                &a.args,
-                a.out.as_deref(),
-            )
-        })
-        .await
-    }
-
-    #[tool(
-        description = "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)も"
-    )]
-    async fn mass(&self) -> Result<CallToolResult, ErrorData> {
-        self.run(|s| s.mass()).await
-    }
-
-    #[tool(
-        description = "ボディに物理材料を付ける(取り消せる)。質量(mass)と外観の既定の色に使い、加工のセットアップの材料の既定にもなる"
-    )]
-    async fn set_material(
-        &self,
-        Parameters(a): Parameters<MaterialArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.set_material(a.body, &a.material)).await
-    }
-
-    #[tool(
-        description = "残ったボディの面(名前)と辺(番号)と、それぞれの形(平面・円柱・直線・円など、数値つき)。measure で測る物を指すのに使う"
-    )]
-    async fn topology(
-        &self,
-        Parameters(a): Parameters<TopologyArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.topology(a.body)).await
-    }
-
-    #[tool(
-        description = "面・辺・円の中心・点を 1 つか 2 つ測る(画面の測る道具と同じ値)。1 つなら長さ・直径・面積・法線など(面ならボディの体積も)、2 つなら距離・ΔX/ΔY/ΔZ・角度。rows が値の行、shapes が測った物の形"
-    )]
-    async fn measure(
-        &self,
-        Parameters(a): Parameters<MeasureArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.measure(&a.targets, a.basis.as_deref()))
-            .await
-    }
-
-    #[tool(
-        description = "残ったボディの絵(PNG)。画面の 3D のビューの明るい見た目で、平行投影で全体が入るように描く(格子・寸法・スケッチは描かない)。view で向き、faces・edges で topology の面と辺を目立たせる。説明に 1 mm の画素数(px_per_mm)。out で PNG を書き出す"
-    )]
-    async fn screenshot(
-        &self,
-        Parameters(a): Parameters<ScreenshotArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run_picture(move |s| s.screenshot(&a)).await
-    }
-
-    #[tool(
-        description = "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
-    )]
-    async fn export(
-        &self,
-        Parameters(a): Parameters<ExportArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| {
-            s.export(
-                &a.path,
-                a.action.as_deref(),
-                a.view.as_ref(),
-                a.tolerance,
-                a.each,
-            )
-        })
-        .await
-    }
-
-    #[tool(
-        description = "セットアップの G-code を作る(既定は Carvera Air、post で WASM のポストのプラグインも使える)"
-    )]
-    async fn gcode(
-        &self,
-        Parameters(a): Parameters<GcodeArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.gcode(a.setup, a.out.as_deref(), a.post.as_deref()))
-            .await
-    }
-
-    #[tool(
-        description = "セットアップの経路でストックを削ってみて、食い込み、早送りでの切削、削り残しを調べる"
-    )]
-    async fn simulate(
-        &self,
-        Parameters(a): Parameters<SimArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.simulate(a.setup, a.cell)).await
-    }
-
-    #[tool(
-        description = "いくつもの道具を順に動かす。途中で失敗したら batch の前の形に全部戻し、何手目(step)の、どの道具(tool)が、なぜ(error)失敗したかを返す。通ったら文書を変えた手を 1 回の取り消し単位にまとめる(undo 1 回で戻る)。手の引数は道具を 1 つずつ呼ぶ時と同じ。open・sample・save・undo・redo・set_settings・batch は入れられない。書き出したファイルは戻さない"
-    )]
-    async fn batch(
-        &self,
-        Parameters(a): Parameters<BatchArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.batch(a.steps)).await
-    }
-
-    #[tool(
-        description = "このPCに残ったクラッシュ報告(送信はしていない)。name を省くと一覧(種類、時刻、版、理由)、指すとその報告(場所、逆追跡、最近の操作、再現用の文書)"
-    )]
-    async fn crash_reports(
-        &self,
-        Parameters(a): Parameters<CrashArg>,
-    ) -> Result<CallToolResult, ErrorData> {
-        self.run(move |s| s.crash_reports(a.name.as_deref())).await
-    }
+tools! {
+    "文書の要約(パラメータ、タイムラインの各機能の状態と止まった理由、セットアップ)"
+    fn status(s) edit => Ok(s.status());
+    "人が見ている動いている画面(kieMonoBench)の今のタブにつなぐ。画面で設定の「AI との接続」を入れている時だけ使える。status で文書の要約と人が選んでいる面や辺、screenshot で画面の向きの絵、probe でその絵の画素に見える面・点(mm)・法線、set_param・add_param・set_value・undo・redo で文書を変える(人の取り消しの履歴に「Claude: 」付きで入る)。人が機能を編集している間は変える要求を断る。ほかの道具は画面の無い別の文書を動かす"
+    fn app(s, a: AppArg) server "画面の道具は、画面の取り消しの履歴に入るので batch の外で使います" => s.app_tool(a);
+    "文書ファイル(JSON)を開き、今の文書と置き換えて再計算し、status と同じ内容を返す。今の文書の保存されていない変更は確かめずに捨てるので、要るなら先に save する"
+    fn open(s, a: PathArg) outside "文書を入れ替える道具は、戻せないので batch に入れられません" => s.open(&a.path);
+    "基準部品の文書で始める(cam=true で加工も入れる)"
+    fn sample(s, a: SampleArg) outside "文書を入れ替える道具は、戻せないので batch に入れられません" => s.sample(a.cam, a.three_d);
+    "文書を JSON のファイルに保存し、保存先を saved で返す。path を省くと開いたファイル(または前に保存した場所)へ上書きし、どちらも無ければ失敗する。path に別の既存ファイルを指すと、overwrite が真の時だけ上書きする。直前の版は .bak に残る"
+    fn save(s, a: SaveArg) outside "保存は batch の外で(途中の形を保存しないため)" => s.save(a.path.as_deref(), a.overwrite);
+    "パラメータの式を変える(なければ足す)。comment と unit を渡すと表のコメントと単位も入れる。スケッチの寸法の名前(d1 など。status の dimensions)なら、その寸法の式を変える。形状と加工の経路は作り直される"
+    fn set_param(s, a: ParamArg) value => s.set_param_info(&a.name, &a.expr, a.comment.as_deref(), a.unit.as_deref());
+    "機能の値(押し出しの距離など。status の values)の式を変える。数だけなら今の単位を補う"
+    fn set_value(s, a: ValueArg) value => s.set_value(a.feature, &a.key, &a.expr);
+    "パラメータの表(同じパラメータを見る窓。写しは持たない)。表ごとに行(row は行の書き方、label、expr、value)。id 0 は全部の表"
+    fn param_views(s, a: ViewsArg) edit => s.param_views(a.id);
+    "パラメータの表を作る・名前を変える・消す、行を入れる・外す(取り消せる)。body を付けて作ると、そのボディに関わるパラメータ・寸法・機能の値が決まりで入る"
+    fn edit_param_view(s, a: EditViewArg) edit => s.edit_param_view(&a);
+    "パラメータ名か寸法の名前(d1 など)を変える。参照している式も書き換える"
+    fn rename_param(s, a: RenameArg) edit => s.rename_param(&a.name, &a.new_name);
+    "機能の種類の一覧。種類ごとに区分、表示名、データの項目(key、種類、説明)を返す。add_feature のデータはこれに従って作る"
+    fn types(s) edit => Ok(s.types());
+    "機能 1 つの id、name、type、suppressed と data(種類ごとの JSON)を返す。set_feature で置き換える前の下書きや、add_feature の data の例に使う"
+    fn get_feature(s, a: IdArg) edit => s.feature_data(a.id);
+    "タイムラインの最後に機能を 1 つ足して再計算し、status に足した機能の ID(added)を付けて返す。data の書き方は types、既存の例は get_feature で見る。省いた欄は画面から作った時と同じ既定で埋まる。対になる機能(ボディの分割の残りの側など)がある種類は、同じ取り消し単位で一緒に足す。未登録の種類は何も変えずに失敗する"
+    fn add_feature(s, a: AddFeatureArg) edit => s.add_feature(&a.type_id, a.name.as_deref(), a.data);
+    "STEP ファイルを読み、タイムラインの最後に足す(形だけのボディ。ブーリアンや加工の元にはなるが、フィレット等はかけられない)"
+    fn import_step(s, a: ImportArg) edit => s.import_step(&a.path, a.stand_up);
+    "タイムラインのロールバックの位置を動かして再計算し、status を返す(画面のタイムラインの印・CLI の rollback と同じ操作。取り消せる)。position は先頭から効かせる機能の数で、省くと最後まで進める。範囲の外は何も変えずに失敗する"
+    fn roll_back(s, a: RollBackArg) edit => s.roll_back(a.position);
+    "設計の属性(部品名・部品番号・改訂・作者・材料・文書の長さの単位 units など)を見る・変える(取り消せる)。部品名・部品番号・改訂・材料は G-code の頭の注に入る。units(mm・cm・m・in)は画面の表示・status の値・数だけ打った長さの単位で、道具の数の引数と measure・mass はいつも mm"
+    fn properties(s, a: PropertiesArg) edit => s.properties(&a.set);
+    "保存した文書の版の履歴(保存のたびに文書の横の .jc/history に残る。新しい順に number・id・saved_at(UNIX 秒)・note・milestone・features)。milestone_of と milestone で節目の名前を付ける"
+    fn versions(s, a: VersionsArg) outside "版の履歴は保存したファイルの物なので、batch の外で使います" => s.versions(a.milestone_of.as_deref(), &a.milestone);
+    "前の版を最新として戻して保存し、status を返す。戻したことも新しい版として残るので、versions からまた戻せる(undo の履歴は消える)"
+    fn restore_version(s, a: RestoreVersionArg) outside "版の履歴は保存したファイルの物なので、batch の外で使います" => s.restore_version(&a.id);
+    "機能のデータを data で丸ごと置き換えて再計算し、status を返す(一部の欄だけを足し合わせることはしない)。先に get_feature で今のデータを取り、直した全体を渡す。式 1 つだけ変えるなら set_value の方が安全。undo で戻せる"
+    fn set_feature(s, a: SetFeatureArg) edit => s.set_feature(a.id, a.data);
+    "機能をまとめてタイムラインの別の位置へ動かし、status を返す。使う機能より前へは動かせない(理由を返す)。undo で戻せる"
+    fn move_features(s, a: MoveFeaturesArg) edit => s.move_features(&a.ids, a.target, a.after);
+    "機能を抑制する、または戻す"
+    fn suppress(s, a: SuppressArg) edit => s.suppress(a.id, a.suppressed);
+    "機能をタイムラインから消して再計算し、status を返す。それを使っていた機能は理由つきで止まる(status の reason)。undo で戻せる。残したまま計算から外すだけなら suppress を使う"
+    fn remove_feature(s, a: IdArg) edit => s.remove_feature(a.id);
+    "タイムラインの機能をグループにまとめる(見せ方だけで、計算は変わらない)。status の groups に出る"
+    fn group(s, a: GroupArg) edit => s.group(&a.ids, &a.name, &a.mode);
+    "機能を写してタイムラインの今の位置に貼る(画面のコピー・貼り付けと同じ)。値と式は写し、面・辺の選ぶ欄は空にするので set_feature で選び直す。まとめて写すと、写した機能どうしのつながりは貼った写しの間でつなぎ直す。pasted が貼った機能の ID、cleared が空にした選ぶ欄の数。undo で戻せる"
+    fn paste_features(s, a: PasteFeaturesArg) edit => s.paste_features(&a.ids);
+    "部品を中の部品ごと、別の部品の中(into、省くと文書の直下)か、ある部品の前(before)・後ろ(after)へ移し、status を返す(画面の部品の木のドラッグと同じ)。自分や自分の中へは移せない(理由を返す)。undo で戻せる"
+    fn move_component(s, a: MoveComponentArg) edit => s.move_component(&a);
+    "部品をアクティブにし(component、省くと文書の直下へ戻す)、status を返す(画面のブラウザの部品の行の丸と同じ)。この後に作るボディと文書の直下に作る部品は、その部品に入る(作った変更と同じ取り消し単位)。今のアクティブな部品は status の active_component。文書には保存しない"
+    fn activate_component(s, a: ActivateComponentArg) edit => s.activate_component(a.component);
+    "ボディを部品(component、省くと部品から外す)へ移し、status を返す(画面のボディの行のドラッグと同じ)。undo で戻せる"
+    fn move_bodies(s, a: MoveBodiesArg) edit => s.move_bodies(&a.ids, a.component);
+    "部品を中の部品ごと複製し、status を返す(画面のブラウザの部品の右クリック「複製」と同じ)。中のボディは元の形を追う写しになり、元のすぐ後ろに並び、外形の幅と隙間だけ X へずらして置く。component が作った部品の番号。undo で戻せる"
+    fn duplicate_component(s, a: IdArg) edit => s.duplicate_component(a.id);
+    "名前を付けた視点の一覧(番号・名前・真ん中の点・向き・傾き・見える高さ・投影)。画面のブラウザの「名前の付いたビュー」と同じ"
+    fn named_views(s) edit => Ok(s.named_views());
+    "視点に名前を付けて文書に保存し、その視点を返す。screenshot の named_view で描ける。undo で戻せる"
+    fn save_named_view(s, a: SaveViewArg) edit => s.save_named_view(&a);
+    "名前を付けた視点の名前を変える"
+    fn rename_named_view(s, a: RenameViewArg) edit => s.rename_named_view(a.id, &a.name);
+    "名前を付けた視点を消す。id は named_views の id"
+    fn remove_named_view(s, a: IdArg) edit => s.remove_named_view(a.id);
+    "グループを解く(中身の機能は残す)。id は status の groups[].id"
+    fn ungroup(s, a: IdArg) edit => s.ungroup(a.id);
+    "最後の変更を取り消す"
+    fn undo(s) outside "取り消し・やり直しは batch に入れられません(失敗した時は batch が戻します)" => s.undo();
+    "取り消した変更をやり直す"
+    fn redo(s) outside "取り消し・やり直しは batch に入れられません(失敗した時は batch が戻します)" => s.redo();
+    "取り消しの履歴。done は済んだ変更(古い順、最後が次に取り消される)、undone はやり直せる変更(次にやり直すものが先頭)"
+    fn history(s) edit => Ok(s.history());
+    "PC 全体の設定(機械など)。fields が変えられる項目、value が今の値、default が初めの値、notes が変えられない事柄"
+    fn settings(s) edit => Ok(s.settings());
+    "設定を変える(この接続の間だけ。PC に残すのは画面の「設定」)。正しくない値なら何も変えずに理由を返す"
+    fn set_settings(s, a: SettingsArg) outside "設定の変更は戻せないので batch に入れられません" => s.set_settings(&a.id, &a.value);
+    "今使えるモジュールの操作(画面のボタンやメニューと同じもの)。disabled は使えない理由、args は受け取る引数の宣言(key・kind・unit・default・required)"
+    fn actions(s, a: ActionsArg) edit => Ok(s.actions(a.selected));
+    "モジュールの操作を実行する(actions の id)。文書を変える操作は status と added を返す"
+    fn run_action(s, a: RunActionArg) edit => s.run_action_at(&a.id, a.selected, a.file.as_deref(), &a.args, a.out.as_deref());
+    "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)も"
+    fn mass(s) edit => s.mass();
+    "ボディに物理材料を付ける(取り消せる)。質量(mass)と外観の既定の色に使い、加工のセットアップの材料の既定にもなる"
+    fn set_material(s, a: MaterialArg) edit => s.set_material(a.body, &a.material);
+    "残ったボディの面(名前)と辺(番号)と、それぞれの形(平面・円柱・直線・円など、数値つき)。measure で測る物を指すのに使う"
+    fn topology(s, a: TopologyArg) edit => s.topology(a.body);
+    "面・辺・円の中心・点を 1 つか 2 つ測る(画面の測る道具と同じ値)。1 つなら長さ・直径・面積・法線など(面ならボディの体積も)、2 つなら距離・ΔX/ΔY/ΔZ・角度。rows が値の行、shapes が測った物の形"
+    fn measure(s, a: MeasureArg) edit => s.measure(&a.targets, a.basis.as_deref());
+    "残ったボディの絵(PNG)。画面の 3D のビューの明るい見た目で、平行投影で全体が入るように描く(格子・寸法・スケッチは描かない)。view で向き、faces・edges で topology の面と辺を目立たせる。説明に 1 mm の画素数(px_per_mm)。out で PNG を書き出す"
+    fn screenshot(s, a: ScreenshotArg) picture => s.screenshot(&a);
+    "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
+    fn export(s, a: ExportArg) edit => s.export(&a.path, a.action.as_deref(), a.view.as_ref(), a.tolerance, a.each);
+    "セットアップの G-code を作る(既定は Carvera Air、post で WASM のポストのプラグインも使える)"
+    fn gcode(s, a: GcodeArg) edit => s.gcode(a.setup, a.out.as_deref(), a.post.as_deref());
+    "セットアップの経路でストックを削ってみて、食い込み、早送りでの切削、削り残しを調べる"
+    fn simulate(s, a: SimArg) edit => s.simulate(a.setup, a.cell);
+    "いくつもの道具を順に動かす。途中で失敗したら batch の前の形に全部戻し、何手目(step)の、どの道具(tool)が、なぜ(error)失敗したかを返す。通ったら文書を変えた手を 1 回の取り消し単位にまとめる(undo 1 回で戻る)。手の引数は道具を 1 つずつ呼ぶ時と同じ。open・sample・save・undo・redo・set_settings・batch は入れられない。書き出したファイルは戻さない"
+    fn batch(s, a: BatchArg) outside "batch の中に batch は入れられません" => s.batch(a.steps);
+    "このPCに残ったクラッシュ報告(送信はしていない)。name を省くと一覧(種類、時刻、版、理由)、指すとその報告(場所、逆追跡、最近の操作、再現用の文書)"
+    fn crash_reports(s, a: CrashArg) edit => s.crash_reports(a.name.as_deref());
 }
 
 #[tool_handler(router = self.tool_router)]
