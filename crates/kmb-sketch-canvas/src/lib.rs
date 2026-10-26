@@ -232,7 +232,8 @@ fn picture(cx: &Context<'_>, id: FeatureId) -> Option<Picture> {
         .and_then(Picture::from_value)
 }
 
-/// 絵のファイルを読んで下絵を足す。平らな面を選んでいればその面に、ほかは XY 平面に置く。
+/// 絵のファイルを読んで下絵を足す。平らな面を選んでいればその面に、ほかは視点に向いた原点の平面
+/// (視点が無ければ XY 平面)に置く。
 fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let path = cx
         .file
@@ -250,6 +251,8 @@ fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         && kmb_cad::plane::has_planar_face(cx, p.feature, &p.face)
     {
         canvas.plane = SketchPlane::face(p.feature, p.face.clone());
+    } else if let Some(view) = cx.arg("view") {
+        face_view(&mut canvas, view)?;
     }
     log::info!(
         "下絵 {file} を置く({}×{} 画素、{} バイト)",
@@ -267,6 +270,39 @@ fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         name,
         serde_json::to_value(canvas).map_err(|e| e.to_string())?,
     ))
+}
+
+/// 何も選ばずに置く時、視点 `view`(`{eye, up}`。視点へ向かう向きと画面の上)にいちばん向いた
+/// 原点の平面に、絵の上が画面の上・表が手前になるよう置く。XY 平面に決めて置くと、正面や右から
+/// 見ている時は真横になり、絵が線にしか見えない。角度は 90° 刻みに丸める(斜めから見ていても絵を
+/// 軸にそろえる)。
+fn face_view(canvas: &mut Canvas, view: &serde_json::Value) -> Result<(), String> {
+    let v3 = |key: &str| -> Result<P3, String> {
+        view.get(key)
+            .and_then(|v| serde_json::from_value::<P3>(v.clone()).ok())
+            .ok_or_else(|| format!("view.{key} は [x, y, z] の数で書きます"))
+    };
+    let (eye, up) = (v3("eye")?, v3("up")?);
+    let normal = |p: &k::Plane| k::cross(p.x_axis, p.y_axis);
+    let (plane, frame) = [
+        (SketchPlane::Xy, k::Plane::XY),
+        (SketchPlane::Yz, k::Plane::YZ),
+        (SketchPlane::Zx, k::Plane::ZX),
+    ]
+    .into_iter()
+    .max_by(|a, b| {
+        k::dot(normal(&a.1), eye)
+            .abs()
+            .total_cmp(&k::dot(normal(&b.1), eye).abs())
+    })
+    .expect("原点の平面は 3 つある");
+    // 絵の上(平面の座標で (-sin a, cos a))を画面の上へ。裏から見ていれば左右を反転して表にする
+    let (ux, uy) = (k::dot(up, frame.x_axis), k::dot(up, frame.y_axis));
+    let deg = (f64::atan2(-ux, uy).to_degrees() / 90.0).round() * 90.0 + 0.0;
+    canvas.plane = plane;
+    canvas.angle = format!("{deg} deg");
+    canvas.flip_h = k::dot(normal(&frame), eye) < 0.0;
+    Ok(())
 }
 
 /// 平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
@@ -351,10 +387,14 @@ impl Extension for CanvasCommands {
         vec![
             Action::new(CANVAS_INSERT, "キャンバス…", "cad")
                 .arg(Arg::file("path", "絵のファイル(省くとファイルを選ぶ窓を出す)"))
+                .arg(Arg::object(
+                    "view",
+                    "今の視点 {eye, up}(視点へ向かう向きと画面の上。画面が渡す)。何も選ばずに置く時、視点にいちばん向いた原点の平面に置く(省くと XY 平面)",
+                ))
                 .menu("挿入")
                 .icon("canvas")
                 .aliases("きゃんばす キャンバス canvas したえ 下絵 がぞう 画像 しゃしん 写真 picture image")
-                .hint("写真や図面の絵を置き、スケッチでなぞる下絵にする。平らな面を選んでいればその面に置く")
+                .hint("写真や図面の絵を置き、スケッチでなぞる下絵にする。平らな面を選んでいればその面に、ほかは今見ている向きの原点の平面に置く")
                 .at(&[Place::Toolbar])
                 .input(Input::OpenFile {
                     title: "キャンバスの絵を選ぶ".into(),
@@ -480,6 +520,24 @@ pub fn module() -> kmb_core::Module {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 正面・右・上・裏から見て置くと、見ている向きの原点の平面に、上を画面の上・表を手前にして置く。
+    #[test]
+    fn a_canvas_faces_the_view_it_is_placed_from() {
+        let blank = || Canvas::from_bytes("a.png", &kmb_format::png::write_rgba(1, 1, &[0; 4])).unwrap();
+        for (eye, up, plane, angle, flip) in [
+            ([0.0, -1.0, 0.0], [0.0, 0.0, 1.0], SketchPlane::Zx, "-90 deg", true),
+            ([1.0, 0.0, 0.0], [0.0, 0.0, 1.0], SketchPlane::Yz, "0 deg", false),
+            ([0.0, 0.0, 1.0], [0.0, 1.0, 0.0], SketchPlane::Xy, "0 deg", false),
+            ([0.0, 0.0, -1.0], [0.0, 1.0, 0.0], SketchPlane::Xy, "0 deg", true),
+        ] {
+            let mut c = blank();
+            face_view(&mut c, &json!({"eye": eye, "up": up})).unwrap();
+            assert_eq!((c.plane, c.angle.as_str(), c.flip_h), (plane, angle, flip), "{eye:?}");
+        }
+        let mut c = blank();
+        assert!(face_view(&mut c, &json!({"eye": "前"})).is_err());
+    }
 
     #[test]
     fn corners_turn_and_flip_about_the_center() {
