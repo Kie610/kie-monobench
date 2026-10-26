@@ -570,51 +570,80 @@ fn a_suppressed_cut_passes_its_target_body_on() {
     );
 }
 
-/// ポケットの手前に、同じ板を読む深いポケットを差し込むと、後ろのポケットと穴はそれを読み、
-/// ボディは 1 つのまま。前の版の読み方(固定の印)のポケットは板をそのまま読み、ボディが 2 つになる。
+/// 穴の手前に、同じ板を読む別の穴を差し込むと、後ろの穴はそれを読み、ボディは 1 つのまま。
+/// 前の版の読み方(固定の印)の穴は板をそのまま読み、ボディが 2 つになる(前の動き)。
+/// 道具は板を上下に突き抜ける角柱にし、板と同じ平面の面を作らない。
 #[test]
-fn a_cut_inserted_before_the_pocket_is_read_by_the_features_after_it() {
+fn a_cut_inserted_before_a_cut_is_read_by_it() {
     let k = TestKernel::new();
     let reg = registry();
     for pin in [false, true] {
-        let mut part = reference_part();
-        let before = final_mass(&mut part.doc, &k).volume;
-        let data = part.doc.data();
-        let at = data.index_of(part.pocket).unwrap();
-        let mut entry = data.feature(part.pocket).unwrap().clone();
-        entry.id = part.doc.alloc_feature_id();
-        entry.name = "深いポケット".into();
-        entry.data["distance"] = serde_json::json!("6 mm");
-        let deep = entry.id;
+        let mut b = DocBuilder::new();
+        let s = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 40.0, 30.0);
+        let plate = extrude_with(
+            &mut b,
+            "板",
+            s,
+            "10 mm",
+            Direction::Normal,
+            None,
+            kmb_cad::Extent::Distance,
+            Operation::New,
+            None,
+        );
+        let first = rect_sketch(&mut b, SketchPlane::Xy, 8.0, 13.0, 4.0, 4.0);
+        let second = rect_sketch(&mut b, SketchPlane::Xy, 28.0, 13.0, 4.0, 4.0);
+        let hole = extrude_with(
+            &mut b,
+            "穴",
+            first,
+            "15 mm",
+            Direction::TwoSides,
+            Some("15 mm"),
+            kmb_cad::Extent::Distance,
+            Operation::Cut,
+            Some(plate),
+        );
+        let mut doc = b.finish("板");
+        let data = doc.data();
+        let at = data.index_of(hole).unwrap();
+        let mut entry = data.feature(hole).unwrap().clone();
+        entry.id = doc.alloc_feature_id();
+        entry.name = "差し込んだ穴".into();
+        entry.data["profile"] = serde_json::json!(second.0);
+        let inserted = entry.id;
         let mut ops = vec![Op::InsertFeature {
             index: Some(at),
             entry,
         }];
         if pin {
             ops.push(Op::SetPinBodies {
-                id: part.pocket,
+                id: hole,
                 pin: true,
             });
         }
-        part.doc
-            .apply(kmb_core::Transaction::new("差し込む", ops))
+        doc.apply(kmb_core::Transaction::new("差し込む", ops))
             .unwrap();
-        let report = part.doc.recompute(&reg, &*k);
+        let report = doc.recompute(&reg, &*k);
         assert_ok(&report);
-        let bodies = visible_bodies(part.doc.data(), &reg, &report);
+        let bodies = visible_bodies(doc.data(), &reg, &report);
+        let ids: Vec<_> = bodies.iter().map(|b| b.0).collect();
+        let volume = |i: usize| k.mass(bodies[i].1).unwrap().volume;
+        let plate_volume = 40.0 * 30.0 * 10.0;
         if pin {
-            let ids: Vec<_> = bodies.iter().map(|b| b.0).collect();
-            assert_eq!(ids, vec![deep, part.hole_pattern]);
-            let after = k.mass(bodies[1].1).unwrap().volume;
-            assert!((after - before).abs() < 0.05, "{before} → {after}");
-        } else {
-            assert_eq!(bodies.len(), 1, "{bodies:?}");
-            assert_eq!(bodies[0].0, part.hole_pattern);
-            // 深いポケット(15 × 12、深さ 6)の分だけ、前の深さ 4 より 2 mm 深く削れる
-            let after = k.mass(bodies[0].1).unwrap().volume;
+            assert_eq!(ids, vec![inserted, hole]);
             assert!(
-                (before - after - 360.0).abs() < 0.05,
-                "差し込んだポケットを読むはず: {before} → {after}"
+                close(volume(1), plate_volume - 160.0, 1e-6),
+                "{}",
+                volume(1)
+            );
+        } else {
+            // 後ろの穴は差し込んだ穴の後の形を読み、穴が 2 つ開く
+            assert_eq!(ids, vec![hole]);
+            assert!(
+                close(volume(0), plate_volume - 320.0, 1e-6),
+                "{}",
+                volume(0)
             );
         }
     }
