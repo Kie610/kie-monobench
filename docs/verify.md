@@ -412,10 +412,11 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 
 ## 14. PR ごとの検査(GitHub の CI)
 
-- `.github/workflows/verify.yml` が、PR と main へのプッシュのたびに `cargo xtask verify` を Linux(ubuntu-latest)と Windows(windows-latest)で流す。カーネルは SMLib(SMLib のソースは third_party にあり、そのまま組める)。
-- 範囲: PR は分かれ目から変えた crate とそれに依存する crate(`--dependents --base origin/<PR の向き先>`)。検査の道具(`.github/workflows/`)・Rust の版(`rust-toolchain.toml`)・cargo の設定(`.cargo/`)・nextest の設定を変えた PR と、main へのプッシュ・手で流す時は全体(`--all`)。`--all` は記録の無い CI では truck の回も足す(1 節)。
+- `.github/workflows/verify.yml` が、PR のたびと main で毎晩 1 回(日本時間 3:00)、`cargo xtask verify` を Linux(ubuntu-latest)と Windows(windows-latest)で流す。カーネルは SMLib(SMLib のソースは third_party にあり、そのまま組める)。
+- 範囲: PR は分かれ目から変えた crate とそれに依存する crate(`--dependents --base origin/<PR の向き先>`)。検査の道具(`.github/workflows/`)・Rust の版(`rust-toolchain.toml`)・cargo の設定(`.cargo/`)・nextest の設定を変えた PR と、毎晩の main の回・手で流す時は全体(`--all`)。PR も毎晩の回も `--truck` を付け、形の計算の試験を truck でも流す(対象に形の計算の試験が無い PR では truck の回は省かれる)。CI は時間の記録を持ち越さず `--all` が毎回 truck の回を足すので、PR で流さないと truck だけで落ちる試験が取り込んだ後に初めて見つかる。CI は利用者の PC を使わないので、1 節の「普段は SMLib だけ」の例外にする。
+- 同じ PR に新しいコミットが来たら前の回を止める。main へのプッシュでは流さない。取り込みの前に PC が `--all` を通しており、プッシュごとに流すと続けて来る取り込みが前の回を止めて、main の回がほとんど「取り消し」で終わっていた(10-26 は 26 回中 25 回)。公開のリポジトリなので標準の runner は無料だが、待ちと取り消しの知らせを減らす。
 - 道具の版は 1 節の入れ方とそろえる(cargo-nextest・cargo-deny・cargo-hakari)。
-- 組み立て済みの物は main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
+- 組み立て済みの物は毎晩の main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
 
 ## 15. タグで配る物を組み立てる(GitHub の CI)
@@ -423,4 +424,4 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
 - タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
 - できた物は OS ごとに「kie-monobench-<タグ>-<OS>.zip」(中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)にまとめて成果物に置く。両方の OS が済んだら、全部の zip の SHA256 を 1 つの `SHA256SUMS`(`sha256sum -c SHA256SUMS` で確かめられる形)にして「kie-monobench-<タグ>-SHA256SUMS」の成果物に置く。GitHub のリリースは作らない。
-- 検査は main へのプッシュの回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は main の回が残した物を使う。
+- 検査は取り込みの前の PC の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。

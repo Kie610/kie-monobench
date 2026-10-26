@@ -29,6 +29,7 @@ a_fillet_after_a_chamfer_runs_through_the_slope = "truck の回(足し引きの�
 a_fillet_corner_is_a_ball_or_the_rounds_meeting = "truck の回(球の足し引き)"
 a_chamfer_corner_is_a_triangle_or_the_chamfers_meeting = "truck の回(角の形)"
 a_union_of_same_height_bodies_keeps_the_first_bodys_top_face_name = "truck の回(同じ高さの面の和算)"
+an_intersection_that_misses_names_the_tool_body_and_its_component = "truck の回(同じ平面で接するブーリアン)"
 the_top_edge_of_a_cylinder_can_be_rounded_and_chamfered = "truck の回(円の辺)"
 a_keyhole_top_is_rounded_along_the_arc_and_the_straight_edges = "truck の回(円の辺)"
 rounding_the_keyhole_top_face_reaches_the_arc_edge = "truck の回(円の辺)"

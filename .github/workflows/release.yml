@@ -1,7 +1,7 @@
 # タグ(v<版>)を押すと、配る物を Linux と Windows で組み立てる(docs/verify.md の 15 節)。
 # - 組み立ては `cargo xtask release`(この PC のパスを exe に残さない引数と数え、許諾文の一覧)。
 #   タグはワークスペースの版と合うかを xtask が先に確かめる。
-# - 検査は main へのプッシュの回(verify.yml)が済ませているので、ここでは流さない。
+# - 検査は取り込みの前の PC の回と毎晩の main の回(verify.yml)が済ませているので、ここでは流さない。
 # - OS ごとに zip にまとめ、全部の zip の SHA256SUMS を最後の回で作る。
 # - できた物は成果物(artifact)に置くだけで、GitHub のリリースは作らない。
 name: リリース
@@ -36,7 +36,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # SMLib の C++ の結果は main の検査の回(verify.yml)が残した物を戻すだけにする
+      # SMLib の C++ の結果は毎晩の main の検査の回(verify.yml)が残した物を戻すだけにする
       - uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/smlib-cache
