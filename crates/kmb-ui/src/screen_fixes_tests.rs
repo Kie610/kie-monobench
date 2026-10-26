@@ -171,3 +171,112 @@ fn the_shape_follows_a_value_while_it_is_still_being_typed() {
         "打っている欄から外れない"
     );
 }
+
+#[test]
+fn a_used_sketch_shows_while_the_feature_that_uses_it_is_edited() {
+    // 10-26 k3: 押し出しを直す間は、使って自動で隠したスケッチも見せる(ほかの輪郭を選べるように)。
+    // 行の目は閉じたままで、直し終えると隠れる。後のスケッチと、目で隠したスケッチは出さない
+    let part = kmb_samples::reference_part();
+    let (sketch, plate, top, pocket) =
+        (part.plate_sketch, part.plate, part.top_sketch, part.pocket);
+    let mut ws = Workspace::new(part.doc, None, kmb_bundle::modules());
+    ws.wait();
+    assert!(ws.is_hidden(sketch));
+    ws.open_edit(plate);
+    let mut h = harness(ws);
+    let ws = h.state();
+    assert!(
+        !ws.is_hidden(sketch),
+        "直している押し出しが使うスケッチは見える"
+    );
+    assert!(ws.is_own_hidden(sketch), "行の目は閉じたまま");
+    assert!(
+        ws.is_hidden(top),
+        "直している機能より後のスケッチは隠したまま"
+    );
+    assert_eq!(ws.sketch_lines().len(), 5, "板の輪郭の 4 本と中央の穴");
+    h.state_mut().finish_edit();
+    h.run();
+    assert!(h.state().is_hidden(sketch), "直し終えると隠れる");
+    // 目で隠したスケッチ(自動で隠したのでない物)は、直している間も隠したまま
+    let ws = h.state_mut();
+    ws.set_hidden(top, false);
+    ws.set_hidden(top, true);
+    ws.open_edit(pocket);
+    h.run();
+    assert!(h.state().is_hidden(top), "目で隠したスケッチは出さない");
+    assert!(!h.state().is_hidden(sketch), "前の使ったスケッチは見える");
+}
+
+#[test]
+fn a_tilted_work_plane_follows_the_angle_while_it_is_typed() {
+    // 10-26 k12: 傾けた作業平面の角度を打って手を止めると、Enter の前に平面が付いて来る
+    let part = kmb_samples::reference_part();
+    let mut ws = Workspace::new(part.doc, None, kmb_bundle::modules());
+    ws.wait();
+    let args =
+        serde_json::json!({"method": "angle", "plane": "xy", "axis": "x", "angle": "30 deg"});
+    let id = ws
+        .run_action_args("cad.add.datum_plane", args)
+        .expect("傾けた作業平面を作れる");
+    ws.wait();
+    let before = ws.output(id, kmb_interchange::DATUM_OUTPUT).cloned();
+    assert!(before.is_some(), "作業平面の形が出ている");
+    ws.open_edit(id);
+    ws.cur.focus_new.set(Some(id));
+    let mut h = harness(ws);
+    // 傾けた平面で最初の式の欄は角度。全体を選んであるので、打った数で置き換わる
+    h.event(egui::Event::Text("45".into()));
+    for _ in 0..4 {
+        h.step();
+    }
+    h.run();
+    let ws = h.state_mut();
+    ws.wait();
+    let data = ws.document().data().feature(id).unwrap().data.clone();
+    assert!(data.to_string().contains("\"45 deg\""), "{data}");
+    assert_ne!(
+        ws.output(id, kmb_interchange::DATUM_OUTPUT).cloned(),
+        before,
+        "打っている途中の角度で平面が傾き直す"
+    );
+    assert!(ws.is_editing(id), "直している途中のまま");
+}
+
+#[test]
+fn clicking_the_view_while_typing_a_value_keeps_the_keyboard_in_the_field() {
+    // 10-26 k22: 値の欄に打っている途中に 3D のビューをクリック(面を選ぶ)しても、欄へ入力が戻り
+    // 続けて打てる(欄を押し直さなくてよい)
+    let part = kmb_samples::reference_part();
+    let boss = part.boss;
+    let mut ws = Workspace::new(part.doc, None, kmb_bundle::modules());
+    ws.wait();
+    ws.open_edit(boss);
+    ws.cur.focus_new.set(Some(boss));
+    let mut h = harness(ws);
+    assert!(
+        h.ctx.memory(|m| m.focused().is_some()),
+        "作り始めは欄に入力がある"
+    );
+    let ws = h.state();
+    let view = ws.win.view_rect;
+    let at = ws.cur.camera.project([50.0, 35.0, 10.0], view).0;
+    assert!(view.contains(at), "{at:?} は 3D のビューの中");
+    h.event(egui::Event::PointerMoved(at));
+    h.step();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
+    h.run();
+    assert!(h.state().is_editing(boss), "直している途中のまま");
+    assert!(
+        h.ctx.memory(|m| m.focused().is_some()),
+        "クリックの後も値の欄に入力が戻る"
+    );
+}
