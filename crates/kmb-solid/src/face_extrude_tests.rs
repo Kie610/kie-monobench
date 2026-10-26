@@ -896,3 +896,62 @@ fn a_union_that_leaves_no_solid_is_refused_by_the_kernel() {
         assert!(v >= k.volume(body).unwrap(), "結合で対象が消えた(体積 {v})");
     }
 }
+
+/// 画面で同じ平面に無い平らな面(板の上と下)を選んで押し出しを押すと、面を黙って捨てて
+/// スケッチの押し出しへ移らず、理由を出して止める(ボタンも同じ理由で押せない)。
+/// 別のボディの面が混ざった時も同じ。曲がった面だけを選んでいる時は前のとおりスケッチの押し出し
+#[test]
+fn picking_flat_faces_on_different_planes_stops_with_the_reason() {
+    use kmb_core::{Context, Extension, FacePick};
+    let k: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(SmlibKernel::new());
+    let reg = registry();
+    let pick = |f: FeatureId, end: &str| FacePick {
+        feature: f,
+        face: format!("f{}:{end}", f.0),
+    };
+    // 板だけの文書(押し出せる輪郭は板の形の 1 つ。面を捨てると、これを押し出してしまう)と、
+    // 板と別のボディ(柱)の文書
+    let (b, p) = plate(None);
+    let one = b.finish("板");
+    let (mut b, _) = plate(None);
+    let mut s = SketchBuilder::new(SketchPlane::Xy);
+    let o = s.fixed_point(50.0, 0.0);
+    s.rectangle(o, "10 mm", "10 mm", [50.0, 0.0, 60.0, 10.0]);
+    let other = b.feature(kmb_sketch::SKETCH, "柱の形", s.build());
+    let post = b.feature(
+        EXTRUDE,
+        "柱",
+        Extrude {
+            profile: Some(other),
+            distance: "5 mm".into(),
+            operation: Operation::New,
+            ..Default::default()
+        },
+    );
+    let two = b.finish("板と柱");
+    for (mut doc, top, also, word) in [
+        (one, pick(p, "end"), vec![pick(p, "start")], "同じ平面"),
+        (two, pick(p, "end"), vec![pick(post, "end")], "1 つのボディ"),
+    ] {
+        let report = doc.recompute(&reg, k.as_ref());
+        let cx = Context {
+            picked: Some(&top),
+            also_picked: &also,
+            ..Context::new(doc.data(), &report, &reg, &k)
+        };
+        match ExtrudeCommands.run(EXTRUDE_SKETCH, &cx) {
+            Some(Err(e)) => {
+                let m = e.to_string();
+                assert!(m.contains(word), "{m}")
+            }
+            other => panic!("面を捨てて押し出した: {other:?}"),
+        }
+        let a = ExtrudeCommands.actions(&cx);
+        let why = a
+            .iter()
+            .find(|a| a.id == EXTRUDE_SKETCH)
+            .and_then(|a| a.disabled.clone())
+            .unwrap_or_default();
+        assert!(why.contains(word), "{why}");
+    }
+}
