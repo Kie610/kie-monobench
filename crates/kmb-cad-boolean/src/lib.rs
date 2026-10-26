@@ -62,14 +62,21 @@ impl Feature for BooleanFeature {
     }
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
-        let mut body = body_of(ctx, self.target)?;
+        let first = body_of(ctx, self.target)?;
+        let mut body = first;
         let b = self.operation.boolean().expect("inputs で確かめている");
         for t in &self.tool {
             let tool = body_of(ctx, *t)?;
             body = checked_boolean_with(ctx.kernel(), b, body, tool, &tool_body_label(ctx, *t))
                 .map_err(kernel_err)?;
         }
-        Ok([("body".to_string(), Value::Shape(body))].into())
+        let mut out: Outputs = [("body".to_string(), Value::Shape(body))].into();
+        if self.operation == Operation::Join
+            && let Some(w) = kmb_cad::detached_join(ctx.kernel(), first, body)
+        {
+            kmb_core::add_warnings(&mut out, vec![w]);
+        }
+        Ok(out)
     }
 }
 

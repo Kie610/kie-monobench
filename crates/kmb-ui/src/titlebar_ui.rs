@@ -54,7 +54,13 @@ impl Workspace {
         }
         let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
         for b in [WinButton::Close, WinButton::Maximize, WinButton::Minimize] {
-            if window_button(ui, b, max).clicked() {
+            let name = self.win.t(match b {
+                WinButton::Minimize => "frame-window-minimize",
+                WinButton::Maximize if max => "frame-window-restore",
+                WinButton::Maximize => "frame-window-maximize",
+                WinButton::Close => "frame-window-close",
+            });
+            if window_button(ui, b, max, &name).clicked() {
                 let cmd = match b {
                     WinButton::Minimize => ViewportCommand::Minimized(true),
                     WinButton::Maximize => ViewportCommand::Maximized(!max),
@@ -137,17 +143,16 @@ fn cursor(d: egui::ResizeDirection) -> egui::CursorIcon {
     }
 }
 
-/// 窓のボタン 1 つ(帯の高さいっぱい。閉じるは乗せると赤)。
-pub(crate) fn window_button(ui: &mut egui::Ui, b: WinButton, maximized: bool) -> egui::Response {
+/// 窓のボタン 1 つ(帯の高さいっぱい。閉じるは乗せると赤)。`name` は今の言語のボタンの名前。
+pub(crate) fn window_button(
+    ui: &mut egui::Ui,
+    b: WinButton,
+    maximized: bool,
+    name: &str,
+) -> egui::Response {
     let l = theme::look(ui.ctx());
     let h = ui.available_height();
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(40.0 * theme::band(), h), Sense::click());
-    let name = match b {
-        WinButton::Minimize => "最小化",
-        WinButton::Maximize if maximized => "元の大きさに戻す",
-        WinButton::Maximize => "最大化",
-        WinButton::Close => "閉じる",
-    };
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, name));
     let p = ui.painter();
     let (fill, ink) = match (b, resp.hovered(), resp.is_pointer_button_down_on()) {

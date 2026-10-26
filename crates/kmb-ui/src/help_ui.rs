@@ -55,22 +55,20 @@ pub(crate) fn ago(t: u64) -> String {
 
 impl Workspace {
     pub(crate) fn help_menu(&mut self, ui: &mut egui::Ui) {
-        let r =
-            crate::theme::icon_button(ui, "help", "ヘルプ", true, false).on_hover_text("ヘルプ");
+        let help = self.win.t("frame-help");
+        let r = crate::theme::icon_button(ui, "help", &help, true, false).on_hover_text(&help);
         egui::Popup::menu(&r).show(|ui| {
             if ui
-                .add(egui::Button::new("操作の手引き").shortcut_text("F1"))
-                .on_hover_text("マウスとキーの操作と、設計・加工の流れ")
+                .add(egui::Button::new(self.win.t("menu-help-guide")).shortcut_text("F1"))
+                .on_hover_text(self.win.t("menu-help-guide-tip"))
                 .clicked()
             {
                 self.win.guide_open = true;
                 ui.close();
             }
             if ui
-                .button("コマンド検索…")
-                .on_hover_text(
-                    "名前や読みでコマンドを探して実行する(S でカーソルの所、Ctrl+K で画面の上)",
-                )
+                .button(self.win.t("menu-help-search"))
+                .on_hover_text(self.win.t("menu-help-search-tip"))
                 .clicked()
             {
                 if !self.is_command_palette_open() {
@@ -80,8 +78,8 @@ impl Workspace {
             }
             ui.separator();
             if ui
-                .button("クラッシュ報告…")
-                .on_hover_text("落ちた時に PC の中に残した報告を見る(どこへも送らない)")
+                .button(self.win.t("menu-help-crash"))
+                .on_hover_text(self.win.t("menu-help-crash-tip"))
                 .clicked()
             {
                 self.open_crash_reports();

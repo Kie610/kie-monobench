@@ -61,6 +61,7 @@ pub fn register(reg: &mut Registry) {
     kmb_cad_import_step::register(reg);
 }
 
+mod adopted_failure_tests;
 mod adopted_io_tests;
 mod adopted_shape_tests;
 mod adopted_sketch_tests;
