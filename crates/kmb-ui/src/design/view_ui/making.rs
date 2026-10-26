@@ -226,6 +226,22 @@ impl Workspace {
                 gesture::value_at(h, &self.cur.camera, rect, p)
             };
         }
+        // 止める面を受ける距離の手順(押し出しの高さ): マウスの下が止められる平らな面なら、
+        // その面の平面までの距離にし、決めた時にその面を「対象まで」の相手にする
+        if let Some(p) = ev.hover {
+            let stop = self.distance_stop(rect, p);
+            let Some(g) = &mut self.cur.gesture else {
+                return;
+            };
+            g.stop = None;
+            if let Some((s, v)) = stop {
+                g.live = Some(serde_json::Value::from(s));
+                g.stop = Some(v);
+            }
+        }
+        let Some(g) = &mut self.cur.gesture else {
+            return;
+        };
         // 面の上の点を決める手順: 選んだ面の外(何もない所・別の面)のクリックは受け付けない。
         // 平面に写すと面の外の点にも穴ができ、形が変わらないまま確定してしまうため
         // (吸い付く点は面の縁にあるので、吸い付いていれば受け付ける)
@@ -263,6 +279,62 @@ impl Workspace {
                 None => {}
             }
         }
+    }
+
+    /// 距離の手順([`kmb_core::Handle::stop_key`] のあるもの)で、画面の点 `p` の下の平らな面で
+    /// 止められるなら、その面の平面までの距離(輪郭の重心から押し出す向きに、符号つき)と相手の値。
+    /// 輪郭と同じ平面にある面(輪郭を描いた面など)と、押し出す向きに沿う面(横の壁)は止められない
+    /// ので除く。数字を打っている間は除く(打った値が先)。
+    pub(crate) fn distance_stop(
+        &mut self,
+        rect: Rect,
+        p: Pos2,
+    ) -> Option<(f64, serde_json::Value)> {
+        let g = self.cur.gesture.as_ref()?;
+        let h = g.current()?;
+        let kmb_core::Gesture::Distance { origin, dir } = h.gesture else {
+            return None;
+        };
+        if h.stop_key.is_none() || !g.typed.trim().is_empty() {
+            return None;
+        }
+        let mut hit = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p)?;
+        // 計算が失敗している機能の面は、その面を持つ計算できた前の機能の面として読む
+        if !matches!(
+            self.output(hit.feature, "body"),
+            Some(kmb_core::Value::Shape(_))
+        ) {
+            hit.feature = self.face_owner(&hit.face)?;
+        }
+        let plane = match &g.stop_seen {
+            Some((seen, plane)) if *seen == hit => *plane,
+            _ => {
+                let plane = kmb_core::Context {
+                    picked: Some(&hit),
+                    ..self.context()
+                }
+                .picked_plane();
+                if let Some(g) = &mut self.cur.gesture {
+                    g.stop_seen = Some((hit.clone(), plane));
+                }
+                plane
+            }
+        }?;
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let len = dot(dir, dir).sqrt();
+        let along = dot(dir, plane.normal);
+        // 面の法線が押し出す向きと 84° 以上ずれる(横の壁に近い)なら止めない
+        if along.abs() < 0.1 * len {
+            return None;
+        }
+        let s = dot([0, 1, 2].map(|i| plane.point[i] - origin[i]), plane.normal) / along;
+        if (s * len).abs() < 1e-3 {
+            return None;
+        }
+        Some((
+            s,
+            serde_json::json!({"feature": hit.feature.0, "face": hit.face}),
+        ))
     }
 
     /// 押し出しを直している間、押し出す輪郭を青く塗る。
@@ -586,6 +658,12 @@ impl Workspace {
             }
             if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
                 let mut text = gesture::describe_for(h, v);
+                // 止める面に載せている間は、どの面までかを添える
+                if let Some(face) = g.stop.as_ref().filter(|_| typed.is_none())
+                    && let Some(face) = face["face"].as_str()
+                {
+                    text = format!("{}まで {text}", self.face_label(face));
+                }
                 if let Some(op) = op {
                     text = format!("{text}({})", op.label());
                 }
