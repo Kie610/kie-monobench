@@ -78,7 +78,7 @@ fn press_pull_sits_in_modify_on_q_and_pushes_a_flat_face_into_a_join() {
         .find(|g| g.items.iter().any(|i| i.key == PRESS_PULL))
         .unwrap();
     assert_eq!(group.name, "修正");
-    // 上と側面を一緒に選ぶと平面が違うので、押し出さずに理由を出す
+    // 上と側面を一緒に選んでも、平面ごとの向きへ押し出せる
     click(&mut ws, [15.0, 10.0, 10.0], PickFilter::FACE);
     let Hit::Face(top) = ws
         .hit_at(rect(), at(&ws, [15.0, 10.0, 10.0]), PickFilter::FACE)
@@ -88,11 +88,7 @@ fn press_pull_sits_in_modify_on_q_and_pushes_a_flat_face_into_a_join() {
     };
     click(&mut ws, [15.0, 0.0, 5.0], PickFilter::FACE);
     ws.pick_hit(Some(Hit::Face(top)), true, false);
-    assert!(
-        matches!(ws.press_pull_target(), PressPull::Refuse(ref m) if m.contains("同じ平面")),
-        "{:?}",
-        ws.press_pull_target()
-    );
+    assert_eq!(ws.press_pull_target(), PressPull::Extrude);
     click(&mut ws, [15.0, 10.0, 10.0], PickFilter::FACE);
     assert_eq!(ws.press_pull_target(), PressPull::Extrude);
     let n = ws.cur.work.doc().data().features.len();

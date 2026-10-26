@@ -995,8 +995,7 @@ fn picking_flat_faces_of_two_bodies_stops_but_different_planes_extrude() {
         }
         other => panic!("上と下の面を押し出さない: {other:?}"),
     }
-    for (mut doc, top, also, word) in
-        [(two, pick(p, "end"), vec![pick(post, "end")], "1 つのボディ")]
+    let (mut doc, top, also, word) = (two, pick(p, "end"), vec![pick(post, "end")], "1 つのボディ");
     {
         let report = doc.recompute(&reg, k.as_ref());
         let cx = Context {
