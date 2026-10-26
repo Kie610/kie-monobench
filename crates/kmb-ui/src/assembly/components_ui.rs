@@ -484,6 +484,8 @@ impl Workspace {
                 ui.separator();
             }
             self.component_menu(ui, &c, shown, &all);
+            ui.separator();
+            self.branch_menu(ui, Some(id));
         });
         if !open {
             return;

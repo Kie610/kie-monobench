@@ -1005,3 +1005,171 @@ fn the_browser_tree_and_eyes_come_back_on_reopen_and_find_opens_folded_rows() {
     assert_eq!(again.doc_view(), Default::default());
     std::fs::remove_dir_all(&d).ok();
 }
+
+/// 3D のビューで選んだボディの行を、ブラウザで見せる(10-25 u3): 閉じていた親の枝がひとりでに開き、
+/// 行を見える所まで送って光らせる。選びを外すと、ひとりでに開いた枝だけが閉じる(自分で開き直した
+/// 枝は開いたまま)。ひとりでに開いた枝は、見え方の覚えには閉じたまま書く。
+#[test]
+fn picking_a_body_in_3d_opens_its_rows_and_closes_them_when_unpicked() {
+    use crate::browser_ui::tree_key;
+    let mut ws = two_plates();
+    let roots = ws.body_roots();
+    let (boxed, lid) = (roots[0].1, roots[1].1);
+    let c = make_component(&mut ws, &[lid], "蓋の部品", None).expect("作れる");
+    ws.wait();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 700.0));
+    ws.cur.camera.fit(&ws.cur.scene, rect);
+    let at = |ws: &Workspace, p: [f32; 3]| ws.cur.camera.project(p, rect).0;
+    let click = |p: egui::Pos2| crate::view3d::ViewEvents {
+        click: Some(p),
+        ..Default::default()
+    };
+    let none = egui::Modifiers::NONE;
+    let (part, bodies) = (tree_key(("component", c)), tree_key("ボディ"));
+    ws.cur.tree_open.insert(part.clone(), false);
+    ws.cur.tree_open.insert(bodies.clone(), false);
+    // 部品の中の蓋の上の面を押すと、部品の行が開き、蓋の行が光る。ボディのまとまりは閉じたまま
+    let top = at(&ws, [55.0, 10.0, 2.0]);
+    ws.pick_events_with(&click(top), rect, none);
+    assert_eq!(ws.selected_bodies(), vec![lid]);
+    assert_eq!(ws.cur.tree_open.get(&part), Some(&true));
+    assert_eq!(ws.cur.tree_open.get(&bodies), Some(&false));
+    assert_eq!(ws.cur.found_scroll, Some(crate::Found::Browser(lid)));
+    assert_eq!(
+        ws.doc_view().open.get(&part),
+        Some(&false),
+        "ひとりでに開いた枝は覚えない"
+    );
+    // 箱を押すと、蓋の部品は閉じて戻り、ボディのまとまりが開く
+    let box_top = at(&ws, [15.0, 10.0, 10.0]);
+    ws.pick_events_with(&click(box_top), rect, none);
+    ws.settle_auto_open();
+    assert_eq!(ws.selected_bodies(), vec![boxed]);
+    assert_eq!(ws.cur.tree_open.get(&part), Some(&false));
+    assert_eq!(ws.cur.tree_open.get(&bodies), Some(&true));
+    // 自分で閉じて開き直した枝は、選びを外しても開いたまま
+    ws.cur.tree_open.insert(bodies.clone(), false);
+    ws.settle_auto_open();
+    ws.cur.tree_open.insert(bodies.clone(), true);
+    ws.settle_auto_open();
+    ws.pick_events_with(&click(egui::pos2(3.0, 3.0)), rect, none);
+    ws.settle_auto_open();
+    assert!(ws.selected_bodies().is_empty());
+    assert_eq!(ws.cur.tree_open.get(&bodies), Some(&true));
+    // 蓋を選んで外すと、開いた部品の行が閉じて戻る
+    ws.pick_events_with(&click(top), rect, none);
+    assert_eq!(ws.cur.tree_open.get(&part), Some(&true));
+    ws.pick_events_with(&click(egui::pos2(3.0, 3.0)), rect, none);
+    ws.settle_auto_open();
+    assert_eq!(ws.cur.tree_open.get(&part), Some(&false));
+    assert!(ws.cur.tree_auto.is_empty());
+}
+
+/// ブラウザの行の右クリックの「下を全部開く」「下を全部閉じる」(10-25 u4)。部品の行ならその下の部品、
+/// 文書の行なら木の全体。閉じる時は押した行を開いたままにする。
+#[test]
+fn open_and_close_everything_below_a_row_from_its_menu() {
+    use crate::browser_ui::tree_key;
+    let mut ws = two_plates();
+    let lid = ws.body_roots()[1].1;
+    let outer = make_component(&mut ws, &[lid], "外", None).expect("外");
+    let inner = make_component(&mut ws, &[lid], "中", Some(outer)).expect("中");
+    ws.wait();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 900.0))
+        .with_step_dt(0.05)
+        .with_max_steps(40)
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let open = |h: &Harness<'_, Workspace>, k: &String| h.state().cur.tree_open.get(k).copied();
+
+    let (doc, o, i) = (
+        tree_key("doc"),
+        tree_key(("component", outer)),
+        tree_key(("component", inner)),
+    );
+    h.get_by_label("外").click_secondary();
+    h.run();
+    h.get_by_label("下を全部閉じる").click();
+    h.run();
+    assert_eq!(open(&h, &i), Some(false), "下の部品を閉じる");
+    assert_eq!(open(&h, &o), None, "押した行は開いたまま");
+    assert!(h.query_by_label("ボディ2").is_none(), "中の部品の蓋は隠れる");
+    // 文書の行で木の全体を開く
+    doc_row(&h).click_secondary();
+    h.run();
+    h.get_by_label("下を全部開く").click();
+    h.run();
+    for k in [&doc, &o, &i, &tree_key("origin"), &tree_key("ボディ")] {
+        assert_eq!(open(&h, k), Some(true), "{k} を開く");
+    }
+    h.get_by_label("ボディ2");
+    // 文書の行で全体を閉じると、文書の直下だけが並ぶ
+    doc_row(&h).click_secondary();
+    h.run();
+    h.get_by_label("下を全部閉じる").click();
+    h.run();
+    assert_eq!(open(&h, &doc), Some(true));
+    for k in [&o, &i, &tree_key("origin"), &tree_key("ボディ")] {
+        assert_eq!(open(&h, k), Some(false), "{k} を閉じる");
+    }
+    h.get_by_label("外");
+    assert!(h.query_by_label("ボディ1").is_none());
+}
+
+/// ブラウザの文書の行(同じ名前のタブより下にある)。
+fn doc_row<'a>(h: &'a Harness<'static, Workspace>) -> egui_kittest::Node<'a> {
+    h.query_all_by_label("(無題)")
+        .max_by(|a, b| a.rect().top().total_cmp(&b.rect().top()))
+        .expect("文書の行")
+}
+
+/// 部品を作業中(アクティブ)にしている間、囲み選択は作業中の部品の物だけを選ぶ(10-25 u10)。
+/// 外の物は 1 つずつ押せば選べる。
+#[test]
+fn a_box_selection_skips_what_is_outside_the_active_component() {
+    let mut ws = two_plates();
+    let roots = ws.body_roots();
+    let (boxed, lid) = (roots[0].1, roots[1].1);
+    let c = make_component(&mut ws, &[lid], "蓋の部品", None).expect("作れる");
+    ws.wait();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 700.0));
+    ws.cur.camera.fit(&ws.cur.scene, rect);
+    let all = crate::view3d::ViewEvents {
+        boxed: Some(rect.shrink(1.0)),
+        ..Default::default()
+    };
+    let none = egui::Modifiers::NONE;
+    let bodies_of = |ws: &Workspace| -> Vec<FeatureId> {
+        let mut v: Vec<FeatureId> = ws
+            .picked_faces()
+            .iter()
+            .map(|p| ws.body_root(p.feature))
+            .collect();
+        v.sort();
+        v.dedup();
+        v
+    };
+    // アクティブでなければ両方の面が入る
+    ws.pick_events_with(&all, rect, none);
+    let mut both = vec![boxed, lid];
+    both.sort();
+    assert_eq!(bodies_of(&ws), both);
+    // 蓋の部品をアクティブにすると、蓋の面だけ
+    ws.activate_component(Some(c));
+    ws.pick_events_with(&all, rect, none);
+    assert_eq!(bodies_of(&ws), vec![lid]);
+    assert!(
+        ws.win.message.as_deref().is_some_and(|m| m.contains("押せば選べます")),
+        "{:?}",
+        ws.win.message
+    );
+    // 外の箱は押せば選べる
+    let p = ws.cur.camera.project([15.0, 10.0, 10.0], rect).0;
+    let click = crate::view3d::ViewEvents {
+        click: Some(p),
+        ..Default::default()
+    };
+    ws.pick_events_with(&click, rect, egui::Modifiers::SHIFT);
+    assert_eq!(bodies_of(&ws), both);
+}

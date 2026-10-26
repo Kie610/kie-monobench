@@ -11,10 +11,12 @@ impl Workspace {
         let c = &self.cur;
         let mut collapsed: Vec<u64> = c.collapsed.iter().copied().collect();
         collapsed.sort();
-        DocView {
-            open: c.tree_open.clone(),
-            collapsed,
+        // ひとりでに開いた枝は閉じたまま覚える(開き直しても開かない。覚え直しも要らない)
+        let mut open = c.tree_open.clone();
+        for k in &c.tree_auto {
+            open.insert(k.clone(), false);
         }
+        DocView { open, collapsed }
     }
 
     /// 文書を入れ替えた後に、その文書の前の見え方に戻す(覚えていなければ既定)。
@@ -27,6 +29,7 @@ impl Workspace {
             _ => DocView::default(),
         };
         self.cur.tree_open = v.open.clone();
+        self.cur.tree_auto.clear();
         self.cur.collapsed = v.collapsed.iter().copied().collect();
         self.refresh_hidden();
         self.cur.view_saved = self.doc_view();

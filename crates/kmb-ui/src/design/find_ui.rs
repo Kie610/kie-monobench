@@ -69,11 +69,25 @@ impl Workspace {
     /// ボディのまとまり、ボディの入っている部品と親の部品を開く(10-26 b1)。
     pub(crate) fn find_in_browser(&mut self, feature: FeatureId) {
         let root = self.body_root(feature);
-        self.cur.found = Some((Found::Browser(root), Instant::now()));
-        self.cur.found_scroll = Some(Found::Browser(root));
+        self.glow_in_browser(root);
         self.win.layout.browser_open = true;
         self.browser.query.clear();
         self.browser.kind = browser_ui::Kind::All;
+        // 探して開いた枝は、選びを外しても閉じない
+        for k in self.branches_to(root) {
+            self.cur.tree_auto.remove(&k);
+            self.cur.tree_open.insert(k, true);
+        }
+    }
+
+    /// ボディ `root` の行をブラウザで光らせ、次に描く時に見える所まで送る。
+    fn glow_in_browser(&mut self, root: FeatureId) {
+        self.cur.found = Some((Found::Browser(root), Instant::now()));
+        self.cur.found_scroll = Some(Found::Browser(root));
+    }
+
+    /// ボディ `root` の行を見せるのに開く枝の鍵(文書と、ボディのまとまりか、入っている部品と親の部品)。
+    fn branches_to(&self, root: FeatureId) -> Vec<String> {
         let mut keys = vec![browser_ui::tree_key("doc")];
         let data = self.cur.work.doc().data();
         let mut at = data.component_of(root);
@@ -86,8 +100,107 @@ impl Workspace {
             keys.push(browser_ui::tree_key(("component", c.id)));
             at = c.parent.and_then(|p| data.component(p));
         }
-        for k in keys {
-            self.cur.tree_open.insert(k, true);
+        keys
+    }
+
+    /// 選んでいるボディ(最初に作った機能)。3D のビューで選んだ面・辺・頂点のボディと、選んでいる機能の
+    /// ボディ。指しているだけの物は入れない。
+    pub(crate) fn selected_bodies(&self) -> Vec<FeatureId> {
+        self.bodies_picked(true)
+    }
+
+    /// 3D のビューで選んだボディ(ボディを選ぶ時は選んでいる機能も)。
+    pub(crate) fn bodies_picked_in_view(&self) -> Vec<FeatureId> {
+        self.bodies_picked(self.win.pick_filter.body)
+    }
+
+    /// 面・辺・頂点の選びのボディと、`with_selection` なら選んでいる機能のボディ。
+    fn bodies_picked(&self, with_selection: bool) -> Vec<FeatureId> {
+        let c = &self.cur;
+        let selection = if with_selection {
+            self.selection()
+        } else {
+            Vec::new()
+        };
+        let mut features: Vec<FeatureId> = c
+            .picked
+            .iter()
+            .chain(&c.also_picked)
+            .map(|p| p.feature)
+            .chain(c.picked_edges.iter().map(|e| e.feature))
+            .chain(c.picked_vertices.iter().map(|v| v.feature))
+            .chain(selection)
+            .collect();
+        features.sort();
+        features.dedup();
+        let roots = self.body_roots();
+        let mut out: Vec<FeatureId> = Vec::new();
+        for r in features.into_iter().map(|f| self.body_root(f)) {
+            if roots.iter().any(|(_, x)| *x == r) && !out.contains(&r) {
+                out.push(r);
+            }
+        }
+        out
+    }
+
+    /// 3D のビューで新しく選んだボディの行を、ブラウザで見せる(10-25 u3)。閉じていた親の枝を
+    /// ひとりでに開き、行を見える所まで送って光らせる(開いた時だけ)。`before` は選ぶ前に 3D のビューで選んでいたボディ
+    /// ([`Self::bodies_picked_in_view`])。
+    /// ひとりでに開いた枝は、選びを外すと閉じる([`Self::settle_auto_open`])。
+    pub(crate) fn reveal_in_browser(&mut self, before: &[FeatureId]) {
+        use crate::Space;
+        if !matches!(
+            self.win.layout.space,
+            Space::Design | Space::Render | Space::Animation
+        ) {
+            return;
+        }
+        let now = self.bodies_picked_in_view();
+        let Some(&root) = now.iter().find(|r| !before.contains(r)) else {
+            return;
+        };
+        // 押して閉じた枝だけを開く(覚えの無い枝は既定で開いている)
+        let mut opened = false;
+        for k in self.branches_to(root) {
+            if self.cur.tree_open.get(&k) == Some(&false) {
+                self.cur.tree_open.insert(k.clone(), true);
+                self.cur.tree_auto.insert(k);
+                opened = true;
+            }
+        }
+        // 畳んだ所から出した行だけ光らせる(見えていた行は選びの印で分かる。押すたびに光らせて
+        // 描き直し続けない)。見える所へはいつも送る
+        if opened {
+            self.glow_in_browser(root);
+        } else {
+            self.cur.found_scroll = Some(Found::Browser(root));
+        }
+    }
+
+    /// ひとりでに開いた枝のうち、もう選んでいるボディを見せるのに要らない物を閉じて戻す(毎回描く前に)。
+    /// その間に自分で閉じた枝は、ひとりでに開いた物として覚えるのをやめる(開き直したら、自分で開いた物)。
+    pub(crate) fn settle_auto_open(&mut self) {
+        if self.cur.tree_auto.is_empty() {
+            return;
+        }
+        let open = &self.cur.tree_open;
+        self.cur.tree_auto.retain(|k| open.get(k) == Some(&true));
+        let keep: std::collections::BTreeSet<String> = self
+            .selected_bodies()
+            .into_iter()
+            .flat_map(|r| self.branches_to(r))
+            .collect();
+        let back: Vec<String> = self
+            .cur
+            .tree_auto
+            .iter()
+            .filter(|k| !keep.contains(*k))
+            .cloned()
+            .collect();
+        for k in back {
+            log::debug!("ひとりでに開いた枝 {k} を閉じて戻す");
+            self.cur.tree_auto.remove(&k);
+            self.cur.tree_open.insert(k, false);
         }
     }
 

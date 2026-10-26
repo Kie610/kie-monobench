@@ -1,0 +1,19 @@
+# ブラウザの行の右クリックの「下を全部開く」「下を全部閉じる」(10-25 u4)。前は木を 1 段ずつ開け閉め
+# するしかなかった。部品の行なら中の部品、文書の行なら木の全体に効く(3D で選んだ行を開く u3 と
+# 囲み選択の u10 は kmb-ui の components_tests)。
+#! sample part
+
+rclick "ボディ1"
+click "新しい部品にする"
+wait
+expect "部品1" exists
+# 部品の行を閉じると中のボディが隠れ、右クリックの「下を全部開く」で開き直す
+click "部品1"
+wait
+rclick "部品1"
+expect "下を全部閉じる" exists
+shot 部品の行の右クリック
+click "下を全部開く"
+wait
+expect "下を全部開く" missing
+shot 下を全部開いた後

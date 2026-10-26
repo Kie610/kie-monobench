@@ -537,7 +537,7 @@ impl Workspace {
                 None => self.set_hidden(f.id, !own_hidden),
             }
         }
-        // 「ブラウザ内を検索」で探したボディは、しばらく差し色の枠で光らせ、見える所まで送る。
+        // 「ブラウザ内を検索」で探したボディは、しばらく差し色の枠で光らせる。
         // AI が足した・直した機能(とそのボディ)の行も同じ枠で光らせる
         if let Some(glow) = body
             .and_then(|root| self.found_glow(ui.ctx(), Found::Browser(root)))
@@ -550,15 +550,16 @@ impl Workspace {
                 Stroke::new(2.0, l.ws().gamma_multiply(glow)),
                 egui::StrokeKind::Inside,
             );
-            if let Some(root) = body
-                && self
-                    .cur
-                    .found_scroll
-                    .take_if(|x| *x == Found::Browser(root))
-                    .is_some()
-            {
-                r.scroll_to_me(Some(egui::Align::Center));
-            }
+        }
+        // 探した・3D で選んだボディの行は、見える所まで送る(光らせない時も)
+        if let Some(root) = body
+            && self
+                .cur
+                .found_scroll
+                .take_if(|x| *x == Found::Browser(root))
+                .is_some()
+        {
+            r.scroll_to_me(Some(egui::Align::Center));
         }
         // 加工の行はドラッグで並べ替える・別のセットアップへ移す(セットアップの行は落とす所)
         let r = if cam && self.is_operation(f.id) {
@@ -686,6 +687,8 @@ impl Workspace {
                 self.activate_component(None);
                 ui.close();
             }
+            ui.separator();
+            self.branch_menu(ui, None);
             ui.separator();
             if crate::theme::menu_row(ui, "table", "設計の属性…", "", true).clicked() {
                 self.open_properties();
@@ -924,6 +927,68 @@ impl Workspace {
                         .color(self.win.look.pal.ink3),
                     );
                 });
+        }
+    }
+
+    /// 右クリックの「下を全部開く」「下を全部閉じる」(10-25 u4)。`at` は部品(`None` なら文書の行で、木の全体)。
+    pub(crate) fn branch_menu(&mut self, ui: &mut egui::Ui, at: Option<u64>) {
+        if crate::theme::menu_row(ui, "chev", "下を全部開く", "", true)
+            .on_hover_text("この行と、下の枝をすべて開く")
+            .clicked()
+        {
+            self.set_branches_under(at, true);
+            ui.close();
+        }
+        if crate::theme::menu_row(ui, "chevr", "下を全部閉じる", "", true)
+            .on_hover_text("下の枝をすべて閉じる(この行は開いたまま、すぐ下の行だけが並ぶ)")
+            .clicked()
+        {
+            self.set_branches_under(at, false);
+            ui.close();
+        }
+    }
+
+    /// 部品 `at`(`None` なら文書の行)の下の枝を全部開く・閉じる(10-25 u4)。開く時はその行も開く。
+    /// 閉じる時はその行を開いたままにして、すぐ下の行が並ぶようにする。
+    pub(crate) fn set_branches_under(&mut self, at: Option<u64>, open: bool) {
+        let data = self.cur.work.doc().data();
+        let (own, mut keys, components) = match at {
+            None => (
+                tree_key("doc"),
+                [
+                    "origin",
+                    "named_views",
+                    "motion_studies",
+                    "contact_sets",
+                    "スケッチ",
+                    "ボディ",
+                    "そのほかの機能",
+                ]
+                .map(tree_key)
+                .to_vec(),
+                data.components.iter().map(|c| c.id).collect(),
+            ),
+            Some(c) => (
+                tree_key(("component", c)),
+                Vec::new(),
+                data.component_tree(c)
+                    .into_iter()
+                    .filter(|k| *k != c)
+                    .collect::<Vec<u64>>(),
+            ),
+        };
+        keys.extend(components.into_iter().map(|c| tree_key(("component", c))));
+        if open {
+            keys.push(own);
+        }
+        log::info!(
+            "ブラウザの枝 {} 個を{}",
+            keys.len(),
+            if open { "開く" } else { "閉じる" }
+        );
+        for k in keys {
+            self.cur.tree_auto.remove(&k);
+            self.cur.tree_open.insert(k, open);
         }
     }
 
