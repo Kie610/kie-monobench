@@ -23,11 +23,12 @@ pub(crate) enum Tab {
 impl Tab {
     const ALL: [Tab; 3] = [Tab::General, Tab::Design, Tab::Machining];
 
-    fn label(self) -> &'static str {
+    /// 名前の文言の ID(`kmb-i18n` の `settings.ftl`)。
+    fn text_id(self) -> &'static str {
         match self {
-            Tab::General => "一般",
-            Tab::Design => "設計",
-            Tab::Machining => "加工",
+            Tab::General => "settings-tab-general",
+            Tab::Design => "settings-tab-design",
+            Tab::Machining => "settings-tab-machining",
         }
     }
 }
@@ -69,7 +70,8 @@ fn sec_words(s: &Sec) -> (&'static str, &'static str) {
     match s {
         Sec::Appearance => (
             "画面",
-            "テーマ 明るさ 色 色覚 ハイコントラスト UI の大きさ 字の大きさ アイコンの大きさ \
+            "言語 表示の言語 English 英語 中文 中国語 한국어 韓国語 language \
+             テーマ 明るさ 色 色覚 ハイコントラスト UI の大きさ 字の大きさ アイコンの大きさ \
              部品の詰め具合 角の丸み 字の書体 フォント 動き アニメーション 見本 \
              ツールバー ボタンの名前 アイコンだけ",
         ),
@@ -136,48 +138,73 @@ pub(crate) fn module_page(id: &str, group: &str) -> String {
 }
 
 /// 頁の並び(モジュールの設定 `groups` の id・見出し・作業空間から作る)。
-pub(crate) fn pages(groups: &[(String, String, String)]) -> Vec<Page> {
+/// 頁の一覧。手で書いた頁の名前は文言の ID で、`text` で今の言語の文にする(モジュールの頁は
+/// 設定が宣言した名前のまま)。
+pub(crate) fn pages(
+    groups: &[(String, String, String)],
+    text: &dyn Fn(&str) -> String,
+) -> Vec<Page> {
     let page = |tab, id: &str, title: &str, secs| Page {
         tab,
         id: id.to_string(),
-        title: title.to_string(),
+        title: text(title),
         secs,
     };
     let mut out = vec![
         page(
             Tab::General,
             "general/appearance",
-            "画面",
+            "settings-page-appearance",
             vec![Sec::Appearance],
         ),
         page(
             Tab::General,
             "general/input",
-            "マウスとキー",
+            "settings-page-input",
             vec![Sec::Mouse, Sec::Keys],
         ),
         page(
             Tab::General,
             "general/files",
-            "ファイル",
+            "settings-page-files",
             vec![Sec::Autosave, Sec::Import],
         ),
-        page(Tab::General, "general/render", "描画", vec![Sec::Render]),
-        page(Tab::General, "general/units", "単位", vec![Sec::Units]),
+        page(
+            Tab::General,
+            "general/render",
+            "settings-page-render",
+            vec![Sec::Render],
+        ),
+        page(
+            Tab::General,
+            "general/units",
+            "settings-page-units",
+            vec![Sec::Units],
+        ),
         page(
             Tab::General,
             "general/new_doc",
-            "新規デザイン",
+            "settings-page-new-doc",
             vec![Sec::NewDoc],
         ),
         page(
             Tab::General,
             "general/arrangement",
-            "画面の配置",
+            "settings-page-arrangement",
             vec![Sec::Arrangement],
         ),
-        page(Tab::General, "general/ai", "AI との接続", vec![Sec::Ai]),
-        page(Tab::Design, "design/view", "3D の表示", vec![Sec::View3d]),
+        page(
+            Tab::General,
+            "general/ai",
+            "settings-page-ai",
+            vec![Sec::Ai],
+        ),
+        page(
+            Tab::Design,
+            "design/view",
+            "settings-page-view3d",
+            vec![Sec::View3d],
+        ),
     ];
     // モジュールの設定ごとに 1 頁(設計: スケッチの表示・作る時、加工: 機械・ポスト・シミュレーション・加工の既定)
     for (id, label, group) in groups {
@@ -186,12 +213,12 @@ pub(crate) fn pages(groups: &[(String, String, String)]) -> Vec<Page> {
         } else {
             Tab::Design
         };
-        out.push(page(
+        out.push(Page {
             tab,
-            &module_page(id, group),
-            label,
-            vec![Sec::Module(id.clone())],
-        ));
+            id: module_page(id, group),
+            title: label.clone(),
+            secs: vec![Sec::Module(id.clone())],
+        });
     }
     out
 }
@@ -265,10 +292,19 @@ impl Workspace {
                 .iter()
                 .map(|g| (g.id.clone(), g.label.clone(), g.group.clone()))
                 .collect::<Vec<_>>(),
+            &|id| self.win.t(id),
         );
+        let tab_names = Tab::ALL.map(|t| (t, self.win.t(t.text_id())));
+        let tab_name = |t: Tab| {
+            tab_names
+                .iter()
+                .find(|(x, _)| *x == t)
+                .map_or(String::new(), |(_, n)| n.clone())
+        };
+        let search_hint = self.win.t("settings-search-hint");
         let mut open = true;
         let mut change = None;
-        egui::Window::new("設定")
+        egui::Window::new(self.win.t("settings-window-title"))
             .id(egui::Id::new("settings"))
             .collapsible(false)
             .resizable(true)
@@ -277,7 +313,7 @@ impl Workspace {
             .show(ctx, |ui| {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.settings.query)
-                        .hint_text("設定を探す(例「字」「キー」「投影」)")
+                        .hint_text(search_hint.as_str())
                         .desired_width(f32::INFINITY),
                 );
                 let query = self.settings.query.trim().to_string();
@@ -292,7 +328,7 @@ impl Workspace {
                             if !all.iter().any(|p| p.tab == t) {
                                 continue;
                             }
-                            if ui.selectable_label(cur.tab == t, t.label()).clicked()
+                            if ui.selectable_label(cur.tab == t, tab_name(t)).clicked()
                                 && cur.tab != t
                                 && let Some(p) = all.iter().find(|p| p.tab == t)
                             {
@@ -314,7 +350,13 @@ impl Workspace {
                             (!secs.is_empty()).then_some((p, secs))
                         })
                         .collect();
-                    ui.weak(format!("「{query}」に当たる設定: {} 頁", found.len()));
+                    ui.weak(self.win.t_with(
+                        "settings-search-found",
+                        &[
+                            ("query", query.as_str().into()),
+                            ("count", found.len().into()),
+                        ],
+                    ));
                     ui.separator();
                     found
                 };
@@ -359,7 +401,7 @@ impl Workspace {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                                 for (p, secs) in &shown {
                                     if !query.is_empty() {
-                                        ui.strong(format!("{} › {}", p.tab.label(), p.title));
+                                        ui.strong(format!("{} › {}", tab_name(p.tab), p.title));
                                     }
                                     for s in secs {
                                         // 1 節だけの頁は、頁の名前と同じ見出しを重ねて出さない
@@ -769,7 +811,9 @@ mod tests {
             g("demo.thing", "見本", "cad"),
             g("probe.cycle", "測りの既定", "cam"),
         ];
-        let p = pages(&groups);
+        let c = kmb_i18n::Catalog::with_os(kmb_i18n::Lang::Ja);
+        let ja = |id: &str| c.text(kmb_i18n::Lang::Ja, id);
+        let p = pages(&groups, &ja);
         let find = |id: &str| p.iter().find(|x| x.id == id).unwrap();
         assert_eq!(find("machining/cam.machine").tab, Tab::Machining);
         assert_eq!(find("machining/cam.post").title, "ポスト");
@@ -783,7 +827,8 @@ mod tests {
         let ids: std::collections::HashSet<&String> = p.iter().map(|x| &x.id).collect();
         assert_eq!(ids.len(), p.len());
         // モジュールが無ければ、空の頁は出さない
-        let bare = pages(&[]);
+        assert_eq!(find("general/appearance").title, "画面");
+        let bare = pages(&[], &ja);
         assert!(bare.iter().all(|x| !x.secs.is_empty()));
         assert!(!bare.iter().any(|x| x.tab == Tab::Machining));
     }

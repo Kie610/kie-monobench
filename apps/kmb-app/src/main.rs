@@ -587,6 +587,7 @@ fn main() -> Result<(), String> {
                 log::info!("描画の API: {note}");
                 workspace.set_renderer_note(note);
             }
+            workspace.use_os_language();
             Ok(Box::new(App {
                 workspace: workspace.into_shared(),
                 starting: data_dir,
