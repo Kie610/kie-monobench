@@ -706,11 +706,23 @@ pub fn checked_boolean(
     cur: ShapeHandle,
     tool: ShapeHandle,
 ) -> Result<ShapeHandle, kmb_core::KernelError> {
+    checked_boolean_with(kernel, op, cur, tool, "道具のボディ")
+}
+
+/// [`checked_boolean`] と同じ。交差が当たらない時の文で、道具を `tool_label` で指す
+/// (別のボディを道具にする機能が、そのボディと部品の名前を言うのに使う。[`tool_body_label`])。
+pub fn checked_boolean_with(
+    kernel: &dyn kmb_core::Kernel,
+    op: BooleanOp,
+    cur: ShapeHandle,
+    tool: ShapeHandle,
+    tool_label: &str,
+) -> Result<ShapeHandle, kmb_core::KernelError> {
     let out = kernel.boolean(op, cur, tool)?;
     if is_empty(kernel, out) && !is_empty(kernel, cur) {
         return Err(kmb_core::KernelError::Failed(match op {
             BooleanOp::Intersect => {
-                "交差すると何も残りません(道具のボディが対象に当たっていません)".into()
+                format!("交差すると何も残りません({tool_label}が対象に当たっていません)")
             }
             _ => "形の計算に失敗しました(結果が空になりました。重なりかけた面がないか見てください)"
                 .into(),
@@ -734,6 +746,16 @@ pub fn checked_boolean(
         Err(kmb_core::KernelError::Failed(format!(
             "結果の形が壊れています(体積 {v0:.3} → {v1:.3})"
         )))
+    }
+}
+
+/// 道具にするボディ `body` を誤りの文で指す言い方: 「道具のボディ「ボディ3」」、部品に入って
+/// いれば「(部品「ふた」)」を添える。別の部品のボディを道具にして外れた時に、どれかが分かる。
+pub fn tool_body_label(ctx: &EvalCtx<'_>, body: FeatureId) -> String {
+    let name = ctx.body_label(body);
+    match ctx.component_label(body) {
+        Some(c) => format!("道具のボディ「{name}」(部品「{c}」)"),
+        None => format!("道具のボディ「{name}」"),
     }
 }
 

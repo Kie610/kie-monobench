@@ -515,6 +515,7 @@ pub(crate) fn run(
                     outputs: &outputs,
                     kernel,
                     registry,
+                    data,
                 };
                 evaluated += 1;
                 let result = feature.evaluate(&mut ctx);
@@ -701,6 +702,7 @@ fn run_jobs(
                 outputs: ready,
                 kernel,
                 registry,
+                data,
             };
             feature.evaluate(&mut ctx).map_err(|e| e.to_string())
         };

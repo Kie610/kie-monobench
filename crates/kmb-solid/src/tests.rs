@@ -374,6 +374,66 @@ fn an_intersection_that_leaves_nothing_stops_and_keeps_the_body() {
     }
 }
 
+// 確かめること: 道具をいくつも当てる交差で、当たらない道具があれば、その道具のボディの名前と
+// 入っている部品の名前を誤りの文で言う(当たった道具の名前は言わない)
+#[test]
+fn an_intersection_that_misses_names_the_tool_body_and_its_component() {
+    let k = TestKernel::new();
+    let reg = registry();
+    let ext = |b: &mut DocBuilder, name: &str, x: f64| {
+        let s = rect_sketch(b, SketchPlane::Xy, x, 0.0, 20.0, 20.0);
+        b.feature(
+            EXTRUDE,
+            name,
+            Extrude {
+                profile: Some(s),
+                distance: "4 mm".into(),
+                operation: Operation::New,
+                ..Default::default()
+            },
+        )
+    };
+    let mut b = DocBuilder::new();
+    let a = ext(&mut b, "a", 0.0);
+    let hit = ext(&mut b, "当たる", 10.0);
+    let miss = ext(&mut b, "外れる", 100.0);
+    let last = b.feature(
+        BOOLEAN,
+        "共通",
+        BooleanFeature {
+            target: a,
+            tool: vec![hit, miss],
+            operation: Operation::Intersect,
+            keep_tools: false,
+        },
+    );
+    let mut doc = b.finish("外れた道具の名前");
+    let id = doc.alloc_group_id();
+    doc.apply(kmb_core::Transaction::new(
+        "部品",
+        vec![Op::SetComponents {
+            components: vec![kmb_core::Component {
+                id,
+                name: "ふた".into(),
+                parent: None,
+                bodies: vec![miss],
+            }],
+        }],
+    ))
+    .unwrap();
+    let report = doc.recompute(&reg, &*k);
+    match report.feature(last).unwrap() {
+        FeatureStatus::Error { message } => {
+            assert!(
+                message.contains("道具のボディ「ボディ3」(部品「ふた」)が対象に当たっていません"),
+                "{message}"
+            );
+            assert!(!message.contains("ボディ2"), "{message}");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
 #[test]
 fn errors_are_reported_not_panicked() {
     let k = TestKernel::new();

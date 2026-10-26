@@ -349,6 +349,8 @@ pub struct EvalCtx<'a> {
     pub(crate) outputs: &'a HashMap<FeatureId, Outputs>,
     pub(crate) kernel: &'a dyn Kernel,
     pub(crate) registry: &'a Registry,
+    /// 計算している文書。誤りの文でボディ・部品を名前で指すためだけに読む
+    pub(crate) data: &'a crate::DocumentData,
 }
 
 impl EvalCtx<'_> {
@@ -420,5 +422,23 @@ impl EvalCtx<'_> {
         data: &crate::DocumentData,
     ) -> Result<crate::RecomputeReport, EvalError> {
         crate::recompute::recompute_nested(data, self.registry, self.kernel)
+    }
+
+    /// ボディ `body`(そのボディのどれかの機能)の名前: 付けた名前か「ボディN」
+    /// ([`crate::body_labels`]。ブラウザと同じ)。
+    ///
+    /// 誤りの文で、どのボディが原因かを言うのに使う。出力には入れない(名前を変えても、出力は
+    /// 作り直されない)。
+    pub fn body_label(&self, body: FeatureId) -> String {
+        crate::body_labels(self.data, self.registry, &[body])
+            .pop()
+            .unwrap_or_default()
+    }
+
+    /// ボディ `body` が入っている部品(すぐ外側の物)の名前。部品に入っていなければ無し。
+    /// [`EvalCtx::body_label`] と同じく、誤りの文だけに使う。
+    pub fn component_label(&self, body: FeatureId) -> Option<String> {
+        let root = crate::body_root(self.data, self.registry, body);
+        self.data.component_of(root).map(|c| c.name.clone())
     }
 }
