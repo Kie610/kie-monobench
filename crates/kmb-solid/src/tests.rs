@@ -1519,6 +1519,7 @@ fn extrude_to_a_face_stops_at_the_face_or_offset_from_it() {
             feature: post,
             face: face.into(),
             vertex: None,
+            datum: false,
         }),
         to_offset: off.map(|o| o.into()),
         operation: Operation::Join,

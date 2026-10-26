@@ -154,6 +154,7 @@ fn a_drafted_cut_to_a_face_leaves_no_skin_on_that_face() {
                 feature: plate,
                 face: format!("f{}:start", plate.0),
                 vertex: None,
+                datum: false,
             }),
             operation: Operation::Cut,
             target: Some(plate),

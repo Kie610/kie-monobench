@@ -457,6 +457,7 @@ fn a_revolve_and_an_extrude_can_stop_at_a_vertex() {
                     feature: block,
                     face: String::new(),
                     vertex: Some(vertex),
+                    datum: false,
                 });
                 b.feature(EXTRUDE, "頂点までの柱", e);
             }
