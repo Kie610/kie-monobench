@@ -129,6 +129,61 @@ fn the_extrude_button_asks_for_a_profile_when_nothing_is_selected() {
 }
 
 /// 円(半径 10)と、右半分に重ねた長方形(0〜25 × -5〜5)を 1 つのスケッチに描いた文書(前方後円墳)。
+#[test]
+fn re_picking_the_profile_before_ok_shows_the_first_sketch_again() {
+    // 作る途中(OK の前)に輪郭を別のスケッチへ選び替えると、足した時に隠したスケッチが出る。
+    // OK の後に選び替えても出し直さない
+    let part = kmb_samples::reference_part();
+    let mut ws = Workspace::new(part.doc, None, reg());
+    let s = ws
+        .document()
+        .data()
+        .feature(part.plate_sketch)
+        .unwrap()
+        .clone();
+    let mut copy = || {
+        ws.cur
+            .work
+            .add_feature(&s.type_id, None, s.data.clone())
+            .unwrap()
+    };
+    let (s2, s3) = (copy(), copy());
+    ws.after_change(Ok(()));
+    ws.wait();
+    ws.clear_selection();
+    ws.start_action(kmb_cad_extrude::EXTRUDE_SKETCH);
+    let pick = ws
+        .cur
+        .gesture
+        .as_ref()
+        .unwrap()
+        .current()
+        .unwrap()
+        .choices
+        .iter()
+        .find(|c| c.value["profile"] == serde_json::json!(s2.0))
+        .expect("足したスケッチの領域が候補にある")
+        .value
+        .clone();
+    ws.gesture_commit_step(serde_json::json!([pick]));
+    ws.gesture_commit_step(serde_json::json!(5.0));
+    let id = ws.creating().expect("作っている途中");
+    assert!(ws.is_own_hidden(s2));
+    let profile = |ws: &mut Workspace, sketch: FeatureId| {
+        let mut d = ws.document().data().feature(id).unwrap().data.clone();
+        d["profile"] = serde_json::json!(sketch.0);
+        d.as_object_mut().unwrap().remove("regions");
+        ws.set_feature_data(id, d);
+    };
+    profile(&mut ws, s3);
+    assert!(ws.is_own_hidden(s3));
+    assert!(!ws.is_own_hidden(s2), "選び替えた前のスケッチが隠れたまま");
+    assert!(!ws.is_hidden(s2), "3D に出ない");
+    ws.finish_edit();
+    profile(&mut ws, s2);
+    assert!(ws.is_own_hidden(s3), "OK の後に出し直した");
+}
+
 fn keyhole_document() -> kmb_core::Document {
     use kmb_core::{Document, FeatureEntry, Op, Transaction};
     let mut s = kmb_sketch::Sketch::default();

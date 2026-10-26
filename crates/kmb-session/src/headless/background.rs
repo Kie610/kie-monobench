@@ -107,6 +107,8 @@ impl Headless {
             active: Default::default(),
             recomputes: 0,
             hold: Hold::Off,
+            creating: None,
+            just_hidden: Default::default(),
         }
     }
 

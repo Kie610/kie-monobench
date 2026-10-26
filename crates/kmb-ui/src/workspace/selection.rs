@@ -128,6 +128,7 @@ impl Workspace {
     pub fn commit_creation(&mut self) {
         self.cur.focus_new.set(None);
         if let Some((id, _)) = self.cur.creating.take() {
+            self.cur.work.end_creation();
             // 作った後に続けて足していた手順(同じ穴を足す、など)も終える
             self.cur.gesture = None;
             if self.cur.editing == Some(id) {
@@ -141,6 +142,7 @@ impl Workspace {
     pub fn cancel_creation(&mut self) {
         self.cur.focus_new.set(None);
         if let Some((_, before)) = self.cur.creating.take() {
+            self.cur.work.end_creation();
             self.cur.gesture = None;
             self.cur.editing = None;
             self.cur.selected = None;
@@ -161,17 +163,19 @@ impl Workspace {
     /// 消えた機能を指したままの編集の状態を外す(取り消しなどで消えた時)。
     pub(crate) fn drop_stale_edit(&mut self) {
         let data = self.cur.work.doc().data();
-        if self.cur.creating.is_some_and(|(id, before)| {
+        let stale = self.cur.creating.is_some_and(|(id, before)| {
             data.feature(id).is_none() || self.cur.work.doc().undo_labels().len() < before
-        }) {
-            self.cur.creating = None;
-        }
+        });
         if self
             .cur
             .editing
             .is_some_and(|id| data.feature(id).is_none())
         {
             self.cur.editing = None;
+        }
+        if stale {
+            self.cur.creating = None;
+            self.cur.work.end_creation();
         }
     }
 
