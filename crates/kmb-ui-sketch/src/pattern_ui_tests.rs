@@ -39,11 +39,11 @@ fn four_circles_in_a_row() -> Harness<'static, Workspace> {
     h
 }
 
-/// 欄(DragValue)をクリックして値を打ち直し Enter。
+/// 式の欄をクリックして値を打ち直し Enter。
 fn retype(h: &mut Harness<'static, Workspace>, label: &str, nth: usize, value: &str) {
     let rect = {
         let nodes: Vec<_> = h
-            .query_all_by_role_and_label(Role::SpinButton, label)
+            .query_all_by_role_and_label(Role::TextInput, label)
             .collect();
         assert!(
             nodes.len() > nth,
@@ -185,50 +185,65 @@ fn dragging_the_original_brings_the_copies_along() {
     }
 }
 
-/// パターンの数の欄を引いている間は、ビューに作り直した見本を出し、文書はまだ変えない。
-/// 離すと見本の数で文書に入り、見本は消える(10-26 t3)。
+/// 数を入力している間は見本だけを更新し、Enter で文書へ入れる。
 #[test]
 fn dragging_the_count_shows_the_result_before_release() {
     let mut h = four_circles_in_a_row();
     click_at(&mut h, [8.52, 11.15]);
     h.run();
     let a = h
-        .query_all_by_role_and_label(Role::SpinButton, "数")
+        .query_all_by_role_and_label(Role::TextInput, "数")
         .next()
         .expect("数の欄")
         .rect()
         .center();
-    h.hover_at(a);
+    quick_click_px(&mut h, a);
     h.run();
-    h.event(egui::Event::PointerButton {
-        pos: a,
-        button: egui::PointerButton::Primary,
-        pressed: true,
-        modifiers: egui::Modifiers::NONE,
-    });
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
     h.run();
-    for k in 1..=10 {
-        h.event(egui::Event::PointerMoved(
-            a + egui::vec2(3.0 * k as f32, 0.0),
-        ));
-        h.run();
-    }
+    type_text(&mut h, "3 * 2");
+    h.run();
     let shown = editor(h.state_mut())
         .editor
         .pattern_ghost
         .as_ref()
         .map(|(_, s, _)| count_of(s, |e| matches!(e, Entity::Circle { .. })));
-    // 引いている途中: 見本は 4 より多く、文書は 4 のまま
-    assert!(shown.is_some_and(|n| n > 4), "見本が出ていない: {shown:?}");
+    assert_eq!(shown, Some(6));
     assert_eq!(circles(&h), 4);
-    h.event(egui::Event::PointerButton {
-        pos: a + egui::vec2(30.0, 0.0),
-        button: egui::PointerButton::Primary,
-        pressed: false,
-        modifiers: egui::Modifiers::NONE,
-    });
+    press_enter(&mut h);
     h.run();
-    h.run();
-    assert_eq!(Some(circles(&h)), shown);
+    assert_eq!(circles(&h), 6);
     assert!(editor(h.state_mut()).editor.pattern_ghost.is_none());
+    let data = serde_json::to_value(current_sketch(h.state())).unwrap();
+    assert_eq!(
+        data["patterns"][0]["expressions"]["directions"][0]["count"],
+        "3 * 2"
+    );
+}
+
+/// 台本からの入力も、欄の式と文書の単位を使う。
+#[test]
+fn a_script_enters_pattern_expressions_using_the_document_unit() {
+    let mut h = four_circles_in_a_row();
+    click_at(&mut h, [8.52, 11.15]);
+    h.run();
+    let batch = h
+        .state_mut()
+        .run_script(include_str!("../tests/ui/pattern-expressions.jcs"))
+        .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 15, "台本が終わらない");
+    }
+    assert_eq!(circles(&h), 5);
+    match &current_sketch(h.state()).patterns[0].def {
+        PatternDef::Rectangular(r) => assert!((r.directions[0].distance - 25.4).abs() < 1e-9),
+        other => panic!("{other:?}"),
+    }
+    kmb_core::set_display_unit(kmb_core::LengthUnit::Mm);
 }

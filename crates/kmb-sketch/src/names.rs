@@ -15,6 +15,10 @@ pub struct DimExpr<'a> {
     pub name: Option<&'a str>,
     pub expr: &'a str,
     pub angle: bool,
+    /// 個数は単位を付けず、整数と上限を確かめる。
+    pub count_max: Option<usize>,
+    /// パターンの距離は負で向きを反転できる。
+    pub signed: bool,
 }
 
 /// 寸法の式を計算する。同じスケッチの寸法の名前はその場で解き(循環は誤り)、ほかの名前は
@@ -63,7 +67,7 @@ pub fn eval_dims(
         let q = e
             .eval(&get)
             .map_err(|e| format!("{who} の寸法 `{}`: {e}", d.expr))?;
-        let q = match (q.dim.is_none(), d.angle) {
+        let q = match (q.dim.is_none() && d.count_max.is_none(), d.angle) {
             (true, true) => Quantity::deg(q.value),
             (true, false) => Quantity::mm(q.value),
             _ => q,
@@ -275,6 +279,8 @@ pub fn dim_exprs<'a, C: DimConstraint>(
                 name: names.get(&c.id()).map(String::as_str),
                 expr: c.value()?,
                 angle: c.is_angle(),
+                count_max: None,
+                signed: false,
             })
         })
         .collect()
@@ -317,6 +323,11 @@ impl Sketch {
             .filter_map(|c| c.kind.value_mut())
             .collect();
         values.extend(s.offset.as_mut());
+        for p in &mut s.patterns {
+            if let Some(e) = &mut p.expressions {
+                values.extend(e.strings_mut());
+            }
+        }
         let changed = rename_in(&mut s.dim_names, values, old, new)?;
         Ok(changed.then_some(s))
     }
@@ -332,7 +343,9 @@ impl Sketch {
         is_own_name(&self.dim_names, &self.constraints, name)
     }
 
-    pub(crate) fn dim_exprs(&self) -> Vec<DimExpr<'_>> {
-        dim_exprs(&self.dim_names, &self.constraints)
+    pub(crate) fn dim_exprs(&self) -> Result<Vec<DimExpr<'_>>, String> {
+        let mut dims = dim_exprs(&self.dim_names, &self.constraints);
+        dims.extend(self.pattern_exprs()?);
+        Ok(dims)
     }
 }
