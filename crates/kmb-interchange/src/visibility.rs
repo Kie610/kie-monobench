@@ -8,7 +8,8 @@
 //! - 区画の無い文書(目を保存する前の文書)は、後の機能が使っているスケッチと作業平面などを隠し、
 //!   ほかを出した状態とみなす([`of`])。読むだけでは文書を変えない。
 //! - 機能を足すか直して、スケッチと作業平面などを初めて使った時に、その変更と同じ変更で隠す
-//!   ([`hide_first_used`]。変更を取り消せば目も戻る)。ほかの時に目を自動で替えない。
+//!   ([`hide_first_used`]。変更を取り消せば目も戻る)。作る途中(OK の前)に選び替えて使わなくなった
+//!   物は、その途中で隠した物だけ出し直す。ほかの時に目を自動で替えない。
 //! - 目を全部開けても区画は外さない(区画の無い文書と分けるため)。
 //! - 選択表示と、機能を直す間の一時の見せは画面の状態で、ここには入れない。
 
@@ -202,26 +203,30 @@ pub fn references(cx: &Context<'_>, id: FeatureId) -> Vec<FeatureId> {
 }
 
 /// 足すか直した機能 `touched` が初めて使うスケッチと作業平面などを隠した目(使った時に 1 回隠す)。
-/// `before` は変更の前に `touched` が使っていた物([`references`])。隠す物が無ければ `None`。
-/// ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。区画の無い文書
-/// (新しい文書と目を保存する前の文書)は、この時に [`of`] の見え方(使われている物を隠す)で区画を
-/// 書き始める(区画が無いままだと、使われなくなった物が出し直されてしまう)。作業平面などは前の計算の
-/// 結果で見分けるので、同じ変更で足した作業平面は入らない。
+/// `before` は変更の前に `touched` が使っていた物([`references`])。`creating` は作る途中(OK の前)に
+/// この道で隠した物で、選び替えて使わなくなった物は出し直す(どの機能も使っていない物だけ)。替える物が
+/// 無ければ `None`。ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。
+/// 区画の無い文書(新しい文書と目を保存する前の文書)は、この時に [`of`] の見え方(使われている物を
+/// 隠す)で区画を書き始める(区画が無いままだと、使われなくなった物が出し直されてしまう)。作業平面などは
+/// 前の計算の結果で見分けるので、同じ変更で足した作業平面は入らない。
 pub fn hide_first_used(
     cx: &Context<'_>,
     touched: &[FeatureId],
     before: &BTreeSet<FeatureId>,
+    creating: &BTreeSet<FeatureId>,
 ) -> Option<Visibility> {
-    let fresh: BTreeSet<FeatureId> = touched
-        .iter()
-        .flat_map(|id| references(cx, *id))
-        .filter(|r| !before.contains(r))
+    let now: BTreeSet<FeatureId> = touched.iter().flat_map(|id| references(cx, *id)).collect();
+    let fresh: BTreeSet<FeatureId> = now.difference(before).copied().collect();
+    let dropped: BTreeSet<FeatureId> = before
+        .difference(&now)
+        .filter(|r| creating.contains(r))
+        .copied()
         .collect();
-    if fresh.is_empty() {
+    if fresh.is_empty() && dropped.is_empty() {
         return None;
     }
     if !cx.data.sections.contains_key(Visibility::KEY) {
-        return Some(of(cx));
+        return (!fresh.is_empty()).then(|| of(cx));
     }
     let used_by_others: BTreeSet<FeatureId> = cx
         .data
@@ -234,6 +239,8 @@ pub fn hide_first_used(
     let hidden = v.hidden.clone();
     v.hidden
         .extend(fresh.into_iter().filter(|r| !used_by_others.contains(r)));
+    v.hidden
+        .retain(|r| !dropped.contains(r) || used_by_others.contains(r));
     (v.hidden != hidden).then_some(v)
 }
 
