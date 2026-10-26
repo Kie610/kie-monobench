@@ -1505,8 +1505,7 @@ impl Workspace {
             self.feature_menu(ui, f.id);
             // ボディを作る機能は、そのボディをブラウザで探せる(3D のビューの右クリックと同じ)
             if self.output(f.id, "body").is_some()
-                && ui
-                    .button("ブラウザ内を検索")
+                && crate::theme::menu_row(ui, "search", "ブラウザ内を検索", "", true)
                     .on_hover_text("この機能のボディを、ブラウザで光らせる")
                     .clicked()
             {
@@ -1695,12 +1694,20 @@ impl Workspace {
         let data = self.cur.work.doc().data().clone();
         let members = edit::group_members(&data, g.id);
         let mut done = false;
-        if ui.button("名前変更").clicked() {
+        if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
             self.cur.renaming_group = Some((g.id, g.name.clone()));
             done = true;
         }
         let collapsed = self.cur.collapsed.contains(&g.id);
-        if ui.button(if collapsed { "開く" } else { "畳む" }).clicked() {
+        if crate::theme::menu_row(
+            ui,
+            if collapsed { "chevr" } else { "chev" },
+            if collapsed { "開く" } else { "畳む" },
+            "",
+            true,
+        )
+        .clicked()
+        {
             if collapsed {
                 self.cur.collapsed.remove(&g.id);
             } else {
@@ -1711,27 +1718,30 @@ impl Workspace {
         let all_suppressed = members
             .iter()
             .all(|id| data.feature(*id).is_some_and(|f| f.suppressed));
-        if ui
-            .button(if all_suppressed {
+        if crate::theme::menu_row(
+            ui,
+            "suppress",
+            if all_suppressed {
                 "まとめて抑制を解除"
             } else {
                 "まとめて抑制"
-            })
-            .clicked()
+            },
+            "",
+            true,
+        )
+        .clicked()
         {
             self.apply(edit::set_suppressed(&members, !all_suppressed));
             done = true;
         }
         ui.separator();
-        if ui.button("グループを解く(中身は残す)").clicked()
+        if crate::theme::menu_row(ui, "ungroup", "グループを解く(中身は残す)", "", true).clicked()
             && let Ok(tx) = edit::ungroup(&data, g.id)
         {
             self.apply(tx);
             done = true;
         }
-        let red = ui.visuals().error_fg_color;
-        if ui
-            .button(egui::RichText::new("グループと中身を削除").color(red))
+        if crate::theme::menu_row_danger(ui, "trash", "グループと中身を削除", "", true)
             .on_hover_text(format!(
                 "中の {} 個の機能も消す。取り消し(Ctrl+Z)で戻せる",
                 members.len()

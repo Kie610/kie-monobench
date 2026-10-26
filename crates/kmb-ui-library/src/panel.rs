@@ -483,25 +483,29 @@ impl Library {
     fn panel_menu(&mut self, ui: &mut egui::Ui, host: &mut HomeHost<'_>, it: &Item, place: &Place) {
         let ok = !it.missing;
         let own = host.current.as_ref() == Some(&it.path);
-        if ui.add_enabled(ok, egui::Button::new("開く")).clicked() {
+        if theme::menu_row(ui, "file", "開く", "", ok).clicked() {
             host.request(HomeRequest::Open(it.path.clone()));
             ui.close();
         }
-        if ui
-            .add_enabled(ok && !own, egui::Button::new("現在のデザインに挿入"))
+        if theme::menu_row(ui, "plus", "現在のデザインに挿入", "", ok && !own)
             .on_disabled_hover_text("開いているデザインそのものは挿入できません")
             .clicked()
         {
             host.request(HomeRequest::Insert(it.path.clone()));
             ui.close();
         }
-        if ui
-            .button(if it.pinned {
+        if theme::menu_row(
+            ui,
+            "pin",
+            if it.pinned {
                 "ピン留めを外す"
             } else {
                 "ピン留め"
-            })
-            .clicked()
+            },
+            "",
+            true,
+        )
+        .clicked()
         {
             host.request(HomeRequest::Recent(
                 it.path.clone(),
@@ -509,10 +513,7 @@ impl Library {
             ));
             ui.close();
         }
-        if ui
-            .add_enabled(ok, egui::Button::new("フォルダを開く"))
-            .clicked()
-        {
+        if theme::menu_row(ui, "folder", "フォルダを開く", "", ok).clicked() {
             host.request(HomeRequest::Recent(
                 it.path.clone(),
                 RecentAction::ShowInFolder,
@@ -520,21 +521,19 @@ impl Library {
             ui.close();
         }
         ui.separator();
-        if ui
-            .add_enabled(ok, egui::Button::new("名前を変える…"))
-            .clicked()
-        {
+        if theme::menu_row(ui, "rename", "名前を変える…", "", ok).clicked() {
             self.panel.renaming = Some((it.path.clone(), file_name(&it.path)));
             self.panel.rename_focus = true;
             ui.close();
         }
-        ui.add_enabled_ui(ok, |ui| {
-            ui.menu_button("移す", |ui| {
+        if ok {
+            theme::menu_sub(ui, "movecopy", "移す", |ui| {
                 self.move_menu(ui, host, std::slice::from_ref(&it.path))
             });
-        });
-        if ui
-            .add_enabled(ok, egui::Button::new("分類を直す…"))
+        } else {
+            theme::menu_row(ui, "movecopy", "移す", "", false);
+        }
+        if theme::menu_row(ui, "edit", "分類を直す…", "", ok)
             .on_hover_text("ホームの右の概要で直します")
             .clicked()
         {
@@ -550,8 +549,8 @@ impl Library {
             host.request(HomeRequest::ShowHome);
             ui.close();
         }
-        if ui
-            .add_enabled(ok, egui::Button::new("削除…"))
+        ui.separator();
+        if theme::menu_row(ui, "trash", "削除…", "", ok)
             .on_hover_text("PC のごみ箱へ移します(版の履歴も)")
             .clicked()
         {
@@ -559,8 +558,7 @@ impl Library {
             ui.close();
         }
         if matches!(place, Place::Recent | Place::Pinned)
-            && ui
-                .button("一覧から外す")
+            && theme::menu_row(ui, "x", "一覧から外す", "", true)
                 .on_hover_text("ファイルは消さない")
                 .clicked()
         {

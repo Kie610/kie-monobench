@@ -385,7 +385,7 @@ fn designs_are_moved_by_menu_and_by_dragging_and_come_back() {
     // 右クリックの「移す」から「部品」へ
     card_of(&h, "天板").click_secondary();
     h.run_ok();
-    h.get_by_label("移す ⏵").click();
+    h.get_by_label("移す").click();
     h.run_ok();
     h.query_all_by_label_contains("部品")
         .find(|n| {

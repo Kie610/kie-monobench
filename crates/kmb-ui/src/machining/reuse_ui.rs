@@ -475,8 +475,7 @@ impl Workspace {
                 ui.weak("保存したテンプレートはまだありません。加工の右クリックの「テンプレートとして保存」で作る");
             }
             for (name, a) in &templates {
-                let r = ui
-                    .add_enabled(a.disabled.is_none(), egui::Button::new(name))
+                let r = crate::theme::menu_row(ui, &a.icon, name, "", a.disabled.is_none())
                     .on_hover_text(&a.hint);
                 if r.clicked() {
                     if self.cur.selected != Some(id) {

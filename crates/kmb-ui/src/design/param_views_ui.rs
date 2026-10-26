@@ -38,10 +38,10 @@ impl RowMenu {
     /// 行 `key` の右クリックの中身。選んだことを返す。
     pub(crate) fn show(&self, ui: &mut egui::Ui, key: &ParamKey) -> Option<RowAct> {
         let mut act = None;
-        ui.menu_button("表に入れる", |ui| {
+        crate::theme::menu_sub(ui, "table", "表に入れる", |ui| {
             for (id, name, rows) in &self.views {
                 let has = rows.contains(key);
-                let r = ui.add_enabled(!has, egui::Button::new(name));
+                let r = crate::theme::menu_row(ui, "", name, "", !has);
                 let r = if has {
                     r.on_disabled_hover_text("この表にもう入っています")
                 } else {
@@ -55,8 +55,7 @@ impl RowMenu {
             if !self.views.is_empty() {
                 ui.separator();
             }
-            if ui
-                .button("新しい表…")
+            if crate::theme::menu_row(ui, "plus", "新しい表…", "", true)
                 .on_hover_text("新しい表を作り、この行を入れる")
                 .clicked()
             {
@@ -76,22 +75,23 @@ impl RowMenu {
                 "「お気に入り」の表に入れる(行の ☆ と同じ)",
             )
         };
-        if ui.button(text).on_hover_text(tip).clicked() {
+        if crate::theme::menu_row(ui, "star", text, "", true)
+            .on_hover_text(tip)
+            .clicked()
+        {
             act = Some(RowAct::Favorite(!fav));
             ui.close();
         }
         if self.tab != 0 {
             ui.separator();
-            if ui
-                .button("上へ")
+            if crate::theme::menu_row(ui, "up", "上へ", "", true)
                 .on_hover_text("この表の中で 1 つ上へ(同じ種類の行の中で)")
                 .clicked()
             {
                 act = Some(RowAct::Move(true));
                 ui.close();
             }
-            if ui
-                .button("下へ")
+            if crate::theme::menu_row(ui, "down", "下へ", "", true)
                 .on_hover_text("この表の中で 1 つ下へ(同じ種類の行の中で)")
                 .clicked()
             {
@@ -101,8 +101,7 @@ impl RowMenu {
         }
         if self.tab != 0
             && self.tab != FAVORITES_TAB
-            && ui
-                .button("この表から外す")
+            && crate::theme::menu_row(ui, "eyeoff", "この表から外す", "", true)
                 .on_hover_text("この表に出さない(パラメータは消さない。「全部」の表には残る)")
                 .clicked()
         {
@@ -392,12 +391,12 @@ impl Workspace {
                     self.cur.param_tab = v.id;
                 }
                 r.right_menu(|ui| {
-                    if ui.button("名前変更").clicked() {
+                    if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
                         renaming = Some((v.id, v.name.clone()));
                         ui.close();
                     }
-                    if ui
-                        .button("表を削除")
+                    ui.separator();
+                    if crate::theme::menu_row(ui, "trash", "表を削除", "", true)
                         .on_hover_text("表だけを消す(中のパラメータは消さない。取り消せる)")
                         .clicked()
                     {

@@ -686,15 +686,15 @@ impl Workspace {
         r.right_menu(|ui| {
             if has_parts
                 && !root_active
-                && ui
-                    .button("アクティブにする")
+                && crate::theme::menu_row(ui, "component", "アクティブにする", "", true)
                     .on_hover_text("文書の直下をアクティブに戻す(新しく作るボディは部品に入らない)")
                     .clicked()
             {
                 self.activate_component(None);
                 ui.close();
             }
-            if ui.button("設計の属性…").clicked() {
+            ui.separator();
+            if crate::theme::menu_row(ui, "table", "設計の属性…", "", true).clicked() {
                 self.open_properties();
                 ui.close();
             }
@@ -737,7 +737,8 @@ impl Workspace {
             // 開け閉めの印はブラウザの中の ID(メニューの中で作ると別の ID になる)
             let open_key = ui.make_persistent_id(("browser_open", "named_views"));
             r.right_menu(|ui| {
-                if ui.button("今のビューを保存").clicked() {
+                if crate::theme::menu_row(ui, "camera", "今のビューを保存", "", true).clicked()
+                {
                     if let Some(id) = self.save_named_view("") {
                         // すぐ名前を打てるようにする
                         let name = self
@@ -1036,7 +1037,7 @@ impl Workspace {
                 self.toggle_machine_settings();
             }
             r.right_menu(|ui| {
-                if ui.button("機械の設定").clicked() {
+                if crate::theme::menu_row(ui, "machine", "機械の設定", "", true).clicked() {
                     self.open_machine_settings();
                     ui.close();
                 }
@@ -1067,7 +1068,7 @@ impl Workspace {
                     } else {
                         a.label.clone()
                     };
-                    let b = ui.add_enabled(a.disabled.is_none(), egui::Button::new(label));
+                    let b = crate::theme::menu_row(ui, &a.icon, &label, "", a.disabled.is_none());
                     let b = match &a.disabled {
                         Some(w) => b.on_disabled_hover_text(w),
                         None => b.on_hover_text(&a.hint),
@@ -1359,7 +1360,7 @@ impl Workspace {
                 self.set_contacts(&label, c);
             }
             r.right_menu(|ui| {
-                if ui.button("削除").clicked() {
+                if crate::theme::menu_row(ui, "trash", "削除", "", true).clicked() {
                     let mut c = contacts.clone();
                     c.sets.remove(i);
                     self.set_contacts(&format!("接触セット「{}」を消す", s.name), c);

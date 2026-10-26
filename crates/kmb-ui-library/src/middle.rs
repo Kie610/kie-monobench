@@ -625,8 +625,7 @@ impl Library {
             flat(&t.root, 0, &mut rows);
             for (path, name, depth) in rows {
                 let text = format!("{}{name}", "  ".repeat(depth));
-                if ui
-                    .add_enabled(!bad(&path), egui::Button::new(text))
+                if theme::menu_row(ui, "folder", &text, "", !bad(&path))
                     .on_disabled_hover_text(why)
                     .clicked()
                 {
@@ -756,7 +755,7 @@ impl Library {
     /// カードの右クリックと、右の概要の「…」の中身。
     pub(crate) fn item_menu(&mut self, ui: &mut egui::Ui, host: &mut HomeHost<'_>, it: &Item) {
         if it.folder.is_some() {
-            if ui.button("開く").clicked() {
+            if theme::menu_row(ui, "folder", "開く", "", true).clicked() {
                 if let Place::Folder { project, .. } = self.place.clone() {
                     self.go(Place::Folder {
                         project,
@@ -772,8 +771,7 @@ impl Library {
         }
         if it.missing
             && let Some(to) = kmb_session::organize::follow_moves(&it.path)
-            && ui
-                .button("移した先に付け替える")
+            && theme::menu_row(ui, "repeat", "移した先に付け替える", "", true)
                 .on_hover_text(format!("最近の一覧のパスを {} に直します", to.display()))
                 .clicked()
         {
@@ -794,17 +792,22 @@ impl Library {
             vec![it.path.clone()]
         };
         let ok = !it.missing;
-        if ui.add_enabled(ok, egui::Button::new("開く")).clicked() {
+        if theme::menu_row(ui, "file", "開く", "", ok).clicked() {
             host.request(HomeRequest::Open(it.path.clone()));
             ui.close();
         }
-        if ui
-            .button(if it.pinned {
+        if theme::menu_row(
+            ui,
+            "pin",
+            if it.pinned {
                 "ピン留めを外す"
             } else {
                 "ピン留め"
-            })
-            .clicked()
+            },
+            "",
+            true,
+        )
+        .clicked()
         {
             host.request(HomeRequest::Recent(
                 it.path.clone(),
@@ -812,10 +815,7 @@ impl Library {
             ));
             ui.close();
         }
-        if ui
-            .add_enabled(ok, egui::Button::new("フォルダを開く"))
-            .clicked()
-        {
+        if theme::menu_row(ui, "folder", "フォルダを開く", "", ok).clicked() {
             host.request(HomeRequest::Recent(
                 it.path.clone(),
                 RecentAction::ShowInFolder,
@@ -823,34 +823,31 @@ impl Library {
             ui.close();
         }
         ui.separator();
-        if ui
-            .add_enabled(ok && many.len() == 1, egui::Button::new("名前を変える…"))
-            .clicked()
+        if theme::menu_row(ui, "rename", "名前を変える…", "", ok && many.len() == 1).clicked()
         {
             self.selected = vec![it.path.clone()];
             self.renaming = Some((it.path.clone(), file_name(&it.path)));
             self.rename_focus = true;
             ui.close();
         }
-        ui.add_enabled_ui(ok, |ui| {
-            ui.menu_button(
-                if many.len() > 1 {
-                    format!("{} 件を移す", many.len())
-                } else {
-                    "移す".into()
-                },
-                |ui| self.move_menu(ui, host, &many),
-            );
-        });
-        if ui
-            .add_enabled(
-                ok,
-                egui::Button::new(if many.len() > 1 {
-                    format!("{} 件を削除…", many.len())
-                } else {
-                    "削除…".into()
-                }),
-            )
+        let move_label = if many.len() > 1 {
+            format!("{} 件を移す", many.len())
+        } else {
+            "移す".into()
+        };
+        if ok {
+            theme::menu_sub(ui, "movecopy", &move_label, |ui| {
+                self.move_menu(ui, host, &many)
+            });
+        } else {
+            theme::menu_row(ui, "movecopy", &move_label, "", false);
+        }
+        let trash_label = if many.len() > 1 {
+            format!("{} 件を削除…", many.len())
+        } else {
+            "削除…".into()
+        };
+        if theme::menu_row(ui, "trash", &trash_label, "", ok)
             .on_hover_text("PC のごみ箱へ移します(版の履歴も)")
             .clicked()
         {
@@ -860,8 +857,7 @@ impl Library {
         if matches!(
             self.place,
             Place::Recent | Place::Pinned | Place::Tidy(Tidy::Missing)
-        ) && ui
-            .button("一覧から外す")
+        ) && theme::menu_row(ui, "x", "一覧から外す", "", true)
             .on_hover_text("ファイルは消さない")
             .clicked()
         {

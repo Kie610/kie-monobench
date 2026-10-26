@@ -40,7 +40,8 @@ impl Workspace {
             }
         }
         ui.separator();
-        if ui.button("すべて選べるようにする").clicked() {
+        if crate::theme::menu_row(ui, "select", "すべて選べるようにする", "", true).clicked()
+        {
             self.reset_pick_filter();
             ui.close();
         }

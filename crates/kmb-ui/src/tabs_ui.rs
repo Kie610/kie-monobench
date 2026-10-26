@@ -464,12 +464,19 @@ impl Workspace {
                     ),
                 };
                 r.on_hover_text(tip).right_menu(|ui| {
-                    if ui.button("閉じる   Ctrl+W").clicked() {
+                    if crate::theme::menu_row(
+                        ui,
+                        "x",
+                        "閉じる",
+                        &crate::keys::label("close_tab"),
+                        true,
+                    )
+                    .clicked()
+                    {
                         close = Some(i);
                         ui.close();
                     }
-                    if ui
-                        .add_enabled(titles.len() > 1, egui::Button::new("ほかのタブを閉じる"))
+                    if crate::theme::menu_row(ui, "", "ほかのタブを閉じる", "", titles.len() > 1)
                         .clicked()
                     {
                         close_others = Some(i);

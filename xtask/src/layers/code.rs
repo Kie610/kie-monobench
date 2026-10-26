@@ -463,6 +463,168 @@ pub(super) const RECOMPUTE_CALLS: &[&str] = &[
 ];
 
 /// `name(` の位置(`my_take_cache(` などの別の名前は数えない)。
+/// 右クリックのメニューの中で、行を `theme::menu_row`・`menu_sub` でなく素のボタンで出している所。
+/// `right_menu(` の中と、そこから呼ぶ同じファイルの関数の中(3 段まで)、名前が `_menu` で終わる関数の中
+/// (ほかのファイルの右クリックから呼ばれる物)を見る。`.context_menu(` はどこでも数える。
+pub(super) fn right_menu_buttons(code: &str) -> Vec<usize> {
+    const WIDGETS: [&str; 4] = [
+        ".button(",
+        ".small_button(",
+        ".menu_button(",
+        "Button::new(",
+    ];
+    let mut spans = vec![];
+    let mut seen = BTreeSet::new();
+    for (i, _) in code
+        .match_indices("_menu(")
+        .chain(code.match_indices("_menu<"))
+    {
+        let start = code[..i]
+            .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .map_or(0, |s| s + 1);
+        // 自分でメニューを開く関数(上の段の「ファイル」など)は右クリックではない
+        if code[..start].ends_with("fn ")
+            && let Some(body) = fn_body(code, &code[start..i + "_menu".len()])
+            && !code[body.0..body.1].contains("Popup::menu(")
+        {
+            spans.push(body);
+        }
+    }
+    for (i, _) in code.match_indices("right_menu(") {
+        if code[..i].trim_end().ends_with("fn") {
+            continue;
+        }
+        let open = i + "right_menu".len();
+        let mut todo = vec![(open, paren_end(code, open), 0)];
+        while let Some((a, b, depth)) = todo.pop() {
+            spans.push((a, b));
+            if depth == 3 {
+                continue;
+            }
+            for name in idents_called(&code[a..b]) {
+                if seen.insert(name.clone())
+                    && let Some((fa, fb)) = fn_body(code, &name)
+                {
+                    todo.push((fa, fb, depth + 1));
+                }
+            }
+        }
+    }
+    let mut at: BTreeSet<usize> = code
+        .match_indices(".context_menu(")
+        .map(|(i, _)| i)
+        .collect();
+    for (a, b) in spans {
+        for w in WIDGETS {
+            at.extend(code[a..b].match_indices(w).map(|(i, _)| a + i));
+        }
+    }
+    at.into_iter().collect()
+}
+
+/// 開き括弧 `(` の位置から、対になる `)` の次の位置。
+fn paren_end(code: &str, open: usize) -> usize {
+    let mut depth = 0usize;
+    for (i, c) in code.bytes().enumerate().skip(open) {
+        match c {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    code.len()
+}
+
+/// `名前(` の形で呼んでいる名前。
+fn idents_called(code: &str) -> BTreeSet<String> {
+    let b = code.as_bytes();
+    let mut out = BTreeSet::new();
+    for (i, _) in code.match_indices('(') {
+        let start = code[..i]
+            .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .map_or(0, |s| s + 1);
+        if start < i && !b[start].is_ascii_digit() {
+            out.insert(code[start..i].to_string());
+        }
+    }
+    out
+}
+
+/// 同じファイルの `fn 名前` の中身の範囲。
+fn fn_body(code: &str, name: &str) -> Option<(usize, usize)> {
+    for p in [format!("fn {name}("), format!("fn {name}<")] {
+        if let Some(i) = code.find(&p) {
+            let open = i + code[i..].find('{')?;
+            let mut depth = 0usize;
+            for (j, c) in code.bytes().enumerate().skip(open) {
+                match c {
+                    b'{' => depth += 1,
+                    b'}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some((open, j + 1));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            return Some((open, code.len()));
+        }
+    }
+    None
+}
+
+/// 右クリックのメニューの行は `theme::menu_row`・`menu_sub` で出す(アイコン・右のキー・区切りをそろえる)。
+pub(super) fn right_menu_rows(
+    root: &Path,
+    g: &Graph,
+    known: &[(&str, &str, usize)],
+) -> Vec<String> {
+    let mut out = vec![];
+    let mut seen = BTreeSet::new();
+    for n in screen_crates(g) {
+        for (rel, _, src) in product_sources(root, g.dir(n)) {
+            let at = right_menu_buttons(&src.code);
+            let allowed = known
+                .iter()
+                .find(|(k, f, _)| *k == n && *f == rel)
+                .map_or(0, |e| e.2);
+            if !at.is_empty() || allowed > 0 {
+                seen.insert((n.to_string(), rel.clone()));
+            }
+            if at.len() > allowed {
+                let lines: Vec<String> = at.iter().map(|&a| src.line_of(a).to_string()).collect();
+                out.push(format!(
+                    "{n}/{rel} の右クリックのメニューが素のボタンで行を出している({} 個、許すのは \
+                     {allowed} 個。行 {})。kmb_ui::theme::menu_row・menu_sub で出し、右クリックは \
+                     right_menu で開く",
+                    at.len(),
+                    lines.join("・")
+                ));
+            } else if at.len() < allowed {
+                out.push(format!(
+                    "{n}/{rel} の右クリックの素のボタンが {} 個に減った。xtask/src/layers.rs の \
+                     RIGHT_MENU_KNOWN を直す",
+                    at.len()
+                ));
+            }
+        }
+    }
+    for (k, f, _) in known {
+        if !seen.contains(&(k.to_string(), f.to_string())) {
+            out.push(format!(
+                "{k}/{f} はもう無い。xtask/src/layers.rs の RIGHT_MENU_KNOWN から消す"
+            ));
+        }
+    }
+    out
+}
+
 pub(super) fn calls_of(code: &str, name: &str) -> Vec<usize> {
     let pat = format!("{name}(");
     code.match_indices(&pat)
@@ -741,6 +903,19 @@ mod tests {
                     fn c() { Edit::SetData {}; }\nfn d_fn() { Edit::SetData {}; Edit::Insert {}; }";
         let names: Vec<String> = insert_and_rewrites(code).into_iter().map(|x| x.0).collect();
         assert_eq!(names, ["b", "d_fn"]);
+    }
+
+    #[test]
+    fn plain_buttons_in_right_menus_are_found_through_helpers() {
+        let code = "fn a(r: R) { r.right_menu(|ui| { ui.button(x); menu_row(ui); }); }\n\
+                    fn b(r: R) { r.right_menu(|ui| self.rows(ui)); }\n\
+                    fn rows(ui: U) { ui.add_enabled(t, egui::Button::new(x)); }\n\
+                    fn body_menu(ui: U) { ui.menu_button(x, f); }\n\
+                    fn file_menu(ui: U) { egui::Popup::menu(&r).show(|ui| ui.button(x)); }\n\
+                    fn other(ui: U) { ui.button(x); r.context_menu(f); }";
+        let at = right_menu_buttons(code);
+        let words: Vec<&str> = at.iter().map(|&i| &code[i..i + 7]).collect();
+        assert_eq!(words, [".button", "Button:", ".menu_b", ".contex"]);
     }
 
     #[test]

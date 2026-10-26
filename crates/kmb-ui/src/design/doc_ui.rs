@@ -322,19 +322,22 @@ impl Workspace {
                 self.apply_named_view(v.id);
             }
             r.right_menu(|ui| {
-                if ui.button("このビューにする").clicked() {
+                if crate::theme::menu_row(ui, "camera", "このビューにする", "", true).clicked()
+                {
                     self.apply_named_view(v.id);
                     ui.close();
                 }
-                if ui.button("今のビューで上書き").clicked() {
+                if crate::theme::menu_row(ui, "save", "今のビューで上書き", "", true).clicked()
+                {
                     self.update_named_view(v.id);
                     ui.close();
                 }
-                if ui.button("名前変更").clicked() {
+                ui.separator();
+                if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
                     self.cur.renaming_view = Some((v.id, v.name.clone()));
                     ui.close();
                 }
-                if ui.button("削除").clicked() {
+                if crate::theme::menu_row(ui, "trash", "削除", "", true).clicked() {
                     self.remove_named_view(v.id);
                     ui.close();
                 }

@@ -312,10 +312,16 @@ impl Workspace {
                                 act = Some((0, r.number));
                             }
                             resp.right_menu(|ui| {
-                                for (k, name) in
-                                    [(0, "大きく見る"), (1, "書き出す…"), (2, "描いた版を開く"), (3, "削除")]
-                                {
-                                    if ui.button(name).clicked() {
+                                for (k, icon, name) in [
+                                    (0, "display", "大きく見る"),
+                                    (1, "export", "書き出す…"),
+                                    (2, "hist", "描いた版を開く"),
+                                    (3, "trash", "削除"),
+                                ] {
+                                    if k == 3 {
+                                        ui.separator();
+                                    }
+                                    if crate::theme::menu_row(ui, icon, name, "", true).clicked() {
                                         act = Some((k, r.number));
                                         ui.close();
                                     }
