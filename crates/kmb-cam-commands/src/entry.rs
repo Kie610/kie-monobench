@@ -139,6 +139,7 @@ pub fn handles(
         shape: None,
         chain: false,
         vertices: false,
+        stop_key: None,
     }])
 }
 

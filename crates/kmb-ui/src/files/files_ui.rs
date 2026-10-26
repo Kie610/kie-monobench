@@ -173,7 +173,7 @@ impl Workspace {
 
     /// 表示の言語の「自動」を OS の言語に合わせる(画面のアプリが起動の時に呼ぶ。呼ばなければ日本語)。
     pub fn use_os_language(&mut self) {
-        self.win.texts = kmb_i18n::Catalog::new();
+        self.win.texts = std::sync::Arc::new(kmb_i18n::Catalog::new());
     }
 
     pub fn is_safe_mode(&self) -> bool {

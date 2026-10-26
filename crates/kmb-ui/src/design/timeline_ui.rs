@@ -5,6 +5,7 @@
 //! 縦長の所に置いた時は、上から古い順の縦の一覧にする(行にアイコンと名前、今の位置の印は行の間の横の棒で上下へ引く)。
 
 use crate::theme::RightMenu as _;
+use crate::window_state::Words;
 use crate::{Found, Workspace, icons, theme};
 use egui::{Rect, Sense, Stroke, Vec2};
 use kmb_core::{FeatureId, FeatureStatus, Group};
@@ -17,7 +18,7 @@ fn group_color(id: u64, l: &theme::Look) -> egui::Color32 {
 }
 
 /// 機能の状態の印と説明。
-pub(crate) fn status_mark(status: Option<&FeatureStatus>) -> (&'static str, String) {
+pub(crate) fn status_mark(w: &Words, status: Option<&FeatureStatus>) -> (&'static str, String) {
     match status {
         Some(FeatureStatus::Ok { outputs, .. }) => {
             let w = kmb_core::warnings_of(outputs);
@@ -28,9 +29,12 @@ pub(crate) fn status_mark(status: Option<&FeatureStatus>) -> (&'static str, Stri
             }
         }
         Some(FeatureStatus::Error { message }) => ("✖", message.clone()),
-        Some(FeatureStatus::Blocked { by, .. }) => ("⏸", format!("{by} が使えません")),
-        Some(FeatureStatus::Suppressed) => ("–", "抑制中".into()),
-        Some(FeatureStatus::RolledBack) => ("…", "ロールバック位置より後ろ".into()),
+        Some(FeatureStatus::Blocked { by, .. }) => (
+            "⏸",
+            w.t_with("timeline-status-blocked", &[("by", by.as_str().into())]),
+        ),
+        Some(FeatureStatus::Suppressed) => ("–", w.t("timeline-status-suppressed")),
+        Some(FeatureStatus::RolledBack) => ("…", w.t("timeline-status-rolled-back")),
         None => ("?", String::new()),
     }
 }
@@ -87,25 +91,35 @@ impl Health {
     }
 
     /// 種類の名前。
-    pub(crate) fn title(&self) -> &'static str {
+    pub(crate) fn title(&self, w: &Words) -> String {
         match self {
-            Health::Warning(_) => "注意",
-            Health::Error(_) => "エラー",
-            Health::Blocked { .. } => "計算していない",
-            Health::Ok => "計算できた",
-            Health::Idle => "",
+            Health::Warning(_) => w.t("timeline-health-warning"),
+            Health::Error(_) => w.t("timeline-health-error"),
+            Health::Blocked { .. } => w.t("timeline-health-blocked"),
+            Health::Ok => w.t("timeline-health-ok"),
+            Health::Idle => String::new(),
         }
     }
 
     /// 知らせの文。
-    pub(crate) fn message(&self) -> String {
+    pub(crate) fn message(&self, w: &Words) -> String {
         match self {
             Health::Warning(m) | Health::Error(m) => m.clone(),
             Health::Blocked { by, .. } => {
-                format!("{by} が使えないので、この機能は計算していません")
+                w.t_with("timeline-health-blocked-by", &[("by", by.as_str().into())])
             }
             _ => String::new(),
         }
+    }
+
+    /// 畳んだまとまりの吹き出し(「中に注意があります」)。`area` は文言の分野(`browser`・`timeline`)。
+    pub(crate) fn inside(&self, w: &Words, area: &str) -> String {
+        let kind = match self {
+            Health::Warning(_) => "warning",
+            Health::Error(_) => "error",
+            _ => "blocked",
+        };
+        w.t(&format!("{area}-inside-{kind}"))
     }
 
     /// 印の色。
@@ -179,22 +193,31 @@ pub(crate) fn worst_health(all: impl Iterator<Item = Health>) -> Option<Health> 
 }
 
 /// 指を置いた時の説明(名前、種類と文、確かめ方)。
-pub(crate) fn health_tip(name: &str, h: &Health) -> String {
+pub(crate) fn health_tip(w: &Words, name: &str, h: &Health) -> String {
     if !h.is_problem() {
         return name.to_string();
     }
-    format!(
-        "{name}\n{}: {}\n右クリックの「{}を確かめる」で詳しく、「文を写す」で写せる",
-        h.title(),
-        h.message(),
-        if h.is_red() { "エラー" } else { "注意" }
+    w.t_with(
+        if h.is_red() {
+            "timeline-tip-error"
+        } else {
+            "timeline-tip-warning"
+        },
+        &[
+            ("name", name.into()),
+            ("title", h.title(w).into()),
+            ("message", h.message(w).into()),
+        ],
     )
 }
 
 /// 計算にかかった時間の書き方(タイムラインの吹き出し)。
-pub(crate) fn time_text(ms: f64) -> String {
+pub(crate) fn time_text(w: &Words, ms: f64) -> String {
     if ms >= 1000.0 {
-        format!("{:.1} 秒", ms / 1000.0)
+        w.t_with(
+            "timeline-seconds",
+            &[("value", format!("{:.1}", ms / 1000.0).into())],
+        )
     } else if ms >= 10.0 {
         format!("{ms:.0} ms")
     } else {
@@ -204,15 +227,17 @@ pub(crate) fn time_text(ms: f64) -> String {
 
 /// タイムラインの札の吹き出し: 名前と具合、計算にかかった時間、操作のヒント(
 /// 重い機能を探せ、ダブルクリック・ドラッグ・右クリックでできることを使いながら覚えられる)。
-pub(crate) fn chip_tip(name: &str, h: &Health, ms: Option<f64>, reused: bool) -> String {
-    let mut s = health_tip(name, h);
+pub(crate) fn chip_tip(w: &Words, name: &str, h: &Health, ms: Option<f64>, reused: bool) -> String {
+    let mut s = health_tip(w, name, h);
     if let Some(ms) = ms {
-        s.push_str(&format!("\n計算 {}", time_text(ms)));
+        s.push('\n');
+        s.push_str(&w.t_with("timeline-calc-time", &[("time", time_text(w, ms).into())]));
         if reused {
-            s.push_str("(前の結果を使い回し)");
+            s.push_str(&w.t("timeline-calc-reused"));
         }
     }
-    s.push_str("\nダブルクリックで編集・ドラッグで並べ替え・右クリックでほかの操作");
+    s.push('\n');
+    s.push_str(&w.t("timeline-chip-hint"));
     s
 }
 
@@ -451,10 +476,8 @@ impl Workspace {
                                 egui::Layout::left_to_right(egui::Align::Center),
                                 |ui| {
                                     ui.label(
-                                        egui::RichText::new(
-                                            "機能はまだありません。上のツールバーから作ります",
-                                        )
-                                        .color(l.pal.ink3),
+                                        egui::RichText::new(self.win.t("timeline-empty"))
+                                            .color(l.pal.ink3),
                                     );
                                 },
                             );
@@ -527,10 +550,7 @@ impl Workspace {
             .show(&mut list, |ui| {
                 ui.spacing_mut().item_spacing.y = 1.0;
                 if data.features.is_empty() {
-                    ui.label(
-                        egui::RichText::new("機能はまだありません。上のツールバーから作ります")
-                            .color(l.pal.ink3),
-                    );
+                    ui.label(egui::RichText::new(self.win.t("timeline-empty")).color(l.pal.ink3));
                 }
                 self.timeline_range(
                     ui,
@@ -554,17 +574,14 @@ impl Workspace {
     fn rollback_buttons(&mut self, ui: &mut egui::Ui, data: &kmb_core::DocumentData) {
         let n = data.features.len() as i32;
         for (icon, name, step) in [
-            ("prev", "ロールバックの棒を先頭へ", -n),
-            (
-                "back",
-                "ロールバックの棒を 1 つ前へ(後ろの機能を一時的に無効にする)",
-                -1,
-            ),
-            ("fwd", "ロールバックの棒を 1 つ後ろへ", 1),
-            ("next", "ロールバックの棒を最後へ(すべて有効にする)", n),
+            ("prev", "timeline-rollback-start", -n),
+            ("back", "timeline-rollback-back", -1),
+            ("fwd", "timeline-rollback-forward", 1),
+            ("next", "timeline-rollback-end", n),
         ] {
-            if theme::icon_button(ui, icon, name, n > 0, false)
-                .on_hover_text(name)
+            let name = self.win.t(name);
+            if theme::icon_button(ui, icon, &name, n > 0, false)
+                .on_hover_text(&name)
                 .clicked()
             {
                 // 加工の機能はこのタイムラインに出さないので、設計の機能ごとに動かす
@@ -621,7 +638,8 @@ impl Workspace {
             .iter()
             .filter(|f| !self.is_cam_feature(&f.type_id))
             .count();
-        let mut s = format!("{} 機能", design.len());
+        let count = |id: &str, n: usize| self.win.t_with(id, &[("count", n.into())]);
+        let mut s = count("timeline-count", design.len());
         let (mut errors, mut warnings) = (0, 0);
         for f in design {
             match Health::of(self.cur.work.report().feature(f.id)) {
@@ -631,16 +649,16 @@ impl Workspace {
             }
         }
         if errors > 0 {
-            s += &format!(" ・ エラー {errors}");
+            s += &format!(" ・ {}", count("timeline-count-errors", errors));
         }
         if warnings > 0 {
-            s += &format!(" ・ 注意 {warnings}");
+            s += &format!(" ・ {}", count("timeline-count-warnings", warnings));
         }
         if !data.groups.is_empty() {
-            s += &format!(" ・ グループ {}", data.groups.len());
+            s += &format!(" ・ {}", count("timeline-count-groups", data.groups.len()));
         }
         if rolled > 0 {
-            s += &format!(" ・ {rolled} つはロールバックの後");
+            s += &format!(" ・ {}", count("timeline-count-rolled", rolled));
         }
         vec![s]
     }
@@ -690,7 +708,8 @@ impl Workspace {
             Vec2::new(12.0, h)
         };
         let (rect, r) = ui.allocate_exact_size(size, Sense::click_and_drag());
-        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "今の位置の印"));
+        let marker = self.win.t("timeline-marker");
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, &marker));
         let marker = crate::doc_id(ui.ctx(), "timeline_marker");
         let dragging = ui
             .ctx()
@@ -864,14 +883,13 @@ impl Workspace {
         let l = theme::look(ui.ctx());
         let color = group_color(g.id, &l);
         let collapsed = self.cur.collapsed.contains(&g.id);
-        let verb = if collapsed { "開く" } else { "畳む" };
-        r.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::WidgetType::Button,
-                true,
-                format!("グループ「{}」を{verb}", g.name),
-            )
-        });
+        let (label, tip) = if collapsed {
+            ("timeline-group-expand", "timeline-group-expand-tip")
+        } else {
+            ("timeline-group-collapse", "timeline-group-collapse-tip")
+        };
+        let label = self.win.t_with(label, &[("name", g.name.as_str().into())]);
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
         if r.hovered() {
             ui.painter().rect_filled(
                 tw,
@@ -887,9 +905,9 @@ impl Workspace {
             1.8,
         );
         let n = edit::group_members(self.cur.work.doc().data(), g.id).len();
-        let r = r.on_hover_text(format!(
-            "グループ「{}」({n} 個)\n押すと{verb}。右クリックで名前変更・解く・消す",
-            g.name
+        let r = r.on_hover_text(self.win.t_with(
+            tip,
+            &[("name", g.name.as_str().into()), ("count", n.into())],
         ));
         if r.clicked() {
             if collapsed {
@@ -922,7 +940,7 @@ impl Workspace {
         );
         // 台本と読み上げが名前で見つけられるように
         ui.ctx()
-            .accesskit_node_builder(r.id, |b| b.set_label("グループの名前"));
+            .accesskit_node_builder(r.id, |b| b.set_label(self.win.t("timeline-group-name")));
         let first = ui.ctx().data_mut(|d| {
             let first = d.get_temp::<u64>(started) != Some(gid);
             d.insert_temp(started, gid);
@@ -1042,7 +1060,7 @@ impl Workspace {
                 );
                 if let Some(h) = worst {
                     paint_health(ui.painter(), egui::pos2(r.right() - 6.0, cy), &h, &l, false);
-                    resp.on_hover_text(format!("中に{}があります(開くと見える)", h.title()));
+                    resp.on_hover_text(h.inside(&self.win.words(), "timeline"));
                 }
             } else {
                 let mut inner = Vec::new();
@@ -1141,7 +1159,7 @@ impl Workspace {
                 Sense::click(),
             );
             r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &m.name));
-            let r = r.on_hover_text("押すと中身をまとめて選ぶ。右クリックで名前・解く・消す");
+            let r = r.on_hover_text(self.win.t("timeline-group-select-tip"));
             if r.clicked() {
                 self.select_group_members(data, m.id);
             }
@@ -1235,7 +1253,7 @@ impl Workspace {
                 if collapsed && let Some(h) = worst {
                     let (d, r) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
                     paint_health(ui.painter(), d.center(), &h, &l, false);
-                    r.on_hover_text(format!("中に{}があります(開くと見える)", h.title()));
+                    r.on_hover_text(h.inside(&self.win.words(), "timeline"));
                 }
             });
             if collapsed {
@@ -1454,6 +1472,7 @@ impl Workspace {
             Some(FeatureStatus::Ok { reused: true, .. })
         );
         let tip = chip_tip(
+            &self.win.words(),
             &f.name,
             &health,
             self.cur.work.report().time_ms(f.id),
@@ -1505,9 +1524,15 @@ impl Workspace {
             self.feature_menu(ui, f.id);
             // ボディを作る機能は、そのボディをブラウザで探せる(3D のビューの右クリックと同じ)
             if self.output(f.id, "body").is_some()
-                && crate::theme::menu_row(ui, "search", "ブラウザ内を検索", "", true)
-                    .on_hover_text("この機能のボディを、ブラウザで光らせる")
-                    .clicked()
+                && crate::theme::menu_row(
+                    ui,
+                    "search",
+                    &self.win.t("timeline-find-in-browser"),
+                    "",
+                    true,
+                )
+                .on_hover_text(self.win.t("timeline-find-in-browser-tip"))
+                .clicked()
             {
                 self.find_in_browser(f.id);
                 ui.close();
@@ -1537,7 +1562,9 @@ impl Workspace {
         if let Some(p) = pos {
             let label = match group.len() {
                 1 => data.feature(id).map_or(String::new(), |f| f.name.clone()),
-                n => format!("{n} 個の機能"),
+                n => self
+                    .win
+                    .t_with("timeline-drag-many", &[("count", n.into())]),
             };
             ui.painter().text(
                 p + egui::vec2(10.0, -10.0),
@@ -1651,8 +1678,11 @@ impl Workspace {
         };
         let why = err.describe(self.cur.work.doc().data());
         let mut choice = None;
+        let mut choice_cancel = false;
         let mut open = true;
-        egui::Window::new("グループにできません")
+        let words = self.win.words();
+        let t = |id: &str| words.t(id);
+        egui::Window::new(t("timeline-group-cannot"))
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
@@ -1661,26 +1691,26 @@ impl Workspace {
                 ui.horizontal(|ui| {
                     if matches!(err, GroupError::Gaps(_)) {
                         if ui
-                            .button("間も含める")
-                            .on_hover_text("最初から最後までの間にある機能も入れてまとめる")
+                            .button(t("timeline-group-include-gaps"))
+                            .on_hover_text(t("timeline-group-include-gaps-tip"))
                             .clicked()
                         {
                             choice = Some(GroupMode::IncludeGaps);
                         }
                         if ui
-                            .button("寄せてからまとめる")
-                            .on_hover_text("間の機能を後ろへ出し、選んだものだけを並べてまとめる")
+                            .button(t("timeline-group-gather"))
+                            .on_hover_text(t("timeline-group-gather-tip"))
                             .clicked()
                         {
                             choice = Some(GroupMode::Gather);
                         }
                     }
-                    if ui.button("キャンセル").clicked() {
-                        self.cur.group_ask = None;
+                    if ui.button(t("common-cancel")).clicked() {
+                        choice_cancel = true;
                     }
                 });
             });
-        if !open {
+        if !open || choice_cancel {
             self.cur.group_ask = None;
         }
         if let Some(mode) = choice {
@@ -1694,7 +1724,9 @@ impl Workspace {
         let data = self.cur.work.doc().data().clone();
         let members = edit::group_members(&data, g.id);
         let mut done = false;
-        if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
+        let words = self.win.words();
+        let t = |id: &str| words.t(id);
+        if crate::theme::menu_row(ui, "rename", &t("timeline-group-rename"), "", true).clicked() {
             self.cur.renaming_group = Some((g.id, g.name.clone()));
             done = true;
         }
@@ -1702,7 +1734,11 @@ impl Workspace {
         if crate::theme::menu_row(
             ui,
             if collapsed { "chevr" } else { "chev" },
-            if collapsed { "開く" } else { "畳む" },
+            &t(if collapsed {
+                "timeline-group-open"
+            } else {
+                "timeline-group-close"
+            }),
             "",
             true,
         )
@@ -1721,11 +1757,11 @@ impl Workspace {
         if crate::theme::menu_row(
             ui,
             "suppress",
-            if all_suppressed {
-                "まとめて抑制を解除"
+            &t(if all_suppressed {
+                "timeline-group-unsuppress"
             } else {
-                "まとめて抑制"
-            },
+                "timeline-group-suppress"
+            }),
             "",
             true,
         )
@@ -1735,16 +1771,16 @@ impl Workspace {
             done = true;
         }
         ui.separator();
-        if crate::theme::menu_row(ui, "ungroup", "グループを解く(中身は残す)", "", true).clicked()
+        if crate::theme::menu_row(ui, "ungroup", &t("timeline-ungroup"), "", true).clicked()
             && let Ok(tx) = edit::ungroup(&data, g.id)
         {
             self.apply(tx);
             done = true;
         }
-        if crate::theme::menu_row_danger(ui, "trash", "グループと中身を削除", "", true)
-            .on_hover_text(format!(
-                "中の {} 個の機能も消す。取り消し(Ctrl+Z)で戻せる",
-                members.len()
+        if crate::theme::menu_row_danger(ui, "trash", &t("timeline-group-delete"), "", true)
+            .on_hover_text(self.win.t_with(
+                "timeline-group-delete-tip",
+                &[("count", members.len().into())],
             ))
             .clicked()
             && let Ok(tx) = edit::delete_group(&data, g.id)
@@ -1790,8 +1826,9 @@ mod health_tests {
             by: "フィレット1".into(),
             feature: Some(FeatureId(3)),
         }));
+        let w = &crate::window_state::Words::of(&egui::Context::default());
         assert_eq!(
-            blocked.message(),
+            blocked.message(w),
             "フィレット1 が使えないので、この機能は計算していません"
         );
         assert_eq!(Health::of(Some(&FeatureStatus::Suppressed)), Health::Idle);
@@ -1805,11 +1842,11 @@ mod health_tests {
         );
         assert_eq!(worst_health([Health::Ok, Health::Idle].into_iter()), None);
         // 指を置いた時の説明に、種類と文と確かめ方
-        let tip = health_tip("フィレット2", &err);
+        let tip = health_tip(w, "フィレット2", &err);
         assert!(tip.starts_with("フィレット2\nエラー: 半径が大きすぎます"));
         assert!(tip.contains("「エラーを確かめる」"));
-        assert!(health_tip("押し出し1", &Health::Ok) == "押し出し1");
-        assert!(health_tip("外形", &warn).contains("「注意を確かめる」"));
+        assert!(health_tip(w, "押し出し1", &Health::Ok) == "押し出し1");
+        assert!(health_tip(w, "外形", &warn).contains("「注意を確かめる」"));
     }
 }
 

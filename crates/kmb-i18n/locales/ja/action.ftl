@@ -81,7 +81,7 @@ action-cad-chamfer-tip = 押してから辺か面をクリックすると、そ�
 action-cad-draft-plane = 引き出し方向を選ぶ
 action-cad-draft-plane-tip = 選んでいる勾配の引き出し方向の平面を、原点の XY・YZ・ZX 平面の四角か作業平面か、ボディの平らな面をクリックして決める
 action-cad-extrude = 押し出し
-action-cad-extrude-tip = 押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)
+action-cad-extrude-tip = 押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。高さを決める間にマウスを別の平らな面に載せると、その面まで伸ばし、クリックすると範囲を「対象まで」にして作る。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)
 action-cad-extrude-regions = 領域を選び直す
 action-cad-extrude-regions-tip = 選んでいる押し出しの、押し出す領域をクリックで足す・外す(今の領域を選んだまま始まる)。Enter で決める
 action-cad-extrude-to-face = 対象の面までにする
@@ -288,3 +288,37 @@ action-study-cancel = 中止
 action-study-cancel-tip = 計算をやめる(流れは、ここまでのコマを結果に残す)
 action-study-run = 実行
 action-study-run-tip = 選んだ研究を解く。研究は自動では解きません。条件や形を変えると結果に「古い」が付きます
+
+## 機能の右クリックだけに出る操作(タイムライン・ブラウザ・3D のビュー)
+## 機能の種類で説明の変わる操作(パラメータを既定として保存・進入位置を置く)は、説明を種類によらない文にした。
+
+action-asm-link-break = リンクを切る
+action-asm-link-break-tip = 元のファイルとのつながりをやめ、今の写しのまま持つ(元が変わっても知らせない。取り消せる)
+action-asm-link-pin = この版に固定
+action-asm-link-pin-tip = 固定すると、元のファイルが変わっても知らせず、最新にもしない
+action-asm-link-update = 最新にする
+action-asm-link-update-tip = 元のファイルの今の形に差し替える(取り消せる)
+action-cad-pattern-axis = 軸を選ぶ
+action-cad-pattern-axis-tip = 選んでいるパターンの軸(直線のパターンは向き)を、原点の X・Y・Z 軸・スケッチの線・ボディの辺(円の辺はその円の軸)をクリックして決める
+action-cad-pattern-axis2 = 方向 2 を選ぶ
+action-cad-pattern-axis2-tip = 選んでいる直線のパターンの方向 2(格子のもう 1 つの向き)を、原点の X・Y・Z 軸・スケッチの線・ボディの辺(円の辺はその円の軸)をクリックして決める
+action-cam-contour-chains = 削る輪郭を選ぶ
+action-cam-contour-chains-tip = 面の外周と穴の縁、スケッチの線をクリックで足す・外し、Enter で決める。いくつでも選べる。選ばずに Enter なら部品の外形
+action-cam-contour-tabs = タブを置く
+action-cam-contour-tabs-tip = 経路の上をクリックでタブを足す・外し、Enter で決める。選ばずに Enter なら、タブの数の欄で等間隔に置く
+action-cam-defaults-save = パラメータを既定として保存
+action-cam-defaults-save-tip = この加工の値(切削条件・残し量・段など)を、次に足す同じ種類の加工の初めの値にする。面・工具・セットアップは保存しない
+action-cam-entry-place = 進入位置を置く
+action-cam-entry-place-tip = クリックした所から削り始める。らせんなら、そこを中心にらせんで下りる
+action-cam-floor-add = 選んだ面を足す
+action-cam-floor-add-tip = 3D のビューで選んだ平らな面を、底の面に足す(Shift・Ctrl+クリックで複数選べる)
+action-cam-floor-remove = 選んだ面を外す
+action-cam-floor-remove-tip = 3D のビューで選んだ面を、底の面から外す
+action-cam-rest-pocket = 取残し加工
+action-cam-rest-pocket-tip = この工具が届かなかった隅や細い溝だけを、ライブラリの次に先の細い工具で削る(ポケットと輪郭は V・テーパーも)
+action-cam-setup-add-body = 削るボディを足す
+action-cam-setup-add-body-tip = 1 つのセットアップで、ほかのボディも一緒に削る(1 枚の板から部品を何個も削る時など)
+action-cam-setup-origin-pick = 原点を 3D で選ぶ
+action-cam-setup-origin-pick-tip = ストックの箱の角・辺の中点・面の中心か、部品の外形の箱の点、部品の角をクリックして、作業座標系の原点にする
+action-cam-template-save = テンプレートとして保存…
+action-cam-template-save-tip = 選んだ加工(セットアップなら中の加工すべて)を名前を付けて PC に保存し、別のセットアップや文書で使う。面や線は保存せず、使う時に選び直す

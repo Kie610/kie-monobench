@@ -240,7 +240,7 @@ impl Workspace {
     /// 状態の印と、読みやすく直した説明(タイムライン・ブラウザ・パネルの説明に使う)。
     pub(crate) fn status_line(&self, id: FeatureId) -> (&'static str, String) {
         let st = self.cur.work.report().feature(id);
-        let (mark, detail) = crate::timeline_ui::status_mark(st);
+        let (mark, detail) = crate::timeline_ui::status_mark(&self.win.words(), st);
         match st {
             Some(FeatureStatus::Error { .. }) | Some(FeatureStatus::Ok { .. }) => {
                 (mark, self.field_labels(id, self.plain_text(&detail)))

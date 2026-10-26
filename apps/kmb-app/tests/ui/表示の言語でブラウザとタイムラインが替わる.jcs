@@ -1,0 +1,29 @@
+# 表示の言語(2026-10-27): English にすると、ブラウザ(種類の札・まとまり・目・ボディの右クリック)と
+# タイムライン(今の位置の印・機能の数・機能の右クリック)が英語になり、日本語に戻すと戻る。
+# 機能とボディの名前は文書の中身なので替わらない。
+#! sample part
+
+expect "ボディ を隠す"
+expect "今の位置の印"
+shot 日本語のブラウザとタイムライン
+click "設定"
+select "表示の言語" "English"
+click "Close window"
+expect "Hide Bodies"
+expect "Show Origin"
+expect "Rollback Marker"
+expect "ボディ を隠す" missing
+rclick "ボディ1"
+expect "Rename"
+expect "Find in Timeline"
+expect "名前変更" missing
+shot 英語のボディの右クリック
+key Escape
+
+# 日本語に戻すと戻る
+click "Preferences"
+select "Display language" "日本語"
+click "Close window"
+expect "ボディ を隠す"
+expect "今の位置の印"
+expect "Hide Bodies" missing

@@ -1230,21 +1230,61 @@ fn chosen(cx: &Context<'_>) -> Option<(FeatureId, Vec<String>)> {
     default_sketch(cx).map(|id| (id, Vec::new()))
 }
 
-/// スケッチを押し出す。面のスケッチならその面のボディに、ほかは最後に見えるボディに結合し、ボディが無ければ新しいボディにする。
-/// 距離 `distance`(mm)を指定すればその距離で。負なら逆向きに押し出し、ボディがあれば切り取る。
-/// 閉じた輪郭が無く線だけのスケッチなら、線の真ん中に厚さ 2 mm の壁を付けた薄い押し出しにする。
 /// 押し出しの高さの既定(mm)。
 const DISTANCE: f64 = 10.0;
 
+/// 引数 `to_face`(`{"feature": 機能の番号, "face": 面の名前}` か頂点の `{"feature", "vertex"}`。
+/// 高さを決める手順で面にマウスを載せて決めた時)の「対象まで」の相手。その機能のボディに、
+/// その平らな面か頂点が無ければ誤り(黙って距離にしない)。
+fn stop_arg(cx: &Context<'_>) -> Result<Option<ToFace>, kmb_core::Problem> {
+    let Some(v) = cx.arg("to_face") else {
+        return Ok(None);
+    };
+    let t: ToFace = serde_json::from_value(v.clone()).map_err(|e| {
+        format!(
+            "to_face は {{\"feature\": 機能の番号, \"face\": 面の名前}} で指定してください({e})"
+        )
+    })?;
+    let found = matches!(cx.output(t.feature, "body"), Some(kmb_core::Value::Shape(b))
+        if kmb_cad::stop_at::has(cx.kernel.as_ref(), *b, &t.pick()));
+    if !found {
+        return Err(format!(
+            "対象の平らな面か頂点が {} のボディにありません。押し出しより前からある平らな面か頂点を選んでください",
+            t.feature
+        )
+        .into());
+    }
+    Ok(Some(t))
+}
+
+/// 輪郭 `profile` の平面から「対象まで」の相手 `t` までの距離(法線の向きが正)。押し出す向きと、
+/// 結合か切り取りかをこの符号で決める(前へ伸ばすと結合、逆へ伸ばすと切り取り。距離の手順と同じ)。
+fn stop_distance(
+    cx: &Context<'_>,
+    t: &ToFace,
+    profile: &kmb_core::Profile,
+) -> Result<f64, kmb_core::Problem> {
+    let Some(kmb_core::Value::Shape(b)) = cx.output(t.feature, "body") else {
+        return Err(format!("{} はボディではありません", t.feature).into());
+    };
+    Ok(face_stop(cx.kernel.as_ref(), *b, &t.pick(), profile)?.near)
+}
+
+/// スケッチを押し出す。面のスケッチならその面のボディに、ほかは最後に見えるボディに結合し、ボディが無ければ新しいボディにする。
+/// 距離 `distance`(mm)を指定すればその距離で。負なら逆向きに押し出し、ボディがあれば切り取る。
+/// 閉じた輪郭が無く線だけのスケッチなら、線の真ん中に厚さ 2 mm の壁を付けた薄い押し出しにする。
+/// 相手 `to_face` を指定すれば、範囲をその面までにする(向きと演算は面のある側で決め、`distance` は使わない)。
 fn add_extrude(
     cx: &Context<'_>,
     sketch: FeatureId,
     regions: Vec<String>,
 ) -> Result<Outcome, kmb_core::Problem> {
     let open = regions.is_empty() && open_lines(cx, sketch).is_some();
-    if !open {
-        chosen_profile(cx, sketch, &regions)?;
-    }
+    let profile = if open {
+        open_preview(cx, sketch)
+    } else {
+        Ok(chosen_profile(cx, sketch, &regions)?)
+    };
     // 面のスケッチなら、その面のボディ(の今の形)に結合する。原点の平面のスケッチは最後に見える
     // ボディ
     let bodies = cx.visible_bodies();
@@ -1253,7 +1293,10 @@ fn add_extrude(
         .into_iter()
         .find(|f| bodies.iter().any(|b| b.0 == *f))
         .or(bodies.last().map(|b| b.0));
-    let d = cx.arg_f64("distance")?.unwrap_or(DISTANCE);
+    let (d, to_face) = match stop_arg(cx)? {
+        Some(t) => (stop_distance(cx, &t, &profile?)?, Some(t)),
+        None => (cx.arg_f64("distance")?.unwrap_or(DISTANCE), None),
+    };
     if d.abs() < 1e-6 {
         return Err("距離が 0 です".into());
     }
@@ -1269,8 +1312,12 @@ fn add_extrude(
             Direction::Normal
         },
         distance2: None,
-        extent: Extent::Distance,
-        to_face: None,
+        extent: if to_face.is_some() {
+            Extent::ToFace
+        } else {
+            Extent::Distance
+        },
+        to_face,
         to_offset: None,
         operation: match (target.is_some(), d < 0.0) {
             (false, _) => Operation::New,
@@ -1363,12 +1410,17 @@ fn faces_profile(
 }
 
 /// 平らな面を押し出す。面のボディに結合する(距離 `distance` が負なら切り取る)。
+/// 相手 `to_face` を指定すれば、範囲をその面までにする(向きと演算は面のある側で決める)。
 fn add_face_extrude(
     cx: &Context<'_>,
     faces: Vec<kmb_core::Ref>,
+    profile: &kmb_core::Profile,
 ) -> Result<Outcome, kmb_core::Problem> {
     let target = faces.first().map(|r| r.feature());
-    let d = cx.arg_f64("distance")?.unwrap_or(DISTANCE);
+    let (d, to_face) = match stop_arg(cx)? {
+        Some(t) => (stop_distance(cx, &t, profile)?, Some(t)),
+        None => (cx.arg_f64("distance")?.unwrap_or(DISTANCE), None),
+    };
     if d.abs() < 1e-6 {
         return Err("距離が 0 です".into());
     }
@@ -1387,6 +1439,12 @@ fn add_face_extrude(
             Operation::Join
         },
         target,
+        extent: if to_face.is_some() {
+            Extent::ToFace
+        } else {
+            Extent::Distance
+        },
+        to_face,
         ..Extrude::default()
     };
     Ok(Outcome::insert(
@@ -1459,8 +1517,7 @@ fn tapered_lines(
     out
 }
 
-const DISTANCE_LABEL: &str =
-    "マウスを動かして高さを決め、クリックで確定。逆向きにするとボディを切り取る";
+const DISTANCE_LABEL: &str = "マウスを動かして高さを決め、クリックで確定。逆向きにするとボディを切り取る。別の平らな面に載せるとその面まで";
 
 /// 押し出しの高さを決める手順: 輪郭の重心から法線の向きにマウスで。
 fn distance_handle(p: &kmb_core::Profile) -> Handle {
@@ -1472,6 +1529,7 @@ fn distance_handle(p: &kmb_core::Profile) -> Handle {
     Handle {
         outline,
         shape: Some(std::sync::Arc::new(shape)),
+        stop_key: Some("to_face".into()),
         ..Handle::new(
             "distance",
             DISTANCE_LABEL,
@@ -1724,11 +1782,15 @@ impl Extension for ExtrudeCommands {
                     &[kmb_core::RefKind::PlanarFace],
                 ))
                 .args(regions::args())
+                .arg(Arg::object(
+                    "to_face",
+                    "範囲を「対象まで」にする相手 {\"feature\": 機能の番号, \"face\": 平らな面の名前}(頂点なら \"face\" の代わりに \"vertex\")。指定すると distance は使わない",
+                ))
                 .role(kmb_interchange::role::action::EXTRUDE)
                 .menu("作成")
                 .icon("extrude")
                 .aliases("おしだし extrude")
-                .hint("押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)")
+                .hint("押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。高さを決める間にマウスを別の平らな面に載せると、その面まで伸ばし、クリックすると範囲を「対象まで」にして作る。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)")
                 .at(&[Place::Toolbar])
                 .at(if sketch { &[Place::FeatureMenu] } else { &[] })
                 .disabled_if(why.as_deref()),
@@ -1791,7 +1853,7 @@ impl Extension for ExtrudeCommands {
                 })
             })(),
             EXTRUDE_SKETCH => match chosen_faces(cx) {
-                Some(Ok((faces, _))) => add_face_extrude(cx, faces),
+                Some(Ok((faces, p))) => add_face_extrude(cx, faces, &p),
                 Some(Err(why)) => Err(why.into()),
                 None => chosen(cx)
                     .ok_or_else(|| {
