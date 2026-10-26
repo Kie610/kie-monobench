@@ -7,8 +7,8 @@
 //! 部品を出すか隠すかは、`Layout::browser_open` などの印で決める。隠すと並びから外し、
 //! 外す前の場所(隣の部品と分け方)を覚えて、また出す時にそこへ戻す。
 
-use crate::theme::RightMenu as _;
 use crate::layout::Space;
+use crate::theme::RightMenu as _;
 use crate::{Workspace, theme};
 use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer};
@@ -406,7 +406,7 @@ fn fit_size(d: &mut DockState<Pane>, pane: Pane, horizontal: bool, size: f32) ->
 
 /// 部品の右クリックのメニュー(タブ、またはタブの帯を出さない所の見出し)。
 pub(crate) fn pane_menu(ui: &mut egui::Ui, pane: Pane, act: &mut Option<DockAction>) {
-    if ui.button("並びを既定に戻す").clicked() {
+    if crate::theme::menu_row(ui, "undo", "並びを既定に戻す", "", true).clicked() {
         *act = Some(DockAction::Reset);
         ui.close();
     }
@@ -414,19 +414,18 @@ pub(crate) fn pane_menu(ui: &mut egui::Ui, pane: Pane, act: &mut Option<DockActi
         return;
     }
     ui.separator();
-    if ui.button("窓に浮かせる").clicked() {
+    if crate::theme::menu_row(ui, "layers", "窓に浮かせる", "", true).clicked() {
         *act = Some(DockAction::Float(pane));
         ui.close();
     }
-    if ui
-        .button("アプリの外の窓に出す")
+    if crate::theme::menu_row(ui, "export", "アプリの外の窓に出す", "", true)
         .on_hover_text("別の窓にして、別のモニターへも動かせる。その窓を閉じると元の場所に戻る")
         .clicked()
     {
         *act = Some(DockAction::Outer(pane));
         ui.close();
     }
-    if ui.button("隠す").clicked() {
+    if crate::theme::menu_row(ui, "eyeoff", "隠す", "", true).clicked() {
         *act = Some(DockAction::Hide(pane));
         ui.close();
     }

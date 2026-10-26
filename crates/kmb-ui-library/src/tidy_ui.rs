@@ -4,7 +4,6 @@
 //! 判定は kmb-session の [`kmb_session::tidy`](画面は呼んで出すだけ)。どれも候補を並べるだけで、
 //! 移す・消すは利用者が押した時に [`HomeRequest`] で頼む。
 
-use kmb_ui::theme::RightMenu as _;
 use crate::middle::band;
 use crate::{
     Drag, GroupsKey, Item, Library, Place, Sort, Tidy, file_name, heading, key_button, place_row,
@@ -12,6 +11,7 @@ use crate::{
 use kmb_session::library::{Period, ago_label, bytes_label};
 use kmb_session::tidy::{self, Entry, Group, Kind};
 use kmb_ui::theme;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::{HomeHost, HomeRequest};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -94,7 +94,7 @@ impl Library {
             let r = place_row(ui, "search", &f.name, None, self.place == place)
                 .on_hover_text(f.describe());
             r.right_menu(|ui| {
-                if ui.button("削除").clicked() {
+                if theme::menu_row(ui, "trash", "削除", "", true).clicked() {
                     host.request(HomeRequest::RemoveFilter(f.name.clone()));
                     if self.place == place {
                         self.go(Place::Recent);
@@ -650,17 +650,17 @@ impl Library {
         project: &Path,
         path: &Path,
     ) {
-        if ui.button("ここに新規デザイン").clicked() {
+        if theme::menu_row(ui, "plus", "ここに新規デザイン", "", true).clicked() {
             host.request(HomeRequest::NewDesignIn(path.to_path_buf()));
             ui.close();
         }
-        if ui.button("エクスプローラーで開く").clicked() {
+        if theme::menu_row(ui, "folder", "エクスプローラーで開く", "", true).clicked() {
             host.request(HomeRequest::ShowFolder(path.to_path_buf()));
             ui.close();
         }
         if path == project {
-            if ui
-                .button("一覧から外す")
+            ui.separator();
+            if theme::menu_row(ui, "x", "一覧から外す", "", true)
                 .on_hover_text("フォルダとデザインは消しません")
                 .clicked()
             {
@@ -670,7 +670,7 @@ impl Library {
             return;
         }
         ui.separator();
-        if ui.button("名前を変える…").clicked() {
+        if theme::menu_row(ui, "rename", "名前を変える…", "", true).clicked() {
             self.go(Place::Folder {
                 project: project.to_path_buf(),
                 folder: path.parent().unwrap_or(project).to_path_buf(),
@@ -680,9 +680,10 @@ impl Library {
             self.rename_focus = true;
             ui.close();
         }
-        ui.menu_button("移す", |ui| self.folder_move_menu(ui, host, path));
-        if ui
-            .button("削除…")
+        theme::menu_sub(ui, "movecopy", "移す", |ui| {
+            self.folder_move_menu(ui, host, path)
+        });
+        if theme::menu_row(ui, "trash", "削除…", "", true)
             .on_hover_text("フォルダと中の物を PC のごみ箱へ移します")
             .clicked()
         {

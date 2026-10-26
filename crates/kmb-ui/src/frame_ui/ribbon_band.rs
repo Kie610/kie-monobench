@@ -1,7 +1,7 @@
 //! タブ付きツールバー: 作業空間の切替の箱、タブ、まとまりの帯(大きなボタン・2 段の小さなボタン・▾ の一覧)、選択のまとまり。
 
-use crate::theme::RightMenu as _;
 use super::*;
+use crate::theme::RightMenu as _;
 
 impl Workspace {
     /// 今の作業空間のツールバーのタブ。
@@ -363,7 +363,8 @@ impl Workspace {
                                 self.win.tab = t.name.clone();
                             }
                             r.right_menu(|ui| {
-                                if ui.button("左へ").clicked() {
+                                if crate::theme::menu_row(ui, "chevl", "左へ", "", true).clicked()
+                                {
                                     ribbon::move_tab(
                                         self.win.layout.space,
                                         &tabs,
@@ -373,7 +374,8 @@ impl Workspace {
                                     );
                                     ui.close();
                                 }
-                                if ui.button("右へ").clicked() {
+                                if crate::theme::menu_row(ui, "chevr", "右へ", "", true).clicked()
+                                {
                                     ribbon::move_tab(
                                         self.win.layout.space,
                                         &tabs,
@@ -383,7 +385,16 @@ impl Workspace {
                                     );
                                     ui.close();
                                 }
-                                if ui.button("タブの順を既定に戻す").clicked() {
+                                ui.separator();
+                                if crate::theme::menu_row(
+                                    ui,
+                                    "undo",
+                                    "タブの順を既定に戻す",
+                                    "",
+                                    true,
+                                )
+                                .clicked()
+                                {
                                     self.win.layout.tab_order.clear();
                                     ui.close();
                                 }
@@ -861,16 +872,18 @@ impl Workspace {
         }
         r.right_menu(|ui| {
             let mut e = None;
-            if ui.button("左へ").clicked() {
+            if crate::theme::menu_row(ui, "chevl", "左へ", "", true).clicked() {
                 e = Some(PinEdit::Move(it.key.clone(), -1));
             }
-            if ui.button("右へ").clicked() {
+            if crate::theme::menu_row(ui, "chevr", "右へ", "", true).clicked() {
                 e = Some(PinEdit::Move(it.key.clone(), 1));
             }
-            if ui.button("前から外す").clicked() {
+            ui.separator();
+            if crate::theme::menu_row(ui, "pin", "前から外す", "", true).clicked() {
                 e = Some(PinEdit::Unpin(it.key.clone()));
             }
-            if ui.button("このまとまりを既定に戻す").clicked() {
+            if crate::theme::menu_row(ui, "undo", "このまとまりを既定に戻す", "", true).clicked()
+            {
                 e = Some(PinEdit::Reset);
             }
             if let Some(e) = e {

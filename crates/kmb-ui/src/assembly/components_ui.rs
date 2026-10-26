@@ -14,9 +14,9 @@
 //! 部品から外す。部品の複製は、中のボディを元の形を追う写し(役割 `kmb_interchange::role::kind::COPY_BODY` の機能)にして、
 //! 同じ並びの新しい部品にまとめ、横へずらした位置(役割 `kmb_interchange::role::kind::COMPONENT_POSITION` の機能)に置く。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::browser_ui::folder_row_radio;
+use crate::theme::RightMenu as _;
 use kmb_core::{Component, FeatureEntry, FeatureId, LinkInfo, LinkStatus};
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};
@@ -522,17 +522,12 @@ impl Workspace {
             let Some(a) = actions.iter().find(|a| a.id == *id) else {
                 continue;
             };
-            let r = ui
-                .add_enabled(a.disabled.is_none(), egui::Button::new(&a.label))
-                .on_hover_text(&a.hint)
-                .on_disabled_hover_text(a.disabled.clone().unwrap_or_default());
-            if r.clicked() {
+            if crate::action_row(ui, a, "").clicked() {
                 self.run_link_action(id, l);
                 ui.close();
             }
         }
-        let open = ui
-            .add_enabled(l.source.is_some(), egui::Button::new("元を開く"))
+        let open = crate::theme::menu_row(ui, "folder", "元を開く", "", l.source.is_some())
             .on_hover_text("元のファイルを別のタブで開く(直して保存し、このタブに戻ると印が出る)")
             .on_disabled_hover_text("元のファイルが見つかりません");
         if open.clicked() {
@@ -557,12 +552,15 @@ impl Workspace {
                 "新しく作るボディと部品をこの部品に入れ、ほかの部品を淡く出す",
             )
         };
-        if ui.button(text).on_hover_text(tip).clicked() {
+        if crate::theme::menu_row(ui, "component", text, "", true)
+            .on_hover_text(tip)
+            .clicked()
+        {
             self.activate_component((!active).then_some(c.id));
             ui.close();
         }
         ui.separator();
-        if ui.button("名前変更").clicked() {
+        if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
             self.cur.renaming = Some((crate::menus_ui::Renaming::Component(c.id), c.name.clone()));
             ui.close();
         }
@@ -571,7 +569,7 @@ impl Workspace {
             .components
             .get(&c.id)
             .cloned();
-        ui.menu_button("外観", |ui| {
+        crate::theme::menu_sub(ui, "appearance", "外観", |ui| {
             // 外観を付けていない中のボディを、この色で塗る
             pick = self
                 .look_menu(ui, own.as_deref(), "なし(ボディの色)")
@@ -583,10 +581,15 @@ impl Workspace {
             ui.ctx().request_repaint();
         }
         if !all.is_empty()
-            && ui
-                .button(if shown { "非表示" } else { "表示" })
-                .on_hover_text("中のボディをまとめて隠す・出す")
-                .clicked()
+            && crate::theme::menu_row(
+                ui,
+                if shown { "eyeoff" } else { "eye" },
+                if shown { "非表示" } else { "表示" },
+                &crate::keys::label("toggle_visible"),
+                true,
+            )
+            .on_hover_text("中のボディをまとめて隠す・出す")
+            .clicked()
         {
             for root in all {
                 self.set_body_hidden(*root, shown);
@@ -594,8 +597,7 @@ impl Workspace {
             ui.close();
         }
         ui.separator();
-        if ui
-            .button("中に新しい部品")
+        if crate::theme::menu_row(ui, "plus", "中に新しい部品", "", true)
             .on_hover_text(
                 "この部品の中に空の部品を作る(ボディは右クリックの「部品へ移す」で入れる)",
             )
@@ -604,8 +606,7 @@ impl Workspace {
             self.new_component(serde_json::json!({ "selection": [], "parent": c.id }));
             ui.close();
         }
-        if ui
-            .button("複製")
+        if crate::theme::menu_row(ui, "duplicate", "複製", "", true)
             .on_hover_text(
                 "中の部品ごと写して横に置く。写しは元の形を追う(元を直すと写しも変わる)。ジョイントは写さない",
             )
@@ -614,8 +615,7 @@ impl Workspace {
             self.duplicate_component(c.id);
             ui.close();
         }
-        if ui
-            .button("部品を解く")
+        if crate::theme::menu_row(ui, "ungroup", "部品を解く", "", true)
             .on_hover_text("部品をやめる。中のボディと部品は外側へ出す(ボディは消えない)")
             .clicked()
         {

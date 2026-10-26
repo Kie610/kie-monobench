@@ -1191,13 +1191,39 @@ impl RightMenu for Response {
 /// ほかの行とそろえ、`keys` が空ならキーを出さない。名前は読み上げと画面の要素の操作に残す。
 /// 行の幅はメニューの幅いっぱいに広げ、まとまりの間は `ui.separator()` で区切る。
 pub fn menu_row(ui: &mut Ui, icon: &str, label: &str, keys: &str, enabled: bool) -> Response {
+    row_of_menu(ui, icon, label, keys, enabled, false)
+}
+
+/// 取り消しても戻すのに手間のかかる行(中身ごと消すなど)。名前を誤りの色で出す。
+pub fn menu_row_danger(
+    ui: &mut Ui,
+    icon: &str,
+    label: &str,
+    keys: &str,
+    enabled: bool,
+) -> Response {
+    row_of_menu(ui, icon, label, keys, enabled, true)
+}
+
+fn row_of_menu(
+    ui: &mut Ui,
+    icon: &str,
+    label: &str,
+    keys: &str,
+    enabled: bool,
+    danger: bool,
+) -> Response {
     let l = look(ui.ctx());
     let sense = if enabled {
         Sense::click()
     } else {
         Sense::hover()
     };
-    let tc = if enabled { l.pal.ink } else { l.pal.ink3 };
+    let tc = match (enabled, danger) {
+        (false, _) => l.pal.ink3,
+        (true, true) => l.pal.err,
+        (true, false) => l.pal.ink,
+    };
     let name = ui
         .painter()
         .layout_no_wrap(label.to_string(), prop(12.5), tc);

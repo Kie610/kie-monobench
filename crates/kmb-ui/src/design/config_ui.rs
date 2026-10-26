@@ -75,8 +75,7 @@ impl Workspace {
                                         .label(egui::RichText::new(l).strong())
                                         .on_hover_text("右クリックで列を外す");
                                     r.right_menu(|ui| {
-                                        if ui
-                                            .button("列を外す")
+                                        if crate::theme::menu_row(ui, "x", "列を外す", "", true)
                                             .on_hover_text("構成表から列を外す(パラメータや機能は消さない)")
                                             .clicked()
                                         {
@@ -295,16 +294,15 @@ fn row_ui(
     }
     r.1.on_hover_text("構成の名前。右クリックで消す・今の値を書き込む")
         .right_menu(|ui| {
-            if ui
-                .button("今の値を書き込む")
+            if crate::theme::menu_row(ui, "save", "今の値を書き込む", "", true)
                 .on_hover_text("今のパラメータの式と抑制を、この行に書き込む")
                 .clicked()
             {
                 act = Some(Act::WriteBack(row.name.clone()));
                 ui.close();
             }
-            if ui
-                .button("構成を削除")
+            ui.separator();
+            if crate::theme::menu_row(ui, "trash", "構成を削除", "", true)
                 .on_hover_text("構成表から行を消す(今の形は変えない。取り消せる)")
                 .clicked()
             {

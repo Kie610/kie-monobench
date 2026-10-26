@@ -1,7 +1,7 @@
 //! スケッチを編集している間のツールバー(編集器の道具をまとまりに並べる)と、スケッチの終わり方。
 
-use crate::theme::RightMenu as _;
 use super::*;
+use crate::theme::RightMenu as _;
 use ribbon_band::{
     group_label, group_widths, more_width, name_width, small_grid, small_width, sub_menu_row,
     tile_hint, tile_width, tool_tile,
@@ -151,16 +151,20 @@ impl Workspace {
                     }
                     r.right_menu(|ui| {
                         let mut e = None;
-                        if ui.button("左へ").clicked() {
+                        if crate::theme::menu_row(ui, "chevl", "左へ", "", true).clicked() {
                             e = Some(PinEdit::Move(t.id.clone(), -1));
                         }
-                        if ui.button("右へ").clicked() {
+                        if crate::theme::menu_row(ui, "chevr", "右へ", "", true).clicked() {
                             e = Some(PinEdit::Move(t.id.clone(), 1));
                         }
-                        if ui.button("前から外す").clicked() {
+                        ui.separator();
+                        if crate::theme::menu_row(ui, "pin", "前から外す", "", true).clicked()
+                        {
                             e = Some(PinEdit::Unpin(t.id.clone()));
                         }
-                        if ui.button("このまとまりを既定に戻す").clicked() {
+                        if crate::theme::menu_row(ui, "undo", "このまとまりを既定に戻す", "", true)
+                            .clicked()
+                        {
                             e = Some(PinEdit::Reset);
                         }
                         if let Some(e) = e {

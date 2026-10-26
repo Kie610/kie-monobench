@@ -17,8 +17,8 @@ mod names;
 
 use code::{
     direct_output_writes, document_extensions, machine_names, numeric_libraries, process_statics,
-    raw_arg_reads, rewrites_on_insert, screen_edits, screen_ops, screen_recomputes,
-    session_only_calls, strategy_kernel_uses, workspace_fields,
+    raw_arg_reads, rewrites_on_insert, right_menu_rows, screen_edits, screen_ops,
+    screen_recomputes, session_only_calls, strategy_kernel_uses, workspace_fields,
 };
 use names::{foreign_names, modules_named_once, names_table};
 
@@ -171,6 +171,7 @@ pub fn check(root: &Path, packages: &[Package]) -> Vec<String> {
     out.extend(document_extensions(root, &g, JSON_NAME_KNOWN));
     out.extend(rewrites_on_insert(root, &g, REWRITE_KNOWN));
     out.extend(workspace_fields(root, WORKSPACE_FIELDS));
+    out.extend(right_menu_rows(root, &g, RIGHT_MENU_KNOWN));
     let all: Vec<(String, String, crate::source::Source)> =
         g.p.keys()
             .flat_map(|&n| {
@@ -386,8 +387,10 @@ impl<'a> Graph<'a> {
         // 呼ぶと、CLI・MCP・画面で同じ処理が別々に育つため。役割の印の語彙(kmb-interchange)は読んでよい
         for app in self.p.keys().filter(|n| self.layer(n) == "app") {
             for d in self.deps(app, false) {
-                if !(matches!(d, "kmb-core" | "kmb-interchange" | "kmb-session" | "kmb-bundle")
-                    || (*app == "kmb-app" && d.starts_with("kmb-ui")))
+                if !(matches!(
+                    d,
+                    "kmb-core" | "kmb-interchange" | "kmb-session" | "kmb-bundle"
+                ) || (*app == "kmb-app" && d.starts_with("kmb-ui")))
                 {
                     out.push(format!("{app} が {d} に直接依存している"));
                 }
@@ -492,7 +495,12 @@ const STATIC_KNOWN: &[(&str, &str, &str, &str)] = &[
         "MAP",
         "一度だけ作る不変の環境の絵(書き換えない)",
     ),
-    ("kmb-io-render", "src/mf.rs", "N", "一時ファイルの名前の採番"),
+    (
+        "kmb-io-render",
+        "src/mf.rs",
+        "N",
+        "一時ファイルの名前の採番",
+    ),
     (
         "kmb-kernel-smlib",
         "src/ffi.rs",
@@ -509,6 +517,9 @@ const SCREEN_OP_KNOWN: &[(&str, &str, usize)] = &[];
 /// 画面とアプリの層で文書の変更を kmb-session の edit(と `Transaction::new`)でその場で組んでいる今の
 /// 所。(crate, ソースの相対パス, 数)。ここで組んだ変更は CLI・MCP から呼べない。減らすだけで足さない
 /// (新しい操作は `Headless` の口に置き、画面もそれを呼ぶ)。
+/// 右クリックのメニューを素のボタンで出している今の所。(crate, ソースの相対パス, 数)。直したら行を消す。
+const RIGHT_MENU_KNOWN: &[(&str, &str, usize)] = &[];
+
 const SCREEN_EDIT_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-ui", "src/animation/animation_ui.rs", 1),
     ("kmb-ui", "src/assembly/components_ui.rs", 2),

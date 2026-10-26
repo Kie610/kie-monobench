@@ -122,6 +122,11 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
         "xtask/src/layers/code.rs",
         "fn workspace_fields(",
     ),
+    (
+        "右クリックの素のボタン",
+        "xtask/src/layers/code.rs",
+        "fn right_menu_buttons(",
+    ),
     ("検査の錠", "xtask/src/main.rs", "fn verify_lock("),
     ("飛ばし", "xtask/src/skips.rs", "pub fn check("),
     ("消えたテスト", "xtask/src/skips.rs", "pub fn removed("),

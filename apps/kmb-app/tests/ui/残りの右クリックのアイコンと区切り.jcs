@@ -1,0 +1,30 @@
+# 残りの右クリックのメニュー(10-19 M17 の続き)。グループ・部品・パラメータ・レンダリング・タブ・
+# ライブラリなどの右クリックも、行の左にアイコン、右にキーを出し、種類ごとに区切る。中身ごと消す
+# 行は名前を誤りの色で出す。
+#! sample part
+#! size 1280x800
+
+# タイムラインのグループの右クリック
+click "板の輪郭"#1
+rclick "板の輪郭"#1
+click ~グループにする
+type field:グループの名前 "ボス" enter
+expect "グループ「ボス」を畳む"
+rclick "グループ「ボス」を畳む"
+expect "まとめて抑制" exists
+expect "グループと中身を削除" exists
+shot グループの右クリック
+key Escape
+expect "グループと中身を削除" missing
+
+# 組立の部品の木の右クリック
+rclick "ボディ1"
+click "新しい部品にする"
+wait
+expect "部品1" exists
+rclick "部品1"
+expect "中に新しい部品" exists
+expect "部品を解く" exists
+shot 部品の右クリック
+key Escape
+expect "部品を解く" missing

@@ -1,8 +1,8 @@
 //! 文書に持つ見せ方の情報: 設計の属性(U13)、名前を付けた視点(U20)、読み込んだ STEP を
 //! 立てるかの問い(U12)。どれも取り消せる変更として文書へ入れる。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
+use crate::theme::RightMenu as _;
 use kmb_core::{FeatureId, NamedView, Properties};
 use kmb_session::edit;
 
@@ -322,19 +322,22 @@ impl Workspace {
                 self.apply_named_view(v.id);
             }
             r.right_menu(|ui| {
-                if ui.button("このビューにする").clicked() {
+                if crate::theme::menu_row(ui, "camera", "このビューにする", "", true).clicked()
+                {
                     self.apply_named_view(v.id);
                     ui.close();
                 }
-                if ui.button("今のビューで上書き").clicked() {
+                if crate::theme::menu_row(ui, "save", "今のビューで上書き", "", true).clicked()
+                {
                     self.update_named_view(v.id);
                     ui.close();
                 }
-                if ui.button("名前変更").clicked() {
+                ui.separator();
+                if crate::theme::menu_row(ui, "rename", "名前変更", "", true).clicked() {
                     self.cur.renaming_view = Some((v.id, v.name.clone()));
                     ui.close();
                 }
-                if ui.button("削除").clicked() {
+                if crate::theme::menu_row(ui, "trash", "削除", "", true).clicked() {
                     self.remove_named_view(v.id);
                     ui.close();
                 }

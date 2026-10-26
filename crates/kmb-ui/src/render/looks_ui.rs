@@ -5,10 +5,10 @@
 //! 選ぶ・お気に入り・割り当てを外して消す。直すのは小さな窓(名前・色・金属・粗さ)。
 //! 文書を変えるのは全部外観の操作([`kmb_interchange::role::action::APPEARANCE`]。CLI・MCP と同じ道)。窓は画面を止めない。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::layout::Space;
 use crate::theme;
+use crate::theme::RightMenu as _;
 use kmb_core::FeatureId;
 use kmb_look::material::{CATEGORIES, LIBRARY};
 use serde_json::{Value, json};
@@ -273,7 +273,9 @@ impl Workspace {
                 // 知らない名前(ほかの版の文書など)。外すことだけできる
                 let resp = ui.label(format!("{n}(知らない外観)"));
                 resp.right_menu(|ui| {
-                    if ui.button("割り当てを外して消す").clicked() {
+                    if crate::theme::menu_row(ui, "trash", "割り当てを外して消す", "", true)
+                        .clicked()
+                    {
                         *cmd = Some(SwatchCmd::Delete(n.clone()));
                         ui.close();
                     }
@@ -293,15 +295,17 @@ impl Workspace {
                 *cmd = Some(SwatchCmd::Apply(n.clone()));
             }
             resp.right_menu(|ui| {
-                if ui.button("編集…").clicked() {
+                if crate::theme::menu_row(ui, "edit", "編集…", "", true).clicked() {
                     *cmd = Some(SwatchCmd::Edit(n.clone()));
                     ui.close();
                 }
-                if ui.button("複製").clicked() {
+                if crate::theme::menu_row(ui, "duplicate", "複製", "", true).clicked() {
                     *cmd = Some(SwatchCmd::Duplicate(n.clone()));
                     ui.close();
                 }
-                if ui.button("適用するオブジェクトを選択").clicked() {
+                if crate::theme::menu_row(ui, "select", "適用するオブジェクトを選択", "", true)
+                    .clicked()
+                {
                     *cmd = Some(SwatchCmd::SelectUsers(n.clone()));
                     ui.close();
                 }
@@ -310,13 +314,12 @@ impl Workspace {
                 } else {
                     "お気に入りに追加"
                 };
-                if ui.button(label).clicked() {
+                if crate::theme::menu_row(ui, "star", label, "", true).clicked() {
                     *cmd = Some(SwatchCmd::Favorite(n.clone(), !fav));
                     ui.close();
                 }
                 ui.separator();
-                if ui
-                    .button("割り当て解除と削除")
+                if crate::theme::menu_row(ui, "trash", "割り当て解除と削除", "", true)
                     .on_hover_text("この外観を付けたボディ・部品・面から外し、このデザインから消す")
                     .clicked()
                 {
@@ -384,19 +387,18 @@ impl Workspace {
                         }
                         resp.right_menu(|ui| {
                             let label = if fav { "お気に入りから外す" } else { "お気に入りに追加" };
-                            if ui.button(label).clicked() {
+                            if crate::theme::menu_row(ui, "star", label, "", true).clicked() {
                                 *cmd = Some(SwatchCmd::Favorite(l.name.to_string(), !fav));
                                 ui.close();
                             }
-                            if ui
-                                .button("このデザインに写して編集…")
+                            if crate::theme::menu_row(ui, "edit", "このデザインに写して編集…", "", true)
                                 .on_hover_text("色と粗さを直した外観をこのデザインに持つ(同じ名前の外観は全部この値になる)")
                                 .clicked()
                             {
                                 *cmd = Some(SwatchCmd::Edit(l.name.to_string()));
                                 ui.close();
                             }
-                            if ui.button("複製").clicked() {
+                            if crate::theme::menu_row(ui, "duplicate", "複製", "", true).clicked() {
                                 *cmd = Some(SwatchCmd::Duplicate(l.name.to_string()));
                                 ui.close();
                             }
@@ -547,7 +549,7 @@ impl Workspace {
         }
         ui.separator();
         for c in CATEGORIES {
-            ui.menu_button(*c, |ui| {
+            crate::theme::menu_sub(ui, "swatch", c, |ui| {
                 for l in LIBRARY.iter().filter(|l| l.category == *c) {
                     if swatch_label(ui, l.color, l.name, current == Some(l.name)).clicked() {
                         pick = Some(l.name.to_string());
@@ -556,7 +558,7 @@ impl Workspace {
             });
         }
         ui.separator();
-        if ui.button("外観の窓…").clicked() {
+        if crate::theme::menu_row(ui, "appearance", "外観の窓…", "", true).clicked() {
             self.open_looks();
             ui.close();
         }
