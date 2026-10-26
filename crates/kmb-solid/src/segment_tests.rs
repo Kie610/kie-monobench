@@ -50,7 +50,8 @@ fn a_3d_sketch_line_turns_a_revolve_and_a_circular_pattern() {
     );
     let m = mass(&mut b.finish("3D スケッチの線で回す"), &k);
     let want = std::f64::consts::PI * (15.0f64.powi(2) - 10.0f64.powi(2)) * 8.0;
-    assert!(close(m.volume, want, 1e-3), "{} {want}", m.volume);
+    // truck は回転の面を近づけて作るので 0.1% ほど小さい(tests.rs の回転と同じ幅)
+    assert!(close(m.volume, want, 2e-3), "{} {want}", m.volume);
     // 箱(x 10〜14)を、Z に立てた 3D スケッチの線のまわりに 4 つ並べる
     let mut b = DocBuilder::new();
     let s = rect_sketch(&mut b, SketchPlane::Xy, 10.0, -2.0, 4.0, 4.0);
