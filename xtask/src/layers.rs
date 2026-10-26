@@ -103,7 +103,7 @@ const DEV_KNOWN: &[(&str, &str, &str)] = &[
 ];
 
 /// 画面の外枠の下に置く部品(画面の拡張ではない。外枠と同じく、機能のモジュールを知らない)。
-const SCREEN_PARTS: [&str; 1] = ["kmb-ui-view3d"];
+const SCREEN_PARTS: [&str; 2] = ["kmb-ui-view3d", "kmb-ui-mouse3d"];
 
 /// 画面の拡張(kmb-ui-*)が通常の依存に持ってよい機能のモジュール(扱う種類のモジュールだけ)。
 const UI_EXTENSIONS: &[(&str, &[&str])] = &[
@@ -347,6 +347,10 @@ impl<'a> Graph<'a> {
             ) {
                 out.push(format!("3D のビューが {d} に依存している"));
             }
+        }
+        // 3D マウスの読み手は機器を読むだけで、egui にもほかの JC の crate にも依存しない
+        for d in self.deps("kmb-ui-mouse3d", false) {
+            out.push(format!("3D マウスの読み手が {d} に依存している"));
         }
         // 描き手(kmb-render)は形を絵にした PNG を書くので、コアの層の形式の小部品(kmb-format)も使ってよい。
         // どちらも材料と外観の表(コアの層の kmb-look)は読んでよい

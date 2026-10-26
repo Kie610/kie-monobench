@@ -18,6 +18,14 @@ impl Workspace {
             ui.radio_value(&mut self.win.layout.free_orbit, true, "フリーオービット");
         });
         ui.weak("拘束オービットは Z を上に保って回す。フリーオービットは上下の軸に縛らず、真上を越えて回せる(ビューの下の帯のオービットを右クリックでも替えられる)");
+        let state = self.win.mouse3d.as_ref().map_or_else(
+            || "探していない(安全モードでは探さない)".to_string(),
+            |m| m.status().label(),
+        );
+        ui.horizontal_wrapped(|ui| {
+            ui.label("3D マウス");
+            ui.weak(state);
+        });
     }
 
     /// 設定の「3D の表示」の節。

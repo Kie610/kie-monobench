@@ -20,6 +20,7 @@ kmb-ui-sketch.workspace = true
 kmb-ui-tools.workspace = true
 kmb-ui-text.workspace = true
 kmb-ui-library.workspace = true
+kmb-ui-mouse3d.workspace = true
 kmb-bundle.workspace = true
 kmb-session.workspace = true
 rfd.workspace = true

@@ -2236,6 +2236,7 @@ dependencies = [
  "kmb-session",
  "kmb-ui",
  "kmb-ui-library",
+ "kmb-ui-mouse3d",
  "kmb-ui-sketch",
  "kmb-ui-text",
  "kmb-ui-tools",
@@ -3323,6 +3324,7 @@ dependencies = [
  "kmb-strategy-face",
  "kmb-strategy-pocket2d",
  "kmb-text",
+ "kmb-ui-mouse3d",
  "kmb-ui-view3d",
  "kmb-workspace-hack",
  "log",
@@ -3343,6 +3345,15 @@ dependencies = [
  "kmb-ui",
  "kmb-workspace-hack",
  "log",
+]
+
+[[package]]
+name = "kmb-ui-mouse3d"
+version = "0.1.0"
+dependencies = [
+ "kmb-workspace-hack",
+ "log",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

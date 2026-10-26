@@ -481,6 +481,9 @@ fn main() -> Result<(), String> {
         );
     if safe_mode {
         workspace = workspace.with_safe_mode();
+    } else {
+        // 安全モードでは機器を探さない(起動を妨げる物を減らす)
+        workspace = workspace.with_mouse3d(kmb_ui_mouse3d::open());
     }
     if let Some(dir) = data_dir.clone() {
         workspace = workspace.with_data_dir(dir);

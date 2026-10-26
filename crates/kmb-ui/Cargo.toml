@@ -15,6 +15,7 @@ kmb-look.workspace = true
 kmb-interchange.workspace = true
 kmb-session.workspace = true
 kmb-ui-view3d.workspace = true
+kmb-ui-mouse3d.workspace = true
 kmb-render.workspace = true
 kmb-measure.workspace = true
 egui.workspace = true

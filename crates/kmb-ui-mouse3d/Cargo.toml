@@ -1,0 +1,22 @@
+[package]
+name = "kmb-ui-mouse3d"
+description = "3D マウス(多軸の機器)を探して読む(画面の部品。Windows は HID の口、Linux は hidraw。egui を知らない)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "ui"
+
+[dependencies]
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[target.'cfg(windows)'.dependencies]
+# 機器を並べて開き、報告を読む src/windows.rs だけが使う
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Devices_HumanInterfaceDevice", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading"] }
+
+# Windows の OS の関数を呼ぶ src/windows.rs だけが unsafe を使う(ワークスペースの forbid の代わりに deny)
+[lints.rust]
+unsafe_code = "deny"
