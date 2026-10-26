@@ -542,8 +542,10 @@ impl Workspace {
     /// ボディの操作だけを出し、ボディを最後に変えた機能(`last`)の操作は出さない。
     pub(crate) fn body_menu(&mut self, ui: &mut egui::Ui, root: FeatureId, last: FeatureId) {
         let mut done = false;
-        if crate::theme::menu_row(ui, "rename", "名前変更", "", true)
-            .on_hover_text("ブラウザに出るボディの名前を変える(取り消せる。行のダブルクリックでも)")
+        let words = self.win.words();
+        let t = |id: &str| words.t(id);
+        if crate::theme::menu_row(ui, "rename", &t("browser-body-rename"), "", true)
+            .on_hover_text(t("browser-body-rename-tip"))
             .clicked()
         {
             self.start_rename_body(root);
@@ -557,11 +559,15 @@ impl Workspace {
         if crate::theme::menu_row(
             ui,
             if hidden { "eye" } else { "eyeoff" },
-            if hidden { "表示" } else { "非表示" },
+            &t(if hidden {
+                "browser-body-show"
+            } else {
+                "browser-body-hide"
+            }),
             &crate::keys::label("toggle_visible"),
             true,
         )
-        .on_hover_text("3D のビューで出す・隠す(隠したボディは書き出さない)")
+        .on_hover_text(t("browser-body-visible-tip"))
         .clicked()
         {
             self.set_body_hidden(root, !hidden);
@@ -569,42 +575,38 @@ impl Workspace {
         }
         let roots = self.bodies_to_isolate(root);
         if self.isolated_bodies() == roots.as_slice() {
-            if crate::theme::menu_row(ui, "isolate", "選択表示の解除", "", true)
-                .on_hover_text("ほかのボディも前と同じように出す")
+            if crate::theme::menu_row(ui, "isolate", &t("browser-body-unisolate"), "", true)
+                .on_hover_text(t("browser-body-unisolate-tip"))
                 .clicked()
             {
                 self.end_isolation();
                 done = true;
             }
-        } else if crate::theme::menu_row(ui, "isolate", "選択表示", "", true)
-            .on_hover_text(
-                "このボディ(と一緒に選んでいるボディ)だけを出す。3D のビューの上の札の「選択表示の解除」で戻す",
-            )
+        } else if crate::theme::menu_row(ui, "isolate", &t("browser-body-isolate"), "", true)
+            .on_hover_text(t("browser-body-isolate-tip"))
             .clicked()
         {
             self.isolate_bodies(roots);
             done = true;
         }
         if self.any_body_hidden()
-            && crate::theme::menu_row(ui, "eye", "すべてのボディを表示", "", true)
-                .on_hover_text("選択表示をやめ、隠したボディを全部出す")
+            && crate::theme::menu_row(ui, "eye", &t("browser-body-show-all"), "", true)
+                .on_hover_text(t("browser-body-show-all-tip"))
                 .clicked()
         {
             self.show_all_bodies();
             done = true;
         }
         ui.separator();
-        if crate::theme::menu_row(ui, "param", "このボディのパラメータの表を作る", "", true)
-            .on_hover_text(
-                "このボディに関わるパラメータ・寸法・機能の値だけを出す表を、パラメータの窓に作る(取り消せる)",
-            )
+        if crate::theme::menu_row(ui, "param", &t("browser-body-param-view"), "", true)
+            .on_hover_text(t("browser-body-param-view-tip"))
             .clicked()
         {
             self.make_body_param_view(root);
             done = true;
         }
-        if crate::theme::menu_row(ui, "search", "タイムライン内を検索", "", true)
-            .on_hover_text("このボディを最後に変えた機能を、タイムラインで光らせる")
+        if crate::theme::menu_row(ui, "search", &t("browser-body-find-in-timeline"), "", true)
+            .on_hover_text(t("browser-body-find-in-timeline-tip"))
             .clicked()
         {
             self.find_in_timeline(last);

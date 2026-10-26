@@ -66,6 +66,24 @@ browser-inside-warning = Contains a warning (expand to see)
 browser-inside-error = Contains an error (expand to see)
 browser-inside-blocked = Contains items that were not calculated (expand to see)
 
+## Body row right-click
+
+browser-body-rename = Rename
+browser-body-rename-tip = Change the body name shown in the browser (can be undone; double-clicking the row also works)
+browser-body-show = Show
+browser-body-hide = Hide
+browser-body-visible-tip = Show or hide in the 3D view (hidden bodies are not exported)
+browser-body-isolate = Isolate
+browser-body-isolate-tip = Show only this body (and the other selected bodies). Undo it with "Unisolate" on the tag at the top of the 3D view
+browser-body-unisolate = Unisolate
+browser-body-unisolate-tip = Show the other bodies as before
+browser-body-show-all = Show All Bodies
+browser-body-show-all-tip = Stop isolating and show every hidden body
+browser-body-param-view = Make a Parameter Table for This Body
+browser-body-param-view-tip = Make a table in the parameters window with only the parameters, dimensions and feature values related to this body (can be undone)
+browser-body-find-in-timeline = Find in Timeline
+browser-body-find-in-timeline-tip = Highlight in the timeline the last feature that changed this body
+
 ## Simulation tree
 
 browser-studies = Studies
