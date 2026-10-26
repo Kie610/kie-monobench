@@ -3,6 +3,21 @@
 use super::*;
 
 impl Workspace {
+    /// 画面の点 `p` で当たる面。今の手順の候補(作業平面の四角)がその面より手前にあれば `None`
+    /// (候補を選ぶ)。
+    fn face_before_choice(&self, rect: Rect, p: egui::Pos2) -> Option<kmb_core::FacePick> {
+        let (hit, at) = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p)
+            .into_iter()
+            .next()?;
+        let front = self
+            .cur
+            .gesture
+            .as_ref()
+            .and_then(|g| g.current())
+            .is_some_and(|h| gesture::choice_in_front(h, &self.cur.camera, rect, p, at));
+        (!front).then_some(hit)
+    }
+
     pub(crate) fn gesture_events(&mut self, ev: &view3d::ViewEvents, rect: Rect) {
         // 辺を選ぶ手順: クリックした辺(面も受ける手順は面も)を足す・外す。足したら次の手順へ進む
         // (Ctrl を押していれば進まずに続けて足す。Enter で次へ)
@@ -114,14 +129,15 @@ impl Workspace {
             return;
         }
         // 候補を選ぶ手順で、ボディの平らな面も受け付けるもの(スケッチを描く平面): 平らな面をクリック
-        // したらその面を選んだ面にして決める。面がなければ候補(原点の平面など)から選ぶ
+        // したらその面を選んだ面にして決める。面がなければ候補(原点の平面など)から選ぶ。
+        // 作業平面の四角が面より手前にあれば、作業平面を選ぶ(面の上に浮かせた作業平面を選べるように)
         let face_choice = self.cur.gesture.as_ref().is_some_and(|g| {
             g.current()
                 .is_some_and(|h| h.faces && matches!(h.gesture, kmb_core::Gesture::Choice))
         });
         if face_choice
             && let Some(p) = ev.click
-            && let Some(hit) = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p)
+            && let Some(hit) = self.face_before_choice(rect, p)
         {
             let before = (
                 self.cur.picked.take(),
@@ -198,7 +214,7 @@ impl Workspace {
         let over_face = face_choice
             && ev
                 .hover
-                .and_then(|p| view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p))
+                .and_then(|p| self.face_before_choice(rect, p))
                 .is_some_and(|hit| self.is_planar(&hit));
         let Some(g) = &mut self.cur.gesture else {
             return;
