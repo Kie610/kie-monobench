@@ -2,6 +2,7 @@
 # - 組み立ては `cargo xtask release`(この PC のパスを exe に残さない引数と数え、許諾文の一覧)。
 #   タグはワークスペースの版と合うかを xtask が先に確かめる。
 # - 検査は main へのプッシュの回(verify.yml)が済ませているので、ここでは流さない。
+# - OS ごとに zip にまとめ、全部の zip の SHA256SUMS を最後の回で作る。
 # - できた物は成果物(artifact)に置くだけで、GitHub のリリースは作らない。
 name: リリース
 
@@ -66,10 +67,47 @@ jobs:
           mkdir -p "dist/$name"
           for b in kie-monobench kmb kmb-mcp; do cp "target/release/$b$ext" "dist/$name/"; done
           cp target/release/THIRD-PARTY-LICENSES.txt LICENSE-MIT LICENSE-APACHE "dist/$name/"
+          # zip の中は「<名前>/」の 1 つのフォルダにする(展開しても散らばらない)
+          cd dist
+          if [ "${{ runner.os }}" = Windows ]; then
+            7z a -tzip -bd "$name.zip" "$name" > /dev/null
+          else
+            zip -qr "$name.zip" "$name"
+          fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.dist.outputs.name }}
-          path: dist/${{ steps.dist.outputs.name }}/
+          path: dist/${{ steps.dist.outputs.name }}.zip
+          if-no-files-found: error
+
+  # 両方の OS の zip がそろってから、まとめて 1 つの SHA256SUMS を作る(`sha256sum -c SHA256SUMS` で確かめられる形)
+  sums:
+    name: SHA256SUMS
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: kie-monobench-*
+          path: dist
+          merge-multiple: true
+
+      - name: SHA256SUMS を作る
+        id: sums
+        shell: bash
+        run: |
+          set -eu
+          name="kie-monobench-${{ github.ref_name }}-SHA256SUMS"
+          name="${name//\//-}"
+          cd dist
+          sha256sum -- *.zip > SHA256SUMS
+          cat SHA256SUMS
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.sums.outputs.name }}
+          path: dist/SHA256SUMS
           if-no-files-found: error

@@ -422,5 +422,5 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 
 - `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
 - タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
-- できた物は「kie-monobench-<タグ>-<OS>」の成果物に置く(3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)。GitHub のリリースは作らない。
+- できた物は OS ごとに「kie-monobench-<タグ>-<OS>.zip」(中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)にまとめて成果物に置く。両方の OS が済んだら、全部の zip の SHA256 を 1 つの `SHA256SUMS`(`sha256sum -c SHA256SUMS` で確かめられる形)にして「kie-monobench-<タグ>-SHA256SUMS」の成果物に置く。GitHub のリリースは作らない。
 - 検査は main へのプッシュの回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は main の回が残した物を使う。
