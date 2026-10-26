@@ -62,6 +62,11 @@ pub struct Handle {
     /// 値は `{"vertex": 頂点の名前, "feature": 機能の番号}`(「対象まで」で点を選ぶ時)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub vertices: bool,
+    /// [`Gesture::Distance`] で、マウスをボディの平らな面に載せると、距離をその面の平面までにする
+    /// (輪郭の平面にある面と、押し出す向きに沿う面は除く)。決めると `key` の指定にその面までの
+    /// 距離を、この名前の指定に `{"feature": 機能, "face": 面}` を入れる(「対象まで」の範囲)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_key: Option<String>,
 }
 
 /// 点の座標系。世界座標 = `origin` + x·`axes[0]` + y·`axes[1]` + z·`axes[2]`(軸は互いに直交する長さ 1)。
@@ -119,6 +124,7 @@ impl Handle {
             shape: None,
             chain: false,
             vertices: false,
+            stop_key: None,
         }
     }
 

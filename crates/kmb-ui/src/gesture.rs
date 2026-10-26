@@ -24,6 +24,11 @@ pub struct Run {
     pub typed: String,
     /// 候補を足す・外す手順([`Gesture::Regions`])で選んだ候補の値
     pub picks: Vec<Json>,
+    /// 距離の手順で、マウスを載せている止める面(`{"feature", "face"}`。[`Handle::stop_key`])。
+    /// 決めるとその指定に入れる。数字を打っている間とほかの手順では空
+    pub stop: Option<Json>,
+    /// 最後に平面を調べた面とその平面(マウスを動かすたびにカーネルへ聞き直さない)
+    pub stop_seen: Option<(kmb_core::FacePick, Option<kmb_core::kernel::PlanarFace>)>,
 }
 
 impl Run {
@@ -49,7 +54,15 @@ impl Run {
                 } else {
                     format!("(入力: {})", typed_text(h, &self.typed))
                 };
-                format!("{}: {}。{live}{typed}  Esc でやめる", self.label, h.label)
+                let stop = if self.stop.is_some() && self.typed.is_empty() {
+                    "(面まで)"
+                } else {
+                    ""
+                };
+                format!(
+                    "{}: {}。{live}{stop}{typed}  Esc でやめる",
+                    self.label, h.label
+                )
             }
             None => format!("{}: Enter で確定、Esc でやめる", self.label),
         }
@@ -657,6 +670,7 @@ mod tests {
             shape: None,
             chain: false,
             vertices: false,
+            stop_key: None,
         };
         assert_eq!(
             typed_value(&h, "8, 20"),
@@ -714,6 +728,7 @@ mod tests {
             shape: None,
             chain: false,
             vertices: false,
+            stop_key: None,
         };
         let v = value_at(&h, &cam, rect, Pos2::new(130.0, 80.0)).unwrap();
         let p: [f64; 3] = serde_json::from_value(v).unwrap();
