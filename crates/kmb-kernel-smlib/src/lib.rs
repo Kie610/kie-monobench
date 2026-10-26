@@ -63,6 +63,9 @@ struct Store {
     /// 体積(形ごと)。面取り・フィレットはブーリアンのたびに前後の体積を比べるので、
     /// 前の結果の体積を求め直さない(SMLib は積分で求めるので、1 回に 0.1 秒ほどかかる)
     volumes: HashMap<u64, f64>,
+    /// 体積・表面積・外形・重心(形ごと)。AI が設計を調べるたびにボディごとの質量を聞くので、
+    /// ボディが千あると 1 回に数十秒かかっていた。形は作った後に変わらないので 1 回だけ求める
+    masses: HashMap<u64, MassProps>,
 }
 
 impl Store {
@@ -1437,19 +1440,24 @@ impl Kernel for SmlibKernel {
         }
         let _g = ffi::lock();
         let mut s = self.lock();
+        if let Some(&m) = s.masses.get(&shape.0) {
+            return Ok(m);
+        }
         let m = s
             .get(shape)?
             .brep
             .mass(VOLUME_ACCURACY)
             .map_err(failed("体積の計算"))?;
         s.volumes.insert(shape.0, m.volume);
-        Ok(MassProps {
+        let props = MassProps {
             volume: m.volume,
             area: m.area,
             min: m.min,
             max: m.max,
             centroid: (m.has_centroid != 0).then_some(m.centroid),
-        })
+        };
+        s.masses.insert(shape.0, props);
+        Ok(props)
     }
 
     fn volume(&self, shape: ShapeHandle) -> Result<f64, KernelError> {
@@ -1590,5 +1598,6 @@ impl Kernel for SmlibKernel {
         s.meshes
             .retain(|(id, _), _| live.contains(&ShapeHandle(*id)));
         s.volumes.retain(|id, _| live.contains(&ShapeHandle(*id)));
+        s.masses.retain(|id, _| live.contains(&ShapeHandle(*id)));
     }
 }

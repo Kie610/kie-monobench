@@ -6,6 +6,7 @@
 //!   印のファイル(`session-*.json`)で見つける。印は起動中ずっと鍵を掛けて持ち、操作のたびに
 //!   最近の操作と文書を書き直す。正しく終われば消す。次の起動で、鍵の掛かっていない
 //!   (持ち主のいない)印が残っていれば、異常終了の報告に変える。
+//!   パニックで終わった起動の印は報告済みと書いてあるので、重ねて報告せず片付ける。
 //! - 報告の数・合計の大きさ・日数に上限があり、超えたら古いものから消す。
 //!
 //! - 報告には、その起動のログ([`crate::logging`])のファイル名と終わりの行を添える。
@@ -67,6 +68,9 @@ struct State {
     active: Option<Json>,
     /// 起動した時刻(印を書き直しても変えない)
     started: u64,
+    /// パニックの報告を書いた時の、その報告のファイル名。印に残し、次の起動はこの印を
+    /// 異常終了として重ねて報告しない。パニックの後も動き続けて作業が進めば消す
+    panic_report: Option<String>,
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
@@ -113,6 +117,7 @@ fn marker_json(s: &State) -> Json {
         "document": s.document,
         "active_component": s.active,
         "log_file": crate::logging::current_file(),
+        "panic_report": s.panic_report,
     })
 }
 
@@ -156,6 +161,7 @@ pub fn install(data_dir: &Path, app: &str) -> Result<Guard, String> {
         document: None,
         active: None,
         started: now_secs(),
+        panic_report: None,
     };
     rewrite_marker(&mut state);
     *STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(state);
@@ -184,12 +190,12 @@ fn on_panic(info: &std::panic::PanicHookInfo<'_>) {
         location.as_deref().unwrap_or("場所不明")
     );
     // 状態を持ったままパニックした時は待たない(固まらせない)
-    let guard = match STATE.try_lock() {
+    let mut guard = match STATE.try_lock() {
         Ok(g) => Some(g),
         Err(std::sync::TryLockError::Poisoned(e)) => Some(e.into_inner()),
         Err(std::sync::TryLockError::WouldBlock) => None,
     };
-    let Some(state) = guard.as_ref().and_then(|g| g.as_ref()) else {
+    let Some(state) = guard.as_mut().and_then(|g| g.as_mut()) else {
         return;
     };
     let mut r = base_report("panic", &state.app);
@@ -204,6 +210,9 @@ fn on_panic(info: &std::panic::PanicHookInfo<'_>) {
     r["log"] = json!(crate::logging::recent());
     if let Some(p) = write_report(&state.dir, &r) {
         eprintln!("クラッシュ報告を残しました: {}", p.display());
+        // パニックで終わると印が残る。報告は済んだと印に書き、次の起動で重ねない
+        state.panic_report = p.file_name().map(|n| n.to_string_lossy().into_owned());
+        rewrite_marker(state);
     }
 }
 
@@ -224,6 +233,8 @@ pub fn note(doc: &Document, active: Option<u64>) {
         return;
     }
     state.key = Some(key);
+    // 文書か作業中の部品が変わった = パニックの後も動いている。この後の異常終了は報告する
+    state.panic_report = None;
     let skip = done.len().saturating_sub(RECENT_COMMANDS);
     state.commands = done[skip..].iter().map(|s| s.to_string()).collect();
     state.document = serde_json::from_str(&doc.to_json()).ok();
@@ -294,6 +305,11 @@ pub fn collect_abnormal_exits(dir: &Path) -> usize {
             .map(|d| d.as_secs());
         drop(f);
         let m: Json = serde_json::from_str(&text).unwrap_or(Json::Null);
+        // パニックで終わった起動は、その場で報告を書いてある。重ねて報告しない
+        if m["panic_report"].is_string() {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
         let app = m["app"].as_str().unwrap_or("(不明)");
         let mut r = base_report("abnormal_exit", app);
         // 異常終了はその場で報告を書けず、次の起動で見つける。報告の
