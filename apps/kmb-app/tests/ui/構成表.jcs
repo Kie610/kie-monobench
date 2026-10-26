@@ -5,7 +5,7 @@
 key Ctrl+P
 shot パラメータの表
 # 構成表はパラメータの一覧の下なので、パネルを下まで送る
-scroll "式" 3000
+scroll "式#1" 3000
 click "構成表"
 shot 開いた所
 click "列を追加 ▾"

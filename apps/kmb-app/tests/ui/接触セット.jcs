@@ -5,7 +5,7 @@
 #! sample box
 
 # 蓋の蝶番の上限を 30° にして、閉じる向きにも動くようにする(このままでは本体にめり込む)
-dclick "蝶番"
+dclick "button:蝶番"
 type "角度の上限" "30 deg"
 click ~OK
 wait

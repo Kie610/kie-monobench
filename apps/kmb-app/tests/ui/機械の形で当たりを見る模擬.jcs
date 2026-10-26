@@ -8,7 +8,7 @@ click ~作業空間:
 click "加工"
 wait
 click "セットアップ 1"
-click "シミュレーション"
+click "シミュレーション#1"
 until ~"機械の当たり・はみ出し 0 件" exists
 expect ~"ベッドを最大 0.30 mm 削る" exists
 shot 前-見本のシミュレーション
@@ -18,7 +18,7 @@ scroll "横の余白" 3000
 type "ベッドの上の置き場所 X" 280
 click ~OK
 wait
-click "シミュレーション"
+click "シミュレーション#1"
 until ~"X の作業範囲を+側へはみ出す" exists
 expect ~"機械の当たり・はみ出し 0 件" missing
 shot 作業範囲をはみ出す

@@ -3,7 +3,7 @@
 # 滑りながら回る。離すと「位置を残す/元に戻す」の帯が出て、帯の札に角度と距離の両方が出る。
 #! sample box
 
-dclick "蝶番"
+dclick "button:蝶番"
 select "種類" "円柱"
 type "距離の上限" 40
 click ~OK

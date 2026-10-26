@@ -7,7 +7,7 @@ click ~作業空間:
 click "加工"
 click "3D ▾"
 expect "3D 粗取り"
-click "3D 粗取り"
+click "3D 粗取り#1"
 wait
 expect "輪を渦巻きにつなぐ"
 expect "角の丸め"

@@ -896,8 +896,23 @@ impl Workspace {
                     ))),
                 }
             }
+            // 一覧の口の値が別の項目に替わったら、押した項目は違う物だった(選んで足す一覧は
+            // 選んだ後に「選ぶ」へ戻るので、値が元のままの時は通す)
             (Cmd::Select(q, item), _) => {
-                Step::Done(Ok(format!("「{}」で {item} を選んだ", q.text)))
+                let combo = r.target.as_ref().expect("前の段で決めた");
+                match nodes
+                    .iter()
+                    .find(|n| n.id == combo.id)
+                    .and_then(|n| n.value.as_ref())
+                {
+                    Some(v) if v != item && Some(v) != combo.value.as_ref() => {
+                        Step::Done(Err(format!(
+                            "「{}」で {item} を押したのに、一覧の値は「{v}」になりました",
+                            q.text
+                        )))
+                    }
+                    _ => Step::Done(Ok(format!("「{}」で {item} を選んだ", q.text))),
+                }
             }
             (Cmd::Pick(face, ctrl), 0) => {
                 let parts: Vec<&str> = face.split('|').collect();
@@ -1339,7 +1354,7 @@ fn help(c: Option<&str>) -> Result<String, String> {
             .map(|(_, u)| u.to_string())
             .ok_or_else(|| format!("コマンド {c} は知りません")),
         None => Ok(format!(
-            "{}\n部品の書き方: \"名前\"(ちょうど同じ)・~字(含む)・button:名前(役割で絞る。field は打てる欄)・名前#2(2 番目)",
+            "{}\n部品の書き方: \"名前\"(ちょうど同じ)・~字(含む)・button:名前(役割で絞る。field は打てる欄)・名前#2(2 番目。幾つも合う時は役割か番号で絞らないと誤り)",
             COMMANDS
                 .iter()
                 .map(|(_, u)| *u)

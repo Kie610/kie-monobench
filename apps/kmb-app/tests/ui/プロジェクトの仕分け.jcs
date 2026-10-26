@@ -12,11 +12,11 @@ expect "プロジェクトから探す" missing
 expect "エクスプローラーで開く" exists
 shot プロジェクト
 # 天板を押すと、右に分類の欄(開かずに直せる)
-click "天板"
+click "天板#1"
 until "材料#2" exists 30s
 shot デザインを選んだ
 # 天板を左の木の「部品」へ引いて離す
-drag "天板" -618 162
+drag "天板#1" -618 162
 until "~へ移しました" exists 10s
 expect "元に戻す#2" exists
 shot 移した
@@ -24,7 +24,7 @@ shot 移した
 click "元に戻す#2"
 until "天板" exists 10s
 # 左のフォルダを押すと中へ(移さない)
-click "部品"
+click "部品#1"
 until "脚" exists 10s
 expect "天板" missing
 shot フォルダの中

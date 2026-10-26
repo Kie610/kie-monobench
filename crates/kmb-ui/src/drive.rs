@@ -262,9 +262,44 @@ impl Query {
             .collect()
     }
 
-    /// 1 つに決める(`#n` が無ければ最初の物)。見つからない時は近い名前を挙げる。
+    /// 1 つに決める。`#n` が無いのに幾つも合う時は、黙って最初の物を押さず誤りにして候補を挙げる
+    /// (違う物を押したまま台本が通らないように)。見つからない時は近い名前を挙げる。
     pub fn one<'a>(&self, nodes: &'a [UiNode], screen: Rect) -> Result<&'a UiNode, String> {
         let found = self.find(nodes, screen);
+        // 欄の名前のラベルと、その名前を持つ横の欄(入切・一覧)は 1 つの物として数える
+        // (一覧の口の名前は右に、スライダの名前は左に書くので、同じ行ですぐ隣の物もそのラベルの物)
+        let next_to = |l: &UiNode, c: &UiNode| {
+            (c.rect.center().y - l.rect.center().y).abs() < l.rect.height()
+                && ((0.0..=24.0).contains(&(l.rect.left() - c.rect.right()))
+                    || (0.0..=24.0).contains(&(c.rect.left() - l.rect.right())))
+        };
+        let names_its_own = |l: &UiNode| {
+            l.role == "Label"
+                && ([
+                    field_for(l, nodes),
+                    check_for(l, nodes),
+                    combo_for(l, nodes),
+                ]
+                .into_iter()
+                .flatten()
+                .any(|t| t.id != l.id && found.iter().any(|f| f.id == t.id))
+                    || found.iter().any(|c| c.role != "Label" && next_to(l, c)))
+        };
+        let distinct = found.iter().filter(|n| !names_its_own(n)).count();
+        if self.nth.is_none() && distinct > 1 {
+            let list: Vec<String> = found
+                .iter()
+                .take(8)
+                .enumerate()
+                .map(|(i, n)| format!("#{}: {}", i + 1, n.line()))
+                .collect();
+            return Err(format!(
+                "「{}」に合う部品が {} 個あります。役割(button: など)か番号(#2 など)で 1 つに絞ってください\n{}",
+                self.text,
+                found.len(),
+                list.join("\n")
+            ));
+        }
         let k = self.nth.unwrap_or(1);
         found.get(k - 1).copied().ok_or_else(|| {
             if found.is_empty() {

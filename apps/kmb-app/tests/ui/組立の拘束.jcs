@@ -25,11 +25,11 @@ click ~OK
 wait
 
 # 種類を角度にすると、札の上の面と本体の手前の面の間を 30° にする(角度の欄だけになる)
-dclick "拘束1"
+dclick "button:拘束1"
 wait
 select ~"種類" "角度"
 expect ~"オフセット" missing
-type ~"角度" "30 deg"
+type ~"角度#1" "30 deg"
 wait
 shot 角度の行
 click ~OK

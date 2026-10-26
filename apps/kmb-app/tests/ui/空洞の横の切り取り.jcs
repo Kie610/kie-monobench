@@ -8,11 +8,11 @@ shot 前
 
 # シェル: 左上の選ぶ種類を「ボディ」にして本体を押し、開けずに中を空洞にする(厚さ 1 mm)
 click "シェル"
-click "button:ボディ"
+click "button:ボディ#1"
 pick f8:end
 type "厚さ" 1
 click ~OK
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 7236.7" 60s
 shot 空洞を作った後
 
@@ -22,6 +22,6 @@ click "面をオフセット"
 pick f8:side:e6
 type "距離" -0.5
 click ~OK
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 7036.7" 60s
 shot 横を削った後
