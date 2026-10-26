@@ -340,3 +340,159 @@ fn an_empty_sketch_has_nothing_to_write() {
     let s = Sketch::default();
     assert!(to_svg(&s, &solved(&s), &SvgOptions::default()).is_none());
 }
+
+fn assert_bad_svg_scale(text: &str) {
+    match from_svg(text) {
+        Ok(imported) => panic!(
+            "誤った倍率を受け入れた: bounds={:?}, shapes={:?}",
+            imported.bounds, imported.shapes
+        ),
+        Err(reason) => assert!(reason.contains("倍率"), "{reason}"),
+    }
+}
+
+#[test]
+fn svg_scale_rejects_zero_viewbox() {
+    assert_bad_svg_scale(
+        r#"<svg width="10mm" height="10mm" viewBox="0 0 0 10"><path d="M0 0 L10 10"/></svg>"#,
+    );
+}
+
+#[test]
+fn svg_scale_rejects_huge_page() {
+    assert_bad_svg_scale(
+        r#"<svg width="1e9mm" height="1e9mm" viewBox="0 0 10 10"><path d="M0 0 L10 10"/></svg>"#,
+    );
+}
+
+#[test]
+fn svg_scale_rejects_huge_transform() {
+    assert_bad_svg_scale(r#"<svg><path transform="scale(1e12)" d="M0 0 L10 10"/></svg>"#);
+}
+
+#[test]
+fn svg_scale_rejects_collapsing_transform() {
+    assert_bad_svg_scale(r#"<svg><path transform="scale(0)" d="M0 0 L10 10"/></svg>"#);
+}
+
+#[test]
+fn svg_scale_rejects_nonfinite_values() {
+    for value in ["NaN", "inf", "1e999"] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg><path transform="scale({value})" d="M0 0 L10 10"/></svg>"#
+        ));
+    }
+}
+
+#[test]
+fn svg_scale_rejects_nested_growth() {
+    assert_bad_svg_scale(
+        r#"<svg><g transform="scale(1e6)"><g transform="scale(1e6)"><path d="M0 0 L10 10"/></g></g></svg>"#,
+    );
+}
+
+#[test]
+fn svg_scale_rejects_tiny_and_negative_values() {
+    for value in ["1e-12", "-1"] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg><path transform="scale({value})" d="M0 0 L10 10"/></svg>"#
+        ));
+    }
+}
+
+#[test]
+fn svg_scale_checks_page_dimensions_and_complete_transform_arguments() {
+    for attr in ["width", "height"] {
+        for value in [
+            "0", "-1mm", "NaN", "inf", "1e999mm", "1e9mm", "1e-12mm", "wrong",
+        ] {
+            assert_bad_svg_scale(&format!(
+                r#"<svg {attr}="{value}"><path d="M0 0 L10 10"/></svg>"#
+            ));
+        }
+    }
+    for viewbox in [
+        "0 0 -1 10",
+        "0 0 10 0",
+        "0 0 NaN 10",
+        "0 0 10 10 extra",
+        "0 0 1e999 10",
+    ] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg viewBox="{viewbox}"><path d="M0 0 L10 10"/></svg>"#
+        ));
+    }
+    for transform in [
+        "scale(1 NaN)",
+        "scale(1,-1)",
+        "scale(1,0)",
+        "scale(1) wrong",
+        "matrix(0 0 0 1 0 0)",
+        "translate(inf 0)",
+    ] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg><path transform="{transform}" d="M0 0 L10 10"/></svg>"#
+        ));
+    }
+}
+
+#[test]
+fn svg_scale_checks_curves_before_subdivision_and_all_nested_products() {
+    for shape in [
+        r#"<path d="M0 0 C0 10 10 10 10 0"/>"#,
+        r#"<ellipse rx="10" ry="5"/>"#,
+        r#"<circle r="10"/>"#,
+    ] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg><g transform="scale(1e12)">{shape}</g></svg>"#
+        ));
+    }
+    for scale in ["1e200", "1e-200"] {
+        assert_bad_svg_scale(&format!(
+            r#"<svg><g transform="scale({scale})"><g transform="scale({scale})"><path d="M0 0 L10 10"/></g></g></svg>"#
+        ));
+    }
+}
+
+#[test]
+fn svg_curve_subdivision_uses_mm_after_scaling() {
+    let read = |shape: &str| {
+        from_svg(&format!(
+            r#"<svg width="100mm" height="100mm" viewBox="0 0 100 100">{shape}</svg>"#
+        ))
+        .unwrap()
+    };
+    let a = read(r#"<path d="M10 10 C10 80 70 80 70 10"/>"#);
+    let b = read(
+        r#"<path transform="scale(1000000)" d="M0.00001 0.00001 C0.00001 0.00008 0.00007 0.00008 0.00007 0.00001"/>"#,
+    );
+    let (a, b) = (approximate(&a.shapes[0]), approximate(&b.shapes[0]));
+    assert_eq!(a.len(), b.len(), "同じ mm の曲線は同じ数に細分する");
+    let (a, b) = (shapes_bounds(&a).unwrap(), shapes_bounds(&b).unwrap());
+    assert!(close2(a.0, b.0, APPROX_TOL) && close2(a.1, b.1, APPROX_TOL));
+}
+
+#[test]
+fn svg_scale_error_is_a_typed_input_problem_without_document_changes() {
+    use kmb_core::{
+        Context, DocumentData, Extension, NullKernel, ProblemKind, RecomputeReport, Registry,
+    };
+    use std::sync::Arc;
+    let path = std::env::temp_dir().join(format!("svg-scale-{}.svg", std::process::id()));
+    std::fs::write(
+        &path,
+        r#"<svg><path transform="scale(0)" d="M0 0 L10 10"/></svg>"#,
+    )
+    .unwrap();
+    let data = DocumentData::default();
+    let report = RecomputeReport::default();
+    let registry = Registry::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let mut cx = Context::new(&data, &report, &registry, &kernel);
+    cx.file = Some(&path);
+    let result = SvgCommands.run(INSERT_SVG, &cx).unwrap().unwrap_err();
+    std::fs::remove_file(path).unwrap();
+    assert_eq!(result.kind, ProblemKind::Input);
+    assert!(result.message.contains("倍率"));
+    assert!(data.features.is_empty());
+}
