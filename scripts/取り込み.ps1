@@ -164,6 +164,9 @@ Invoke-Git push origin main | Out-Null
 $summary.Add("プッシュ: main $($before.Substring(0,7))..$((Invoke-Git rev-parse --short HEAD))")
 
 # 5. 取り込んだブランチの削除(origin と、手元にあれば手元も)。先頭が控えた SHA のままの物だけ消す
+# GitHub はプッシュの後に、PR の先頭が main に入ったかを少し遅れて調べて「取り込み済み」にする。
+# 先にブランチを消すと PR は取り込まれないまま「閉じた」になるので、調べ終わるのを待ってから消す
+Start-Sleep -Seconds 30
 $kept = Remove-MergedBranch -Remote origin -Tips $tips
 $summary.Add("ブランチの削除: $($Branches.Count - $kept.Count) 本")
 foreach ($k in $kept) { $summary.Add("消さずに残した: $k。取り込みの後に積まれたコミットがあり、まだ main に入っていない。もう一度取り込む") }
