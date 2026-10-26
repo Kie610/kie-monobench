@@ -965,6 +965,12 @@ impl Feature for Extrude {
             });
         }
         let body = body.ok_or_else(|| EvalError::InvalidData("道具がありません".into()))?;
+        if op == Operation::Join
+            && let Some(t) = self.target
+            && let Some(w) = kmb_cad::detached_join(kernel, body_of(ctx, t)?, body)
+        {
+            warnings.push(w);
+        }
         let mut preview: Option<kmb_core::ToolPreview> = None;
         let mut parts = Vec::new();
         for b in built {
@@ -1586,8 +1592,29 @@ fn side_now(cx: &Context<'_>, e: &Extrude, profile: &kmb_core::Profile) -> Optio
     }
 }
 
-/// 押し出し `e` の輪郭(スケッチの輪郭か、平らな面の縁)。
+/// 押し出し `e` の輪郭(スケッチの輪郭か、平らな面の縁)を、開始のずらしの分だけ動かした物
+/// (押し出しが始まる所。面までの距離も、結合か切り取りかの判定もここから測る。10-26 k15)。
 fn extrude_profile(cx: &Context<'_>, e: &Extrude) -> Option<kmb_core::Profile> {
+    let mut p = sketch_or_face_profile(cx, e)?;
+    p.plane = p.plane.offset(start_shift(cx, e));
+    Some(p)
+}
+
+/// 開始のずらし(mm)。式は今のパラメータの値で読む。読めなければ 0(ずらしの欄の誤りは計算の方が出す)。
+fn start_shift(cx: &Context<'_>, e: &Extrude) -> f64 {
+    let (Start::Offset, Some(src)) = (e.start, e.start_offset.as_deref()) else {
+        return 0.0;
+    };
+    let values = cx.report.param_values();
+    kmb_core::parse_expr(src)
+        .ok()
+        .and_then(|x| x.eval(&|n| values.get(n).copied()).ok())
+        .filter(|q| q.dim.is_none() || q.dim == kmb_core::Dim::LENGTH)
+        .map_or(0.0, |q| q.value)
+}
+
+/// 押し出し `e` の、輪郭の平面のままの輪郭。
+fn sketch_or_face_profile(cx: &Context<'_>, e: &Extrude) -> Option<kmb_core::Profile> {
     match e.source {
         Source::Sketch => profile_of(cx, e.profile?),
         Source::Faces => {
