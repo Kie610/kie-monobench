@@ -157,6 +157,9 @@ pub(crate) struct DocState {
     pub(crate) used_sketches: HashSet<FeatureId>,
     /// `used_sketches` のために自動で隠したもの(使われなくなったら出し直す)
     pub(crate) auto_hidden: HashSet<FeatureId>,
+    /// `hidden_now` を決め直した時に直していた機能(直す機能が替われば、使って隠したスケッチの
+    /// 見せ方を決め直す)
+    pub(crate) shown_for_edit: Option<FeatureId>,
     /// 隠しているボディ(最初に作った機能で持つ。後から機能を足しても隠したまま)
     pub(crate) hidden_bodies: HashSet<FeatureId>,
     /// ブラウザのまとまり(スケッチ・ボディ)の目で隠しているもの。中の行の目はそのまま残す
@@ -294,6 +297,7 @@ impl DocState {
             hidden: HashSet::new(),
             used_sketches: HashSet::new(),
             auto_hidden: HashSet::new(),
+            shown_for_edit: None,
             hidden_bodies: HashSet::new(),
             hidden_folders: HashSet::new(),
             origin_shown: false,

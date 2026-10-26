@@ -621,6 +621,7 @@ impl Workspace {
         }
         self.poll_job();
         self.poll_task();
+        self.follow_editing_for_hidden();
         // 画面の部品を名前で操作する差し込み口(コマンド欄・AI の接続・バッチの e2e が使う)。
         // 部品の一覧(AccessKit の木)は、使う時だけ作る
         let c = ui.ctx().clone();

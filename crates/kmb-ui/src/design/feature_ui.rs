@@ -372,7 +372,7 @@ fn value_ui(
             ui.horizontal(|ui| {
                 // 作り始めた機能は、最初の式の欄にキーボードを移す(すぐ数字を打てるように)
                 // (表が大きさを測るだけの描画では移せないので、移せるまで続ける)
-                let focus = ws.cur.focus_new.get() == Some(entry.id);
+                let focus = ws.cur.focus_new.get() == Some(entry.id) || take_refocus(ui, key);
                 // 省ける欄は、空の時に説明(例: 空なら貫通)を薄く出す
                 let hint = if *optional { f.help.as_str() } else { "" };
                 // 範囲のある欄(ジョイントの値と戻る位置)は、範囲の外の値を赤くして受け付けない
@@ -387,6 +387,7 @@ fn value_ui(
                 if focus && focused {
                     ws.cur.focus_new.set(None);
                 }
+                keep_focus_over_view_clicks(ui, ws, key, focused);
                 // 打つ手を止めたら、打っている途中の値で形を付いて来させる(決めるのは前と同じく
                 // Enter か欄の外。採用分 10-22 k10)
                 if new.is_none() && focused {
@@ -1299,6 +1300,33 @@ pub(crate) fn expr_field_focus(
     hint: &str,
 ) -> (Option<String>, bool) {
     expr_field_reserving(ui, key, current, focus, hint, 0.0, &|_| None)
+}
+
+/// 3D のビューをクリックして面などを選んだ後も、打っていた欄 `key` に入力を戻す(10-26 k22)。
+/// クリックで欄から外れた時だけ印を付け、次の描画の [`take_refocus`] で欄へ戻す。
+fn keep_focus_over_view_clicks(ui: &egui::Ui, ws: &Workspace, key: egui::Id, focused: bool) {
+    let had = key.with("had_focus");
+    let before = ui.data(|d| d.get_temp::<bool>(had)).unwrap_or(false);
+    ui.data_mut(|d| d.insert_temp(had, focused));
+    if !before || focused {
+        return;
+    }
+    let in_view = ui.input(|i| {
+        i.pointer.any_click()
+            && i.pointer
+                .interact_pos()
+                .is_some_and(|p| ws.win.view_rect.contains(p))
+    });
+    if in_view {
+        let pass = ui.ctx().cumulative_pass_nr();
+        ui.data_mut(|d| d.insert_temp(key.with("refocus"), pass));
+    }
+}
+
+/// [`keep_focus_over_view_clicks`] が付けた印があれば外して `true`(すぐ後の描画の間だけ効く)。
+fn take_refocus(ui: &egui::Ui, key: egui::Id) -> bool {
+    let at = ui.data_mut(|d| d.remove_temp::<u64>(key.with("refocus")));
+    at.is_some_and(|at| ui.ctx().cumulative_pass_nr() <= at + 3)
 }
 
 /// 打つ手を止めてから形を付いて来させるまでの時間(打つたびに計算し直さない)。

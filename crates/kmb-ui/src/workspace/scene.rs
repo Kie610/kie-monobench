@@ -145,6 +145,46 @@ impl Workspace {
         }
     }
 
+    /// 直している機能がスケッチを使うなら、それより前の、使って自動で隠したスケッチ(ほかの輪郭も
+    /// 選べるように見せる。目で隠したものと、後のスケッチは入れない)。
+    fn sketches_shown_while_editing(&self) -> Vec<FeatureId> {
+        let Some(id) = self.cur.editing else {
+            return Vec::new();
+        };
+        let data = self.cur.work.doc().data();
+        let Some(at) = data.features.iter().position(|f| f.id == id) else {
+            return Vec::new();
+        };
+        let f = &data.features[at];
+        let uses_sketch = self
+            .win
+            .registry
+            .instantiate(&f.type_id, &f.data)
+            .and_then(Result::ok)
+            .and_then(|feature| feature.inputs().ok())
+            .unwrap_or_default()
+            .into_iter()
+            .any(|i| {
+                matches!(i, kmb_core::InputRef::Output { feature, .. }
+                    if self.cur.used_sketches.contains(&feature))
+            });
+        if !uses_sketch {
+            return Vec::new();
+        }
+        data.features[..at]
+            .iter()
+            .map(|f| f.id)
+            .filter(|f| self.cur.auto_hidden.contains(f))
+            .collect()
+    }
+
+    /// 直す機能が替わったら、隠す物を決め直す(直す間だけ使ったスケッチを見せるため)。
+    pub(crate) fn follow_editing_for_hidden(&mut self) {
+        if self.cur.shown_for_edit != self.cur.editing {
+            self.refresh_hidden();
+        }
+    }
+
     /// 3D のビューに出すスケッチの線(隠していない、止めていないスケッチの線)。
     pub(crate) fn sketch_lines(&self) -> Vec<(Vec<[f64; 3]>, kmb_core::LineKind)> {
         let mut out = Vec::new();
@@ -330,6 +370,11 @@ impl Workspace {
         // ボディの最後の機能が替わると、色を付けるボディの ID も替わる
         self.refresh_body_colors();
         let mut now = self.cur.hidden.clone();
+        // 押し出し・回転などを直す間は、使って自動で隠したスケッチを一時的に見せる(行の目は変えない)
+        self.cur.shown_for_edit = self.cur.editing;
+        for id in self.sketches_shown_while_editing() {
+            now.remove(&id);
+        }
         let bodies = self.body_roots();
         // 選択表示していたボディが無くなった(消した・取り消した)ら外し、全部無くなればやめる
         self.cur
