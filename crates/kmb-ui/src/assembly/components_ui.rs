@@ -327,8 +327,7 @@ impl Workspace {
         let roots = self.selected_body_roots(root);
         let mut done = false;
         let now = self.cur.work.doc().data().component_of(root).map(|c| c.id);
-        if ui
-            .button("新しい部品にする")
+        if crate::theme::menu_row(ui, "component", "新しい部品にする", "", true)
             .on_hover_text(
                 "選んでいるボディをまとめて部品にする(ブラウザの部品の木に出る。取り消せる)。\
                  ボディがみな同じ部品に入っていればその中に作る",
@@ -341,7 +340,7 @@ impl Workspace {
         }
         let comps: Vec<(u64, String, usize)> = self.component_list();
         if !comps.is_empty() {
-            ui.menu_button("部品へ移す", |ui| {
+            crate::theme::menu_sub(ui, "move", "部品へ移す", |ui| {
                 for (id, name, depth) in &comps {
                     let label = format!("{}{name}", "  ".repeat(*depth));
                     if ui.selectable_label(now == Some(*id), label).clicked() {
@@ -359,8 +358,7 @@ impl Workspace {
             });
         }
         if now.is_some()
-            && ui
-                .button("部品から外す")
+            && crate::theme::menu_row(ui, "x", "部品から外す", "", true)
                 .on_hover_text("ボディを部品から出して、文書の直下のボディにする")
                 .clicked()
         {

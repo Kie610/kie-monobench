@@ -430,7 +430,8 @@ impl Workspace {
                 // ボディは色だけ替わり質感が既定のままになる)
                 let a = body.looks.appearance_of(data, root);
                 let m = body.materials.get(root);
-                (a.is_some() || m.is_some()).then(|| (last, kmb_render::Look::of(&body.looks, a, m)))
+                (a.is_some() || m.is_some())
+                    .then(|| (last, kmb_render::Look::of(&body.looks, a, m)))
             })
             .collect();
         self.cur.scene.set_body_looks(looks);
@@ -486,10 +487,13 @@ impl Workspace {
                 .rect_filled(r, 2.0, egui::Color32::from_rgb(c[0], c[1], c[2]));
         };
         let mut pick_material = None;
-        ui.menu_button("物理材料", |ui| {
+        crate::theme::menu_sub(ui, "material", "物理材料", |ui| {
             for m in kmb_look::material::PHYS_MATERIALS {
                 // 材料を付けていないボディは既定の鋼に印を付ける
-                let on = material.as_deref().unwrap_or(kmb_look::material::DEFAULT_MATERIAL) == m.name;
+                let on = material
+                    .as_deref()
+                    .unwrap_or(kmb_look::material::DEFAULT_MATERIAL)
+                    == m.name;
                 let r = ui
                     .horizontal(|ui| {
                         swatch(ui, m.color);
@@ -502,15 +506,13 @@ impl Workspace {
                 }
             }
             ui.separator();
-            if ui
-                .add_enabled(material.is_some(), egui::Button::new("材料を外す"))
-                .clicked()
+            if crate::theme::menu_row(ui, "x", "材料を外す", "", material.is_some()).clicked()
             {
                 pick_material = Some(String::new());
             }
         });
         let mut pick_look = None;
-        ui.menu_button("外観", |ui| {
+        crate::theme::menu_sub(ui, "appearance", "外観", |ui| {
             pick_look = self.look_menu(ui, look.as_deref(), "材料の色(既定)");
         });
         if let Some(m) = pick_material {
@@ -540,8 +542,7 @@ impl Workspace {
     /// ボディの操作だけを出し、ボディを最後に変えた機能(`last`)の操作は出さない。
     pub(crate) fn body_menu(&mut self, ui: &mut egui::Ui, root: FeatureId, last: FeatureId) {
         let mut done = false;
-        if ui
-            .button("名前変更")
+        if crate::theme::menu_row(ui, "rename", "名前変更", "", true)
             .on_hover_text("ブラウザに出るボディの名前を変える(取り消せる。行のダブルクリックでも)")
             .clicked()
         {
@@ -553,26 +554,29 @@ impl Workspace {
         done |= self.body_component_menu(ui, root);
         ui.separator();
         let hidden = self.is_body_hidden(root, last);
-        if ui
-            .button(if hidden { "表示" } else { "非表示" })
-            .on_hover_text("3D のビューで出す・隠す(隠したボディは書き出さない)")
-            .clicked()
+        if crate::theme::menu_row(
+            ui,
+            if hidden { "eye" } else { "eyeoff" },
+            if hidden { "表示" } else { "非表示" },
+            &crate::keys::label("toggle_visible"),
+            true,
+        )
+        .on_hover_text("3D のビューで出す・隠す(隠したボディは書き出さない)")
+        .clicked()
         {
             self.set_body_hidden(root, !hidden);
             done = true;
         }
         let roots = self.bodies_to_isolate(root);
         if self.isolated_bodies() == roots.as_slice() {
-            if ui
-                .button("選択表示の解除")
+            if crate::theme::menu_row(ui, "isolate", "選択表示の解除", "", true)
                 .on_hover_text("ほかのボディも前と同じように出す")
                 .clicked()
             {
                 self.end_isolation();
                 done = true;
             }
-        } else if ui
-            .button("選択表示")
+        } else if crate::theme::menu_row(ui, "isolate", "選択表示", "", true)
             .on_hover_text(
                 "このボディ(と一緒に選んでいるボディ)だけを出す。3D のビューの上の札の「選択表示の解除」で戻す",
             )
@@ -582,8 +586,7 @@ impl Workspace {
             done = true;
         }
         if self.any_body_hidden()
-            && ui
-                .button("すべてのボディを表示")
+            && crate::theme::menu_row(ui, "eye", "すべてのボディを表示", "", true)
                 .on_hover_text("選択表示をやめ、隠したボディを全部出す")
                 .clicked()
         {
@@ -591,8 +594,7 @@ impl Workspace {
             done = true;
         }
         ui.separator();
-        if ui
-            .button("このボディのパラメータの表を作る")
+        if crate::theme::menu_row(ui, "param", "このボディのパラメータの表を作る", "", true)
             .on_hover_text(
                 "このボディに関わるパラメータ・寸法・機能の値だけを出す表を、パラメータの窓に作る(取り消せる)",
             )
@@ -601,8 +603,7 @@ impl Workspace {
             self.make_body_param_view(root);
             done = true;
         }
-        if ui
-            .button("タイムライン内を検索")
+        if crate::theme::menu_row(ui, "search", "タイムライン内を検索", "", true)
             .on_hover_text("このボディを最後に変えた機能を、タイムラインで光らせる")
             .clicked()
         {
@@ -723,16 +724,14 @@ impl Workspace {
             } else {
                 "注意"
             };
-            if ui
-                .button(format!("{what}を確かめる"))
+            if crate::theme::menu_row(ui, "warn", &format!("{what}を確かめる"), "", true)
                 .on_hover_text("ビューの右下に、知らせの全文と直し方の手がかりを出す")
                 .clicked()
             {
                 self.open_review(id);
                 done = true;
             }
-            if ui
-                .button("文を写す")
+            if crate::theme::menu_row(ui, "copy", "文を写す", "", true)
                 .on_hover_text("機能の名前と知らせの文をクリップボードへ(質問や報告に貼る)")
                 .clicked()
             {
@@ -742,8 +741,7 @@ impl Workspace {
             if let crate::timeline_ui::Health::Blocked {
                 feature: Some(up), ..
             } = &health
-                && ui
-                    .button("原因のフィーチャを選ぶ")
+                && crate::theme::menu_row(ui, "select", "原因のフィーチャを選ぶ", "", true)
                     .on_hover_text("止めている前の機能を選ぶ")
                     .clicked()
             {
@@ -753,8 +751,7 @@ impl Workspace {
             ui.separator();
         }
         // 直すのは、ここかダブルクリックで開いた時だけ(選んだだけでは直さない)
-        if ui
-            .add_enabled(!self.is_editing(id), egui::Button::new("フィーチャを編集"))
+        if crate::theme::menu_row(ui, "edit", "フィーチャを編集", "", !self.is_editing(id))
             .on_hover_text("編集パネルでこの機能を直す(ダブルクリックでも開く)")
             .clicked()
         {
@@ -779,8 +776,7 @@ impl Workspace {
             } else {
                 format!("元のスケッチ「{}」を直す", sk.name)
             };
-            if ui
-                .button(label)
+            if crate::theme::menu_row(ui, "sketch", &label, "", true)
                 .on_hover_text(format!("この機能が使うスケッチ「{}」を開いて直す", sk.name))
                 .clicked()
             {
@@ -788,8 +784,7 @@ impl Workspace {
                 done = true;
             }
         }
-        if ui
-            .button("名前変更")
+        if crate::theme::menu_row(ui, "rename", "名前変更", "", true)
             .on_hover_text("タイムラインとブラウザに出る名前を変える(取り消せる)")
             .clicked()
         {
@@ -812,7 +807,9 @@ impl Workspace {
             .filter(|a| a.is_at(Place::FeatureMenu) && self.belongs_here(a))
             .collect();
         for a in &actions {
-            if crate::action_button(ui, a).clicked() {
+            if crate::action_row(ui, a, &self.key_of(&crate::CommandId::Action(a.id.clone())))
+                .clicked()
+            {
                 if self.cur.selected != Some(id) {
                     self.select(id);
                 }
@@ -829,40 +826,43 @@ impl Workspace {
         } else {
             "抑制"
         };
-        if ui.button(label).clicked() {
+        if crate::theme::menu_row(ui, "suppress", label, "", true).clicked() {
             self.set_suppressed(id, !f.suppressed);
             done = true;
         }
-        if ui.add_enabled(i > 0, egui::Button::new("上へ")).clicked() {
-            self.move_feature(id, -1);
-            done = true;
-        }
-        if ui
-            .add_enabled(i + 1 < n, egui::Button::new("下へ"))
-            .clicked()
-        {
-            self.move_feature(id, 1);
-            done = true;
-        }
-        if ui
-            .button("ここまで戻す")
+        if crate::theme::menu_row(ui, "back", "ここまで戻す", "", true)
             .on_hover_text("この機能より後ろを一時的に無効にする(後ろの機能は消えない)")
             .clicked()
         {
             self.roll_back_after(Some(id));
             done = true;
         }
-        if self.cur.work.doc().data().rollback.is_some() && ui.button("最後まで進める").clicked()
+        if self.cur.work.doc().data().rollback.is_some()
+            && crate::theme::menu_row(ui, "last", "最後まで進める", "", true).clicked()
         {
             self.roll_back_after(None);
             done = true;
         }
+        // 並べ方(順とグループ)
         ui.separator();
+        if crate::theme::menu_row(ui, "up", "上へ", "", i > 0).clicked() {
+            self.move_feature(id, -1);
+            done = true;
+        }
+        if crate::theme::menu_row(ui, "down", "下へ", "", i + 1 < n).clicked() {
+            self.move_feature(id, 1);
+            done = true;
+        }
         let sel = self.selection();
         let ids = if sel.contains(&id) { sel } else { vec![id] };
-        if ui
-            .button(format!("グループにする({} 個、Ctrl+G)", ids.len()))
-            .clicked()
+        if crate::theme::menu_row(
+            ui,
+            "folder",
+            &format!("グループにする({} 個)", ids.len()),
+            &crate::keys::label("group"),
+            true,
+        )
+        .clicked()
         {
             self.group_features(&ids, edit::GroupMode::Exact);
             done = true;
@@ -874,7 +874,16 @@ impl Workspace {
                 continue;
             };
             let i = self.index_of(id).unwrap_or(0);
-            if (i == a || i == b) && ui.button(format!("「{}」から出す", g.name)).clicked() {
+            if (i == a || i == b)
+                && crate::theme::menu_row(
+                    ui,
+                    "ungroup",
+                    &format!("「{}」から出す", g.name),
+                    "",
+                    true,
+                )
+                .clicked()
+            {
                 if let Ok(tx) = edit::take_out_of_group(&data, g.id, id) {
                     self.apply(tx);
                 }
@@ -882,8 +891,7 @@ impl Workspace {
             }
         }
         ui.separator();
-        if ui
-            .button("削除")
+        if crate::theme::menu_row(ui, "trash", "削除", "Delete", true)
             .on_hover_text("取り消し(Ctrl+Z)で戻せる")
             .clicked()
         {
@@ -928,7 +936,7 @@ impl Workspace {
         // 作っている途中・直している途中は、OK とキャンセルを先に出す
         if self.cur.gesture.is_some() || self.cur.creating.is_some() || self.cur.editing.is_some() {
             let blocked = self.ok_blocked();
-            let r = ui.add_enabled(blocked.is_none(), egui::Button::new("OK"));
+            let r = crate::theme::menu_row(ui, "check", "OK", "Enter", blocked.is_none());
             let r = match blocked {
                 Some(why) => r.on_disabled_hover_text(why),
                 None => r.on_hover_text("Enter。決めた値で作る・直したところを決める"),
@@ -937,8 +945,7 @@ impl Workspace {
                 self.command_ok();
                 done = true;
             }
-            if ui
-                .button("キャンセル")
+            if crate::theme::menu_row(ui, "x", "キャンセル", "Esc", true)
                 .on_hover_text("Esc。作るのをやめる・直したところを捨てる")
                 .clicked()
             {
@@ -950,8 +957,7 @@ impl Workspace {
         // 重なった物から選ぶ(長押しと同じ一覧。長押しを知らない人への入口で、使い方も添える)
         let in_command = self.cur.gesture.is_some() || self.cur.creating.is_some();
         if !in_command && self.view_menu.context_others.1.len() > 1 {
-            if ui
-                .button("ほかを選ぶ…(長押しでも)")
+            if crate::theme::menu_row(ui, "layers", "ほかを選ぶ…(長押しでも)", "", true)
                 .on_hover_text(
                     "右クリックした所に重なっている面の一覧から選ぶ。左ボタンの長押しでも出る",
                 )
@@ -967,9 +973,12 @@ impl Workspace {
             && let Some(key) = self.win.last_item.clone()
             && let Some(it) = self.item_of(&key)
         {
-            let r = ui.add_enabled(
+            let r = crate::theme::menu_row(
+                ui,
+                "repeat",
+                &format!("繰り返す: {}", it.label),
+                "",
                 it.disabled.is_none(),
-                egui::Button::new(format!("繰り返す: {}", it.label)),
             );
             let r = match &it.disabled {
                 Some(why) => r.on_disabled_hover_text(why),
@@ -986,11 +995,21 @@ impl Workspace {
             .into_iter()
             .filter(|a| a.is_at(Place::FaceMenu) && self.belongs_here(a))
             .collect();
+        let any = !actions.is_empty();
         for a in actions {
-            if crate::action_button(ui, &a).clicked() {
+            if crate::action_row(
+                ui,
+                &a,
+                &self.key_of(&crate::CommandId::Action(a.id.clone())),
+            )
+            .clicked()
+            {
                 self.start_action(&a.id);
                 done = true;
             }
+        }
+        if any {
+            ui.separator();
         }
         if !in_command
             && (self.cur.context_hit.is_some()
@@ -1003,12 +1022,11 @@ impl Workspace {
             ui.separator();
         }
         let measure = if self.is_measuring() {
-            "測るのをやめる(M)"
+            "測るのをやめる"
         } else {
-            "測る(M)"
+            "測る"
         };
-        if ui
-            .button(measure)
+        if crate::theme::menu_row(ui, "measure", measure, &crate::keys::label("measure"), true)
             .on_hover_text("点・辺・面をクリックして、距離・角度・径・面積を測る")
             .clicked()
         {
@@ -1016,23 +1034,23 @@ impl Workspace {
             done = true;
         }
         if let Some(p) = self.cur.context_point
-            && ui
-                .button("ここを回す中心にする")
+            && crate::theme::menu_row(ui, "orbit", "ここを回す中心にする", "", true)
                 .on_hover_text("右クリックした面の点を中心に回す")
                 .clicked()
         {
             self.cur.camera.set_pivot(p);
             done = true;
         }
-        if ui
-            .button("全体表示")
+        if crate::theme::menu_row(ui, "fit", "全体表示", "Home", true)
             .on_hover_text("Home。全体を収め、部品の中心で回す")
             .clicked()
         {
             self.cur.camera.refit();
             done = true;
         }
-        ui.menu_button("表示設定", |ui| self.view_style_items(ui));
+        crate::theme::menu_sub(ui, "display", "表示設定", |ui| {
+            self.view_style_items(ui)
+        });
         if done {
             ui.close();
         }

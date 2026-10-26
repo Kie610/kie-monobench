@@ -155,18 +155,14 @@ impl Workspace {
         let mut done = false;
         let sel = self.selection();
         let ids = if sel.contains(&id) { sel } else { vec![id] };
-        if ui
-            .button("コピー(Ctrl+C)")
+        if crate::theme::menu_row(ui, "copy", "コピー", "Ctrl+C", true)
             .on_hover_text("値と式を写す。貼る時に面や辺を選び直す")
             .clicked()
         {
             self.copy_features(Some(ui.ctx()), &ids);
             done = true;
         }
-        let r = ui.add_enabled(
-            self.has_feature_clip(),
-            egui::Button::new("貼り付け(Ctrl+V)"),
-        );
+        let r = crate::theme::menu_row(ui, "paste", "貼り付け", "Ctrl+V", self.has_feature_clip());
         let r = if self.has_feature_clip() {
             r.on_hover_text("タイムラインの最後に貼り、面や辺を選び直す")
         } else {
