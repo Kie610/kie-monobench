@@ -66,7 +66,8 @@ impl Feature for BooleanFeature {
         let b = self.operation.boolean().expect("inputs で確かめている");
         for t in &self.tool {
             let tool = body_of(ctx, *t)?;
-            body = checked_boolean(ctx.kernel(), b, body, tool).map_err(kernel_err)?;
+            body = checked_boolean_with(ctx.kernel(), b, body, tool, &tool_body_label(ctx, *t))
+                .map_err(kernel_err)?;
         }
         Ok([("body".to_string(), Value::Shape(body))].into())
     }
