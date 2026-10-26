@@ -14,6 +14,7 @@
 pub mod canvas;
 pub mod components;
 pub mod crash;
+pub mod doc_view;
 pub mod edit;
 pub mod filters;
 pub mod gallery;

@@ -911,3 +911,98 @@ fn m_on_a_part_moves_the_whole_part_by_value() {
         "アクティブな部品の中ではボディの移動/コピー"
     );
 }
+
+/// ブラウザの木の開け閉め・原点とまとまりの目・ボディと行の目・畳んだグループは、文書を開き直しても
+/// 戻る(10-25 u1)。「ブラウザ内を検索」「タイムライン内を検索」は、畳んだ部品(親も)とグループを
+/// 開いて探した行を見せる(10-26 b1)。
+#[test]
+fn the_browser_tree_and_eyes_come_back_on_reopen_and_find_opens_folded_rows() {
+    use crate::browser_ui::{Kind, tree_key};
+    let d = crate::tests::temp_dir("doc-view");
+    let path = d.join(format!("板.{}", kmb_core::DOCUMENT_EXTENSION));
+    let mut ws = two_plates().with_data_dir(d.join("data"));
+    let roots = ws.body_roots();
+    let ((box_tip, boxed), (_, lid)) = (roots[0], roots[1]);
+    let outer = make_component(&mut ws, &[boxed], "外", None).expect("外");
+    let inner = make_component(&mut ws, &[boxed], "中", Some(outer)).expect("中");
+    assert_eq!(
+        ws.document().data().component_of(boxed).map(|c| c.id),
+        Some(inner)
+    );
+    // 畳んだ部品の中のボディを探すと、文書・外・中を開く
+    for k in [
+        tree_key("doc"),
+        tree_key(("component", outer)),
+        tree_key(("component", inner)),
+    ] {
+        ws.cur.tree_open.insert(k, false);
+    }
+    ws.find_in_browser(box_tip);
+    for k in [
+        tree_key("doc"),
+        tree_key(("component", outer)),
+        tree_key(("component", inner)),
+    ] {
+        assert_eq!(ws.cur.tree_open.get(&k), Some(&true), "{k} を開く");
+    }
+    // 畳んだグループの中の機能を探すと、グループを開く
+    let named = |ws: &Workspace, n: &str| {
+        ws.document()
+            .data()
+            .features
+            .iter()
+            .find(|f| f.name == n)
+            .map(|f| f.id)
+            .expect(n)
+    };
+    let (sketch, plate) = (named(&ws, "蓋のスケッチ"), named(&ws, "蓋"));
+    let g = ws
+        .group_features(&[sketch, plate], kmb_session::edit::GroupMode::Exact)
+        .expect("グループ");
+    ws.cur.collapsed.insert(g);
+    ws.find_in_timeline(plate);
+    assert!(!ws.cur.collapsed.contains(&g), "グループを開く");
+
+    // 保存した文書を開き、見え方を変える
+    kmb_session::save(&path, ws.document()).unwrap();
+    assert!(ws.load_path(&path));
+    ws.wait();
+    assert_eq!(ws.doc_view(), Default::default(), "覚えていなければ既定");
+    let box_sketch = named(&ws, "箱のスケッチ");
+    assert!(
+        ws.cur.hidden.contains(&box_sketch),
+        "使ったスケッチは自動で隠す"
+    );
+    ws.set_hidden(box_sketch, false);
+    ws.set_origin_shown(true);
+    ws.set_folder_hidden(Kind::Sketch, true);
+    ws.set_body_hidden(lid, true);
+    ws.cur.collapsed.insert(g);
+    ws.cur
+        .tree_open
+        .insert(tree_key(("component", outer)), false);
+    ws.save_doc_view();
+    let view = ws.doc_view();
+
+    // 次に起動して開き直すと戻る
+    let mut again = Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules())
+        .with_data_dir(d.join("data"));
+    assert!(again.load_path(&path));
+    again.wait();
+    assert_eq!(again.doc_view(), view);
+    assert!(again.is_origin_shown() && again.is_folder_hidden(Kind::Sketch));
+    assert!(again.cur.collapsed.contains(&g));
+    assert!(
+        !again.cur.hidden.contains(&box_sketch),
+        "目を開けたスケッチは出したまま"
+    );
+    assert!(again.cur.hidden.contains(&named(&again, "蓋のスケッチ")));
+    assert!(
+        again.cur.hidden_now.contains(&again.body_roots()[1].0),
+        "隠したボディ"
+    );
+    // 新しい文書は既定の見え方
+    again.new_document();
+    assert_eq!(again.doc_view(), Default::default());
+    std::fs::remove_dir_all(&d).ok();
+}

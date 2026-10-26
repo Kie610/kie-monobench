@@ -7,6 +7,7 @@ use crate::timeline_ui::Health;
 use crate::{Found, Space, Workspace, icons, theme};
 use egui::{Color32, Rect, Sense, Stroke, Vec2};
 use kmb_core::{FeatureEntry, FeatureId, FeatureStatus, category};
+use std::collections::BTreeMap;
 
 /// 種類の絞り込み(設計のまとまりの目でも使う)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -301,8 +302,6 @@ pub(crate) struct BrowserPart {
     /// ブラウザの検索と種類の絞り込み
     pub(crate) query: String,
     pub(crate) kind: Kind,
-    /// 次に描く時に、ブラウザのボディのまとまりを開く(「ブラウザ内を検索」)
-    pub(crate) open_folder: bool,
     /// ブラウザの加工とセットアップの行(ドラッグで落とす所。描くたびに集め直す。画面の上の位置なので
     /// 文書ごとの状態に置かない)
     pub(crate) drop_rows: Vec<(FeatureId, egui::Rect)>,
@@ -657,13 +656,6 @@ impl Workspace {
         let items = self.browser_items();
         let filtering = !self.browser.query.trim().is_empty() || self.browser.kind != Kind::All;
         self.browser.marked = self.marked_bodies();
-        // 「ブラウザ内を検索」: 文書とボディのまとまりを開いておく
-        if std::mem::take(&mut self.browser.open_folder) {
-            for key in ["doc", "ボディ"] {
-                let id = ui.make_persistent_id(("browser_open", key));
-                ui.data_mut(|d| d.insert_temp(id, true));
-            }
-        }
         // 文書の行の右クリックで設計の属性
         let part = self.cur.work.doc().data().properties.part_number.clone();
         // 部品があれば、文書の行にも丸(押すと文書の直下をアクティブに戻す)
@@ -671,6 +663,7 @@ impl Workspace {
         let root_active = self.active_component().is_none();
         let (open, r, _, radio) = folder_row_radio(
             ui,
+            &mut self.cur.tree_open,
             "doc",
             (0, "box", &name, &part),
             true,
@@ -707,6 +700,7 @@ impl Workspace {
             let shown = self.is_origin_shown();
             let (open, _, eye) = folder_row(
                 ui,
+                &mut self.cur.tree_open,
                 "origin",
                 1,
                 "origin",
@@ -726,6 +720,7 @@ impl Workspace {
             let n = self.cur.work.doc().data().named_views.len().to_string();
             let (open, r) = branch_row(
                 ui,
+                &mut self.cur.tree_open,
                 "named_views",
                 1,
                 "folder",
@@ -734,8 +729,6 @@ impl Workspace {
                 false,
                 None,
             );
-            // 開け閉めの印はブラウザの中の ID(メニューの中で作ると別の ID になる)
-            let open_key = ui.make_persistent_id(("browser_open", "named_views"));
             r.right_menu(|ui| {
                 if crate::theme::menu_row(ui, "camera", "今のビューを保存", "", true).clicked()
                 {
@@ -750,7 +743,7 @@ impl Workspace {
                             .map(|v| v.name.clone())
                             .unwrap_or_default();
                         self.cur.renaming_view = Some((id, name));
-                        ui.data_mut(|d| d.insert_temp(open_key, true));
+                        self.cur.tree_open.insert(tree_key("named_views"), true);
                     }
                     ui.close();
                 }
@@ -763,6 +756,7 @@ impl Workspace {
             if n > 0 {
                 let (open, _) = branch_row(
                     ui,
+                    &mut self.cur.tree_open,
                     "motion_studies",
                     1,
                     "folder",
@@ -780,6 +774,7 @@ impl Workspace {
             if !contacts.sets.is_empty() {
                 let (open, _, eye) = folder_row(
                     ui,
+                    &mut self.cur.tree_open,
                     "contact_sets",
                     1,
                     "folder",
@@ -859,6 +854,7 @@ impl Workspace {
             let folder_shown = !self.is_folder_hidden(kind);
             let (open, folder, eye_clicked) = folder_row(
                 ui,
+                &mut self.cur.tree_open,
                 title,
                 1,
                 "folder",
@@ -977,7 +973,17 @@ impl Workspace {
             .map(|i| i.0)
             .filter(|f| self.win.registry.is(&f.type_id, category::STUDY))
             .collect();
-        let (open, _) = branch_row(ui, "studies", 0, "folder", "研究", "", true, None);
+        let (open, _) = branch_row(
+            ui,
+            &mut self.cur.tree_open,
+            "studies",
+            0,
+            "folder",
+            "研究",
+            "",
+            true,
+            None,
+        );
         if !open {
             return;
         }
@@ -1050,7 +1056,17 @@ impl Workspace {
             .cloned()
             .collect();
         if matches!(self.browser.kind, Kind::All | Kind::Operation) {
-            let (open, r) = branch_row(ui, "setups", 0, "folder", "セットアップ", "", true, None);
+            let (open, r) = branch_row(
+                ui,
+                &mut self.cur.tree_open,
+                "setups",
+                0,
+                "folder",
+                "セットアップ",
+                "",
+                true,
+                None,
+            );
             // 右クリックで、リボンの「セットアップ」のまとまりの操作(セットアップを足すなど)を出す
             // (Z4: 右クリックしても何も出なかった)
             r.right_menu(|ui| {
@@ -1097,8 +1113,8 @@ impl Workspace {
                         .map(|i| i.0.clone())
                         .filter(|f| parent_of(f) == Some(s.id))
                         .collect();
-                    let id = ui.make_persistent_id(("browser_open", "setup", s.id));
-                    let open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(true);
+                    let key = tree_key(("setup", s.id));
+                    let open = self.cur.tree_open.get(&key).copied().unwrap_or(true);
                     let material = s
                         .data
                         .pointer("/stock/material")
@@ -1106,7 +1122,7 @@ impl Workspace {
                         .unwrap_or("")
                         .to_string();
                     if self.browser_row(ui, s, 1, &material, Some(open), false, None) {
-                        ui.data_mut(|d| d.insert_temp(id, !open));
+                        self.cur.tree_open.insert(key, !open);
                     }
                     if open {
                         let n = s
@@ -1151,6 +1167,7 @@ impl Workspace {
                 if !orphans.is_empty() {
                     let open = branch(
                         ui,
+                        &mut self.cur.tree_open,
                         "orphans",
                         1,
                         "folder",
@@ -1175,7 +1192,16 @@ impl Workspace {
             .collect();
         if !tools.is_empty() {
             let n = tools.len().to_string();
-            let open = branch(ui, "tools", 0, "tools", "この文書の工具", &n, true);
+            let open = branch(
+                ui,
+                &mut self.cur.tree_open,
+                "tools",
+                0,
+                "tools",
+                "この文書の工具",
+                &n,
+                true,
+            );
             if open {
                 for f in &tools {
                     self.browser_row(ui, f, 1, "", None, false, None);
@@ -1199,24 +1225,44 @@ pub(crate) fn tool_meta(f: &FeatureEntry) -> String {
     }
 }
 
-/// 開け閉めできる行(畳んだ状態は egui の記憶に置く)。開いていれば真。
+/// 木の枝の鍵(文書ごとの開け閉めの覚え [`crate::doc_state::DocState::tree_open`] の鍵)。
+pub(crate) fn tree_key(key: impl std::fmt::Debug) -> String {
+    format!("{key:?}")
+}
+
+/// 開け閉めできる行(開け閉めは文書ごとの覚え `opened` に置く)。開いていれば真。
+#[allow(clippy::too_many_arguments)]
 fn branch(
     ui: &mut egui::Ui,
-    key: impl std::hash::Hash + std::fmt::Debug,
+    opened: &mut BTreeMap<String, bool>,
+    key: impl std::fmt::Debug,
     depth: usize,
     icon: &str,
     name: &str,
     meta: &str,
     default_open: bool,
 ) -> bool {
-    folder_row(ui, key, depth, icon, name, meta, default_open, None, None).0
+    folder_row(
+        ui,
+        opened,
+        key,
+        depth,
+        icon,
+        name,
+        meta,
+        default_open,
+        None,
+        None,
+    )
+    .0
 }
 
 /// 枝の行(開いているかと、右クリックのメニューを付けるための応答)。
 #[allow(clippy::too_many_arguments)]
 fn branch_row(
     ui: &mut egui::Ui,
-    key: impl std::hash::Hash + std::fmt::Debug,
+    opened: &mut BTreeMap<String, bool>,
+    key: impl std::fmt::Debug,
     depth: usize,
     icon: &str,
     name: &str,
@@ -1224,7 +1270,18 @@ fn branch_row(
     default_open: bool,
     worst: Option<Health>,
 ) -> (bool, egui::Response) {
-    let (open, r, _) = folder_row(ui, key, depth, icon, name, meta, default_open, worst, None);
+    let (open, r, _) = folder_row(
+        ui,
+        opened,
+        key,
+        depth,
+        icon,
+        name,
+        meta,
+        default_open,
+        worst,
+        None,
+    );
     (open, r)
 }
 
@@ -1234,7 +1291,8 @@ fn branch_row(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn folder_row(
     ui: &mut egui::Ui,
-    key: impl std::hash::Hash + std::fmt::Debug,
+    opened: &mut BTreeMap<String, bool>,
+    key: impl std::fmt::Debug,
     depth: usize,
     icon: &str,
     name: &str,
@@ -1245,6 +1303,7 @@ pub(crate) fn folder_row(
 ) -> (bool, egui::Response, bool) {
     let (open, r, eye, _) = folder_row_radio(
         ui,
+        opened,
         key,
         (depth, icon, name, meta),
         default_open,
@@ -1257,17 +1316,19 @@ pub(crate) fn folder_row(
 
 /// [`folder_row`] に、目の左の丸いボタン `radio`(部品のアクティブ化。アクティブなら真)を足した物。
 /// (開いているか、応答、目を押したか、丸を押したか)を返す。丸を押しても開け閉めしない。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn folder_row_radio(
     ui: &mut egui::Ui,
-    key: impl std::hash::Hash + std::fmt::Debug,
+    opened: &mut BTreeMap<String, bool>,
+    key: impl std::fmt::Debug,
     (depth, icon, name, meta): (usize, &str, &str, &str),
     default_open: bool,
     worst: Option<Health>,
     eye: Option<bool>,
     radio: Option<bool>,
 ) -> (bool, egui::Response, bool, bool) {
-    let id = ui.make_persistent_id(("browser_open", key));
-    let open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(default_open);
+    let key = tree_key(key);
+    let open = opened.get(&key).copied().unwrap_or(default_open);
     let (r, tw, eye_clicked, radio_clicked) = row_radio(
         ui,
         Row {
@@ -1290,7 +1351,7 @@ pub(crate) fn folder_row_radio(
         None => r,
     };
     if !eye_clicked && !radio_clicked && (tw || r.double_clicked() || r.clicked()) {
-        ui.data_mut(|d| d.insert_temp(id, !open));
+        opened.insert(key, !open);
         return (!open, r, false, false);
     }
     (open, r, eye_clicked, radio_clicked)

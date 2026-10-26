@@ -345,7 +345,6 @@ impl Workspace {
             browser: browser_ui::BrowserPart {
                 query: String::new(),
                 kind: browser_ui::Kind::All,
-                open_folder: false,
                 drop_rows: Vec::new(),
                 component_drop_rows: Vec::new(),
                 marked: Vec::new(),
@@ -825,6 +824,7 @@ impl Workspace {
             });
         self.window_edges(ui);
         self.save_layout_if_changed(&ctx);
+        self.save_doc_view_if_changed(&ctx);
     }
 
     /// 知らせが変わったら履歴に残す。

@@ -166,6 +166,10 @@ pub(crate) struct DocState {
     pub(crate) hidden_folders: HashSet<browser_ui::Kind>,
     /// ブラウザの「原点」の目: 原点の平面をいつも 3D のビューに出す
     pub(crate) origin_shown: bool,
+    /// ブラウザの木の枝の開け閉め(枝の鍵 → 開いているか。押した枝だけ。無ければ枝の既定)
+    pub(crate) tree_open: std::collections::BTreeMap<String, bool>,
+    /// 最後にデータフォルダへ書いた・から読んだ見え方(変わったら書き直す。開き直しても戻す。10-25 u1)
+    pub(crate) view_saved: kmb_session::doc_view::DocView,
     /// 3D のビューで実際に隠している機能(行の目・ボディの目・まとまりの目を合わせた物)
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
@@ -301,6 +305,8 @@ impl DocState {
             hidden_bodies: HashSet::new(),
             hidden_folders: HashSet::new(),
             origin_shown: false,
+            tree_open: Default::default(),
+            view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,
             section: None,

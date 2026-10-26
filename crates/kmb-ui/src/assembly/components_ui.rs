@@ -443,6 +443,7 @@ impl Workspace {
         let active = self.active_component() == Some(id);
         let (open, r, eye, radio) = folder_row_radio(
             ui,
+            &mut self.cur.tree_open,
             ("component", id),
             (
                 depth,
