@@ -123,7 +123,9 @@ fn eyes_are_saved_undone_and_never_recompute_shapes() {
         json!({"folder": "nothing"}),
         json!({}),
     ] {
-        let e = set(&mut h, bad.clone()).err().expect("断る");
+        let Err(e) = set(&mut h, bad.clone()) else {
+            panic!("{bad}: 断らなかった");
+        };
         assert_eq!(e.kind, ProblemKind::Input, "{bad}: {}", e.message);
     }
 }
