@@ -1,5 +1,6 @@
 //! スケッチを編集している間のツールバー(編集器の道具をまとまりに並べる)と、スケッチの終わり方。
 
+use crate::theme::RightMenu as _;
 use super::*;
 use ribbon_band::{
     group_label, group_widths, more_width, name_width, small_grid, small_width, sub_menu_row,
@@ -148,7 +149,7 @@ impl Workspace {
                     if r.clicked() {
                         used = Some(t.id.clone());
                     }
-                    r.context_menu(|ui| {
+                    r.right_menu(|ui| {
                         let mut e = None;
                         if ui.button("左へ").clicked() {
                             e = Some(PinEdit::Move(t.id.clone(), -1));

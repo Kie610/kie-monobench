@@ -2,6 +2,7 @@
 //! 1 コマは `sketch_view` が順に進める: 視点(ここ)→ キー(`keys.rs`)→ 今の道具の操作(`act.rs`、
 //! 道具ごとの子は `act/`)→ 描画(`draw.rs`、描きかけの見本と寸法は `draw/`)。
 
+use kmb_ui::theme::RightMenu as _;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, Vec2};
 use kmb_sketch::{ConstraintKind, Entity, EntityId, Sketch, Solution, SolveStatus};
 use kmb_ui::view3d;
@@ -495,7 +496,7 @@ pub(crate) fn sketch_view(
     }
     // 右クリックのメニュー(開いた時に覚えた様子で項目を出す)
     let mut ask = None;
-    response.context_menu(|ui| {
+    response.right_menu(|ui| {
         if let Some(cx) = &editor.menu {
             ask = crate::menu::show(ui, cx, base_sketch);
         }

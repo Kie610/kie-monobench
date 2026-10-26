@@ -568,15 +568,24 @@ impl Workspace {
                             pressed: true,
                             repeat: false,
                             ..
-                        }
+                        } | egui::Event::Copy
+                            | egui::Event::Cut
+                            | egui::Event::Paste(_)
                     )
                 })?;
                 match inp.events.remove(at) {
-                    egui::Event::Key { key, modifiers, .. } => Some((key, modifiers)),
-                    _ => None,
+                    egui::Event::Key { key, modifiers, .. } => Some(Some((key, modifiers))),
+                    _ => Some(None),
                 }
             });
-            if let Some((key, mods)) = got {
+            // Ctrl+Shift+C などは写す働きとして届き、キーが分からない。受けたまま黙らず理由を出す
+            if got == Some(None) {
+                self.settings.key_note = Some(format!(
+                    "{}なので付け替えられません。別のキーを押してください(Esc でやめる)",
+                    keys::COPY_KEYS
+                ));
+            }
+            if let Some(Some((key, mods))) = got {
                 if key == egui::Key::Escape && mods.is_none() {
                     self.settings.key_capture = None;
                     self.settings.key_note = None;

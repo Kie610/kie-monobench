@@ -4,6 +4,7 @@
 //! 判定は kmb-session の [`kmb_session::tidy`](画面は呼んで出すだけ)。どれも候補を並べるだけで、
 //! 移す・消すは利用者が押した時に [`HomeRequest`] で頼む。
 
+use kmb_ui::theme::RightMenu as _;
 use crate::middle::band;
 use crate::{
     Drag, GroupsKey, Item, Library, Place, Sort, Tidy, file_name, heading, key_button, place_row,
@@ -92,7 +93,7 @@ impl Library {
             let place = Place::Saved(f.name.clone());
             let r = place_row(ui, "search", &f.name, None, self.place == place)
                 .on_hover_text(f.describe());
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 if ui.button("削除").clicked() {
                     host.request(HomeRequest::RemoveFilter(f.name.clone()));
                     if self.place == place {
@@ -315,7 +316,7 @@ impl Library {
                             pinned: false,
                             missing: false,
                         };
-                        r.context_menu(|ui| self.item_menu(ui, host, &it));
+                        r.right_menu(|ui| self.item_menu(ui, host, &it));
                     }
                 });
             })
@@ -633,7 +634,7 @@ impl Library {
                         open = Some(it.clone());
                     }
                     let r = r.on_hover_text(it.path.display().to_string());
-                    r.context_menu(|ui| self.item_menu(ui, host, it));
+                    r.right_menu(|ui| self.item_menu(ui, host, it));
                 }
             });
         if let Some(it) = open {

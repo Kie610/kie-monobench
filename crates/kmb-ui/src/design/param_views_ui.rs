@@ -3,6 +3,7 @@
 //! 保存される。表は同じパラメータを見る窓で、どの表で直しても元のパラメータ・寸法・機能の値が変わる。
 //! 行を選ぶ計算は CLI・MCP と同じ [`kmb_session::params`]。
 
+use crate::theme::RightMenu as _;
 use crate::{FieldEdit, Workspace, complete, reason_label, star_button};
 use kmb_core::{FeatureId, Param, ParamKey, ParamStatus, ParamView};
 use kmb_session::{param_io, params};
@@ -390,7 +391,7 @@ impl Workspace {
                 if r.clicked() {
                     self.cur.param_tab = v.id;
                 }
-                r.context_menu(|ui| {
+                r.right_menu(|ui| {
                     if ui.button("名前変更").clicked() {
                         renaming = Some((v.id, v.name.clone()));
                         ui.close();
@@ -628,7 +629,7 @@ impl Workspace {
                     let r = ui
                         .add(egui::Label::new(&v.label).sense(egui::Sense::click()))
                         .on_hover_text(format!("{} の{}", feature_name(v.feature), v.label));
-                    r.context_menu(|ui| {
+                    r.right_menu(|ui| {
                         if let Some(a) = menu.show(ui, &key) {
                             act = Some((key.clone(), a));
                         }

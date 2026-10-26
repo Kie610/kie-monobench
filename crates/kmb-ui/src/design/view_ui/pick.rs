@@ -6,6 +6,37 @@ use super::*;
 const CANDIDATE_WIDTH: f32 = 280.0;
 
 impl Workspace {
+    /// 3D のビューの右クリック: メニューが使う、押した所の物と重なった面を覚え、押した面を選ぶ。
+    pub(crate) fn context_pick(&mut self, rect: Rect, p: Pos2) {
+        // 右クリックした所の物(「タイムライン内を検索」)と、重なった面(「ほかを選ぶ」)
+        let all = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p);
+        let f = if self.win.pick_filter.body {
+            PickFilter::FACE
+        } else {
+            self.win.pick_filter
+        };
+        self.cur.context_hit = self.hit_at(rect, p, f);
+        self.view_menu.context_others = (p, all.iter().map(|h| h.0.clone()).collect());
+        // 選んでいる辺・頂点の上の右クリックは選びを変えない(複数の辺を選んで右クリックすると、
+        // 下の面が選びに入り、メニューがその面に効いていた。10-25 u7)
+        let on_picked = match &self.cur.context_hit {
+            Some(Hit::Edge(e)) => self.cur.picked_edges.contains(e),
+            Some(Hit::Vertex(v)) => self.cur.picked_vertices.contains(v),
+            _ => false,
+        };
+        // 右クリックした面も選ぶ(メニューはその面に使える操作)
+        let hit = all.into_iter().next();
+        if let Some((pick, at)) = hit {
+            if !on_picked && !self.picked_faces().contains(&pick) {
+                self.cur.picked = Some(pick);
+                self.cur.also_picked.clear();
+            }
+            self.cur.context_point = Some(at);
+        } else {
+            self.cur.context_point = None;
+        }
+    }
+
     pub(super) fn pick_events(&mut self, ui: &egui::Ui, ev: &view3d::ViewEvents, rect: Rect) {
         let m = ui.input(|i| i.modifiers);
         self.pick_events_with(ev, rect, m);

@@ -1,0 +1,25 @@
+# Esc で窓を閉じると右クリックの 2 回目(採用分 10-25 u5・u8)。前は、取り消しの履歴の窓と
+# 編集パネルのパラメータが Esc で閉じず、右クリックのメニューはもう一度右クリックすると消えた。
+#! sample part
+
+# 取り消しの履歴の窓は Esc で閉じる
+click "取り消しの履歴"
+expect "0. 最初の状態" exists
+key Escape
+expect "0. 最初の状態" missing
+shot 取り消しの履歴でEsc
+
+# 編集パネルのパラメータも Esc で閉じる
+click "パラメータ"#1
+expect "モデルパラメータ" exists
+key Escape
+expect "モデルパラメータ" missing
+shot パラメータでEsc
+
+# 右クリックを素早く 2 回しても、メニューは出たまま
+rclick "ボディ1"
+rclick "ボディ1"
+expect "このボディのパラメータの表を作る" exists
+shot 右クリックの2回目
+key Escape
+expect "このボディのパラメータの表を作る" missing

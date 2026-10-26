@@ -2,6 +2,7 @@
 //! セットアップの木(セットアップの下に加工の操作)。上に検索の欄と種類の札。
 //! 並べ方は記述子(区分と、親を指す欄)から決め、アイコンも記述子の名前を使う。
 
+use crate::theme::RightMenu as _;
 use crate::timeline_ui::Health;
 use crate::{Found, Space, Workspace, icons, theme};
 use egui::{Color32, Rect, Sense, Stroke, Vec2};
@@ -607,7 +608,7 @@ impl Workspace {
         if r.secondary_clicked() && !self.selection().contains(&f.id) {
             self.select(f.id);
         }
-        r.context_menu(|ui| {
+        r.right_menu(|ui| {
             if !self.selection().contains(&f.id) {
                 self.select(f.id);
             }
@@ -678,7 +679,7 @@ impl Workspace {
         }
         // 部品の木のドラッグ: 文書の行へ落とすと直下へ
         self.browser.component_drop_rows.push((None, r.rect));
-        r.context_menu(|ui| {
+        r.right_menu(|ui| {
             if has_parts
                 && !root_active
                 && ui
@@ -731,7 +732,7 @@ impl Workspace {
             );
             // 開け閉めの印はブラウザの中の ID(メニューの中で作ると別の ID になる)
             let open_key = ui.make_persistent_id(("browser_open", "named_views"));
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 if ui.button("今のビューを保存").clicked() {
                     if let Some(id) = self.save_named_view("") {
                         // すぐ名前を打てるようにする
@@ -1030,7 +1031,7 @@ impl Workspace {
             if r.clicked() {
                 self.toggle_machine_settings();
             }
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 if ui.button("機械の設定").clicked() {
                     self.open_machine_settings();
                     ui.close();
@@ -1047,7 +1048,7 @@ impl Workspace {
             let (open, r) = branch_row(ui, "setups", 0, "folder", "セットアップ", "", true, None);
             // 右クリックで、リボンの「セットアップ」のまとまりの操作(セットアップを足すなど)を出す
             // (Z4: 右クリックしても何も出なかった)
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 let acts: Vec<kmb_core::Action> = self
                     .actions()
                     .into_iter()
@@ -1353,7 +1354,7 @@ impl Workspace {
                 );
                 self.set_contacts(&label, c);
             }
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 if ui.button("削除").clicked() {
                     let mut c = contacts.clone();
                     c.sets.remove(i);

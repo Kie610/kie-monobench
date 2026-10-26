@@ -236,3 +236,34 @@ fn changing_the_new_document_unit_also_sets_it_on_the_untouched_untitled_documen
     assert_eq!(h.state().length_unit(), kmb_core::LengthUnit::In);
     assert!(!h.state().document().can_undo() && !h.state().is_modified());
 }
+
+#[test]
+fn copy_cut_and_paste_keys_with_shift_are_refused_with_a_reason() {
+    // Ctrl+C・Ctrl+X・Ctrl+V は Shift・Alt を足しても、PC から「写す」などとして届き、キーとしては
+    // 来ない。受けたまま黙らず理由を出し、キーとして来ても同じ理由で断る(10-25 u6)
+    let mut h = harness();
+    h.state_mut().open_settings_at("general/input");
+    h.run();
+    change_row(&mut h, "全部を計算し直す");
+    h.event(egui::Event::Copy);
+    h.run();
+    h.get_by_label_contains("写す・切り取る・貼り付ける");
+    assert!(h.state().settings.key_capture.is_some(), "断った後も受けたまま");
+    press(
+        &mut h,
+        egui::Key::C,
+        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+    );
+    assert!(h.state().settings.key_capture.is_some(), "Ctrl+Shift+C は付けない");
+    assert!(!h.state().win.layout.keys.contains_key("recompute"));
+    // ほかの Ctrl+Shift の組み合わせは付く
+    press(
+        &mut h,
+        egui::Key::K,
+        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+    );
+    assert_eq!(
+        h.state().win.layout.keys["recompute"],
+        vec!["Ctrl+Shift+K".to_string()]
+    );
+}

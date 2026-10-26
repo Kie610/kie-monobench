@@ -9,6 +9,7 @@
 //! 場所・広げた行・名前を変える途中などはホームと別に持つ(ホームを開いても、パネルの場所は変わらない)。
 //! デザインの概要とフォルダの木の控えはホームと同じ物を使う。
 
+use kmb_ui::theme::RightMenu as _;
 use crate::middle::drop_target;
 use crate::{
     Drag, Filter, Item, Library, Place, file_name, key_button, paint_fit, place_row, plate,
@@ -326,7 +327,7 @@ impl Library {
                     } else if r.clicked() {
                         self.panel.open_row = (!expanded).then(|| it.path.clone());
                     }
-                    r.context_menu(|ui| self.panel_menu(ui, host, it, place));
+                    r.right_menu(|ui| self.panel_menu(ui, host, it, place));
                     if self
                         .panel
                         .renaming

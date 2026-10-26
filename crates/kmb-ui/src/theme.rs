@@ -1151,6 +1151,41 @@ pub fn command_button(
     command_tile(ui, icon, label, enabled, pinned, false)
 }
 
+/// 右クリックのメニュー。egui の `Response::context_menu` の代わりに必ずこれを使う。
+///
+/// egui のメニューはどのボタンのクリックでも閉じるので、素早く 2 回右クリックすると、2 回目
+/// (出たメニューの角か、元の物の上)でメニューが一瞬で消えた(10-25 u5)。出ているメニューの上か
+/// 元の物の上の右クリックでは閉じない(元の物の上なら押した所へ出し直す)。
+pub trait RightMenu {
+    fn right_menu(&self, add: impl FnOnce(&mut Ui)) -> Option<egui::InnerResponse<()>>;
+}
+
+impl RightMenu for Response {
+    fn right_menu(&self, add: impl FnOnce(&mut Ui)) -> Option<egui::InnerResponse<()>> {
+        let id = egui::Popup::default_response_id(self);
+        let (right, at) = self.ctx.input(|i| {
+            (
+                i.pointer.button_clicked(egui::PointerButton::Secondary),
+                i.pointer.interact_pos(),
+            )
+        });
+        let on_menu = || {
+            let shown = self.ctx.read_response(id);
+            at.is_some_and(|p| shown.is_some_and(|r| r.rect.contains(p)))
+        };
+        let again = right
+            && egui::Popup::is_id_open(&self.ctx, id)
+            && (self.secondary_clicked() || on_menu());
+        let menu = egui::Popup::context_menu(self);
+        let menu = if again {
+            menu.close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+        } else {
+            menu
+        };
+        menu.show(add)
+    }
+}
+
 /// ツールバーの ▾ の一覧の 1 行(アイコンと名前)。`on` は使っている道具。
 pub fn menu_item(ui: &mut Ui, icon: &str, label: &str, enabled: bool, on: bool) -> Response {
     let l = look(ui.ctx());

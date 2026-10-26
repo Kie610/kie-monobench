@@ -5,6 +5,7 @@
 //! 選ぶ・お気に入り・割り当てを外して消す。直すのは小さな窓(名前・色・金属・粗さ)。
 //! 文書を変えるのは全部外観の操作([`kmb_interchange::role::action::APPEARANCE`]。CLI・MCP と同じ道)。窓は画面を止めない。
 
+use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::layout::Space;
 use crate::theme;
@@ -271,7 +272,7 @@ impl Workspace {
             let Some(r) = all.resolve(&n) else {
                 // 知らない名前(ほかの版の文書など)。外すことだけできる
                 let resp = ui.label(format!("{n}(知らない外観)"));
-                resp.context_menu(|ui| {
+                resp.right_menu(|ui| {
                     if ui.button("割り当てを外して消す").clicked() {
                         *cmd = Some(SwatchCmd::Delete(n.clone()));
                         ui.close();
@@ -291,7 +292,7 @@ impl Workspace {
             if resp.clicked() {
                 *cmd = Some(SwatchCmd::Apply(n.clone()));
             }
-            resp.context_menu(|ui| {
+            resp.right_menu(|ui| {
                 if ui.button("編集…").clicked() {
                     *cmd = Some(SwatchCmd::Edit(n.clone()));
                     ui.close();
@@ -381,7 +382,7 @@ impl Workspace {
                         if resp.clicked() {
                             *cmd = Some(SwatchCmd::Apply(l.name.to_string()));
                         }
-                        resp.context_menu(|ui| {
+                        resp.right_menu(|ui| {
                             let label = if fav { "お気に入りから外す" } else { "お気に入りに追加" };
                             if ui.button(label).clicked() {
                                 *cmd = Some(SwatchCmd::Favorite(l.name.to_string(), !fav));

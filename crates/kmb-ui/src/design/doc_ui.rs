@@ -1,6 +1,7 @@
 //! 文書に持つ見せ方の情報: 設計の属性(U13)、名前を付けた視点(U20)、読み込んだ STEP を
 //! 立てるかの問い(U12)。どれも取り消せる変更として文書へ入れる。
 
+use crate::theme::RightMenu as _;
 use crate::Workspace;
 use kmb_core::{FeatureId, NamedView, Properties};
 use kmb_session::edit;
@@ -320,7 +321,7 @@ impl Workspace {
             if r.clicked() {
                 self.apply_named_view(v.id);
             }
-            r.context_menu(|ui| {
+            r.right_menu(|ui| {
                 if ui.button("このビューにする").clicked() {
                     self.apply_named_view(v.id);
                     ui.close();
