@@ -615,6 +615,7 @@ const JSON_NAME_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-core", "src/document.rs", 1),      // 文書の拡張子の定数そのもの
     ("kmb-post-carvera-air", "src/machine.rs", 1), // 機械の台の穴の表
     ("kmb-session", "src/crash.rs", 5),      // 落ちた時の記録
+    ("kmb-session", "src/doc_view.rs", 1),   // 文書ごとの見え方
     ("kmb-session", "src/filters.rs", 1),    // 絞り込みの設定
     ("kmb-session", "src/gallery.rs", 2),    // 絵の索引
     ("kmb-session", "src/history.rs", 2),    // 版の履歴の索引

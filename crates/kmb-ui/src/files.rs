@@ -2,6 +2,7 @@
 //! 中のモジュールは crate の直下でも同じ名前で引ける(lib.rs の `use`)。
 
 pub(crate) mod compare_ui;
+pub(crate) mod doc_view_ui;
 pub(crate) mod files_ui;
 pub(crate) mod home;
 pub(crate) mod home_ui;
