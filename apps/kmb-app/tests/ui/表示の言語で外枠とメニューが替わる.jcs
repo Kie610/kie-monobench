@@ -1,0 +1,30 @@
+# 表示の言語(2026-10-27): 設定 → 画面の「表示の言語」を English にすると、画面の外枠(上の帯・
+# 文書のタブ・下の帯)とファイル・ヘルプのメニューの文言が英語になり、日本語に戻すと戻る。
+#! sample part
+
+shot 日本語
+click "設定"
+select "表示の言語" "English"
+click "Close window"
+expect "File"
+expect "Preferences"
+expect "Units mm"
+expect "ファイル" missing
+shot 英語
+click "File"
+expect "Save As…   Ctrl+Shift+S"
+expect "Version History…"
+shot 英語のファイルのメニュー
+key Escape
+click "Help"
+expect "Controls Guide F1"
+shot 英語のヘルプのメニュー
+key Escape
+
+# 日本語に戻すと外枠も戻る
+click "Preferences"
+select "Display language" "日本語"
+click "Close window"
+expect "ファイル"
+expect "単位 mm"
+expect "File" missing
