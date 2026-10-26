@@ -440,6 +440,11 @@ impl Workspace {
                 id,
                 args.as_object().cloned().unwrap_or_default(),
             )))
+        } else if self.declares(id, "view") {
+            // 今の視点を使う操作(下絵を見ている向きの平面に置くなど)には、視点の向きを渡す
+            let (_, up, eye) = self.cur.camera.basis_pub();
+            let f = |v: [f32; 3]| v.map(f64::from).to_vec();
+            Some(serde_json::json!({"view": {"eye": f(eye), "up": f(up)}}))
         } else {
             None
         };
