@@ -63,6 +63,24 @@ browser-inside-warning = 中に注意があります(開くと見える)
 browser-inside-error = 中にエラーがあります(開くと見える)
 browser-inside-blocked = 中に計算していない物があります(開くと見える)
 
+## ボディの行の右クリック
+
+browser-body-rename = 名前変更
+browser-body-rename-tip = ブラウザに出るボディの名前を変える(取り消せる。行のダブルクリックでも)
+browser-body-show = 表示
+browser-body-hide = 非表示
+browser-body-visible-tip = 3D のビューで出す・隠す(隠したボディは書き出さない)
+browser-body-isolate = 選択表示
+browser-body-isolate-tip = このボディ(と一緒に選んでいるボディ)だけを出す。3D のビューの上の札の「選択表示の解除」で戻す
+browser-body-unisolate = 選択表示の解除
+browser-body-unisolate-tip = ほかのボディも前と同じように出す
+browser-body-show-all = すべてのボディを表示
+browser-body-show-all-tip = 選択表示をやめ、隠したボディを全部出す
+browser-body-param-view = このボディのパラメータの表を作る
+browser-body-param-view-tip = このボディに関わるパラメータ・寸法・機能の値だけを出す表を、パラメータの窓に作る(取り消せる)
+browser-body-find-in-timeline = タイムライン内を検索
+browser-body-find-in-timeline-tip = このボディを最後に変えた機能を、タイムラインで光らせる
+
 ## 解析の木
 
 browser-studies = 研究

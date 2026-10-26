@@ -1,4 +1,4 @@
-# 表示の言語(2026-10-27): English にすると、ブラウザ(種類の札・まとまり・目・右クリック)と
+# 表示の言語(2026-10-27): English にすると、ブラウザ(種類の札・まとまり・目・ボディの右クリック)と
 # タイムライン(今の位置の印・機能の数・機能の右クリック)が英語になり、日本語に戻すと戻る。
 # 機能とボディの名前は文書の中身なので替わらない。
 #! sample part
@@ -15,8 +15,9 @@ expect "Rollback Marker"
 expect "ボディ を隠す" missing
 rclick "ボディ1"
 expect "Rename"
-expect "Roll Back to Here"
-shot 英語のブラウザと機能の右クリック
+expect "Find in Timeline"
+expect "名前変更" missing
+shot 英語のボディの右クリック
 key Escape
 
 # 日本語に戻すと戻る
