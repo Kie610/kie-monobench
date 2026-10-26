@@ -8,8 +8,9 @@ use kmb_samples::sample_document;
 
 #[test]
 fn extrude_button_makes_a_body_and_3d_view_shows_it() {
+    // 幅 1000 では「作成」のまとまりが ▾ 1 つに畳まれ、押し出しのボタンが帯に出ない
     let mut h = Harness::builder()
-        .with_size(egui::vec2(1000.0, 700.0))
+        .with_size(egui::vec2(1280.0, 700.0))
         .build_ui_state(
             |ui, ws: &mut Workspace| ws.ui(ui),
             Workspace::new(sample_document(), None, reg()),

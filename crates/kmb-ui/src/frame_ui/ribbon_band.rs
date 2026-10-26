@@ -581,10 +581,7 @@ impl Workspace {
             .groups
             .iter()
             .zip(&fronts)
-            .map(|(g, f)| {
-                let on = f.iter().position(|i| Some(&i.key) == active.as_ref());
-                group_widths(ui, &g.name, f.len(), on, labels)
-            })
+            .map(|(g, f)| group_widths(ui, &g.name, f.len(), labels))
             .collect();
         let select_w = 196.0 * theme::band();
         let fold = ribbon::fit(&widths, select_w, more_width(ui), ui.available_width());
@@ -592,17 +589,13 @@ impl Workspace {
         for ((g, front), f) in tab.groups.iter().zip(&fronts).zip(&fold) {
             let shown: Vec<&Item> = match f {
                 ribbon::Fold::Hidden => continue,
-                ribbon::Fold::Compact(n) => front
-                    .iter()
-                    .enumerate()
-                    .filter(|(k, i)| *k < *n || Some(&i.key) == active.as_ref())
-                    .map(|(_, i)| i)
-                    .collect(),
+                ribbon::Fold::Collapsed => Vec::new(),
                 _ => front.iter().collect(),
             };
             let compact = !labels || *f != ribbon::Fold::Full;
             let n = shown.len().max(1) as f32;
             let w = (n * tile_width(compact) + (n - 1.0) * 2.0 + 8.0).max(name_width(ui, &g.name));
+            let lit = g.items.iter().any(|i| Some(&i.key) == active.as_ref());
             let (rect, _) =
                 ui.allocate_exact_size(egui::vec2(w, self.band_height()), egui::Sense::hover());
             let mut col = ui.new_child(
@@ -612,66 +605,96 @@ impl Workspace {
             );
             col.spacing_mut().item_spacing = egui::vec2(2.0, 0.0);
             col.add_space(3.0);
+            // 畳んだまとまりは、まとまりのボタン 1 つ(押すと名前の ▾ と同じ一覧)
+            let mut opens = Vec::new();
             col.horizontal(|ui| {
+                if *f == ribbon::Fold::Collapsed {
+                    let icon = g
+                        .items
+                        .iter()
+                        .find(|i| Some(&i.key) == active.as_ref())
+                        .or(front.first())
+                        .or(g.items.first())
+                        .map_or("", |i| i.icon.as_str());
+                    opens.push(group_tile(ui, icon, &g.name, lit, tall));
+                }
                 for it in &shown {
                     let on = Some(&it.key) == active.as_ref();
                     self.command(ui, it, &tab.name, g, on, compact, tall);
                 }
             });
             // まとまりの名前と ▾ の一覧(ピンで前に出す)
-            let lit = g.items.iter().any(|i| Some(&i.key) == active.as_ref());
-            let r = group_label(ui, rect, ("glabel", &tab.name, &g.name), &g.name, lit);
-            egui::Popup::menu(&r).show(|ui| {
-                let front: Vec<String> = ribbon::front(space, &tab.name, g, &self.win.layout)
-                    .iter()
-                    .map(|i| i.key.clone())
-                    .collect();
-                for it in &g.items {
-                    ui.horizontal(|ui| {
-                        let pinned = front.contains(&it.key);
-                        let pr = theme::icon_button(
-                            ui,
-                            "pin",
-                            if pinned {
+            opens.push(group_label(
+                ui,
+                rect,
+                ("glabel", &tab.name, &g.name),
+                &g.name,
+                lit,
+            ));
+            for r in &opens {
+                egui::Popup::menu(r).show(|ui| {
+                    let front: Vec<String> = ribbon::front(space, &tab.name, g, &self.win.layout)
+                        .iter()
+                        .map(|i| i.key.clone())
+                        .collect();
+                    for it in &g.items {
+                        ui.horizontal(|ui| {
+                            let pinned = front.contains(&it.key);
+                            let pr = theme::icon_button(
+                                ui,
+                                "pin",
+                                if pinned {
+                                    "前から外す"
+                                } else {
+                                    "前に出す"
+                                },
+                                true,
+                                pinned,
+                            )
+                            .on_hover_text(if pinned {
                                 "前から外す"
                             } else {
                                 "前に出す"
-                            },
-                            true,
-                            pinned,
-                        )
-                        .on_hover_text(if pinned {
-                            "前から外す"
-                        } else {
-                            "前に出す"
-                        });
-                        if pr.clicked() {
-                            let e = if pinned {
-                                PinEdit::Unpin(it.key.clone())
-                            } else {
-                                PinEdit::Pin(it.key.clone())
+                            });
+                            if pr.clicked() {
+                                let e = if pinned {
+                                    PinEdit::Unpin(it.key.clone())
+                                } else {
+                                    PinEdit::Pin(it.key.clone())
+                                };
+                                ribbon::edit_pins(space, &tab.name, g, &mut self.win.layout, e);
+                            }
+                            let on = Some(&it.key) == active.as_ref();
+                            let r = theme::menu_item(
+                                ui,
+                                &it.icon,
+                                &it.label,
+                                it.disabled.is_none(),
+                                on,
+                            );
+                            let r = match &it.disabled {
+                                Some(why) => r.on_hover_text(format!("{}: {why}", it.label)),
+                                None if !it.hint.is_empty() => r.on_hover_text(&it.hint),
+                                None => r,
                             };
-                            ribbon::edit_pins(space, &tab.name, g, &mut self.win.layout, e);
-                        }
-                        let on = Some(&it.key) == active.as_ref();
-                        let r =
-                            theme::menu_item(ui, &it.icon, &it.label, it.disabled.is_none(), on);
-                        let r = match &it.disabled {
-                            Some(why) => r.on_hover_text(format!("{}: {why}", it.label)),
-                            None if !it.hint.is_empty() => r.on_hover_text(&it.hint),
-                            None => r,
-                        };
-                        if r.clicked() {
-                            self.run_item(&it.key);
-                            ui.close();
-                        }
-                    });
-                }
-                ui.separator();
-                if ui.button("前の並びを既定に戻す").clicked() {
-                    ribbon::edit_pins(space, &tab.name, g, &mut self.win.layout, PinEdit::Reset);
-                }
-            });
+                            if r.clicked() {
+                                self.run_item(&it.key);
+                                ui.close();
+                            }
+                        });
+                    }
+                    ui.separator();
+                    if ui.button("前の並びを既定に戻す").clicked() {
+                        ribbon::edit_pins(
+                            space,
+                            &tab.name,
+                            g,
+                            &mut self.win.layout,
+                            PinEdit::Reset,
+                        );
+                    }
+                });
+            }
             // まとまりの区切り
             ui.painter().vline(
                 rect.right() - 0.5,
@@ -1015,25 +1038,51 @@ pub(super) fn name_width(ui: &egui::Ui, name: &str) -> f32 {
         + 16.0
 }
 
-/// まとまりの出し方ごとの幅。`n` は前に出すボタンの数、`on` は使っている道具の前の並びの位置
-/// (ボタンを減らしても、使っている道具は出す)、`labels` はボタンに名前を出す設定。
-pub(super) fn group_widths(
-    ui: &egui::Ui,
-    name: &str,
-    n: usize,
-    on: Option<usize>,
-    labels: bool,
-) -> ribbon::Widths {
+/// まとまりの出し方ごとの幅。`n` は前に出すボタンの数、`labels` はボタンに名前を出す設定。
+pub(super) fn group_widths(ui: &egui::Ui, name: &str, n: usize, labels: bool) -> ribbon::Widths {
     let w = |n: usize, compact: bool| {
         let n = n.max(1) as f32;
         (n * tile_width(compact) + (n - 1.0) * 2.0 + 8.0).max(name_width(ui, name))
     };
     ribbon::Widths {
         full: w(n, !labels),
-        compact: (1..=n.max(1))
-            .map(|k| w(k + usize::from(on.is_some_and(|p| p >= k)), true))
-            .collect(),
+        compact: w(n, true),
+        collapsed: w(1, true),
     }
+}
+
+/// 畳んだまとまりのボタン(まとまりの道具のアイコン 1 つ)。押すとまとまりの一覧を出す。
+pub(super) fn group_tile(
+    ui: &mut egui::Ui,
+    icon: &str,
+    name: &str,
+    lit: bool,
+    tall: bool,
+) -> egui::Response {
+    // 名前はまとまりの名前と分ける(台本でまとまりの道具と見分ける)
+    let r = icon_tile(
+        ui,
+        icon,
+        &format!("{name}(畳んだまとまり)"),
+        true,
+        lit,
+        tall,
+    );
+    // 右下の ▾ で、押すと道具でなく一覧が出ることを見せる
+    let l = theme::look(ui.ctx());
+    crate::icons::paint(
+        ui.painter(),
+        egui::Rect::from_center_size(
+            r.rect.right_bottom() + egui::vec2(-7.0, -8.0),
+            egui::vec2(9.0, 9.0),
+        ),
+        "chev",
+        if lit { l.ws() } else { l.pal.ink2 },
+        1.6,
+    );
+    r.on_hover_text(format!(
+        "{name}: 窓が狭いので 1 つに畳んだまとまり。押すと道具の一覧を出す"
+    ))
 }
 
 /// 右端の「その他」のまとまりの幅。

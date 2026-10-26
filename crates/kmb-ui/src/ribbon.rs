@@ -258,12 +258,15 @@ pub fn migrate_pins(space: Space, tab: &str, groups: &[Group], layout: &mut Layo
 }
 
 /// 帯の 1 つのまとまりの出し方。帯に入りきらない時は右のまとまりから順に畳む。
+/// まとまりの中の一部のボタンだけを隠す段は作らない(畳む時はまとまり全部を 1 つにする)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Fold {
     /// 前の並びをそのまま(名前を出す設定なら名前つき)
     Full,
-    /// 前の並びの先頭から、この数だけをアイコンだけで出す(残りはまとまりの名前の ▾ の一覧から)
-    Compact(usize),
+    /// 前の並びを全部、アイコンだけで出す
+    Compact,
+    /// まとまり全部を、名前の ▾ のボタン 1 つに畳む(押すとまとまりの一覧)
+    Collapsed,
     /// 帯に出さず、右端の「その他」の一覧に入れる
     Hidden,
 }
@@ -273,20 +276,18 @@ pub enum Fold {
 pub struct Widths {
     /// 前の並びをそのまま出した幅
     pub full: f32,
-    /// 前の並びの先頭から k 個(`compact[k - 1]`)をアイコンだけで出した幅。前の並びが空でも 1 つは持つ
-    pub compact: Vec<f32>,
+    /// 前の並びを全部アイコンだけで出した幅
+    pub compact: f32,
+    /// 名前の ▾ のボタン 1 つに畳んだ幅
+    pub collapsed: f32,
 }
 
 impl Widths {
     fn of(&self, f: Fold) -> f32 {
         match f {
             Fold::Full => self.full,
-            Fold::Compact(k) => self
-                .compact
-                .get(k.max(1) - 1)
-                .copied()
-                .unwrap_or(self.full)
-                .min(self.full),
+            Fold::Compact => self.compact.min(self.full),
+            Fold::Collapsed => self.collapsed.min(self.compact).min(self.full),
             Fold::Hidden => 0.0,
         }
     }
@@ -294,9 +295,8 @@ impl Widths {
 
 /// 帯の幅 `width` に収まるように、まとまりごとの出し方を決める。`fixed` は必ず出す物
 /// (「選択」のまとまり・「スケッチを終了」)の幅、`more` は右端の「その他」の幅。
-/// 右のまとまりから順にアイコンだけにし、それでも入らなければ右から 1 つずつボタンを減らし
-/// (先頭の 1 つまで)、それでも入らなければ右から「その他」へ移す。並びの順は変えない
-/// (Microsoft のリボンの縮め方と同じ順)。
+/// 右のまとまりから順にアイコンだけにし、それでも入らなければ右から 1 つずつまとまり全部を
+/// 名前の ▾ のボタン 1 つに畳み、それでも入らなければ右から「その他」へ移す。並びの順は変えない。
 pub fn fit(groups: &[Widths], fixed: f32, more: f32, width: f32) -> Vec<Fold> {
     let mut fold = vec![Fold::Full; groups.len()];
     let fits = |fold: &[Fold]| -> bool {
@@ -306,25 +306,16 @@ pub fn fit(groups: &[Widths], fixed: f32, more: f32, width: f32) -> Vec<Fold> {
             + if hidden { more } else { 0.0 }
             <= width
     };
-    for i in (0..groups.len()).rev() {
-        if fits(&fold) {
-            return fold;
-        }
-        fold[i] = Fold::Compact(groups[i].compact.len());
-    }
-    for i in (0..groups.len()).rev() {
-        for k in (1..groups[i].compact.len()).rev() {
+    for step in [Fold::Compact, Fold::Collapsed, Fold::Hidden] {
+        for i in (0..groups.len()).rev() {
             if fits(&fold) {
                 return fold;
             }
-            fold[i] = Fold::Compact(k);
+            // 狭くならない畳み方はしない(ボタンが 1 つのまとまりは、畳まずにそのボタンを出す)
+            if step == Fold::Hidden || groups[i].of(step) < groups[i].of(fold[i]) {
+                fold[i] = step;
+            }
         }
-    }
-    for i in (0..groups.len()).rev() {
-        if fits(&fold) {
-            return fold;
-        }
-        fold[i] = Fold::Hidden;
     }
     fold
 }
@@ -578,33 +569,39 @@ mod tests {
 
     #[test]
     fn groups_fold_from_the_right_until_the_band_fits() {
-        // 名前つきのボタン 100、アイコンだけ 40(まとまりの幅 = 数 × 幅)
+        // 名前つきのボタン 100、アイコンだけ 40(まとまりの幅 = 数 × 幅)、畳んだボタン 50
         let w = |n: usize| Widths {
             full: n as f32 * 100.0,
-            compact: (1..=n).map(|k| k as f32 * 40.0).collect(),
+            compact: n as f32 * 40.0,
+            collapsed: 50.0,
         };
         let g = [w(4), w(3), w(2)];
         use Fold::*;
         // 入る時は畳まない
         assert_eq!(fit(&g, 100.0, 50.0, 1000.0), [Full, Full, Full]);
         // 右から順にアイコンだけにする
-        assert_eq!(fit(&g, 100.0, 50.0, 880.0), [Full, Full, Compact(2)]);
-        assert_eq!(fit(&g, 100.0, 50.0, 700.0), [Full, Compact(3), Compact(2)]);
-        // 全部アイコンだけでも入らなければ、右から 1 つずつ減らす(先頭の 1 つまで)
+        assert_eq!(fit(&g, 100.0, 50.0, 880.0), [Full, Full, Compact]);
+        assert_eq!(fit(&g, 100.0, 50.0, 700.0), [Full, Compact, Compact]);
+        // 全部アイコンだけでも入らなければ、右からまとまり全部を名前の ▾ 1 つに畳む。
+        // まとまりの中の一部のボタンだけを残す出し方にはしない
+        assert_eq!(fit(&g, 100.0, 50.0, 440.0), [Compact, Compact, Collapsed]);
+        assert_eq!(fit(&g, 100.0, 50.0, 370.0), [Compact, Collapsed, Collapsed]);
         assert_eq!(
-            fit(&g, 100.0, 50.0, 440.0),
-            [Compact(4), Compact(3), Compact(1)]
+            fit(&g, 100.0, 50.0, 250.0),
+            [Collapsed, Collapsed, Collapsed]
         );
+        // 畳んでも狭くならないまとまり(ボタンが 1 つ)は、アイコンだけのボタンのまま
+        let one = Widths {
+            full: 100.0,
+            compact: 40.0,
+            collapsed: 40.0,
+        };
         assert_eq!(
-            fit(&g, 100.0, 50.0, 380.0),
-            [Compact(4), Compact(2), Compact(1)]
-        );
-        assert_eq!(
-            fit(&g, 100.0, 50.0, 220.0),
-            [Compact(1), Compact(1), Compact(1)]
+            fit(&[w(4), one.clone(), one], 100.0, 50.0, 230.0),
+            [Collapsed, Compact, Compact]
         );
         // それでも入らなければ、右から「その他」へ(その他の幅も足す)
-        assert_eq!(fit(&g, 100.0, 50.0, 200.0), [Compact(1), Hidden, Hidden]);
+        assert_eq!(fit(&g, 100.0, 50.0, 240.0), [Collapsed, Hidden, Hidden]);
         assert_eq!(fit(&g, 100.0, 50.0, 10.0), [Hidden, Hidden, Hidden]);
     }
 }
