@@ -354,7 +354,8 @@ impl Workspace {
                     egui::Checkbox::new(&mut self.win.layout.timeline_open, "タイムライン(加工は段の帯)"),
                 )
                 .on_disabled_hover_text("レンダリングと解析では出しません(設計へ戻すと出ます)");
-                ui.checkbox(&mut self.win.layout.panel_open, "編集パネル");
+                ui.checkbox(&mut self.win.layout.panel_always, "選んだだけでも編集パネルを出す")
+                    .on_hover_text("切: 編集パネルは作る・直す・パラメータの間だけ出す。入: 機能を選ぶと値を見せる");
                 ui.checkbox(&mut self.win.layout.commands_open, "コマンド")
                     .on_hover_text("コマンドを打つ欄。画面の部品を名前で押す・打つ、スクリプトを流す(help で一覧)");
                 if ui

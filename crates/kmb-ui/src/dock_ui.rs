@@ -586,7 +586,7 @@ impl TabViewer for Viewer<'_> {
 
     fn on_close(&mut self, tab: &mut Pane) -> OnCloseResponse {
         // 並びから外すのは次の描画の前(戻す場所を覚えてから外す)
-        self.ws.set_pane_open(*tab, false);
+        self.ws.hide_pane(*tab);
         OnCloseResponse::Ignore
     }
 
@@ -650,10 +650,53 @@ impl Workspace {
         match pane {
             Pane::View => true,
             Pane::Browser => self.win.layout.browser_open,
-            Pane::Panel => self.win.layout.panel_open,
+            Pane::Panel => self.win.layout.panel_always || self.tool_in_use(),
             Pane::Timeline => self.win.layout.timeline_open,
             Pane::Commands => self.win.layout.commands_open,
             Pane::Data => self.win.layout.data_open,
+        }
+    }
+
+    /// 道具を使っている間か(クリックで値を決める手順・作る途中・直す途中・パラメータ・まとめて
+    /// 編集・選んでいる研究を解いている間)。この間は編集パネルを出す。
+    pub fn tool_in_use(&self) -> bool {
+        self.cur.gesture.is_some()
+            || self.cur.creating.is_some()
+            || self.cur.editing.is_some()
+            || self.cur.multi_edit
+            || self.win.show_params
+            || self.cur.selected.is_some_and(|id| {
+                self.cur.work.doc().data().feature(id).is_some()
+                    && self
+                        .run_state(id)
+                        .is_some_and(|s| s.tone == kmb_core::RunTone::Busy)
+            })
+    }
+
+    /// 部品の × ・「隠す」。道具の間の編集パネルは道具をやめる(キャンセル・Esc と同じ。作る途中
+    /// なら作る前へ戻す)。
+    pub(crate) fn hide_pane(&mut self, pane: Pane) {
+        if pane != Pane::Panel {
+            self.set_pane_open(pane, false);
+            return;
+        }
+        if self.cur.gesture.is_some() {
+            self.cur.gesture = None;
+        } else if self.cur.creating.is_some() || self.cur.editing.is_some() || self.cur.multi_edit {
+            self.cancel_edit();
+        } else if self.win.show_params {
+            self.win.show_params = false;
+        } else {
+            self.win.layout.panel_always = false;
+        }
+    }
+
+    /// 編集パネルの見出しの × の説明。
+    pub(crate) fn panel_close_hint(&self) -> &'static str {
+        if self.tool_in_use() {
+            "閉じる(キャンセルと同じ。作っている途中なら作る前へ戻す)"
+        } else {
+            "編集パネルを隠す(作る・直す間はまた出る)"
         }
     }
 
@@ -668,7 +711,7 @@ impl Workspace {
         match pane {
             Pane::View => {}
             Pane::Browser => self.win.layout.browser_open = open,
-            Pane::Panel => self.win.layout.panel_open = open,
+            Pane::Panel => self.win.layout.panel_always = open,
             Pane::Timeline => self.win.layout.timeline_open = open,
             Pane::Commands => self.win.layout.commands_open = open,
             Pane::Data => self.win.layout.data_open = open,
@@ -677,7 +720,8 @@ impl Workspace {
 
     /// 並びを既定に戻す(部品をすべて出し、前の版の固定の配置と同じにする)。
     pub(crate) fn reset_dock(&mut self) {
-        for p in Pane::HIDABLE {
+        // 編集パネルは道具の間だけ出す(「選んだだけでも出す」は表示のメニューの設定で、並びに入れない)
+        for p in Pane::HIDABLE.into_iter().filter(|p| *p != Pane::Panel) {
             self.set_pane_open(p, p.open_by_default());
         }
         self.win.layout.dock = None;
@@ -696,6 +740,7 @@ impl Workspace {
             && self.win.layout.outer.is_empty()
             && Pane::HIDABLE
                 .iter()
+                .filter(|p| **p != Pane::Panel)
                 .all(|p| self.pane_open(*p) == p.open_by_default())
     }
 
@@ -1000,7 +1045,7 @@ impl Workspace {
                 self.reset_dock();
                 return;
             }
-            Some(DockAction::Hide(p)) => self.set_pane_open(p, false),
+            Some(DockAction::Hide(p)) => self.hide_pane(p),
             Some(DockAction::Outer(p)) => self.pop_out(ui.ctx(), p),
             Some(DockAction::Float(p)) => {
                 if let Some(d) = self.docking.tree.as_mut()

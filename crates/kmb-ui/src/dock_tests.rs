@@ -6,7 +6,9 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use kmb_samples::reference_document;
 
-fn harness_with(ws: Workspace) -> Harness<'static, Workspace> {
+fn harness_with(mut ws: Workspace) -> Harness<'static, Workspace> {
+    // 並びの試験なので、編集パネルを選んだだけでも出す(既定は道具の間だけ)
+    ws.layout_mut().panel_always = true;
     let mut h = Harness::builder()
         .with_size(egui::vec2(1400.0, 900.0))
         .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);

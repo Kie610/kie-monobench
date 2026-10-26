@@ -72,7 +72,9 @@ fn a_study_runs_from_its_panel_and_turns_stale_when_its_conditions_change() {
     assert_eq!(st.tone, RunTone::Idle, "{}", st.badge);
     assert_eq!(st.badge, "未実行");
     assert!(h.state().overlay().shape.is_none());
-    // 設定欄の「実行」を押す
+    // 開いた設定欄の「実行」を押す
+    h.state_mut().open_edit(id);
+    h.run();
     h.get_by_label("▶  実行").click();
     h.step();
     wait_done(&mut h, id, 300);
@@ -101,6 +103,8 @@ fn a_study_runs_from_its_panel_and_turns_stale_when_its_conditions_change() {
     let st = h.state().run_state(id).unwrap();
     assert_eq!(st.tone, RunTone::Stale, "{}", st.badge);
     assert!(h.state().overlay().shape.unwrap().label.contains("古い"));
+    h.state_mut().open_edit(id);
+    h.run();
     h.get_by_label("▶  実行(解き直す)").click();
     h.step();
     wait_done(&mut h, id, 300);
@@ -119,6 +123,7 @@ fn a_flow_study_steps_through_its_frames_on_the_time_bar() {
         }),
     );
     let mut h = harness(ws);
+    h.state_mut().open_edit(id);
     h.run();
     h.get_by_label("▶  実行").click();
     h.step();

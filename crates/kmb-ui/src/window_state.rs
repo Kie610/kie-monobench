@@ -38,6 +38,9 @@ pub(crate) struct WinState {
     pub(crate) mouse3d: Option<kmb_ui_mouse3d::Mouse3d>,
     /// 最後に描いた 3D のビューの枠(名前付きの視点を取り出す・戻すのに使う)
     pub(crate) view_rect: egui::Rect,
+    /// `view_rect` を描いた時に並びに置いていた部品(出し入れで 3D のビューの片側が動いた時に、
+    /// 形をその場に留める。まだ描いていなければ `None`)
+    pub(crate) view_panes: Option<Vec<crate::dock_ui::Pane>>,
     /// 落ちた時の知らせ(開始画面と「ヘルプ」に出す)
     pub(crate) crash_page: help_ui::CrashPage,
     /// これまでの知らせ(誤りや完了の文。最大 100 件)

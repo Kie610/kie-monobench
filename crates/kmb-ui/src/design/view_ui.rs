@@ -63,6 +63,32 @@ impl Workspace {
             .then(|| e.type_id.clone())
     }
 
+    /// 部品の出し入れ(編集パネル・ブラウザ)で 3D のビューの左右の片側だけが動いた時、形を画面の
+    /// 同じ所に留める。投影の中心は四角の真ん中なので、そのままだと動いた幅の半分だけ形が跳ぶ。
+    /// 引いて幅を変えた時と窓の大きさを変えた時は今のまま(並びに置く部品が変わった時だけ)。
+    pub(crate) fn keep_shape_in_place(&mut self, next: egui::Rect) {
+        let panes: Vec<_> = crate::dock_ui::Pane::HIDABLE
+            .into_iter()
+            .filter(|p| self.pane_docked(*p))
+            .collect();
+        let Some(before) = self.win.view_panes.replace(panes.clone()) else {
+            return;
+        };
+        if before == panes {
+            return;
+        }
+        let old = self.win.view_rect;
+        let same = |a: f32, b: f32| (a - b).abs() < 0.5;
+        if old.width() > 1.0
+            && next.width() > 1.0
+            && same(old.top(), next.top())
+            && same(old.bottom(), next.bottom())
+            && (same(old.left(), next.left()) != same(old.right(), next.right()))
+        {
+            self.cur.camera.pan.x += old.center().x - next.center().x;
+        }
+    }
+
     /// 中央のビューを持つ編集器(スケッチ)を終えた最初のコマに、その編集器で見ていた向き・真ん中・
     /// 大きさを 3D のビューへ移す(入る前の向きへ飛ばない。10-23 u1)。
     fn take_editor_view(&mut self) {
@@ -161,6 +187,7 @@ impl Workspace {
         ghosts.extend(self.compare_ghosts());
         ghosts.extend(self.table_ghosts());
         self.cur.camera.perspective = self.win.layout.projection.perspective_for(&self.cur.camera);
+        self.keep_shape_in_place(ui.available_rect_before_wrap());
         let (ev, resp, rect) = view3d::view3d(
             ui,
             &mut self.cur.camera,

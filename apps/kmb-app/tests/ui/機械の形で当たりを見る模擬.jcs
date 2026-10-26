@@ -12,7 +12,7 @@ click "シミュレーション#1"
 until ~"機械の当たり・はみ出し 0 件" exists
 expect ~"ベッドを最大 0.30 mm 削る" exists
 shot 前-見本のシミュレーション
-click "編集Enter"
+key Return
 wait
 scroll "横の余白" 3000
 type "ベッドの上の置き場所 X" 280

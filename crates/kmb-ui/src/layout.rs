@@ -335,7 +335,8 @@ pub struct Layout {
     pub space: Space,
     pub browser_open: bool,
     pub browser_width: f32,
-    pub panel_open: bool,
+    /// 選んだだけでも編集パネルを出すか(切なら、道具を使う間だけ出す。前の `panel_open` は読まない)
+    pub panel_always: bool,
     pub panel_width: f32,
     pub timeline_open: bool,
     /// コマンド欄を出すか(初めは隠す)
@@ -431,7 +432,7 @@ impl Default for Layout {
             space: Space::Design,
             browser_open: true,
             browser_width: 250.0,
-            panel_open: true,
+            panel_always: false,
             panel_width: 312.0,
             timeline_open: true,
             commands_open: false,

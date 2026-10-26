@@ -1196,7 +1196,11 @@ impl Workspace {
                 format!("部品 {name} はありません(ブラウザ・編集パネル・タイムライン・コマンド)")
             })?;
         let open = on.unwrap_or(!self.pane_open(pane));
-        self.set_pane_open(pane, open);
+        if open {
+            self.set_pane_open(pane, true);
+        } else {
+            self.hide_pane(pane);
+        }
         Ok(format!(
             "{} を{}",
             pane.label(space),

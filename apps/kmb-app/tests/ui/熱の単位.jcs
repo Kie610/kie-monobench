@@ -35,8 +35,14 @@ shot 値を打った後
 
 # 決めて、解く
 click ~OK
+# OK で編集パネルは閉じる。Enter で開き直して「実行」を押す
+key Return
 click "▶  実行"
-until "済み" 300s
+# 解いている間は編集パネルに進み具合が出て、解き終わると閉じる。Enter で開き直して様子を見る
+expect "編集パネルを隠す" exists
+until "編集パネルを隠す" missing 300s
+key Return
+expect "済み" exists
 # 温度を決める面の 50 ℃が効いている(面が入らないと、まわりの温度へ逃げるだけで最低は 50 ℃にならない)
 expect ~"最低の温度: 50.00 ℃"
 shot 解いた後

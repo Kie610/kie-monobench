@@ -454,7 +454,7 @@ fn the_mesh_tolerance_is_chosen_per_setup() {
     let mut h = Harness::builder()
         .with_size(egui::vec2(1000.0, 700.0))
         .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
-    h.state_mut().select(setup);
+    h.state_mut().open_edit(setup);
     h.run();
     h.get_by_label("網の許容差");
 }

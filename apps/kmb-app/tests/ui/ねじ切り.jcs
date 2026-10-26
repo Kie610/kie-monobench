@@ -34,7 +34,7 @@ click ~OK
 shot 後
 # G-code を見て、終わり(この加工)まで巻く。下穴 8 mm の中心から半円で壁へ寄り、
 # 反時計回り(G3)で 1 周 1.25 mm ずつ Z を上げ、半円で中心へ戻ってから上がる
-click "G-code を見る"#2
+click "G-code を見る"
 scroll ~"(kieMonoBench / Carvera Air)" 1000000
 expect ~"G3 X33.677 Y22 I0.838 J0" exists
 expect ~"X30.323 Y22 Z-16 I-1.677 J0" exists

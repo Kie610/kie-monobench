@@ -158,6 +158,8 @@ fn the_bars_and_the_workspace_list_fit_their_text_at_every_size() {
         );
     h.state_mut().win.layout.appearance.text_scale = 2.5;
     h.state_mut().win.layout.appearance.icon_scale = 2.5;
+    // 選んだだけの編集パネルの下の欄(計算の札と「編集」)も見る
+    h.state_mut().win.layout.panel_always = true;
     h.run();
     h.run();
     let labels = |h: &Harness<'static, Workspace>, band: egui::Rect| -> Vec<(String, egui::Rect)> {

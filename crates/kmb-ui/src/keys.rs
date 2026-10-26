@@ -805,7 +805,6 @@ impl Workspace {
                 }
                 Cmd::Params => {
                     self.win.show_params = !self.win.show_params;
-                    self.win.layout.panel_open = true;
                 }
                 Cmd::Settings => self.toggle_settings(),
             },

@@ -11,6 +11,8 @@ click ~"作業空間:"
 click "加工"
 expect "素材" exists
 shot 段の帯-250
+# 選んで Enter で編集パネルに出す
 click "素材"
+key Return
 expect "編集パネルを隠す" exists
 shot 素材を選んだ-250

@@ -19,8 +19,14 @@ expect "要素の大きさ" = "2.5 mm"
 
 # 決めて、解く
 click ~OK
+# OK で編集パネルは閉じる。Enter で開き直して「実行」を押す
+key Return
 click "▶  実行"
-until "済み" 300s
+# 解いている間は編集パネルに進み具合が出て、解き終わると閉じる。Enter で開き直して様子を見る
+expect "編集パネルを隠す" exists
+until "編集パネルを隠す" missing 300s
+key Return
+expect "済み" exists
 shot 解いた後
 
 # 結果の数値に、特異点を除いた最大と特異点の注意が出ない

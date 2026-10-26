@@ -261,7 +261,6 @@ impl Workspace {
             match key {
                 "u:params" => {
                     self.win.show_params = true;
-                    self.win.layout.panel_open = true;
                 }
                 "u:machines" => self.open_machine_settings(),
                 "u:measure" => self.toggle_measure(),

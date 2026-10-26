@@ -17,6 +17,9 @@ fn reference_document_opens_in_3d() {
     h.run();
     assert_eq!(h.state().report().error_count(), 0);
     h.get_by_label("全体表示");
+    // 選んだだけの編集パネルの「体積を計測」を押す
+    h.state_mut().win.layout.panel_always = true;
+    h.run();
     h.get_all_by_label("体積を計測").next().unwrap().click();
     h.run();
     assert!(
@@ -1170,4 +1173,44 @@ fn lone_sketch_points_show_in_the_3d_view() {
     let p = dots[0][0];
     assert!((p[0] - 4.0).abs() < 1e-6 && (p[1] - 7.0).abs() < 1e-6 && p[2].abs() < 1e-6);
     assert_eq!(lines.len(), 2, "線 1 本と点 1 つ");
+}
+
+#[test]
+fn the_shape_stays_put_when_the_panel_comes_and_goes() {
+    let part = kmb_samples::reference_part();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(
+            |ui, ws: &mut Workspace| ws.ui(ui),
+            Workspace::new(part.doc, None, reg()),
+        );
+    h.run();
+    h.run();
+    let at = |h: &Harness<'static, Workspace>| {
+        let ws = h.state();
+        (
+            ws.cur.camera.project([0.0, 0.0, 0.0], ws.win.view_rect).0,
+            ws.win.view_rect,
+        )
+    };
+    let (p0, r0) = at(&h);
+    // 作り始めると右に編集パネルが出て、3D のビューの右の端が動く。形は同じ所に残る
+    h.state_mut()
+        .add_described(kmb_cad_hole::HOLE)
+        .expect("足せる");
+    h.run();
+    h.run();
+    let (p1, r1) = at(&h);
+    assert!(
+        r0.right() - r1.right() > 200.0,
+        "右の端が動く: {r0:?} {r1:?}"
+    );
+    assert!((p1 - p0).length() < 1.0, "原点が跳ぶ: {p0:?} → {p1:?}");
+    // OK で閉じても戻らない
+    h.state_mut().finish_edit();
+    h.run();
+    h.run();
+    let (p2, r2) = at(&h);
+    assert!((r2.right() - r0.right()).abs() < 1.0);
+    assert!((p2 - p0).length() < 1.0, "原点が跳ぶ: {p0:?} → {p2:?}");
 }

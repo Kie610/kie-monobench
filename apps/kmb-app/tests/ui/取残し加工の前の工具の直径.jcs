@@ -5,7 +5,9 @@
 
 click ~作業空間:
 click "加工"
-click "ポケット"#2
+# 右クリックの「工具の順番」から足す
+rclick "ポケット"#2
+click "工具の順番"
 click "T3 平 2 mm を順番に足す"
 wait
 scroll "壁の残し量" 3000
@@ -23,7 +25,7 @@ wait
 shot 直径で打った残り削り
 # 開き直すと、番号は空で直径が残っている
 click "ポケット の T3"
-click "編集Enter"
+key Return
 scroll "壁の残し量" 3000
 expect "取残し加工: 前の工具の番号" = ""
 expect "取残し加工: 前の工具の直径" = "3.175 mm"

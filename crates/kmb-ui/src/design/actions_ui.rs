@@ -567,7 +567,6 @@ impl Workspace {
             self.cur.focus_new.set(Some(id));
             self.cur.editing = Some(id);
             self.cur.edit_start = Some((id, self.cur.work.doc().undo_labels().len()));
-            self.win.layout.panel_open = true;
             if let Some(p) = file {
                 self.report_imported(id, &p);
             }

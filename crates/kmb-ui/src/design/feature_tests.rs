@@ -368,17 +368,87 @@ fn escape_cancels_a_new_feature_then_clears_the_selection() {
     let last = h.state().document().data().features.last().unwrap().id;
     h.state_mut().select(last);
     h.run();
-    h.get_by_label_contains("選んでいるだけです");
+    assert!(
+        h.query_by_label("編集パネルを隠す").is_none(),
+        "選んだだけでは出さない"
+    );
     h.key_press(egui::Key::Enter);
     h.run();
     assert!(h.state().is_editing(last));
+    h.get_by_label("編集パネルを隠す");
     h.key_press(egui::Key::Escape);
     h.run();
     assert!(!h.state().is_editing(last));
+    assert!(
+        h.query_by_label("編集パネルを隠す").is_none(),
+        "Esc で閉じる"
+    );
     assert_eq!(h.state().selected(), Some(last));
     h.key_press(egui::Key::Escape);
     h.run();
     assert!(h.state().selected().is_none(), "もう一度 Esc で選びを外す");
+}
+
+#[test]
+fn the_panel_is_out_only_while_a_tool_is_in_use() {
+    let part = kmb_samples::reference_part();
+    let holes = part.holes;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1200.0, 800.0))
+        .build_ui_state(
+            |ui, ws: &mut Workspace| ws.ui(ui),
+            Workspace::new(part.doc, None, reg()),
+        );
+    h.run();
+    let shown = |h: &Harness<'static, Workspace>| h.query_by_label("編集パネルを隠す").is_some();
+    // 選んだだけでは出さない
+    h.state_mut().select(holes);
+    h.run();
+    assert!(!shown(&h), "選んだだけ");
+    // 作り始めると出て、OK で閉じる(選びは残す)
+    let n = h.state().document().data().features.len();
+    let id = h
+        .state_mut()
+        .add_described(kmb_cad_hole::HOLE)
+        .expect("足せる");
+    h.run();
+    assert!(shown(&h), "作っている途中");
+    h.state_mut().finish_edit();
+    h.run();
+    assert!(!shown(&h), "OK の後");
+    assert_eq!(h.state().selected(), Some(id));
+    // 直し始めると出て、キャンセルで閉じる
+    h.state_mut().open_edit(id);
+    h.run();
+    assert!(shown(&h), "直している途中");
+    h.state_mut().cancel_edit();
+    h.run();
+    assert!(!shown(&h), "キャンセルの後");
+    // 作っている途中の × はキャンセルと同じ(作る前へ戻す)
+    h.state_mut()
+        .add_described(kmb_cad_hole::HOLE)
+        .expect("足せる");
+    h.run();
+    h.get_by_label("編集パネルを隠す").click();
+    h.run();
+    assert!(!shown(&h), "× の後");
+    assert_eq!(
+        h.state().document().data().features.len(),
+        n + 1,
+        "作る前へ戻す"
+    );
+    // パラメータの一覧の間も出す
+    h.state_mut().win.show_params = true;
+    h.run();
+    assert!(shown(&h), "パラメータ");
+    h.get_by_label("編集パネルを隠す").click();
+    h.run();
+    assert!(!h.state().win.show_params && !shown(&h));
+    // 「選んだだけでも出す」を入れると、選んだだけで出る
+    h.state_mut().win.layout.panel_always = true;
+    h.run();
+    assert!(shown(&h), "選んだだけでも出す");
+    assert!(h.state().dock_is_default(), "表示の設定で、並びは変えない");
 }
 
 /// 板の上の面のまわりの、出っ張ったまっすぐな辺(表示しているボディの辺として)。

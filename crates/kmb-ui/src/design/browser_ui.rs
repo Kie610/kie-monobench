@@ -828,7 +828,6 @@ impl Workspace {
                 .clicked()
             {
                 self.win.show_params = !self.win.show_params;
-                self.win.layout.panel_open = true;
             }
         }
         for (title, kind) in [

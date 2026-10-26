@@ -24,7 +24,11 @@ impl Extension for InspectCommands {
                 .aliases("たいせき はかる measure volume")
                 .hint("選んでいるボディ(なければ最後のボディ)の体積・表面積・外形")
                 .at(&[Place::Toolbar])
-                .at(if on_body { &[Place::Panel] } else { &[] })
+                .at(if on_body {
+                    &[Place::Panel, Place::FeatureMenu]
+                } else {
+                    &[]
+                })
                 .disabled_if(bodies.is_empty().then_some("ボディがありません")),
         ]
     }

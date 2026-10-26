@@ -83,7 +83,7 @@ impl Workspace {
         );
         let xr = ui
             .interact(x, ui.id().with("panel_close"), egui::Sense::click())
-            .on_hover_text("編集パネルを隠す(機能を選ぶとまた出る)");
+            .on_hover_text(self.panel_close_hint());
         xr.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "編集パネルを隠す")
         });
@@ -102,7 +102,7 @@ impl Workspace {
             1.6,
         );
         if xr.clicked() {
-            self.win.layout.panel_open = false;
+            self.hide_pane(crate::dock_ui::Pane::Panel);
         }
         let rest = ui.available_rect_before_wrap();
         let footer = self.panel_footer_kind();
@@ -574,6 +574,15 @@ impl Workspace {
         if let Some(a) = picks.first() {
             self.begin_pick(a);
         }
+    }
+
+    /// 選んでいる機能(2 つ以上)をまとめて直せるか(共通の欄がある)。
+    pub(crate) fn can_multi_edit(&self, sel: &[kmb_core::FeatureId]) -> bool {
+        let entries: Vec<FeatureEntry> = sel
+            .iter()
+            .filter_map(|id| self.cur.work.doc().data().feature(*id).cloned())
+            .collect();
+        entries.len() >= 2 && !self.common_fields(&entries).is_empty()
     }
 
     /// 複数の機能の、共通の欄(同じ名前と種類の欄)。

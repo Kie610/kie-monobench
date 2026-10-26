@@ -10,7 +10,7 @@ fn the_hole_is_edited_in_fields_made_from_its_descriptor() {
     let part = kmb_samples::reference_part();
     let holes = part.holes;
     let mut ws = Workspace::new(part.doc, None, reg());
-    ws.select(holes);
+    ws.open_edit(holes);
     let mut h = Harness::builder()
         .with_size(egui::vec2(1200.0, 800.0))
         .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
