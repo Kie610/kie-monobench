@@ -210,6 +210,42 @@ fn a_used_sketch_shows_while_the_feature_that_uses_it_is_edited() {
 }
 
 #[test]
+fn a_hidden_body_shows_while_a_feature_that_uses_it_is_edited() {
+    // 表示と非表示の決まり 5(H6): 直す間は、その機能が使うボディも一時的に見せる(行の目で隠した物も、
+    // まとまりの目で隠した物も)。目は閉じたままで、直し終えると隠れる
+    let part = kmb_samples::reference_part();
+    let (plate, pocket, last) = (part.plate, part.pocket, part.hole_pattern);
+    let mut ws = Workspace::new(part.doc, None, kmb_bundle::modules());
+    ws.wait();
+    ws.set_hidden(last, true);
+    assert!(ws.is_hidden(plate) && ws.is_hidden(last));
+    ws.open_edit(pocket);
+    let mut h = harness(ws);
+    let ws = h.state();
+    assert!(
+        !ws.is_hidden(plate) && !ws.is_hidden(last),
+        "ポケットが削るボディは見える"
+    );
+    assert!(ws.is_own_hidden(plate), "行の目は閉じたまま");
+    h.state_mut().finish_edit();
+    h.run();
+    assert!(h.state().is_hidden(last), "直し終えると隠れる");
+    let ws = h.state_mut();
+    ws.set_hidden(last, false);
+    ws.set_folder_hidden(crate::browser_ui::Kind::Body, true);
+    assert!(ws.is_hidden(last));
+    ws.open_edit(pocket);
+    h.run();
+    assert!(
+        !h.state().is_hidden(last),
+        "まとまりの目で隠したボディも見える"
+    );
+    h.state_mut().cancel_edit();
+    h.run();
+    assert!(h.state().is_hidden(last), "やめると隠れる");
+}
+
+#[test]
 fn a_tilted_work_plane_follows_the_angle_while_it_is_typed() {
     // 10-26 k12: 傾けた作業平面の角度を打って手を止めると、Enter の前に平面が付いて来る
     let part = kmb_samples::reference_part();

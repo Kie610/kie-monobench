@@ -201,6 +201,50 @@ pub fn references(cx: &Context<'_>, id: FeatureId) -> Vec<FeatureId> {
         .collect()
 }
 
+/// 機能 `id` を直す間に、隠れていても一時的に見せる物: 入力に使うスケッチ・作業平面など・ボディと、
+/// 自分が形を足すボディ(直した形が見えるように)。ボディは、そのボディの機能を全部入れる(3D は
+/// ボディの最後の機能で隠すかを見るため)。目は変えない。
+pub fn shown_while_editing(cx: &Context<'_>, id: FeatureId) -> BTreeSet<FeatureId> {
+    let Some(f) = cx.data.feature(id) else {
+        return BTreeSet::new();
+    };
+    let Some(Ok(feature)) = cx.registry.instantiate(&f.type_id, &f.data) else {
+        return BTreeSet::new();
+    };
+    let mut out = BTreeSet::new();
+    let mut roots = BTreeSet::new();
+    // 形を出さない機能(キャンバスなど)はボディの区分でも、自分を見せない
+    if folder_of(cx, id) == Some(Folder::Bodies) && cx.output(id, "body").is_some() {
+        roots.insert(kmb_core::body_root(cx.data, cx.registry, id));
+    }
+    for i in feature.inputs().unwrap_or_default() {
+        let InputRef::Output { feature: r, .. } = i else {
+            continue;
+        };
+        match folder_of(cx, r) {
+            _ if r == id => {}
+            Some(Folder::Sketches | Folder::Datums) => {
+                out.insert(r);
+            }
+            Some(Folder::Bodies) => {
+                roots.insert(kmb_core::body_root(cx.data, cx.registry, r));
+            }
+            None => {}
+        }
+    }
+    if !roots.is_empty() {
+        out.extend(
+            cx.data
+                .features
+                .iter()
+                .map(|f| f.id)
+                .filter(|f| folder_of(cx, *f) == Some(Folder::Bodies))
+                .filter(|f| roots.contains(&kmb_core::body_root(cx.data, cx.registry, *f))),
+        );
+    }
+    out
+}
+
 /// 足すか直した機能 `touched` が初めて使うスケッチと作業平面などを隠した目(使った時に 1 回隠す)。
 /// `before` は変更の前に `touched` が使っていた物([`references`])。隠す物が無ければ `None`。
 /// ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。区画の無い文書
