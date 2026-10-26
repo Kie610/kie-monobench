@@ -4,6 +4,7 @@
 //!
 //! 縦長の所に置いた時は、上から古い順の縦の一覧にする(行にアイコンと名前、今の位置の印は行の間の横の棒で上下へ引く)。
 
+use crate::theme::RightMenu as _;
 use crate::{Found, Workspace, icons, theme};
 use egui::{Rect, Sense, Stroke, Vec2};
 use kmb_core::{FeatureId, FeatureStatus, Group};
@@ -897,7 +898,7 @@ impl Workspace {
                 self.cur.collapsed.insert(g.id);
             }
         }
-        r.context_menu(|ui| self.group_menu(ui, g));
+        r.right_menu(|ui| self.group_menu(ui, g));
     }
 
     /// グループの名前を打つ欄(グループを作った直後と「名前変更」)。Enter・欄の外を押す・注目が
@@ -1145,7 +1146,7 @@ impl Workspace {
                 self.select_group_members(data, m.id);
             }
             if let Some(g) = data.groups.iter().find(|g| g.id == m.id).cloned() {
-                r.context_menu(|ui| self.group_menu(ui, &g));
+                r.right_menu(|ui| self.group_menu(ui, &g));
             }
         }
     }
@@ -1218,7 +1219,7 @@ impl Workspace {
                     if r.double_clicked() {
                         self.cur.collapsed.remove(&g.id);
                     }
-                    r.context_menu(|ui| self.group_menu(ui, g));
+                    r.right_menu(|ui| self.group_menu(ui, g));
                 }
                 ui.label(
                     egui::RichText::new((e - s + 1).to_string())
@@ -1495,7 +1496,7 @@ impl Workspace {
             let key = crate::doc_id(ui.ctx(), "timeline_drag");
             ui.ctx().data_mut(|d| d.insert_temp(key, Dragging(f.id)));
         }
-        r.context_menu(|ui| {
+        r.right_menu(|ui| {
             if !self.selection().contains(&f.id) {
                 self.select(f.id);
             }

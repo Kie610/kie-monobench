@@ -1,6 +1,7 @@
 //! 左: 始め方(新規デザイン・開く…・プロジェクトを追加)と場所(ホームの 3 つ、プロジェクトの
 //! フォルダの木)。木の行は押すとそのフォルダを開き、デザインを引いて離すとそこへ移す。
 
+use kmb_ui::theme::RightMenu as _;
 use crate::middle::drop_target;
 use crate::{Library, Place, big_button, file_name, heading, place_row};
 use kmb_session::projects::Folder;
@@ -195,7 +196,7 @@ impl Library {
             });
         }
         let r = r.on_hover_text(path.display().to_string());
-        r.context_menu(|ui| self.folder_menu(ui, host, project, path));
+        r.right_menu(|ui| self.folder_menu(ui, host, project, path));
         if r.clicked() {
             self.go(Place::Folder {
                 project: project.to_path_buf(),

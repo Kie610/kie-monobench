@@ -495,6 +495,74 @@ impl Workspace {
         self.win.layout_saved = self.win.layout.clone();
     }
 
+    /// Esc で、見るための窓(取り消しの履歴・版の履歴など)のいちばん上の 1 つか、編集パネルの
+    /// パラメータを閉じる。閉じたら Esc を使い切る(下の作る途中・選びを重ねて戻さない)。
+    /// 選んで決める窓(消す・名前変更など)は自分で Esc を受ける(10-25 u8、片付けの残り#L20)。
+    pub(crate) fn close_on_esc(&mut self, ctx: &egui::Context) -> bool {
+        if !ctx.input(|i| i.key_pressed(egui::Key::Escape) && i.modifiers.is_none())
+            || egui::Popup::is_any_open(ctx)
+        {
+            return false;
+        }
+        let top = ctx.memory(|m| {
+            let shown = m.areas().visible_layer_ids();
+            m.layer_ids()
+                .filter(|l| l.order == egui::Order::Middle && shown.contains(l))
+                .last()
+        });
+        let id = |s: &str| egui::Id::new(s);
+        let closed = match top.map(|l| l.id) {
+            Some(t) if t == id("undo_history") && self.win.undo_history_open => {
+                self.win.undo_history_open = false;
+                true
+            }
+            Some(t) if t == id("text_viewer") && self.cur.viewer.is_some() => {
+                self.cur.viewer = None;
+                true
+            }
+            Some(t) if t == id("versions_window") && self.cur.versions.open => {
+                self.cur.versions.open = false;
+                self.cur.versions.naming = None;
+                true
+            }
+            Some(t) if t == id("render_viewer") && self.cur.gallery.viewing.is_some() => {
+                self.cur.gallery.viewing = None;
+                true
+            }
+            Some(t) if t == id("操作の手引き") && self.win.guide_open => {
+                self.win.guide_open = false;
+                true
+            }
+            Some(t)
+                if t == egui::Id::new(("compare_window", self.tab_uid()))
+                    && self.cur.versions.compare.is_some() =>
+            {
+                self.cur.versions.compare = None;
+                true
+            }
+            Some(t)
+                if self
+                    .cur
+                    .table_view
+                    .as_ref()
+                    .is_some_and(|v| t == egui::Id::new(("table_view", v.table.key.as_str()))) =>
+            {
+                self.cur.table_view = None;
+                true
+            }
+            _ if self.win.show_params => {
+                self.win.show_params = false;
+                true
+            }
+            _ => false,
+        };
+        if closed {
+            log::info!("Esc で窓を閉じた: {:?}", top.map(|l| l.id));
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        }
+        closed
+    }
+
     /// 画面のキー(文字の欄を打っていない時だけ)。
     pub(crate) fn view_keys(&mut self, ctx: &egui::Context) {
         // クリックで作る流れが Enter・Esc を使ったフレームでは、下の Enter・Esc を重ねて使わない
@@ -506,6 +574,9 @@ impl Workspace {
         use egui::Key;
         if let Some(row) = self.pressed_key(ctx, crate::keys::Scope::View) {
             self.run_key(ctx, row);
+        }
+        if !had_gesture && self.cur.gesture.is_none() && self.close_on_esc(ctx) {
+            return;
         }
         // スケッチの編集器は F・Esc・Delete を自分で使う
         if self.view_editor_type().is_some() {

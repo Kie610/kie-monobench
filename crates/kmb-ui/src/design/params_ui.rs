@@ -1,5 +1,6 @@
 //! パラメータの窓(ユーザーのパラメータとモデルのパラメータの表)と、その欄の部品。
 
+use crate::theme::RightMenu as _;
 use crate::*;
 
 impl Workspace {
@@ -142,7 +143,7 @@ impl Workspace {
                     if r.lost_focus() && *name != p.name {
                         commit_name = Some((p.id, name.clone()));
                     }
-                    r.context_menu(|ui| {
+                    r.right_menu(|ui| {
                         if let Some(a) = menu.show(ui, &key) {
                             row_act = Some((key.clone(), a));
                         }
@@ -570,7 +571,7 @@ impl Workspace {
                     if r.lost_focus() && name != p.name {
                         rename = Some((p.name.clone(), name.clone()));
                     }
-                    r.context_menu(|ui| {
+                    r.right_menu(|ui| {
                         if let Some(a) = menu.show(ui, &k) {
                             act = Some((k.clone(), a));
                         }

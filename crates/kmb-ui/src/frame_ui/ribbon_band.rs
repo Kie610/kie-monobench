@@ -1,5 +1,6 @@
 //! タブ付きツールバー: 作業空間の切替の箱、タブ、まとまりの帯(大きなボタン・2 段の小さなボタン・▾ の一覧)、選択のまとまり。
 
+use crate::theme::RightMenu as _;
 use super::*;
 
 impl Workspace {
@@ -361,7 +362,7 @@ impl Workspace {
                             if r.clicked() {
                                 self.win.tab = t.name.clone();
                             }
-                            r.context_menu(|ui| {
+                            r.right_menu(|ui| {
                                 if ui.button("左へ").clicked() {
                                     ribbon::move_tab(
                                         self.win.layout.space,
@@ -858,7 +859,7 @@ impl Workspace {
         if r.clicked() {
             self.run_item(&it.key);
         }
-        r.context_menu(|ui| {
+        r.right_menu(|ui| {
             let mut e = None;
             if ui.button("左へ").clicked() {
                 e = Some(PinEdit::Move(it.key.clone(), -1));

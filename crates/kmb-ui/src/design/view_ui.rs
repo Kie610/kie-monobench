@@ -1,6 +1,7 @@
 //! 中央のビュー: スケッチの編集器か 3D のビュー。3D のビューの出来事(クリック、範囲、長押し、
 //! 右クリック)を選びに直し、「クリックで作る」流れの値を決める。
 
+use crate::theme::RightMenu as _;
 use crate::select_ui::Hit;
 use crate::view3d::{self, Pick};
 use crate::{MenuKind, PickFilter, Workspace, gesture};
@@ -269,29 +270,10 @@ impl Workspace {
                 && self.cur.gesture.is_none()
                 && let Some(p) = ev.context
             {
-                // 右クリックした所の物(「タイムライン内を検索」)と、重なった面(「ほかを選ぶ」)
-                let all = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p);
-                let f = if self.win.pick_filter.body {
-                    PickFilter::FACE
-                } else {
-                    self.win.pick_filter
-                };
-                self.cur.context_hit = self.hit_at(rect, p, f);
-                self.view_menu.context_others = (p, all.iter().map(|h| h.0.clone()).collect());
-                // 右クリックした面も選ぶ(メニューはその面に使える操作)
-                let hit = all.into_iter().next();
-                if let Some((pick, at)) = hit {
-                    if !self.picked_faces().contains(&pick) {
-                        self.cur.picked = Some(pick);
-                        self.cur.also_picked.clear();
-                    }
-                    self.cur.context_point = Some(at);
-                } else {
-                    self.cur.context_point = None;
-                }
+                self.context_pick(rect, p);
             }
         }
-        resp.context_menu(|ui| match self.view_menu.kind {
+        resp.right_menu(|ui| match self.view_menu.kind {
             MenuKind::Actions => self.view_menu(ui),
             MenuKind::Create => self.create_menu(ui),
             MenuKind::Filter => self.filter_menu(ui),

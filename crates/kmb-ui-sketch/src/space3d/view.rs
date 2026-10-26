@@ -1,6 +1,7 @@
 //! 3D スケッチの中央のビュー。視点の操作とボディの絵は画面(kmb-ui)の 3D のビューを使い、
 //! その上にスケッチの線・点・面・拘束の印・寸法と、作図面を重ねる。
 
+use kmb_ui::theme::RightMenu as _;
 use super::ops::{DrawPlane, Sel};
 use super::{
     ProjectPick, Sketch3dEditor, Start, Tool3, sketch_of, status_text, values_of, work_frame,
@@ -869,7 +870,7 @@ pub(crate) fn view(
         }
     }
     let mut ask = None;
-    resp.context_menu(|ui| ask = ed.menu_ui(ui, &sk, &shown));
+    resp.right_menu(|ui| ask = ed.menu_ui(ui, &sk, &shown));
 
     // キー(ほかの欄に打っている時は使わない)。Tab は egui が欄から欄へ移るのにも使うので、
     // 前のコマの時点で欄に打っていなければ作図面を替え、欄へ移った分は戻す

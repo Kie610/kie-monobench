@@ -13,6 +13,7 @@
 //! `Arc<Mutex<Workspace>>` にして持つ。共有していない時(試験)や、窓を分けられない時は、
 //! 本体の窓の中の窓(egui の Window)で出す。
 
+use crate::theme::RightMenu as _;
 use crate::dock_ui::{DockAction, Pane, pane_menu};
 use crate::titlebar_ui::{WinButton, window_button};
 use crate::{Workspace, theme};
@@ -284,7 +285,7 @@ impl Workspace {
                             .or_else(|| ui.ctx().data(|d| d.get_temp(last)));
                         log::debug!("浮かせた窓の帯を離した: {pane:?} {:?}", out.dropped);
                     }
-                    r.context_menu(|ui| pane_menu(ui, pane, act));
+                    r.right_menu(|ui| pane_menu(ui, pane, act));
                 }
             });
         });

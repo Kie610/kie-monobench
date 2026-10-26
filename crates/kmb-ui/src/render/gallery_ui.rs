@@ -4,6 +4,7 @@
 //! (kmb-session の `gallery`)。絵を押すと大きく見る窓、右クリックで書き出す・版を開く・消す。
 //! 版の履歴の窓からも、その版の絵だけを出せる。
 
+use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::layout::Space;
 use crate::theme;
@@ -19,7 +20,7 @@ pub(crate) struct GalleryPage {
     /// 出す版の番号(`None` はすべて)
     pub version: Option<u32>,
     /// 大きく見ている絵の番号と絵
-    viewing: Option<(u32, Option<egui::TextureHandle>)>,
+    pub(crate) viewing: Option<(u32, Option<egui::TextureHandle>)>,
     /// 縮小図の絵の控え(文書と絵の番号ごと。絵は変わらないので 1 回だけ読む)
     thumbs: HashMap<(PathBuf, u32), Option<egui::TextureHandle>>,
 }
@@ -310,7 +311,7 @@ impl Workspace {
                             if resp.clicked() {
                                 act = Some((0, r.number));
                             }
-                            resp.context_menu(|ui| {
+                            resp.right_menu(|ui| {
                                 for (k, name) in
                                     [(0, "大きく見る"), (1, "書き出す…"), (2, "描いた版を開く"), (3, "削除")]
                                 {

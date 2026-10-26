@@ -876,6 +876,8 @@ mod dock_tests;
 #[cfg(test)]
 mod keys_tests;
 #[cfg(test)]
+mod menu_keys_tests;
+#[cfg(test)]
 mod one_path_tests;
 #[cfg(test)]
 mod scale_tests;

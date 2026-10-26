@@ -5,6 +5,7 @@
 //! 並べて実行するだけ。右端には、モジュールが [`kmb_core::Place::Timeline`] に置いた操作
 //! (G-code を見る・書き出すなど)を出す。
 
+use crate::theme::RightMenu as _;
 use crate::{Workspace, icons, theme};
 use egui::{Rect, Sense, Stroke, Vec2};
 use kmb_core::{FeatureEntry, FeatureId, Place, StageBand, category};
@@ -428,7 +429,7 @@ impl Workspace {
                 pressed = true;
             }
         }
-        r.context_menu(|ui| self.feature_menu(ui, f.id));
+        r.right_menu(|ui| self.feature_menu(ui, f.id));
         pressed
     }
 

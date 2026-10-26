@@ -272,7 +272,7 @@ impl Workspace {
                         }
                         // オービットの右クリックで回し方を選ぶ
                         if mode == LeftDrag::Orbit {
-                            r.context_menu(|ui| {
+                            r.right_menu(|ui| {
                                 ui.radio_value(
                                     &mut self.win.layout.free_orbit,
                                     false,

@@ -3,6 +3,7 @@
 //! 取り消しで戻る)。表の中身と当て方は [`kmb_interchange::configuration`](文書の区画)、CLI・MCP は同じ表を
 //! 操作 `cad.config.*` で直す。
 
+use crate::theme::RightMenu as _;
 use crate::{FieldEdit, Workspace, reason_label};
 use kmb_core::{FeatureId, ParamId, Transaction};
 use kmb_interchange::configuration::{self, ConfigCell, ConfigColumn, ConfigRow, Configurations};
@@ -73,7 +74,7 @@ impl Workspace {
                                     let r = ui
                                         .label(egui::RichText::new(l).strong())
                                         .on_hover_text("右クリックで列を外す");
-                                    r.context_menu(|ui| {
+                                    r.right_menu(|ui| {
                                         if ui
                                             .button("列を外す")
                                             .on_hover_text("構成表から列を外す(パラメータや機能は消さない)")
@@ -293,7 +294,7 @@ fn row_ui(
         act = Some(Act::Rename(row.name.clone(), t));
     }
     r.1.on_hover_text("構成の名前。右クリックで消す・今の値を書き込む")
-        .context_menu(|ui| {
+        .right_menu(|ui| {
             if ui
                 .button("今の値を書き込む")
                 .on_hover_text("今のパラメータの式と抑制を、この行に書き込む")

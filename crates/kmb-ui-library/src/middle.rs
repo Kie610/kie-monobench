@@ -4,6 +4,7 @@
 //! カードは押すと選び(Ctrl で足し引き、Shift で範囲)、二度押すと開く(フォルダは中へ)。デザインの
 //! カードは引いて、左の木の行かフォルダのカードへ離すと移す。
 
+use kmb_ui::theme::RightMenu as _;
 use crate::left::flat;
 use crate::{
     Drag, Filter, Item, Library, Place, Tidy, file_name, heading, key_button, paint_fit, plate,
@@ -694,7 +695,7 @@ impl Library {
                             if r.double_clicked() && !it.missing {
                                 open = Some(it.clone());
                             }
-                            r.context_menu(|ui| self.item_menu(ui, host, it));
+                            r.right_menu(|ui| self.item_menu(ui, host, it));
                         }
                     });
                     ui.add_space(gap);

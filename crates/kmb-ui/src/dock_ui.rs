@@ -7,6 +7,7 @@
 //! 部品を出すか隠すかは、`Layout::browser_open` などの印で決める。隠すと並びから外し、
 //! 外す前の場所(隣の部品と分け方)を覚えて、また出す時にそこへ戻す。
 
+use crate::theme::RightMenu as _;
 use crate::layout::Space;
 use crate::{Workspace, theme};
 use egui_dock::tab_viewer::OnCloseResponse;
@@ -577,7 +578,7 @@ impl TabViewer for Viewer<'_> {
 
     fn on_tab_button(&mut self, tab: &mut Pane, response: &egui::Response) {
         // egui_dock のメニューは使わない(「タブの帯を隠す」が出てしまうため)。項目は見出しと同じ
-        response.context_menu(|ui| pane_menu(ui, *tab, &mut self.act));
+        response.right_menu(|ui| pane_menu(ui, *tab, &mut self.act));
     }
 
     fn is_closeable(&self, tab: &Pane) -> bool {
@@ -968,7 +969,7 @@ impl Workspace {
                     egui::Id::new(("dock_strip", pane)),
                     egui::Sense::click(),
                 );
-                r.context_menu(|ui| pane_menu(ui, pane, &mut act));
+                r.right_menu(|ui| pane_menu(ui, pane, &mut act));
             }
             self.pane_ui(&mut child, pane);
             if pane == Pane::View {
