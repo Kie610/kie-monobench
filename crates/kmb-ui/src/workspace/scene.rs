@@ -112,13 +112,13 @@ impl Workspace {
         self.run_visibility(serde_json::json!({"features": [id.0], "show": !hide}));
     }
 
-    /// 直している機能が使うスケッチと作業平面など(隠れていても、直す間だけ一時的に見せる。
+    /// 直している機能が使うスケッチ・作業平面など・ボディ(隠れていても、直す間だけ一時的に見せる。
     /// 目は変えない)。
-    fn shown_while_editing(&self) -> Vec<FeatureId> {
+    fn shown_while_editing(&self) -> std::collections::BTreeSet<FeatureId> {
         let Some(id) = self.cur.editing else {
-            return Vec::new();
+            return Default::default();
         };
-        kmb_interchange::visibility::references(&self.context(), id)
+        kmb_interchange::visibility::shown_while_editing(&self.context(), id)
     }
 
     /// 直す機能が替わったら、隠す物を決め直す(直す間だけ使う物を見せるため)。
@@ -308,11 +308,6 @@ impl Workspace {
         self.refresh_body_colors();
         self.cur.visibility = self.cur.work.visibility();
         let mut now: HashSet<FeatureId> = self.cur.work.hidden_features().into_iter().collect();
-        // 押し出し・回転などを直す間は、使うスケッチと作業平面などを一時的に見せる(目は変えない)
-        self.cur.shown_for_edit = self.cur.editing;
-        for id in self.shown_while_editing() {
-            now.remove(&id);
-        }
         let bodies = self.body_roots();
         // 選択表示していたボディが無くなった(消した・取り消した)ら外し、全部無くなればやめる
         self.cur
@@ -326,6 +321,12 @@ impl Workspace {
                     .filter(|(_, root)| !isolated.contains(root))
                     .map(|(last, _)| *last),
             );
+        }
+        // 押し出し・回転などを直す間は、使うスケッチ・作業平面など・ボディを一時的に見せる。目も
+        // 選択表示も変えない
+        self.cur.shown_for_edit = self.cur.editing;
+        for id in self.shown_while_editing() {
+            now.remove(&id);
         }
         self.cur.hidden_now = now;
         self.cur.scene.set_hidden(&self.cur.hidden_now);
