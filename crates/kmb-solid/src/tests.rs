@@ -570,6 +570,56 @@ fn a_suppressed_cut_passes_its_target_body_on() {
     );
 }
 
+/// ポケットの手前に、同じ板を読む深いポケットを差し込むと、後ろのポケットと穴はそれを読み、
+/// ボディは 1 つのまま。前の版の読み方(固定の印)のポケットは板をそのまま読み、ボディが 2 つになる。
+#[test]
+fn a_cut_inserted_before_the_pocket_is_read_by_the_features_after_it() {
+    let k = TestKernel::new();
+    let reg = registry();
+    for pin in [false, true] {
+        let mut part = reference_part();
+        let before = final_mass(&mut part.doc, &k).volume;
+        let data = part.doc.data();
+        let at = data.index_of(part.pocket).unwrap();
+        let mut entry = data.feature(part.pocket).unwrap().clone();
+        entry.id = part.doc.alloc_feature_id();
+        entry.name = "深いポケット".into();
+        entry.data["distance"] = serde_json::json!("6 mm");
+        let deep = entry.id;
+        let mut ops = vec![Op::InsertFeature {
+            index: Some(at),
+            entry,
+        }];
+        if pin {
+            ops.push(Op::SetPinBodies {
+                id: part.pocket,
+                pin: true,
+            });
+        }
+        part.doc
+            .apply(kmb_core::Transaction::new("差し込む", ops))
+            .unwrap();
+        let report = part.doc.recompute(&reg, &*k);
+        assert_ok(&report);
+        let bodies = visible_bodies(part.doc.data(), &reg, &report);
+        if pin {
+            let ids: Vec<_> = bodies.iter().map(|b| b.0).collect();
+            assert_eq!(ids, vec![deep, part.hole_pattern]);
+            let after = k.mass(bodies[1].1).unwrap().volume;
+            assert!((after - before).abs() < 0.05, "{before} → {after}");
+        } else {
+            assert_eq!(bodies.len(), 1, "{bodies:?}");
+            assert_eq!(bodies[0].0, part.hole_pattern);
+            // 深いポケット(15 × 12、深さ 6)の分だけ、前の深さ 4 より 2 mm 深く削れる
+            let after = k.mass(bodies[0].1).unwrap().volume;
+            assert!(
+                (before - after - 360.0).abs() < 0.05,
+                "差し込んだポケットを読むはず: {before} → {after}"
+            );
+        }
+    }
+}
+
 /// 最後の機能(四隅の穴のパターン)を抑制しても、その前のボディが残る(渡す先が無いまま
 /// 元のボディを使い切ったことにして、ボディが 1 つも無くならない)。
 #[test]
@@ -618,6 +668,7 @@ pub(crate) fn with_edge_feature(
                     name: "辺".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -643,6 +694,7 @@ pub(crate) fn edge_feature_status(type_id: &str, mut data: serde_json::Value) ->
                     name: "辺".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -703,6 +755,7 @@ impl EdgeBench {
                         name: "辺".into(),
                         data,
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 };
                 let ops = match old {
