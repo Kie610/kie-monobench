@@ -44,15 +44,22 @@ pub(crate) enum Ask3 {
     Params,
 }
 
-fn item(ui: &mut egui::Ui, text: &str, key: &str, out: &mut Option<Ask3>, ask: Ask3) {
-    let label = if key.is_empty() {
-        text.to_string()
-    } else {
-        format!("{text}({key})")
-    };
-    if ui.button(label).clicked() {
+/// メニューの 1 行(左にアイコン、右にキー)。キーは名前に書かない(画面の要素の名前は名前だけ)。
+fn item(ui: &mut egui::Ui, icon: &str, text: &str, key: &str, out: &mut Option<Ask3>, ask: Ask3) {
+    if kmb_ui::theme::menu_row(ui, icon, text, key, true).clicked() {
         *out = Some(ask);
         ui.close();
+    }
+}
+
+/// 道具のアイコン(リボンと同じ絵)。
+fn tool_icon(t: Tool3) -> &'static str {
+    match t {
+        Tool3::Select => "select",
+        Tool3::Include => "sketch3d",
+        Tool3::Project => "project",
+        Tool3::Intersect => "intersect",
+        t => super::DRAW3.iter().find(|d| d.0 == t).map_or("", |d| d.2),
     }
 }
 
@@ -108,11 +115,12 @@ impl Sketch3dEditor {
     ) -> Option<Ask3> {
         let mut out = None;
         let sel = &self.selection;
+        let construction = kmb_ui::keys::label("sketch_construction");
         if self.tool != Tool3::Select {
             // 道具の中
             ui.weak(self.tool.label());
-            item(ui, "OK", "Enter", &mut out, Ask3::Ok);
-            item(ui, "キャンセル", "Esc", &mut out, Ask3::Cancel);
+            item(ui, "check", "OK", "Enter", &mut out, Ask3::Ok);
+            item(ui, "x", "キャンセル", "Esc", &mut out, Ask3::Cancel);
             if !matches!(
                 self.tool,
                 Tool3::Include | Tool3::Project | Tool3::Intersect
@@ -122,38 +130,49 @@ impl Sketch3dEditor {
                 } else {
                     "補助線で描く"
                 };
-                item(ui, text, "X", &mut out, Ask3::DrawConstruction);
+                item(
+                    ui,
+                    "dashline",
+                    text,
+                    &construction,
+                    &mut out,
+                    Ask3::DrawConstruction,
+                );
             }
             if !sel.is_empty() && self.start.is_none() {
                 ui.separator();
-                item(ui, "削除", "Delete", &mut out, Ask3::Delete);
+                item(ui, "trash", "削除", "Delete", &mut out, Ask3::Delete);
             }
             return out;
         }
         match self.last_tool {
             Some(t) => item(
                 ui,
+                "repeat",
                 &format!("繰り返し: {}", t.label()),
                 "",
                 &mut out,
                 Ask3::Tool(t),
             ),
             None => {
-                ui.label("繰り返す道具はまだありません");
+                ui.weak("繰り返す道具はまだありません");
             }
         }
+        // 図の印で選んだ寸法・拘束
         if let Some(c) = self.picked_constraint.and_then(|c| sk.constraint(c)) {
+            ui.separator();
             match c.kind {
                 Kind3d::Radius { .. } => {
-                    item(ui, "直径の寸法にする", "", &mut out, Ask3::RoundDim);
+                    item(ui, "dim", "直径の寸法にする", "", &mut out, Ask3::RoundDim);
                 }
                 Kind3d::Diameter { .. } => {
-                    item(ui, "半径の寸法にする", "", &mut out, Ask3::RoundDim);
+                    item(ui, "dim", "半径の寸法にする", "", &mut out, Ask3::RoundDim);
                 }
                 _ => {}
             }
             item(
                 ui,
+                "trash",
                 &format!("{}の拘束を外す", c.kind.label()),
                 "Delete",
                 &mut out,
@@ -161,12 +180,30 @@ impl Sketch3dEditor {
             );
         }
         if sel.is_empty() {
-            item(ui, "元に戻す", "Ctrl+Z", &mut out, Ask3::Undo);
-            item(ui, "やり直し", "Ctrl+Y", &mut out, Ask3::Redo);
             ui.separator();
-            item(ui, "すべて表示", "", &mut out, Ask3::Fit);
-            item(ui, "パラメータを変更", "", &mut out, Ask3::Params);
-            item(ui, "作図面を作る", "", &mut out, Ask3::WorkPlane);
+            let undo = kmb_ui::keys::label("undo");
+            let redo = kmb_ui::keys::label("redo");
+            item(ui, "undo", "元に戻す", &undo, &mut out, Ask3::Undo);
+            item(ui, "redo", "やり直し", &redo, &mut out, Ask3::Redo);
+            ui.separator();
+            item(ui, "fit", "すべて表示", "", &mut out, Ask3::Fit);
+            let params = kmb_ui::keys::label("params");
+            item(
+                ui,
+                "param",
+                "パラメータを変更",
+                &params,
+                &mut out,
+                Ask3::Params,
+            );
+            item(
+                ui,
+                "wplaneadd",
+                "作図面を作る",
+                "",
+                &mut out,
+                Ask3::WorkPlane,
+            );
             let recent: Vec<Tool3> = if self.recent.is_empty() {
                 vec![Tool3::Line, Tool3::Rectangle, Tool3::Circle]
             } else {
@@ -179,30 +216,46 @@ impl Sketch3dEditor {
                     .iter()
                     .find(|d| d.0 == t)
                     .map_or(String::new(), |d| kmb_ui::keys::label(d.3));
-                item(ui, t.label(), &key, &mut out, Ask3::Tool(t));
+                item(ui, tool_icon(t), t.label(), &key, &mut out, Ask3::Tool(t));
             }
             return out;
         }
-        // 選んだ物
+        // 選んだ物: 寸法・線の種類
+        ui.separator();
         let target = self.target_plane();
         if ops::dimension_kind(&self.fmt, "寸法", sk, sol, sel, &target).is_ok() {
-            item(ui, "スケッチ寸法", "D", &mut out, Ask3::Dimension);
+            let key = kmb_ui::keys::label("sketch_dimension");
+            item(ui, "dim", "スケッチ寸法", &key, &mut out, Ask3::Dimension);
         }
         if !curves(sk, sel).is_empty() {
-            item(ui, "標準/補助線", "X", &mut out, Ask3::Construction);
+            item(
+                ui,
+                "dashline",
+                "標準/補助線",
+                &construction,
+                &mut out,
+                Ask3::Construction,
+            );
         }
+        // 拘束
+        ui.separator();
         if !fix_targets(sk, sel).is_empty() {
             if has_fix(sk, sel) {
-                item(ui, "固定解除", "", &mut out, Ask3::Fix(false));
+                item(ui, "fix", "固定解除", "", &mut out, Ask3::Fix(false));
             } else {
-                item(ui, "固定する", "", &mut out, Ask3::Fix(true));
+                item(ui, "fix", "固定する", "", &mut out, Ask3::Fix(true));
             }
         }
         // 線分だけを選んでいれば、軸に沿わせる(2D の水平・垂直にする)
         if ops::constraint_kinds("X に沿う", sk, sel, &target).is_ok() {
-            for (axis, name) in [(Axis::X, "X"), (Axis::Y, "Y"), (Axis::Z, "Z")] {
+            for (axis, name, icon) in [
+                (Axis::X, "X", "alongx"),
+                (Axis::Y, "Y", "alongy"),
+                (Axis::Z, "Z", "alongz"),
+            ] {
                 item(
                     ui,
+                    icon,
                     &format!("{name} に沿わせる"),
                     "",
                     &mut out,
@@ -211,11 +264,18 @@ impl Sketch3dEditor {
             }
         }
         if ops::work_plane_def(sk, sol, sel, self.plane, self.anchor, &target).is_ok() {
-            item(ui, "選んだ物で作図面を作る", "", &mut out, Ask3::WorkPlane);
+            item(
+                ui,
+                "wplaneadd",
+                "選んだ物で作図面を作る",
+                "",
+                &mut out,
+                Ask3::WorkPlane,
+            );
         }
         ui.separator();
-        item(ui, "削除", "Delete", &mut out, Ask3::Delete);
-        item(ui, "選択を外す", "Esc", &mut out, Ask3::Deselect);
+        item(ui, "trash", "削除", "Delete", &mut out, Ask3::Delete);
+        item(ui, "select", "選択を外す", "Esc", &mut out, Ask3::Deselect);
         out
     }
 

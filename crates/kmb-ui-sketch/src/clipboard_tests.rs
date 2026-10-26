@@ -161,12 +161,12 @@ fn the_right_click_menu_copies_and_pastes_where_it_was_opened() {
     let old = lines(&current_sketch(h.state()));
     // 選んだ線の上で右クリック → コピー
     right_click_at(&mut h, [6.4, 16.36]);
-    h.get_by_label("コピー(Ctrl+C)").click();
+    crate::tests::menu_item(&h, "コピー").click();
     h.run();
     assert!(copied_text(&h).is_some());
     // 空いた所で右クリック → 貼り付け: 同じ位置に置き、移動の道具でクリックした所へ動かす
     right_click_at(&mut h, [27.26, 0.72]);
-    h.get_by_label("貼り付け(Ctrl+V)").click();
+    crate::tests::menu_item(&h, "貼り付け").click();
     h.run();
     assert_eq!(editor(h.state_mut()).editor.tool, Tool::Move);
     click_at(&mut h, [27.26, 0.72]);
@@ -181,6 +181,6 @@ fn the_right_click_menu_copies_and_pastes_where_it_was_opened() {
     press_key(&mut h, egui::Key::Escape);
     assert!(editor(h.state_mut()).editor.selection.is_empty());
     right_click_at(&mut h, [-1.42, -3.45]);
-    assert!(h.query_by_label("コピー(Ctrl+C)").is_none());
-    assert!(h.query_by_label("貼り付け(Ctrl+V)").is_some());
+    assert!(h.query_by_label("コピー").is_none());
+    assert!(h.query_by_label("貼り付け").is_some());
 }

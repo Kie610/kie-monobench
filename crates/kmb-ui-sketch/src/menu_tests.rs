@@ -91,9 +91,9 @@ fn the_menu_in_a_tool_makes_the_typed_shape_with_ok() {
     type_text(&mut h, "40");
     right_click_at(&mut h, [11.62, 8.54]);
     // 道具の中: OK・キャンセル・補助線で描く
-    h.get_by_label("キャンセル(Esc)");
-    h.get_by_label("補助線で描く(X)");
-    h.get_by_label("OK(Enter)").click();
+    crate::tests::menu_item(&h, "キャンセル");
+    crate::tests::menu_item(&h, "補助線で描く");
+    crate::tests::menu_item(&h, "OK").click();
     h.run();
     h.run();
     let s = current_sketch(h.state());
@@ -151,9 +151,9 @@ fn right_clicking_a_line_selects_it_and_offers_fix_and_horizontal() {
     // 選んでいない線の上で右クリック: その線を選んでメニューを出す
     right_click_at(&mut h, [1.19, 3.33]);
     assert!(editor(h.state_mut()).editor.selection.contains(&line));
-    h.get_by_label("スケッチ寸法(D)");
-    h.get_by_label("標準/補助線(X)");
-    h.get_by_label("オフセット(O)");
+    crate::tests::menu_item(&h, "スケッチ寸法");
+    crate::tests::menu_item(&h, "標準/補助線");
+    crate::tests::menu_item(&h, "オフセット");
     h.get_by_label("固定する").click();
     h.run();
     let fixes = |s: &Sketch| {
@@ -209,9 +209,9 @@ fn the_empty_menu_undoes_fits_and_offers_recent_tools() {
     assert!(zoomed > 1.05, "拡大した: {zoomed}");
     right_click_at(&mut h, [22.04, 4.31]);
     // 最近使った道具に円が出る
-    h.get_by_label("中心と直径の円(C)");
-    h.get_by_label("やり直し(Ctrl+Y)");
-    h.get_by_label("すべて表示(ホイール二度押し)").click();
+    crate::tests::menu_item(&h, "中心と直径の円");
+    crate::tests::menu_item(&h, "やり直し");
+    crate::tests::menu_item(&h, "すべて表示").click();
     h.run();
     let v = &editor(h.state_mut()).view;
     assert_eq!(
@@ -220,7 +220,7 @@ fn the_empty_menu_undoes_fits_and_offers_recent_tools() {
         "全体が収まる表示に戻す"
     );
     right_click_at(&mut h, [22.04, 0.72]);
-    h.get_by_label("元に戻す(Ctrl+Z)").click();
+    crate::tests::menu_item(&h, "元に戻す").click();
     h.run();
     h.run();
     assert_eq!(circles(&h), 0, "メニューから取り消せる");

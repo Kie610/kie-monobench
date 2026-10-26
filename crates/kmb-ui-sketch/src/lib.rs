@@ -727,6 +727,35 @@ pub(crate) fn tool_label(t: Tool) -> &'static str {
     }
 }
 
+/// 道具のアイコン(リボンと同じ絵。右クリックのメニューの行に使う)。
+pub(crate) fn tool_icon(t: Tool) -> &'static str {
+    match t {
+        Tool::Select => "select",
+        Tool::Dimension => "dim",
+        Tool::Measure => "measure",
+        Tool::Origin => "origin",
+        Tool::Constraint(name) => constraint_icon(name),
+        _ => DRAW
+            .iter()
+            .chain(MODIFY.iter())
+            .find(|d| d.tool == t)
+            .map_or("", |d| d.icon),
+    }
+}
+
+/// 拘束の名前(帯のボタンの名前)のアイコン。知らない名前は空。
+pub(crate) fn constraint_icon(name: &str) -> &'static str {
+    match name {
+        "水平" => return "horiz",
+        "垂直" => return "vert",
+        _ => {}
+    }
+    constraints_ui::GEOMETRIC
+        .iter()
+        .find(|g| g.0 == name)
+        .map_or("", |g| g.1)
+}
+
 fn tool_id(t: Tool) -> String {
     format!("tool:{t:?}")
 }

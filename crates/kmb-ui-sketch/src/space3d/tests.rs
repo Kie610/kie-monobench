@@ -1084,7 +1084,7 @@ fn enter_ends_the_chain_and_then_the_tool() {
     // 何も選ばずに右クリック: 「繰り返し: 長方形」で長方形の道具に戻る
     let r = ed(h.state_mut()).rect;
     crate::tests::right_click_px(&mut h, r.center() + egui::vec2(-200.0, 150.0));
-    h.get_by_label("元に戻す(Ctrl+Z)");
+    crate::tests::menu_item(&h, "元に戻す");
     h.get_by_label("繰り返し: 長方形").click();
     h.run();
     assert_eq!(ed(h.state_mut()).tool, Tool3::Rectangle);
@@ -1101,12 +1101,11 @@ fn right_click_in_a_tool_offers_ok_and_cancel() {
     type_text(&mut h, "12");
     let at = ed(h.state_mut()).screen_of([30.0, 40.0, 0.0]);
     crate::tests::right_click_px(&mut h, at);
-    h.get_by_label("キャンセル(Esc)");
-    assert!(
-        h.get_all_by_label("補助線で描く(X)").count() >= 2,
-        "メニューとパネル"
-    );
-    h.get_by_label("OK(Enter)").click();
+    crate::tests::menu_item(&h, "キャンセル");
+    // メニューの行(キーは名前の右に出す)とパネルの欄
+    crate::tests::menu_item(&h, "補助線で描く");
+    h.get_by_label("補助線で描く(X)");
+    crate::tests::menu_item(&h, "OK").click();
     h.run();
     assert_eq!(ed(h.state_mut()).tool, Tool3::Select);
     assert_eq!(lines(&current(h.state())), 2);
@@ -1123,7 +1122,7 @@ fn right_click_in_a_tool_offers_ok_and_cancel() {
     click3(&mut h, [60.0, 0.0, 0.0]);
     let at = ed(h.state_mut()).screen_of([60.0, 20.0, 0.0]);
     crate::tests::right_click_px(&mut h, at);
-    h.get_by_label("キャンセル(Esc)").click();
+    crate::tests::menu_item(&h, "キャンセル").click();
     h.run();
     assert_eq!(ed(h.state_mut()).tool, Tool3::Select);
     assert!(ed(h.state_mut()).start.is_none());
@@ -1147,10 +1146,10 @@ fn right_click_on_a_line_selects_it_and_offers_its_actions() {
         panic!("線を選ぶ: {picked:?}")
     };
     assert!(s.line_ends(line).is_some());
-    h.get_by_label("スケッチ寸法(D)");
-    h.get_by_label("標準/補助線(X)");
+    crate::tests::menu_item(&h, "スケッチ寸法");
+    crate::tests::menu_item(&h, "標準/補助線");
     h.get_by_label("Z に沿わせる");
-    h.get_by_label("選択を外す(Esc)");
+    crate::tests::menu_item(&h, "選択を外す");
     h.get_by_label("固定する").click();
     h.run();
     let s = current(h.state());
