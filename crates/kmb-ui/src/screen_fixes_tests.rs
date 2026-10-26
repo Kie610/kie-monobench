@@ -206,7 +206,10 @@ fn a_used_sketch_shows_while_the_feature_that_uses_it_is_edited() {
     h.run();
     assert!(!h.state().is_hidden(top), "直す機能が使うスケッチは見える");
     assert!(h.state().is_own_hidden(top), "行の目は閉じたまま");
-    assert!(h.state().is_hidden(sketch), "直す機能が使わないスケッチは隠したまま");
+    assert!(
+        h.state().is_hidden(sketch),
+        "直す機能が使わないスケッチは隠したまま"
+    );
 }
 
 #[test]

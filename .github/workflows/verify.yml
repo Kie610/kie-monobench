@@ -65,6 +65,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update -q && sudo apt-get install -y -q fonts-ipafont-gothic
 
+      # 整形の崩れは組み立ての前に落とす(数秒。cargo xtask verify も「整形」の段で同じ点検を流す)
+      - name: 整形(cargo fmt --check)
+        if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+
       - name: cargo xtask verify
         shell: bash
         env:

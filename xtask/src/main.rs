@@ -833,6 +833,56 @@ fn runtime_skips(ws: &Workspace) -> Option<Done> {
     Some(d)
 }
 
+/// 整形の点検(`cargo fmt --all --check`)。組み立てずに数秒で済むので、どの crate を選んでも全体を見る。
+/// 崩れたファイルの名前だけを出す(差の全文は `cargo fmt --all --check` で見る。直すのは `cargo fmt --all`)。
+fn fmt_check() -> Done {
+    let mut c = cargo();
+    c.args(["fmt", "--all", "--check"]);
+    println!("\n== 整形: {c:?}");
+    let t = Instant::now();
+    let out = c.output();
+    let ok = out.as_ref().is_ok_and(|o| o.status.success());
+    let files: BTreeSet<String> = out
+        .as_ref()
+        .map(|o| unformatted(&String::from_utf8_lossy(&o.stdout)))
+        .unwrap_or_default();
+    for f in &files {
+        println!("  整形の崩れ: {f}");
+    }
+    if !ok {
+        println!("  直し方: cargo fmt --all");
+        if let Ok(o) = &out {
+            let err = String::from_utf8_lossy(&o.stderr);
+            for l in err.lines().filter(|l| !l.trim().is_empty()).take(20) {
+                println!("  {l}");
+            }
+        }
+    }
+    let mut d = Done::new("整形", ok, t.elapsed().as_secs_f64());
+    d.detail = Some(match (&out, files.len()) {
+        (Err(e), _) => format!("cargo fmt を動かせない: {e}"),
+        (_, 0) if ok => "崩れ 0 件".into(),
+        (_, 0) => "cargo fmt が失敗".into(),
+        (_, n) => format!("崩れ {n} ファイル"),
+    });
+    d
+}
+
+/// `cargo fmt --check` の出力(「Diff in <パス>:<行>:」)から、崩れたファイルの名前を集める。
+fn unformatted(text: &str) -> BTreeSet<String> {
+    text.lines()
+        .filter_map(|l| l.strip_prefix("Diff in "))
+        .map(|rest| {
+            let rest = rest.trim_end_matches(':');
+            // 後ろの「:<行>」を外す(Windows の「C:\…」の : は残す)
+            match rest.rsplit_once(':') {
+                Some((path, line)) if line.chars().all(|c| c.is_ascii_digit()) => path.to_string(),
+                _ => rest.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// ライセンス・取り寄せ先の点検(cargo-deny、deny.toml)。`required` なら、道具が無いのも失敗。
 fn deny(ws: &Workspace, required: bool) -> Option<Done> {
     let have = cargo()
@@ -1128,7 +1178,7 @@ fn run() -> Result<ExitCode, String> {
                 );
                 o.truck = true;
             }
-            let mut results = vec![checks(&ws, &fork, &changed)];
+            let mut results = vec![checks(&ws, &fork, &changed), fmt_check()];
             let _ = fs::remove_file(skip_log(&ws));
             let started = SystemTime::now();
             let testing = !sel.as_ref().is_some_and(BTreeSet::is_empty);
@@ -1371,5 +1421,16 @@ mod tests {
             ["-p", "kmb-core", "-p", "kmb-ui"]
         );
         assert_eq!(package_args(&None), ["--workspace"]);
+    }
+
+    #[test]
+    fn unformatted_files_come_from_the_diff_headers() {
+        let text = "Diff in /w/crates/a/src/x.rs:267:\n-  a\n+ a\nDiff in /w/crates/a/src/x.rs:274:\n\
+                    Diff in C:\\w\\crates\\b\\src\\y.rs:9:\n";
+        assert_eq!(
+            unformatted(text),
+            set(&["/w/crates/a/src/x.rs", "C:\\w\\crates\\b\\src\\y.rs"])
+        );
+        assert!(unformatted("").is_empty());
     }
 }

@@ -48,6 +48,8 @@
 - コアの公開の項目(`xtask/src/api.rs`): crate を名指ししない時、kmb-core の公開の項目(`pub` の頭、`pub enum` の値、`pub trait` の項目。字面で読む)を分かれ目と比べ、変わっていれば契約テスト(kmb-contract)を使う crate を全部足して流す。項目は「ファイル: 項目」で数えるので、ファイルを分けただけでも変わったと見なす。`CORE_API_VERSION` は公開まで上げない(PR ごとに上げていた版は誰も読まず、衝突の元だった)。
 - 組み立ての名前の一意(kmb-bundle の試験 `tests/ids.rs`): 操作の ID・役割の印・設定の ID が重ならず、`then`・`before`・段の帯の操作が実際にある操作を指す。見本の文書 3 つで、何も選ばない時と機能を 1 つずつ選んだ時の操作を集める。
 
+整形(毎回、どの crate を選んでも全体): `cargo fmt --all --check`(rustfmt は `rust-toolchain.toml` の版)。崩れたファイルの名前を出して落とす。直すのは `cargo fmt --all`。CI(14 節)は組み立ての前にも Linux で流し、整形の崩れた PR を早く落とす。
+
 ライセンス(`--all` の時と、`Cargo.lock`・`Cargo.toml`・`deny.toml` を変えた時): `cargo deny check licenses bans sources`(`deny.toml`)と、Windows 版の許諾文の一覧が作れること(13 節)。`--all` では cargo-deny が無いのも失敗。入れ方(版 0.19.9): クラウドは `scripts/install-deny.sh`、PC は `cargo install cargo-deny --locked --version 0.19.9`(`scripts/取り込み.ps1` は無ければ入れる)。依存の表は作る環境(Windows と Linux)で組み立てる物だけを見る。
 
 揃えた依存(`--all` の時と、`Cargo.lock`・`Cargo.toml`・`deny.toml` を変えた時): `cargo hakari generate --diff` と `cargo hakari manage-deps --dry-run` が差を出せば落とす。cargo-hakari が無いのも失敗(依存を変えたのにクラウドで作り直さず、PC の取り込みで初めて落ちるのを防ぐ)。差が出たら `cargo hakari generate`・`cargo hakari manage-deps --yes` で直し、`plugins/post-example` で `cargo metadata` を流してその Cargo.lock も合わせる(kmb-plugin-host の試験が比べる)。入れ方(版 0.9.39): クラウドは `scripts/install-hakari.sh`、PC は `cargo install cargo-hakari --locked --version 0.9.39`。
@@ -415,6 +417,7 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - `.github/workflows/verify.yml` が、PR のたびと main で毎晩 1 回(日本時間 3:00)、`cargo xtask verify` を Linux(ubuntu-latest)と Windows(windows-latest)で流す。カーネルは SMLib(SMLib のソースは third_party にあり、そのまま組める)。
 - 範囲: PR は分かれ目から変えた crate とそれに依存する crate(`--dependents --base origin/<PR の向き先>`)。検査の道具(`.github/workflows/`)・Rust の版(`rust-toolchain.toml`)・cargo の設定(`.cargo/`)・nextest の設定を変えた PR と、毎晩の main の回・手で流す時は全体(`--all`)。PR も毎晩の回も `--truck` を付け、形の計算の試験を truck でも流す(対象に形の計算の試験が無い PR では truck の回は省かれる)。CI は時間の記録を持ち越さず `--all` が毎回 truck の回を足すので、PR で流さないと truck だけで落ちる試験が取り込んだ後に初めて見つかる。CI は利用者の PC を使わないので、1 節の「普段は SMLib だけ」の例外にする。
 - 同じ PR に新しいコミットが来たら前の回を止める。main へのプッシュでは流さない。プッシュごとに流すと続けて来る取り込みが前の回を止めて、main の回がほとんど「取り消し」で終わっていた(10-26 は 26 回中 25 回)。取り込みの前の検査は PR の回が受け持つ(16 節)。公開のリポジトリなので標準の runner は無料だが、待ちと取り消しの知らせを減らす。
+- 整形の崩れ(`cargo fmt --all --check`)は、組み立ての前の段で Linux だけ流して落とす(1 節の「整形」と同じ点検)。
 - 道具の版は 1 節の入れ方とそろえる(cargo-nextest・cargo-deny・cargo-hakari)。
 - 組み立て済みの物は毎晩の main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。

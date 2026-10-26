@@ -33,6 +33,7 @@ const TABLE_END: &str = "<!-- 層の表ここまで -->";
 /// 点検を消したり名前を変えたりしたら、ここと AGENTS.md の「(点検: …)」を同じ PR で直す。
 pub const CHECKS: &[(&str, &str, &str)] = &[
     ("層の向き", "xtask/src/layers.rs", "fn allowed("),
+    ("整形", "xtask/src/main.rs", "fn fmt_check("),
     (
         "許したフォルダ",
         "apps/kmb-mcp/src/tests.rs",

@@ -1094,7 +1094,10 @@ fn open_and_close_everything_below_a_row_from_its_menu() {
     h.run();
     assert_eq!(open(&h, &i), Some(false), "下の部品を閉じる");
     assert_eq!(open(&h, &o), None, "押した行は開いたまま");
-    assert!(h.query_by_label("ボディ2").is_none(), "中の部品の蓋は隠れる");
+    assert!(
+        h.query_by_label("ボディ2").is_none(),
+        "中の部品の蓋は隠れる"
+    );
     // 文書の行で木の全体を開く
     doc_row(&h).click_secondary();
     h.run();
@@ -1160,7 +1163,10 @@ fn a_box_selection_skips_what_is_outside_the_active_component() {
     ws.pick_events_with(&all, rect, none);
     assert_eq!(bodies_of(&ws), vec![lid]);
     assert!(
-        ws.win.message.as_deref().is_some_and(|m| m.contains("押せば選べます")),
+        ws.win
+            .message
+            .as_deref()
+            .is_some_and(|m| m.contains("押せば選べます")),
         "{:?}",
         ws.win.message
     );
