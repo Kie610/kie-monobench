@@ -3068,6 +3068,7 @@ name = "kmb-sketch-3d"
 version = "0.1.0"
 dependencies = [
  "kmb-core",
+ "kmb-interchange",
  "kmb-sketch",
  "kmb-sketch-solver",
  "kmb-workspace-hack",
@@ -3124,6 +3125,7 @@ dependencies = [
  "kmb-look",
  "kmb-samples",
  "kmb-sketch",
+ "kmb-sketch-3d",
  "kmb-text",
  "kmb-workspace-hack",
  "serde",
