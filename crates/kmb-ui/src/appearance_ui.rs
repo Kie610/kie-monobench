@@ -12,6 +12,7 @@ impl Workspace {
     pub(crate) fn apply_appearance(&mut self, ctx: &egui::Context, sketching: bool) {
         let t = self.win.themes.theme(&self.win.layout.appearance);
         theme::apply(ctx, &t, self.win.layout.space, sketching);
+        self.win.words().share(ctx);
         let font = self.win.layout.appearance.font.clone();
         match &self.win.font_applied {
             // 起動した時の自動の字はアプリが入れている

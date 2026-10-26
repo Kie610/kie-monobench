@@ -37,7 +37,8 @@ impl Workspace {
             .feature(id)
             .map_or(String::new(), |f| f.name.clone());
         let h = self.health(id);
-        let mut s = format!("{name}({}): {}", h.title(), h.message());
+        let w = self.win.words();
+        let mut s = format!("{name}({}): {}", h.title(&w), h.message(&w));
         if let Some(raw) = self.raw_text(id) {
             s += &format!("\n元の文: {raw}");
         }
@@ -70,6 +71,7 @@ impl Workspace {
             .and_then(|u| self.cur.work.doc().data().feature(u))
             .map(|u| u.name.clone());
         let l = self.win.look;
+        let words = self.win.words();
         let (mut close, mut edit, mut copy, mut pick_up) = (false, false, false, false);
         let screen = ui.ctx().content_rect();
         let offset = egui::vec2(
@@ -97,9 +99,9 @@ impl Workspace {
                                 ui.allocate_exact_size(Vec2::splat(14.0), egui::Sense::hover());
                             paint_health(ui.painter(), r.center(), &health, &l, false);
                             let title = if health.is_problem() {
-                                health.title()
+                                health.title(&words)
                             } else {
-                                "今は計算できています"
+                                "今は計算できています".to_string()
                             };
                             ui.label(egui::RichText::new(title).strong().color(accent));
                             ui.label(egui::RichText::new(&f.name).strong());
@@ -128,7 +130,9 @@ impl Workspace {
                                 .max_height(160.0)
                                 .show(ui, |ui| {
                                     ui.add(
-                                        egui::Label::new(health.message()).wrap().selectable(true),
+                                        egui::Label::new(health.message(&words))
+                                            .wrap()
+                                            .selectable(true),
                                     );
                                 });
                             if let Some(n) = &upstream_name {

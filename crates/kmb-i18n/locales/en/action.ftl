@@ -287,3 +287,37 @@ action-study-cancel = Cancel
 action-study-cancel-tip = Stop solving (for flow, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
+
+## Commands shown only in the feature right-click menu (timeline, browser, 3D view)
+## For commands whose description depends on the feature type (Save as Default, Place Entry Point), the description is written to fit every type.
+
+action-asm-link-break = Break Link
+action-asm-link-break-tip = Stop following the source file and keep the current copy (no more notices when the source changes; can be undone)
+action-asm-link-pin = Pin This Version
+action-asm-link-pin-tip = When pinned, changes to the source file are neither reported nor pulled in
+action-asm-link-update = Get Latest
+action-asm-link-update-tip = Replace it with the current shape in the source file (can be undone)
+action-cad-pattern-axis = Select Axis
+action-cad-pattern-axis-tip = Set the axis of the selected pattern (the direction for a rectangular pattern) by clicking an origin X/Y/Z axis, a sketch line or a body edge (a circular edge gives its circle's axis)
+action-cad-pattern-axis2 = Select Direction 2
+action-cad-pattern-axis2-tip = Set direction 2 of the selected rectangular pattern (the second direction of the grid) by clicking an origin X/Y/Z axis, a sketch line or a body edge (a circular edge gives its circle's axis)
+action-cam-contour-chains = Select Contours
+action-cam-contour-chains-tip = Click face outlines, hole edges and sketch lines to add or remove them, then press Enter. Any number can be selected. Pressing Enter with none selected uses the part outline
+action-cam-contour-tabs = Place Tabs
+action-cam-contour-tabs-tip = Click on the toolpath to add or remove tabs, then press Enter. Pressing Enter with none placed spaces them evenly by the tab count field
+action-cam-defaults-save = Save Parameters as Default
+action-cam-defaults-save-tip = Use this operation's values (cutting conditions, stock to leave, steps and so on) as the starting values for the next operation of the same kind. Faces, tools and setups are not saved
+action-cam-entry-place = Place Entry Point
+action-cam-entry-place-tip = Start cutting from the clicked point. With a helical entry, the tool spirals down around it
+action-cam-floor-add = Add Selected Faces
+action-cam-floor-add-tip = Add the flat faces selected in the 3D view to the floor faces (Shift or Ctrl+click selects several)
+action-cam-floor-remove = Remove Selected Faces
+action-cam-floor-remove-tip = Remove the faces selected in the 3D view from the floor faces
+action-cam-rest-pocket = Rest Machining
+action-cam-rest-pocket-tip = Cut only the corners and narrow slots this tool could not reach, with the next smaller tool in the library (V and tapered tools too for pockets and contours)
+action-cam-setup-add-body = Add Body to Cut
+action-cam-setup-add-body-tip = Cut other bodies in the same setup (to cut several parts from one board, for example)
+action-cam-setup-origin-pick = Pick Origin in 3D
+action-cam-setup-origin-pick-tip = Click a stock box corner, edge midpoint or face center, a point of the part's bounding box, or a part corner to make it the work coordinate origin
+action-cam-template-save = Save as Template…
+action-cam-template-save-tip = Save the selected operations (all operations inside, for a setup) on this PC under a name to use in another setup or document. Faces and lines are not saved; select them again when using it
