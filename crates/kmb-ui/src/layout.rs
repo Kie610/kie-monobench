@@ -234,6 +234,8 @@ pub struct Appearance {
     /// アイコンの変わる部分を役の色(作る・変える・増やす・決める)で描くか。切ると土台も
     /// 変わる部分も字の色の 1 色(前の見た目)
     pub role_colors: bool,
+    /// 表示の言語(`auto` は OS に合わせる。ほかは言語の符号。知らない値は自動。[`kmb_i18n::Choice`])
+    pub language: String,
 }
 
 /// 字とアイコンの倍率の範囲(UI の大きさと同じ 50〜250 %。Kie 2026-10-19)。
@@ -251,6 +253,7 @@ impl Default for Appearance {
             motion: Motion::Full,
             tool_labels: true,
             role_colors: true,
+            language: kmb_i18n::Choice::Auto.code().to_string(),
         }
     }
 }

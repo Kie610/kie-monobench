@@ -59,6 +59,8 @@ pub(crate) struct WinState {
     pub(crate) look: theme::Look,
     /// 選べるテーマ(同梱と、データフォルダの `themes/` から読んだもの。U38)
     pub(crate) themes: themes::Themes,
+    /// 画面の文言の訳(全言語。「自動」は起動の時の OS の言語。試験では日本語にそろえる)
+    pub(crate) texts: kmb_i18n::Catalog,
     /// 入れてある字の書体の設定(変わったら入れ直す。`None` はまだ見ていない)
     pub(crate) font_applied: Option<Option<String>>,
     /// 知らせの一覧を開いて見た時の数(鐘の数は、これより後ろの知らせ)
@@ -104,6 +106,22 @@ pub(crate) struct WinState {
 }
 
 impl WinState {
+    /// 今の表示の言語(設定の「表示の言語」)。
+    pub(crate) fn lang(&self) -> kmb_i18n::Lang {
+        self.texts
+            .resolve(kmb_i18n::Choice::parse(&self.layout.appearance.language))
+    }
+
+    /// 文言 `id` の今の言語の文(`kmb-i18n` の `locales/`)。
+    pub(crate) fn t(&self, id: &str) -> String {
+        self.texts.text(self.lang(), id)
+    }
+
+    /// 差し込み口のある文言。
+    pub(crate) fn t_with(&self, id: &str, args: &[(&str, kmb_i18n::Arg)]) -> String {
+        self.texts.text_with(self.lang(), id, args)
+    }
+
     /// 失敗の知らせを出す(知らせの一覧で失敗の色になる)。
     pub(crate) fn fail(&mut self, text: impl Into<String>) {
         self.message = Some(text.into());

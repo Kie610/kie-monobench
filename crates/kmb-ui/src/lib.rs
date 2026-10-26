@@ -291,6 +291,7 @@ impl Workspace {
                 play_speed: 10.0,
                 look: theme::Look::default(),
                 themes: themes::Themes::default(),
+                texts: kmb_i18n::Catalog::with_os(kmb_i18n::Lang::Ja),
                 font_applied: None,
                 notices_seen: 0,
                 undo_history_open: false,

@@ -325,13 +325,14 @@ impl<'a> Graph<'a> {
         // 画面の外枠は、機能の一覧・設定欄・操作をコア経由で受け取るだけ(CAD・CAM・カーネルを知らない)。
         // 3D のビュー(kmb-ui-view3d)と測る計算(kmb-measure)と描き手(kmb-render)は外枠の部品。
         // 受け渡しの語彙(kmb-interchange。描き方の役割など)と外観の語彙(kmb-look。材料と外観の表、
-        // 光源とデカールの型)は読んでよい
+        // 光源とデカールの型)と画面の文言の訳(kmb-i18n)は読んでよい
         for d in self.deps("kmb-ui", false) {
             if !(matches!(
                 d,
                 "kmb-core"
                     | "kmb-interchange"
                     | "kmb-look"
+                    | "kmb-i18n"
                     | "kmb-session"
                     | "kmb-measure"
                     | "kmb-render"

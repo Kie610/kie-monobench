@@ -12,6 +12,7 @@ layer = "ui"
 [dependencies]
 kmb-core.workspace = true
 kmb-look.workspace = true
+kmb-i18n.workspace = true
 kmb-interchange.workspace = true
 kmb-session.workspace = true
 kmb-ui-view3d.workspace = true

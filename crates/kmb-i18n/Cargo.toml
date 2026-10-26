@@ -1,0 +1,20 @@
+[package]
+name = "kmb-i18n"
+description = "画面の文言の訳(言語ごとの Fluent のファイルを組み込み、文言の ID で引く。OS の言語に合わせる「自動」)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "core"
+
+[dependencies]
+fluent-bundle.workspace = true
+unic-langid.workspace = true
+sys-locale.workspace = true
+log.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true

@@ -1,4 +1,4 @@
-//! 設定の「画面」(U38): テーマ・明るさ・UI の大きさ・字とアイコンの大きさ・部品の詰め具合・
+//! 設定の「画面」(U38): 表示の言語・テーマ・明るさ・UI の大きさ・字とアイコンの大きさ・部品の詰め具合・
 //! 角の丸み・字の書体・動き。選んだ物は毎フレーム [`theme::apply`] で画面に当てる。
 
 use crate::layout::{Appearance, Corners, Density, Motion, SCALE_RANGE};
@@ -30,6 +30,22 @@ impl Workspace {
     /// 設定の窓の「画面」の節。
     pub(crate) fn appearance_settings(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // 表示の言語の一覧(言語の名前はその言語で書き、今の言語に訳さない)
+        let os = self.win.texts.os_lang();
+        let languages: Vec<(String, String)> = kmb_i18n::Choice::all()
+            .map(|c| {
+                let name = match c {
+                    kmb_i18n::Choice::Auto => self.win.t_with(
+                        "settings-language-auto",
+                        &[("lang", os.native_name().into())],
+                    ),
+                    kmb_i18n::Choice::Fixed(l) => l.native_name().to_string(),
+                };
+                (c.code().to_string(), name)
+            })
+            .collect();
+        let language_label = self.win.t("settings-language");
+        let language_hint = self.win.t("settings-language-hint");
         let a = &mut self.win.layout.appearance;
         let pct = |v: f64| format!("{:.0} %", v * 100.0);
         // 欄に打った「50」「50 %」「50%」は 0.5 倍(書き方と同じく % で読む)
@@ -45,6 +61,24 @@ impl Workspace {
             .num_columns(2)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
+                ui.label(language_label.as_str());
+                let now = kmb_i18n::Choice::parse(&a.language).code();
+                egui::ComboBox::from_id_salt("appearance_language")
+                    .selected_text(
+                        languages
+                            .iter()
+                            .find(|(c, _)| c == now)
+                            .map_or("", |(_, n)| n.as_str()),
+                    )
+                    .width(200.0)
+                    .show_ui(ui, |ui| {
+                        for (code, name) in &languages {
+                            ui.selectable_value(&mut a.language, code.clone(), name);
+                        }
+                    })
+                    .response
+                    .on_hover_text(language_hint.as_str());
+                ui.end_row();
                 ui.label("テーマ");
                 egui::ComboBox::from_id_salt("appearance_theme")
                     .selected_text(self.win.themes.label(&a.theme))
