@@ -8,6 +8,8 @@
 //! - 引数を省くと、1 つでも見えていれば隠し、全部隠れていれば出す。知らない機能は入力の誤り。
 //! - 機能を足すか直して、スケッチと作業平面を初めて使うと同じ変更で隠し、取り消せば目も戻る。目を
 //!   開けた後に別の機能が使っても隠さない。区画の無い文書は、初めて使った時に区画を書き始める。
+//! - 作る途中(OK の前)に輪郭を選び替えると、その途中で隠したスケッチを同じ変更で出し直す。OK の後と、
+//!   目を自分で替えた物と、ほかの機能が使っている物は出し直さない。
 
 use kmb_core::{FeatureId, ProblemKind, category};
 use kmb_interchange::visibility::Visibility;
@@ -256,5 +258,77 @@ fn a_feature_hides_what_it_first_uses_in_the_same_undo_step() {
     on_plane["plane"] = json!({"kind": "datum", "feature": plane.0});
     h.add_feature(&s.type_id, None, on_plane).unwrap();
     assert!(hidden_of(&h).contains(&plane));
+    assert_eq!(h.report().error_count(), 0);
+}
+
+#[test]
+fn re_picking_while_creating_shows_again_what_the_creation_hid() {
+    let mut h = Headless::with_document(
+        kmb_bundle::modules(),
+        kmb_samples::reference_document(),
+        None,
+    );
+    let sketch = all_of(&h, category::SKETCH)[0];
+    let s = h.doc().data().feature(sketch).unwrap().clone();
+    let e = h
+        .doc()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.data["profile"] == json!(sketch.0))
+        .unwrap()
+        .clone();
+    let extrude = |profile: FeatureId| {
+        let mut d = e.data.clone();
+        d["profile"] = json!(profile.0);
+        d
+    };
+    let pick = |h: &mut Headless, id: FeatureId, profile: FeatureId| {
+        h.apply_edits(
+            "輪郭を替える",
+            vec![kmb_core::Edit::SetData {
+                id,
+                data: extrude(profile),
+            }],
+        )
+        .unwrap();
+    };
+    let s2 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
+    let s3 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
+
+    // 区画の無い文書で足して作る途中にする。選び替えると前のスケッチが同じ 1 手で出る
+    let ex = h.add_feature(&e.type_id, None, extrude(s2)).unwrap();
+    h.begin_creation(ex);
+    assert!(hidden_of(&h).contains(&s2));
+    let depth = h.doc().undo_depth();
+    pick(&mut h, ex, s3);
+    assert_eq!(h.doc().undo_depth(), depth + 1, "変更が 2 手に分かれた");
+    assert!(hidden_of(&h).contains(&s3));
+    assert!(
+        !hidden_of(&h).contains(&s2),
+        "選び替えた前のスケッチが隠れたまま"
+    );
+    h.undo().unwrap();
+    assert!(hidden_of(&h).contains(&s2) && !hidden_of(&h).contains(&s3));
+    h.redo().unwrap();
+
+    // ほかの機能が使っているスケッチは、選んでから外しても隠したまま
+    pick(&mut h, ex, sketch);
+    pick(&mut h, ex, s3);
+    assert!(
+        hidden_of(&h).contains(&sketch),
+        "ほかの機能が使う物を出した"
+    );
+
+    // 作る途中でも、目を自分で替えた物は出し直さない
+    set(&mut h, json!({"features": [s3.0], "show": true})).unwrap();
+    set(&mut h, json!({"features": [s3.0], "show": false})).unwrap();
+    pick(&mut h, ex, s2);
+    assert!(hidden_of(&h).contains(&s3), "目を自分で閉じた物を出した");
+
+    // OK の後に選び替えても出し直さない
+    h.end_creation();
+    pick(&mut h, ex, s3);
+    assert!(hidden_of(&h).contains(&s2), "OK の後に出し直した");
     assert_eq!(h.report().error_count(), 0);
 }

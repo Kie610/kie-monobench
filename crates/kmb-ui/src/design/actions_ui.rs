@@ -564,6 +564,8 @@ impl Workspace {
             // 足したものは「作っている途中」: 編集パネルで値を直し、OK で決める。
             // キャンセル・Esc なら作る前へ戻す(押しただけで形が決まらないように)
             self.cur.creating = Some((id, before));
+            // 作る途中に輪郭などを選び替えたら、足した時に隠したスケッチを出し直す
+            self.cur.work.begin_creation(id);
             self.cur.focus_new.set(Some(id));
             self.cur.editing = Some(id);
             self.cur.edit_start = Some((id, self.cur.work.doc().undo_labels().len()));

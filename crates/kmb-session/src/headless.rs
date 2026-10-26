@@ -8,6 +8,7 @@ use kmb_core::{
     Transaction,
 };
 use serde_json::Value as Json;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 /// ボディ 1 つの質量の値(M47)。`props` の項目はそのまま並べる(前の `mass` の形に足しただけ)。
@@ -106,6 +107,10 @@ pub struct Headless {
     recomputes: u64,
     /// 作り直しを後へ回しているか([`Headless::hold_recompute`])
     hold: Hold,
+    /// 作る途中(画面の OK の前)の機能と、その途中で使った時に隠した物([`Headless::begin_creation`])
+    creating: Option<(FeatureId, BTreeSet<FeatureId>)>,
+    /// 最後の変更で使った時に隠した物(作る途中を始めた時に引き継ぐ)
+    just_hidden: BTreeSet<FeatureId>,
 }
 
 /// 作り直しを後へ回す様子。
@@ -136,6 +141,8 @@ impl Headless {
             active: Default::default(),
             recomputes: 1,
             hold: Hold::Off,
+            creating: None,
+            just_hidden: BTreeSet::new(),
         }
     }
 
@@ -511,24 +518,46 @@ impl Headless {
         Ok(())
     }
 
+    /// 足した機能 `id` を作る途中にする(画面は足した後、OK かキャンセルまで直す)。足した変更で隠した
+    /// スケッチと作業平面などを覚え、途中で輪郭などを選び替えて使わなくなったら出し直す。
+    pub fn begin_creation(&mut self, id: FeatureId) {
+        self.creating = Some((id, std::mem::take(&mut self.just_hidden)));
+    }
+
+    /// 作る途中を終える(OK・キャンセル)。この後は使わなくなっても出し直さない。
+    pub fn end_creation(&mut self) {
+        self.creating = None;
+    }
+
     /// 文書を変える `change` を走らせ、足した機能と直した機能 `touched` が初めて使うスケッチと
     /// 作業平面などを同じ取り消し単位で隠す(使った時に 1 回隠す。変更を取り消せば目も戻る)。
-    /// 再計算はしない。
+    /// 作る途中なら、その途中で隠して使わなくなった物を出し直す。再計算はしない。
     pub(crate) fn commit<T>(
         &mut self,
         mut touched: Vec<FeatureId>,
         change: impl FnOnce(&mut Document) -> Result<T, kmb_core::TxError>,
     ) -> Result<T, String> {
+        use kmb_core::SectionType;
         use kmb_interchange::visibility as vis;
+        self.just_hidden.clear();
+        if self
+            .creating
+            .as_ref()
+            .is_some_and(|(id, _)| self.doc.data().feature(*id).is_none())
+        {
+            self.creating = None;
+        }
         let depth = self.doc.undo_depth();
         let ids: std::collections::HashSet<FeatureId> =
             self.doc.data().features.iter().map(|f| f.id).collect();
-        let before: std::collections::BTreeSet<FeatureId> = {
+        let eyes_before = self.doc.data().sections.get(vis::Visibility::KEY).cloned();
+        let (before, old) = {
             let cx = self.context(None, None, &Json::Null);
-            touched
+            let refs: BTreeSet<FeatureId> = touched
                 .iter()
                 .flat_map(|id| vis::references(&cx, *id))
-                .collect()
+                .collect();
+            (refs, vis::of(&cx).hidden)
         };
         let out = change(&mut self.doc).map_err(|e| e.to_string())?;
         touched.extend(
@@ -540,7 +569,23 @@ impl Headless {
                 .filter(|id| !ids.contains(id)),
         );
         let cx = self.context(None, None, &Json::Null);
-        let Some(v) = vis::hide_first_used(&cx, &touched, &before) else {
+        // 作る途中に目を自分で替えた物は、もう出し直さない
+        let mut mine = self
+            .creating
+            .as_ref()
+            .map(|c| c.1.clone())
+            .unwrap_or_default();
+        if !mine.is_empty()
+            && self.doc.data().sections.get(vis::Visibility::KEY) != eyes_before.as_ref()
+        {
+            let new = vis::of(&cx).hidden;
+            mine.retain(|r| old.contains(r) == new.contains(r));
+        }
+        let v = vis::hide_first_used(&cx, &touched, &before, &mine);
+        if let Some((_, m)) = &mut self.creating {
+            m.clone_from(&mine);
+        }
+        let Some(v) = v else {
             return Ok(out);
         };
         let op = match self.doc.data().section_op(&v) {
@@ -556,6 +601,11 @@ impl Headless {
         match self.doc.apply(Transaction::new(label.clone(), vec![op])) {
             Ok(()) => {
                 self.doc.squash_since(depth, &label);
+                self.just_hidden = v.hidden.difference(&old).copied().collect();
+                if let Some((_, mine)) = &mut self.creating {
+                    mine.retain(|r| v.hidden.contains(r));
+                    mine.extend(self.just_hidden.iter().copied());
+                }
             }
             Err(e) => log::warn!("使ったスケッチを隠せない: {e}"),
         }
