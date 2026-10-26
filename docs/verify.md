@@ -97,7 +97,7 @@
 
 Cargo は、選んだ crate の組み合わせごとに依存先の機能(features)を決め直す。そのため `cargo test -p kmb-cam-commands` のように一部だけを選ぶと、全体のビルドと機能の組み合わせが変わり、wasmtime や egui などの依存先を最初から作り直していた(測った例: `-p kmb-cam-commands` で 2 分 46 秒、`-p kmb-ui` で 6 分 15 秒)。
 
-`crates/kmb-workspace-hack` は中身のない crate で、全部の crate がこれに依存し、依存先の機能を全体と同じにそろえる。入れた後は、どの crate を選んでも依存先の作り直しは 0 件だった(`kmb-cam-commands`・`kmb-ui`・`kmb-expr`・`kmb-sketch` などで確認)。
+`crates/kmb-workspace-hack` は中身のない crate で、全部の crate がこれに依存し、依存先の機能を全体と同じにそろえる。ただし見本のプラグイン(`plugins/post-example`)が組む crate(kmb-post・kmb-toolpath と、その依存の kmb-cam-tool・kmb-core・kmb-expr・kmb-format・kmb-look)は、`.config/hakari.toml` の `final-excludes` で外す。揃えた依存は egui などの画面の部品を抱えるので、外さないとプラグインが WASM でもそれを組む(kmb-plugin-host の試験が、プラグインの Cargo.lock に揃えた依存と画面の部品が無いことを確かめる)。この 7 crate だけを `-p` で選ぶと、依存先の作り直しが起きることがある。入れた後は、どの crate を選んでも依存先の作り直しは 0 件だった(`kmb-cam-commands`・`kmb-ui`・`kmb-expr`・`kmb-sketch` などで確認)。
 
 - 作るのは [cargo-hakari](https://docs.rs/cargo-hakari)(MIT または Apache-2.0。開発の道具で、製品には入らない)。設定は `.config/hakari.toml`。
 - 入れた直後の 1 回だけ、全体のビルドで依存先を作り直す(3 節の変更と合わせ、クラウドで約 14 分)。

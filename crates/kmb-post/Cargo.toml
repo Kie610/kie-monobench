@@ -15,7 +15,6 @@ kmb-format.workspace = true
 kmb-toolpath.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
 

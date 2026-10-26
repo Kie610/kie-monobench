@@ -2560,7 +2560,6 @@ dependencies = [
  "kmb-core",
  "kmb-format",
  "kmb-look",
- "kmb-workspace-hack",
  "miniz_oxide 0.9.1",
  "serde",
  "serde_json",
@@ -2607,7 +2606,6 @@ name = "kmb-core"
 version = "0.1.0"
 dependencies = [
  "kmb-expr",
- "kmb-workspace-hack",
  "log",
  "proptest",
  "serde",
@@ -2618,7 +2616,6 @@ dependencies = [
 name = "kmb-expr"
 version = "0.1.0"
 dependencies = [
- "kmb-workspace-hack",
  "proptest",
  "serde",
 ]
@@ -2656,7 +2653,6 @@ name = "kmb-format"
 version = "0.1.0"
 dependencies = [
  "crc32fast",
- "kmb-workspace-hack",
  "miniz_oxide 0.9.1",
 ]
 
@@ -2800,7 +2796,6 @@ name = "kmb-look"
 version = "0.1.0"
 dependencies = [
  "kmb-core",
- "kmb-workspace-hack",
  "log",
  "serde",
  "serde_json",
@@ -2854,7 +2849,6 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-format",
  "kmb-toolpath",
- "kmb-workspace-hack",
  "serde",
  "serde_json",
 ]
@@ -3265,7 +3259,6 @@ name = "kmb-toolpath"
 version = "0.1.0"
 dependencies = [
  "kmb-cam-tool",
- "kmb-workspace-hack",
  "serde",
  "serde_json",
 ]

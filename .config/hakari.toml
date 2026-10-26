@@ -27,3 +27,16 @@ platforms = [
 # 開発用の道具は、揃えた依存を待たずにすぐ動かす
 [traversal-excludes]
 workspace-members = ["xtask"]
+
+# プラグイン作りに使う crate(見本のプラグインが組む物)は揃えた依存に入れない。
+# 揃えた依存は画面の部品(egui など)を抱えるので、入れるとプラグインが WASM でもそれを組む。
+[final-excludes]
+workspace-members = [
+    "kmb-cam-tool",
+    "kmb-core",
+    "kmb-expr",
+    "kmb-format",
+    "kmb-look",
+    "kmb-post",
+    "kmb-toolpath",
+]
