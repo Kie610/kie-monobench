@@ -3,8 +3,8 @@
 use super::*;
 use crate::theme::RightMenu as _;
 use ribbon_band::{
-    group_label, group_widths, more_width, name_width, small_grid, small_width, sub_menu_row,
-    tile_hint, tile_width, tool_tile,
+    group_label, group_tile, group_widths, more_width, name_width, small_grid, small_width,
+    sub_menu_row, tile_hint, tile_width, tool_tile,
 };
 
 impl Workspace {
@@ -73,15 +73,11 @@ impl Workspace {
             .zip(&fronts)
             .zip(&smalls)
             .map(|((g, f), small)| {
-                let mut w = group_widths(ui, &g.name, f.len(), f.iter().position(|t| t.on), labels);
-                // 小さなボタンは、前の道具を全部出す時だけ並べる(帯に入らなければ先に畳む)
+                let mut w = group_widths(ui, &g.name, f.len(), labels);
+                // 小さなボタンは、前の道具を並べる時だけ並べる(畳んだまとまりには出さない)
                 let extra = small_width(small.len(), labels);
                 w.full += extra;
-                for (k, c) in w.compact.iter_mut().enumerate() {
-                    if k + 1 >= f.len() {
-                        *c += extra;
-                    }
-                }
+                w.compact += extra;
                 w
             })
             .collect();
@@ -101,17 +97,12 @@ impl Workspace {
         for (((g, front), f), g_small) in groups.iter().zip(&fronts).zip(&fold).zip(&smalls) {
             let shown: Vec<&crate::EditorTool> = match f {
                 ribbon::Fold::Hidden => continue,
-                ribbon::Fold::Compact(n) => front
-                    .iter()
-                    .enumerate()
-                    .filter(|(k, t)| *k < *n || t.on)
-                    .map(|(_, t)| t)
-                    .collect(),
+                ribbon::Fold::Collapsed => Vec::new(),
                 _ => front.iter().collect(),
             };
             let compact = !labels || *f != ribbon::Fold::Full;
             let small: &[crate::EditorTool] = match f {
-                ribbon::Fold::Compact(n) if *n < front.len() => &[],
+                ribbon::Fold::Collapsed => &[],
                 _ => g_small,
             };
             let rg = sketch_group(g);
@@ -128,7 +119,18 @@ impl Workspace {
             );
             col.spacing_mut().item_spacing = egui::vec2(2.0, 0.0);
             col.add_space(3.0);
+            let lit = all.iter().any(|t| t.on);
+            // 畳んだまとまりは、まとまりのボタン 1 つ(押すと名前の ▾ と同じ一覧)
+            let mut opens = Vec::new();
             col.horizontal(|ui| {
+                if *f == ribbon::Fold::Collapsed {
+                    let icon = all
+                        .iter()
+                        .find(|t| t.on)
+                        .or(all.first())
+                        .map_or("", |t| t.icon.as_str());
+                    opens.push(group_tile(ui, icon, &g.name, lit, labels));
+                }
                 for t in &shown {
                     // 親のある道具は、同じ親の道具が前に 1 つだけなら親の名前で出す(「2 点指定の長方形」は
                     // 「長方形」。種類で見分ける)。説明には道具の名前を出す
@@ -177,88 +179,101 @@ impl Workspace {
                     used = Some(id);
                 }
             });
-            let lit = all.iter().any(|t| t.on);
-            let r = group_label(ui, rect, ("sk_glabel", &g.name), &g.name, lit);
-            egui::Popup::menu(&r).show(|ui| {
-                let pinned: Vec<String> = ribbon::front(space, SKETCH_TAB, &rg, &self.win.layout)
-                    .iter()
-                    .map(|i| i.key.clone())
-                    .collect();
-                // 道具が多い(描くは 28)ので、画面の下に届く時は巻物にする(窓が低くても全部選べる)
-                let max_h = (ui.ctx().content_rect().bottom() - ui.next_widget_position().y - 60.0)
-                    .max(160.0);
-                // 親のある道具は親の行にまとめ、指を置くと子の一覧を横に出す
-                egui::ScrollArea::vertical()
-                    .max_height(max_h)
-                    .show(ui, |ui| {
-                        let menu = g.menu();
-                        let mut i = 0;
-                        while i < menu.len() {
-                            let t = menu[i];
-                            if t.sep && i > 0 {
-                                ui.separator();
-                            }
-                            let Some(parent) = &t.sub else {
-                                if self.tool_menu_row(ui, t, &rg, &pinned) {
-                                    used = Some(t.id.clone());
-                                    ui.close();
+            opens.push(group_label(ui, rect, ("sk_glabel", &g.name), &g.name, lit));
+            for r in &opens {
+                egui::Popup::menu(r).show(|ui| {
+                    let pinned: Vec<String> =
+                        ribbon::front(space, SKETCH_TAB, &rg, &self.win.layout)
+                            .iter()
+                            .map(|i| i.key.clone())
+                            .collect();
+                    // 道具が多い(描くは 28)ので、画面の下に届く時は巻物にする(窓が低くても全部選べる)
+                    let max_h =
+                        (ui.ctx().content_rect().bottom() - ui.next_widget_position().y - 60.0)
+                            .max(160.0);
+                    // 親のある道具は親の行にまとめ、指を置くと子の一覧を横に出す
+                    egui::ScrollArea::vertical()
+                        .max_height(max_h)
+                        .show(ui, |ui| {
+                            let menu = g.menu();
+                            let mut i = 0;
+                            while i < menu.len() {
+                                let t = menu[i];
+                                if t.sep && i > 0 {
+                                    ui.separator();
                                 }
-                                i += 1;
-                                continue;
-                            };
-                            let kids: Vec<&crate::EditorTool> = menu[i..]
-                                .iter()
-                                .take_while(|k| k.sub.as_ref() == Some(parent))
-                                .copied()
-                                .collect();
-                            i += kids.len();
-                            let lit = kids.iter().any(|k| k.on);
-                            let icon = kids.iter().find(|k| k.on).unwrap_or(&kids[0]).icon.clone();
-                            let row = ui
-                                .horizontal(|ui| {
-                                    // ピンの欄(30×26)だけ空けて、子のない行と名前の位置と高さをそろえる
-                                    ui.allocate_exact_size(
-                                        egui::vec2(30.0, 26.0),
-                                        egui::Sense::hover(),
-                                    );
-                                    let r = theme::menu_item(ui, &icon, parent, true, lit);
-                                    crate::icons::paint(
-                                        ui.painter(),
-                                        egui::Rect::from_center_size(
-                                            egui::pos2(r.rect.right() - 10.0, r.rect.center().y),
-                                            egui::vec2(12.0, 12.0),
-                                        ),
-                                        "chevr",
-                                        l.pal.ink2,
-                                        1.6,
-                                    );
-                                    r
-                                })
-                                .inner;
-                            let row = row.on_hover_text(
-                                kids.iter()
-                                    .map(|k| k.label.as_str())
-                                    .collect::<Vec<_>>()
-                                    .join("・"),
-                            );
-                            egui::containers::menu::SubMenu::new().show(ui, &row, |ui| {
-                                for (j, k) in kids.iter().enumerate() {
-                                    if k.sep && j > 0 {
-                                        ui.separator();
-                                    }
-                                    if self.tool_menu_row(ui, k, &rg, &pinned) {
-                                        used = Some(k.id.clone());
+                                let Some(parent) = &t.sub else {
+                                    if self.tool_menu_row(ui, t, &rg, &pinned) {
+                                        used = Some(t.id.clone());
                                         ui.close();
                                     }
-                                }
-                            });
-                        }
-                    });
-                ui.separator();
-                if ui.button("前の並びを既定に戻す").clicked() {
-                    ribbon::edit_pins(space, SKETCH_TAB, &rg, &mut self.win.layout, PinEdit::Reset);
-                }
-            });
+                                    i += 1;
+                                    continue;
+                                };
+                                let kids: Vec<&crate::EditorTool> = menu[i..]
+                                    .iter()
+                                    .take_while(|k| k.sub.as_ref() == Some(parent))
+                                    .copied()
+                                    .collect();
+                                i += kids.len();
+                                let lit = kids.iter().any(|k| k.on);
+                                let icon =
+                                    kids.iter().find(|k| k.on).unwrap_or(&kids[0]).icon.clone();
+                                let row = ui
+                                    .horizontal(|ui| {
+                                        // ピンの欄(30×26)だけ空けて、子のない行と名前の位置と高さをそろえる
+                                        ui.allocate_exact_size(
+                                            egui::vec2(30.0, 26.0),
+                                            egui::Sense::hover(),
+                                        );
+                                        let r = theme::menu_item(ui, &icon, parent, true, lit);
+                                        crate::icons::paint(
+                                            ui.painter(),
+                                            egui::Rect::from_center_size(
+                                                egui::pos2(
+                                                    r.rect.right() - 10.0,
+                                                    r.rect.center().y,
+                                                ),
+                                                egui::vec2(12.0, 12.0),
+                                            ),
+                                            "chevr",
+                                            l.pal.ink2,
+                                            1.6,
+                                        );
+                                        r
+                                    })
+                                    .inner;
+                                let row = row.on_hover_text(
+                                    kids.iter()
+                                        .map(|k| k.label.as_str())
+                                        .collect::<Vec<_>>()
+                                        .join("・"),
+                                );
+                                egui::containers::menu::SubMenu::new().show(ui, &row, |ui| {
+                                    for (j, k) in kids.iter().enumerate() {
+                                        if k.sep && j > 0 {
+                                            ui.separator();
+                                        }
+                                        if self.tool_menu_row(ui, k, &rg, &pinned) {
+                                            used = Some(k.id.clone());
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    ui.separator();
+                    if ui.button("前の並びを既定に戻す").clicked() {
+                        ribbon::edit_pins(
+                            space,
+                            SKETCH_TAB,
+                            &rg,
+                            &mut self.win.layout,
+                            PinEdit::Reset,
+                        );
+                    }
+                });
+            }
             ui.painter().vline(
                 rect.right() - 0.5,
                 rect.y_range(),
