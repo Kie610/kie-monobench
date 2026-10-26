@@ -48,6 +48,17 @@ impl Workspace {
         rect: Rect,
         m: egui::Modifiers,
     ) {
+        if ev.click.is_none() && ev.boxed.is_none() {
+            self.pick_events_now(ev, rect, m);
+            return;
+        }
+        // 新しく選んだボディの行をブラウザで見せる(10-25 u3)
+        let before = self.bodies_picked_in_view();
+        self.pick_events_now(ev, rect, m);
+        self.reveal_in_browser(&before);
+    }
+
+    fn pick_events_now(&mut self, ev: &view3d::ViewEvents, rect: Rect, m: egui::Modifiers) {
         // 点の欄が受けている間は、頂点のクリックをその欄に入れる
         if self.active_point_pick().is_some() {
             if let Some(p) = ev.click.filter(|_| ev.double_click.is_none()) {
@@ -106,6 +117,7 @@ impl Workspace {
                         faces: e.faces.clone(),
                     })
                     .collect();
+                let inside = self.inside_active(inside, |e| e.feature);
                 for e in inside {
                     if !self.cur.picked_edges.contains(&e) {
                         self.cur.picked_edges.push(e);
@@ -133,6 +145,7 @@ impl Workspace {
                         vertex: v.name.clone(),
                     })
                     .collect();
+                let inside = self.inside_active(inside, |v| v.feature);
                 for v in inside {
                     if !self.cur.picked_vertices.contains(&v) {
                         self.cur.picked_vertices.push(v);
@@ -152,6 +165,7 @@ impl Workspace {
                 false => {
                     let faces =
                         view3d::picks_in(&self.cur.scene, &self.cur.camera, rect, area, crossing);
+                    let faces = self.inside_active(faces, |p| p.feature);
                     if !m.shift {
                         self.cur.also_picked.clear();
                         self.cur.picked = None;
@@ -165,6 +179,7 @@ impl Workspace {
                 true => {
                     let bodies =
                         view3d::bodies_in(&self.cur.scene, &self.cur.camera, rect, area, crossing);
+                    let bodies = self.inside_active(bodies, |b| *b);
                     for (i, b) in bodies.into_iter().enumerate() {
                         if i == 0 && !m.shift {
                             self.select(b);
@@ -184,6 +199,25 @@ impl Workspace {
                 self.view_menu.candidates = Some((p, list));
             }
         }
+    }
+
+    /// 囲んだ物 `list` から、作業中(アクティブ)の部品の外の物(淡く描いているボディの物)を除く(10-25 u10)。
+    /// 外の物は 1 つずつ押せば選べる。除いた時は知らせる。
+    fn inside_active<T>(&mut self, mut list: Vec<T>, feature: impl Fn(&T) -> FeatureId) -> Vec<T> {
+        let faded = self.cur.scene.faded();
+        if faded.is_empty() {
+            return list;
+        }
+        let n = list.len();
+        list.retain(|x| !faded.contains(&feature(x)));
+        if list.len() < n {
+            log::debug!("囲み: アクティブな部品の外の {} 個を除いた", n - list.len());
+            self.win.message = Some(format!(
+                "アクティブな部品の外の {} 個は囲みでは選びません(押せば選べます)",
+                n - list.len()
+            ));
+        }
+        list
     }
 
     /// 面 `hit` を選ぶ。Shift で足す、Ctrl で足す・外す。何もない所なら選びを外す。

@@ -168,6 +168,9 @@ pub(crate) struct DocState {
     pub(crate) origin_shown: bool,
     /// ブラウザの木の枝の開け閉め(枝の鍵 → 開いているか。押した枝だけ。無ければ枝の既定)
     pub(crate) tree_open: std::collections::BTreeMap<String, bool>,
+    /// 3D のビューで選んだボディを見せるために、ひとりでに開いた枝の鍵(選びを外すと閉じる。
+    /// 見え方の覚えには閉じたまま書く。10-25 u3)
+    pub(crate) tree_auto: std::collections::BTreeSet<String>,
     /// 最後にデータフォルダへ書いた・から読んだ見え方(変わったら書き直す。開き直しても戻す。10-25 u1)
     pub(crate) view_saved: kmb_session::doc_view::DocView,
     /// 3D のビューで実際に隠している機能(行の目・ボディの目・まとまりの目を合わせた物)
@@ -306,6 +309,7 @@ impl DocState {
             hidden_folders: HashSet::new(),
             origin_shown: false,
             tree_open: Default::default(),
+            tree_auto: Default::default(),
             view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,

@@ -827,6 +827,7 @@ impl Workspace {
                 ui.push_id(("doc_tab", self.tab_uid()), |ui| self.dock_ui(ui));
             });
         self.window_edges(ui);
+        self.settle_auto_open();
         self.save_layout_if_changed(&ctx);
         self.save_doc_view_if_changed(&ctx);
     }

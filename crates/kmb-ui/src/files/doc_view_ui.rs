@@ -22,8 +22,13 @@ impl Workspace {
         let c = &self.cur;
         let mut collapsed: Vec<u64> = c.collapsed.iter().copied().collect();
         collapsed.sort();
+        // ひとりでに開いた枝は閉じたまま覚える(開き直しても開かない。覚え直しも要らない)
+        let mut open = c.tree_open.clone();
+        for k in &c.tree_auto {
+            open.insert(k.clone(), false);
+        }
         DocView {
-            open: c.tree_open.clone(),
+            open,
             origin: c.origin_shown,
             hidden_folders: FOLDERS
                 .iter()
@@ -47,6 +52,7 @@ impl Workspace {
             _ => DocView::default(),
         };
         self.cur.tree_open = v.open.clone();
+        self.cur.tree_auto.clear();
         self.cur.origin_shown = v.origin;
         self.cur.hidden_folders = FOLDERS
             .into_iter()
