@@ -7,6 +7,8 @@
 //!
 //! - 区画の無い文書(目を保存する前の文書)は、後の機能が使っているスケッチと作業平面などを隠し、
 //!   ほかを出した状態とみなす([`of`])。読むだけでは文書を変えない。
+//! - 機能を足すか直して、スケッチと作業平面などを初めて使った時に、その変更と同じ変更で隠す
+//!   ([`hide_first_used`]。変更を取り消せば目も戻る)。ほかの時に目を自動で替えない。
 //! - 目を全部開けても区画は外さない(区画の無い文書と分けるため)。
 //! - 選択表示と、機能を直す間の一時の見せは画面の状態で、ここには入れない。
 
@@ -169,24 +171,69 @@ impl Visibility {
 
 /// 止めていない後の機能が入力に使っているスケッチと作業平面など。
 fn used_references(cx: &Context<'_>) -> BTreeSet<FeatureId> {
-    let mut used = BTreeSet::new();
-    for f in cx.data.features.iter().filter(|f| !f.suppressed) {
-        let Some(Ok(feature)) = cx.registry.instantiate(&f.type_id, &f.data) else {
-            continue;
-        };
-        for i in feature.inputs().unwrap_or_default() {
-            if let InputRef::Output { feature, .. } = i
-                && feature != f.id
-                && matches!(
-                    folder_of(cx, feature),
-                    Some(Folder::Sketches | Folder::Datums)
-                )
-            {
-                used.insert(feature);
-            }
-        }
+    cx.data
+        .features
+        .iter()
+        .filter(|f| !f.suppressed)
+        .flat_map(|f| references(cx, f.id))
+        .collect()
+}
+
+/// 機能 `id` が入力に使っているスケッチと作業平面など(自分は除く)。
+pub fn references(cx: &Context<'_>, id: FeatureId) -> Vec<FeatureId> {
+    let Some(f) = cx.data.feature(id) else {
+        return Vec::new();
+    };
+    let Some(Ok(feature)) = cx.registry.instantiate(&f.type_id, &f.data) else {
+        return Vec::new();
+    };
+    feature
+        .inputs()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|i| match i {
+            InputRef::Output { feature, .. } => Some(feature),
+            _ => None,
+        })
+        .filter(|r| {
+            *r != id && matches!(folder_of(cx, *r), Some(Folder::Sketches | Folder::Datums))
+        })
+        .collect()
+}
+
+/// 足すか直した機能 `touched` が初めて使うスケッチと作業平面などを隠した目(使った時に 1 回隠す)。
+/// `before` は変更の前に `touched` が使っていた物([`references`])。隠す物が無ければ `None`。
+/// ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。区画の無い文書は、
+/// 使われている物を [`of`] がいつも隠すので `None`。作業平面などは前の計算の結果で見分けるので、
+/// 同じ変更で足した作業平面は入らない。
+pub fn hide_first_used(
+    cx: &Context<'_>,
+    touched: &[FeatureId],
+    before: &BTreeSet<FeatureId>,
+) -> Option<Visibility> {
+    if !cx.data.sections.contains_key(Visibility::KEY) {
+        return None;
     }
-    used
+    let fresh: BTreeSet<FeatureId> = touched
+        .iter()
+        .flat_map(|id| references(cx, *id))
+        .filter(|r| !before.contains(r))
+        .collect();
+    if fresh.is_empty() {
+        return None;
+    }
+    let used_by_others: BTreeSet<FeatureId> = cx
+        .data
+        .features
+        .iter()
+        .filter(|f| !touched.contains(&f.id))
+        .flat_map(|f| references(cx, f.id))
+        .collect();
+    let mut v = of(cx);
+    let hidden = v.hidden.clone();
+    v.hidden
+        .extend(fresh.into_iter().filter(|r| !used_by_others.contains(r)));
+    (v.hidden != hidden).then_some(v)
 }
 
 #[cfg(test)]

@@ -6,6 +6,8 @@
 //! - ボディはどの機能で替えても最初に作った機能で覚え、そのボディの機能が全部隠れる。
 //! - 保存して開き直しても目は閉じたまま。
 //! - 引数を省くと、1 つでも見えていれば隠し、全部隠れていれば出す。知らない機能は入力の誤り。
+//! - 機能を足すか直して、スケッチと作業平面を初めて使うと同じ変更で隠し、取り消せば目も戻る。目を
+//!   開けた後に別の機能が使っても隠さない。区画の無い文書には区画を書かない。
 
 use kmb_core::{FeatureId, ProblemKind, category};
 use kmb_interchange::visibility::Visibility;
@@ -128,4 +130,118 @@ fn eyes_are_saved_undone_and_never_recompute_shapes() {
         };
         assert_eq!(e.kind, ProblemKind::Input, "{bad}: {}", e.message);
     }
+}
+
+/// 行の目を閉じた機能。
+fn hidden_of(h: &Headless) -> std::collections::BTreeSet<FeatureId> {
+    h.visibility().hidden
+}
+
+#[test]
+fn a_feature_hides_what_it_first_uses_in_the_same_undo_step() {
+    let mut h = Headless::with_document(
+        kmb_bundle::modules(),
+        kmb_samples::reference_document(),
+        None,
+    );
+    let sketch = all_of(&h, category::SKETCH)[0];
+    let data = |h: &Headless, id: FeatureId| h.doc().data().feature(id).unwrap().clone();
+    let s = data(&h, sketch);
+    let e = h
+        .doc()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.data["profile"] == json!(sketch.0))
+        .unwrap()
+        .clone();
+    let extrude = |profile: FeatureId| {
+        let mut d = e.data.clone();
+        d["profile"] = json!(profile.0);
+        d
+    };
+
+    // 区画の無い文書: 区画は書かず、使ったスケッチは区画の無い時の決まりで隠れる
+    let s2 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
+    h.add_feature(&e.type_id, None, extrude(s2)).unwrap();
+    assert!(!h.doc().data().sections.contains_key("cad.visibility"));
+    assert!(h.hidden_features().contains(&s2));
+    h.undo().unwrap();
+    h.undo().unwrap();
+
+    // 使っているスケッチの目を開ける。別の機能が同じスケッチを使っても、もう隠さない
+    set(&mut h, json!({"features": [sketch.0], "show": true})).unwrap();
+    h.add_feature(&e.type_id, None, extrude(sketch)).unwrap();
+    assert!(!hidden_of(&h).contains(&sketch), "目を開けた後に隠した");
+
+    // 初めて使うスケッチは、機能を足す変更と同じ 1 手で隠れる
+    let s3 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
+    assert!(!hidden_of(&h).contains(&s3), "使う前に隠した");
+    let depth = h.doc().undo_depth();
+    h.add_feature(&e.type_id, None, extrude(s3)).unwrap();
+    assert_eq!(h.doc().undo_depth(), depth + 1, "変更が 2 手に分かれた");
+    assert!(hidden_of(&h).contains(&s3));
+    assert_eq!(h.report().error_count(), 0);
+    // 取り消せば機能と一緒に目も戻り、やり直せばまた隠れる
+    h.undo().unwrap();
+    assert!(!hidden_of(&h).contains(&s3));
+    h.redo().unwrap();
+    assert!(hidden_of(&h).contains(&s3));
+
+    // 1 回の変更でスケッチと、それを使う機能を足しても隠れる(操作の結果の変更と同じ道)
+    let added = h
+        .apply_edits(
+            "スケッチと押し出し",
+            vec![
+                kmb_core::Edit::Insert {
+                    type_id: s.type_id.clone(),
+                    name: "s4".into(),
+                    data: s.data.clone(),
+                },
+                kmb_core::Edit::Insert {
+                    type_id: e.type_id.clone(),
+                    name: "e4".into(),
+                    data: {
+                        let mut d = e.data.clone();
+                        d["profile"] = json!({"$new": 0});
+                        d
+                    },
+                },
+            ],
+        )
+        .unwrap();
+    assert!(hidden_of(&h).contains(&added[0]));
+
+    // 足した機能を直して、別のスケッチを初めて使った時も隠れる(画面は足してから輪郭を選ぶ)。
+    // 前に使っていたスケッチは隠したまま(道具は目を出し直さない)
+    let s5 = h.add_feature(&s.type_id, None, s.data.clone()).unwrap();
+    let depth = h.doc().undo_depth();
+    h.apply_edits(
+        "輪郭を替える",
+        vec![kmb_core::Edit::SetData {
+            id: added[1],
+            data: extrude(s5),
+        }],
+    )
+    .unwrap();
+    assert_eq!(h.doc().undo_depth(), depth + 1);
+    assert!(hidden_of(&h).contains(&s5));
+    assert!(hidden_of(&h).contains(&added[0]));
+    h.undo().unwrap();
+    assert!(!hidden_of(&h).contains(&s5));
+
+    // 作業平面も、スケッチを置いて初めて使った時に隠れる
+    let plane = h
+        .add_feature(
+            kmb_cad_datum::DATUM_PLANE,
+            None,
+            json!({"method": "offset", "base": {"kind": "xy"}, "distance": "10 mm"}),
+        )
+        .unwrap();
+    assert!(!hidden_of(&h).contains(&plane));
+    let mut on_plane = s.data.clone();
+    on_plane["plane"] = json!({"kind": "datum", "feature": plane.0});
+    h.add_feature(&s.type_id, None, on_plane).unwrap();
+    assert!(hidden_of(&h).contains(&plane));
+    assert_eq!(h.report().error_count(), 0);
 }

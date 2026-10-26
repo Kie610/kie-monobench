@@ -202,10 +202,8 @@ impl Headless {
         })?;
         Ok(match outcome {
             kmb_core::Outcome::Change { label, edits } => {
-                let added = self
-                    .doc
-                    .apply_edits(&label, edits)
-                    .map_err(|e| e.to_string())?;
+                let added =
+                    self.commit(Self::edited(&edits), |doc| doc.apply_edits(&label, edits))?;
                 self.recompute();
                 Handled::Changed(added)
             }
