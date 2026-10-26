@@ -267,17 +267,13 @@ impl Workspace {
         ui.horizontal(|ui| {
             ui.label("遊び");
             ui.add(egui::Slider::new(&mut s.dead_zone, DEAD_ZONE_RANGE))
-                .on_hover_text(
-                    "これより小さく動かした分は使わない(放しても少しずつ動く時に上げる)",
-                );
+                .on_hover_text("これより小さく動かした分は使わない(放しても少しずつ動く時に上げる)");
         });
         let mut zero = false;
         ui.horizontal(|ui| {
             zero = ui
                 .button("今の位置を 0 にする")
-                .on_hover_text(
-                    "手を放した時の値を 0 として覚える(放しても動き続ける時に、放してから押す)",
-                )
+                .on_hover_text("手を放した時の値を 0 として覚える(放しても動き続ける時に、放してから押す)")
                 .clicked();
             if ui.button("既定に戻す").clicked() {
                 *s = Mouse3dSettings::default();
@@ -317,11 +313,7 @@ mod tests {
         assert!(nav_of([0.04, 0.0, 0.0, 0.0, 0.04, 0.0], &s, DT, H).is_none());
         // いっぱいに倒すと 1 秒で 150 度、遅れたコマでも 0.05 秒分まで
         let full = nav_of([0.0, 0.0, 0.0, 0.0, 0.0, -1.0], &s, DT, H);
-        assert!(
-            (full.spin - TURN_PER_SEC * DT).abs() < 1e-5,
-            "{}",
-            full.spin
-        );
+        assert!((full.spin - TURN_PER_SEC * DT).abs() < 1e-5, "{}", full.spin);
         let late = nav_of([0.0, 0.0, 0.0, 0.0, 0.0, -1.0], &s, 2.0, H);
         assert!((late.spin - TURN_PER_SEC * MAX_DT).abs() < 1e-5);
         // 半分に倒すと緩い出だしで半分より小さい
@@ -356,35 +348,16 @@ mod tests {
         );
         assert!(d.zoom > 0.0 && d.pan == egui::Vec2::ZERO && !d.turns());
         // オービットを切ると回らない。画面移動とズームを切ると回るだけ
-        let r = nav_of(
-            a,
-            &Mouse3dSettings {
-                rotate: false,
-                ..s.clone()
-            },
-            DT,
-            H,
-        );
+        let r = nav_of(a, &Mouse3dSettings { rotate: false, ..s.clone() }, DT, H);
         assert!(!r.turns() && r.zoom > 0.0);
-        let p = nav_of(
-            a,
-            &Mouse3dSettings {
-                pan_zoom: false,
-                ..s.clone()
-            },
-            DT,
-            H,
-        );
+        let p = nav_of(a, &Mouse3dSettings { pan_zoom: false, ..s.clone() }, DT, H);
         assert!(p.turns() && p.zoom == 0.0 && p.pan == egui::Vec2::ZERO);
         // 反転
         let mut inv = s.clone();
         inv.invert[0] = true;
         assert!(nav_of(a, &inv, DT, H).pan.x < 0.0);
         // 0 合わせ: 覚えた値は動いていないと見る
-        let z = Mouse3dSettings {
-            zero: a,
-            ..s.clone()
-        };
+        let z = Mouse3dSettings { zero: a, ..s.clone() };
         assert!(nav_of(a, &z, DT, H).is_none());
         // ズームを上下に引くへ替えると、前後に押すのは上下の画面移動
         let l = Mouse3dSettings {
@@ -400,12 +373,7 @@ mod tests {
     #[test]
     fn buttons_map_to_view_presses_and_old_settings_still_load() {
         assert_eq!(ButtonAction::Fit.press(), Some(NavPress::Fit));
-        for a in [
-            ButtonAction::Iso,
-            ButtonAction::Front,
-            ButtonAction::Top,
-            ButtonAction::Right,
-        ] {
+        for a in [ButtonAction::Iso, ButtonAction::Front, ButtonAction::Top, ButtonAction::Right] {
             assert!(matches!(a.press(), Some(NavPress::View(_))), "{a:?}");
         }
         assert_eq!(ButtonAction::None.press(), None);
@@ -422,35 +390,22 @@ mod tests {
         let m = kmb_ui_mouse3d::Mouse3d::fake();
         // 報告 2 = 回転。ひねりをいっぱいに
         m.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
-        let ws = Workspace::new(
-            kmb_samples::reference_document(),
-            None,
-            kmb_bundle::modules(),
-        )
-        .with_mouse3d(m);
+        let ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
+            .with_mouse3d(m);
         let mut h = egui_kittest::Harness::builder()
             .with_size(egui::vec2(1200.0, 800.0))
             .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
         h.run();
         let yaw0 = h.state().cur.camera.yaw;
-        h.state_mut()
-            .win
-            .mouse3d
-            .as_ref()
-            .unwrap()
-            .feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
+        h.state_mut().win.mouse3d.as_ref().unwrap().feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
         h.run();
         let yaw1 = h.state().cur.camera.yaw;
         assert!((yaw1 - yaw0).abs() > 1e-4, "回った: {yaw0} → {yaw1}");
         // 切ると動かない
         h.state_mut().win.layout.mouse3d.enabled = false;
-        h.state_mut()
-            .win
-            .mouse3d
-            .as_ref()
-            .unwrap()
-            .feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
+        h.state_mut().win.mouse3d.as_ref().unwrap().feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
         h.run();
         assert_eq!(h.state().cur.camera.yaw, yaw1);
     }
 }
+

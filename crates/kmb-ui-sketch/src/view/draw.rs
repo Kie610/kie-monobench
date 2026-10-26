@@ -90,15 +90,7 @@ pub(super) fn draw(
     if t.space.is_none() {
         painter.rect_filled(rect, kmb_ui::theme::corner(0.0), l.pal.canvas);
         if let Some(pl) = plane {
-            flat_bodies(
-                ui,
-                rect,
-                response.id.with("bodies"),
-                &t,
-                pl,
-                scene,
-                l.pal.canvas,
-            );
+            flat_bodies(ui, rect, response.id.with("bodies"), &t, pl, scene, l.pal.canvas);
         }
     }
     if editor.display.grid {

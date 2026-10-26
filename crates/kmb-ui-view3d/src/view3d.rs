@@ -52,9 +52,7 @@ fn take_nav(ctx: &egui::Context, view: egui::Id, hovered: bool) -> Option<Nav> {
             m.insert_temp(last, view);
         }
         let mine = m.get_temp::<egui::Id>(last).is_none_or(|v| v == view);
-        let nav = m
-            .get_temp::<Nav>(nav_id())
-            .filter(|n| mine && !n.is_none())?;
+        let nav = m.get_temp::<Nav>(nav_id()).filter(|n| mine && !n.is_none())?;
         m.remove::<Nav>(nav_id());
         if m.get_temp::<egui::Id>(last).is_none() {
             m.insert_temp(last, view);
@@ -681,7 +679,18 @@ fn paint_scene(
                                 body: colors.shape,
                                 ..*colors
                             };
-                            render_guided(sc, cam, size, ppp, &[], None, &c, shading, guides, &[])
+                            render_guided(
+                                sc,
+                                cam,
+                                size,
+                                ppp,
+                                &[],
+                                None,
+                                &c,
+                                shading,
+                                guides,
+                                &[],
+                            )
                         }
                         None => render_guided(
                             scene,

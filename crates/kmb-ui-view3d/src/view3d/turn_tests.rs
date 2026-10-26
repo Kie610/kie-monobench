@@ -455,11 +455,7 @@ fn the_3d_mouse_turns_like_the_orbit_and_zooms_to_the_pivot() {
         true,
     );
     assert!(close3(f.basis_pub().2, e0), "視線のまわりだけ");
-    assert!(
-        (f.roll - 0.3).abs() < 1e-3 || (f.roll + 0.3).abs() < 1e-3,
-        "{}",
-        f.roll
-    );
+    assert!((f.roll - 0.3).abs() < 1e-3 || (f.roll + 0.3).abs() < 1e-3, "{}", f.roll);
     // ズームは回す中心が動かずに寄る。画面移動は回す中心も動く
     let mut z = Camera::default();
     let (t0, k0) = (z.target, z.zoom);
