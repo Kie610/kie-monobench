@@ -55,8 +55,9 @@ pub fn datum_planes(cx: &Context<'_>) -> Vec<(FeatureId, String, DatumPlane)> {
 }
 
 /// 平面を選ぶ手順の候補にする作業平面(値は機能の番号。四角の内側をクリックしても選べる)。
-pub fn datum_choices(cx: &Context<'_>) -> Vec<HandleChoice> {
-    datum_planes(cx)
+/// `before` があれば、その機能より前の物だけ(後ろの物を指すと計算の順が回る)。
+pub fn datum_choices(cx: &Context<'_>, before: Option<FeatureId>) -> Vec<HandleChoice> {
+    datums::<DatumPlane>(cx, before)
         .into_iter()
         .map(|(id, name, d)| {
             let c = d.corners();

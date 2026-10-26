@@ -326,6 +326,35 @@ pub fn choice_at(h: &Handle, cam: &Camera, rect: Rect, pos: Pos2) -> Option<usiz
     best.map(|b| b.1)
 }
 
+/// 画面の点 `pos` の候補が、そこで当たった面の点 `hit` より手前にあるか(その候補を選ぶ)。
+/// 平らな四角の候補(作業平面)だけを見る。原点の平面のように画面の上で大きさが一定の候補
+/// ([`HandleChoice::sized`])は奥行きを決めないので、面を先にする。
+pub fn choice_in_front(h: &Handle, cam: &Camera, rect: Rect, pos: Pos2, hit: [f32; 3]) -> bool {
+    let Some(c) = choice_at(h, cam, rect, pos).and_then(|k| h.choices.get(k)) else {
+        return false;
+    };
+    let Some(l) = c.outline.first().filter(|l| !c.sized && l.len() >= 3) else {
+        return false;
+    };
+    let (a, b, q) = (f32s(l[0]), f32s(l[1]), f32s(l[2]));
+    let sub = |x: [f32; 3], y: [f32; 3]| [0, 1, 2].map(|i| x[i] - y[i]);
+    let (u, v) = (sub(b, a), sub(q, a));
+    let n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let (o, d) = cam.ray(pos, rect);
+    let dn = dot(d, n);
+    if dn.abs() < 1e-9 {
+        return false;
+    }
+    // 視線の上の距離で比べる(面の点は視線の上にある)
+    let t_choice = dot(sub(a, o), n) / dn;
+    let t_hit = dot(sub(hit, o), d) / dot(d, d);
+    t_choice < t_hit - 1e-3
+}
+
 /// 候補の線(世界座標)。原点の平面や軸([`HandleChoice::sized`])は、画面の上で一定の大きさに伸ばす。
 pub fn outline(c: &HandleChoice, cam: &Camera, rect: Rect) -> Vec<Vec<[f64; 3]>> {
     if !c.sized {
