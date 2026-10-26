@@ -632,3 +632,44 @@ fn an_offset_that_flips_an_arc_is_refused_with_a_reason() {
     assert_eq!(why, Some(crate::offset::ARC_FLIPS));
     assert_eq!(t.entities.len(), s.entities.len(), "断った時は何も足さない");
 }
+
+/// 投影した線・原点と同じ所に描いた自分の線や点は、投影より先に当たる(同じ近さなら投影でない方。
+/// 投影は掴めず、重ねて描いた自分の線を直せない困り事)。
+#[test]
+fn own_lines_and_points_win_over_projections_at_the_same_spot() {
+    let mut s = Sketch::default();
+    let origin = s.add_projection(&origin_ref(&kmb_core::Plane::XY));
+    let edge_line = s.add_projection(&RefItem {
+        source: edge(1, "top", "side"),
+        shape: RefShape::Line([0.0, 0.0], [60.0, 0.0]),
+    });
+    let a = s.add_point(0.0, 0.0);
+    let b = s.add_point(60.0, 0.0);
+    let own = s.add_line(a, b);
+    let sol = solve_all(&s, 10.0);
+    assert!(s.is_projected(origin) && s.is_projected(edge_line));
+    assert_eq!(
+        s.nearest_point(&sol, 0.1, 0.0, 1.0).map(|h| h.entity),
+        Some(a)
+    );
+    assert_eq!(s.hit_test(&sol, 0.0, 0.1, 1.0).map(|h| h.entity), Some(a));
+    assert_eq!(s.hit_test(&sol, 60.0, 0.1, 1.0).map(|h| h.entity), Some(b));
+    assert_eq!(
+        s.hit_test(&sol, 30.0, 0.1, 1.0).map(|h| h.entity),
+        Some(own)
+    );
+    let hits: Vec<EntityId> = s
+        .hits(&sol, 30.0, 0.1, 1.0)
+        .into_iter()
+        .map(|h| h.entity)
+        .collect();
+    assert_eq!(hits, vec![own, edge_line], "重なりの一覧も自分の線が先");
+    // 投影しか無い所では投影に当たる(選べなくはしない)
+    let mut only = Sketch::default();
+    let p = only.add_projection(&origin_ref(&kmb_core::Plane::XY));
+    let sol = solve_all(&only, 10.0);
+    assert_eq!(
+        only.hit_test(&sol, 0.1, 0.0, 1.0).map(|h| h.entity),
+        Some(p)
+    );
+}

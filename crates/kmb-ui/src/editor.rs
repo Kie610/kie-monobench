@@ -292,6 +292,12 @@ pub trait FeatureEditor: Any + Send {
         Vec::new()
     }
 
+    /// 取り消し(Ctrl+Z)を、描いている途中の 1 段を戻して受けたか(真なら文書は戻さない)。
+    /// 中央のビューを持つ編集器(スケッチ)だけに聞く。
+    fn undo_step(&mut self) -> bool {
+        false
+    }
+
     /// 選ぶ機能が変わった時(編集の途中の状態を捨てる)。
     fn reset(&mut self) {}
 

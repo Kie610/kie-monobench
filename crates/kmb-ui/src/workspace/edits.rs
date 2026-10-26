@@ -189,6 +189,9 @@ impl Workspace {
             self.undo_files();
             return;
         }
+        if self.editor_undo_step() {
+            return;
+        }
         if self.cur.work.undo().is_ok() {
             self.supersede_job();
             self.cur.modified = self.differs_from_saved();
@@ -196,6 +199,18 @@ impl Workspace {
             self.recompute();
         }
         self.drop_stale_edit();
+    }
+
+    /// 中央のビューを持つ編集器が、描いている途中の 1 段を戻したか(スプラインの最後の点など)。
+    fn editor_undo_step(&mut self) -> bool {
+        let Some(type_id) = self.view_editor_type() else {
+            return false;
+        };
+        self.cur
+            .editors
+            .iter_mut()
+            .find(|ed| ed.handles(&type_id) && ed.takes_view())
+            .is_some_and(|ed| ed.undo_step())
     }
 
     pub fn redo(&mut self) {

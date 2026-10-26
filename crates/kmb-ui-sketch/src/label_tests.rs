@@ -416,3 +416,31 @@ fn an_angle_from_one_point_measures_the_sector_whatever_the_line_directions() {
         );
     }
 }
+
+/// 寸法の札を右クリックして、駆動の寸法と参照の寸法を切り替える(編集パネルを開かずに)。
+#[test]
+fn a_dimension_is_switched_between_driving_and_reference_from_its_label() {
+    let mut h = sketch_with_rectangle();
+    let id = rectangle_with_top_length(&mut h);
+    let reference = |h: &Harness<'static, Workspace>| {
+        current_sketch(h.state())
+            .constraints
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .reference
+    };
+    assert!(!reference(&h));
+    let at = label_of(&mut h, id);
+    right_click_px(&mut h, at);
+    h.get_by_label("参照にする").click();
+    h.run();
+    h.run();
+    assert!(reference(&h), "参照の寸法になる");
+    let at = label_of(&mut h, id);
+    right_click_px(&mut h, at);
+    h.get_by_label("駆動にする").click();
+    h.run();
+    h.run();
+    assert!(!reference(&h), "駆動の寸法に戻る");
+}
