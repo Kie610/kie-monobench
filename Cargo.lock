@@ -2297,6 +2297,7 @@ dependencies = [
  "kmb-post-carvera-air",
  "kmb-samples",
  "kmb-scene",
+ "kmb-session",
  "kmb-sketch",
  "kmb-sketch-3d",
  "kmb-sketch-canvas",
@@ -2328,6 +2329,7 @@ dependencies = [
  "kmb-interchange",
  "kmb-look",
  "kmb-workspace-hack",
+ "log",
  "serde",
  "serde_json",
 ]

@@ -98,6 +98,7 @@ cad.text_on_face	kmb-text
 cad.text_on_path	kmb-text
 cad.thread	kmb-cad-hole
 cad.timeline.roll_back	kmb-cad
+cad.visibility	kmb-cad
 cam.adaptive2d@1	kmb-strategy-adaptive2d
 cam.add.adaptive	kmb-cam-commands
 cam.add.chamfer	kmb-cam-commands

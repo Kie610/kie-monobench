@@ -71,6 +71,11 @@ pub mod action {
     /// 部品を値で動かす(位置の機能を足す)。引数 `bodies`(省くと選んでいるボディ)。画面の M キーが、
     /// アクティブでない部品のボディを選んでいる時に使う
     pub const MOVE_COMPONENT: ActionRole = ActionRole("move_component");
+    /// 目の開け閉め(表示/非表示。文書の区画 [`crate::visibility`] を直す変更で、取り消しで戻る)。
+    /// 引数は `features`(機能の番号の並び。ボディはどの機能でもよい。省くと選んでいる機能)・
+    /// `components`(部品の番号の並び)・`folder`(まとまり)・`origin`(原点の目)と `show`
+    /// (見せるか。省くと、対象が 1 つでも見えていれば全部隠し、全部隠れていれば全部出す)
+    pub const SET_VISIBILITY: ActionRole = ActionRole("set_visibility");
 
     /// 全部(名前の重なりの試験に使う)。
     pub const ALL: &[ActionRole] = &[
@@ -95,6 +100,7 @@ pub mod action {
         APPEARANCE,
         NEW_COMPONENT,
         MOVE_COMPONENT,
+        SET_VISIBILITY,
     ];
 }
 

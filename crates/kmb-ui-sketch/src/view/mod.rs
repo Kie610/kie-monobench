@@ -496,9 +496,8 @@ pub(crate) fn sketch_view(
     }
     // 右クリックのメニュー(開いた時に覚えた様子で項目を出す)。図は画面の要素の操作で
     // 名前で探せるようにする(台本の rclick "スケッチの図")
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "スケッチの図")
-    });
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "スケッチの図"));
     let mut ask = None;
     response.right_menu(|ui| {
         if let Some(cx) = &editor.menu {

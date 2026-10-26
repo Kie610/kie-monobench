@@ -68,6 +68,7 @@ default = ["smlib"]
 smlib = ["dep:kmb-kernel-smlib"]
 
 [dev-dependencies]
+kmb-session.workspace = true
 serde_json.workspace = true
 
 [lints]

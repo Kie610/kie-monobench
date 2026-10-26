@@ -2103,10 +2103,7 @@ fn a_horizontal_dimension_on_a_slanted_line_does_not_move_its_points() {
 
 /// 右クリックのメニューの行。同じ名前のボタンがほかにもあれば(帯の「元に戻す」・パネルの
 /// 「キャンセル」など)、メニューを開いた所(マウスの位置)にいちばん近い物。
-pub(crate) fn menu_item<'h, S>(
-    h: &'h Harness<'_, S>,
-    label: &'h str,
-) -> egui_kittest::Node<'h> {
+pub(crate) fn menu_item<'h, S>(h: &'h Harness<'_, S>, label: &'h str) -> egui_kittest::Node<'h> {
     let at = h.ctx.input(|i| i.pointer.latest_pos()).unwrap_or_default();
     h.get_all_by_label(label)
         .min_by(|a, b| {

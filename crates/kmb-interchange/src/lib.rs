@@ -10,6 +10,7 @@
 //! | [`motion::MotionStudies`](区画 `asm.motion`)・[`contact::Contacts`](区画 `asm.contacts`) | 組立(kmb-asm) | 画面・kmb-session |
 //! | [`animation::Storyboard`](区画 `asm.animation`)・ジョイントの今の様子 [`animation::Drive`] | 組立(kmb-asm) | 画面・レンダリングの書き出し・kmb-session |
 //! | [`configuration::Configurations`](区画 `config.table`) | 構成表(kmb-config) | 画面・kmb-session |
+//! | [`visibility::Visibility`](区画 `cad.visibility`) | CAD の共通の操作(kmb-cad) | 画面・kmb-session |
 //! | [`ink`] の印(線・箱・平面・形の色・印) | 3D のビューに重ねる物を出すモジュール | 画面のテーマ |
 //! | [`role`] の役割の印(操作・機能の種類・設定) | 名乗るモジュール | 画面・CLI・MCP・kmb-session |
 //!
@@ -22,6 +23,7 @@ pub mod hole;
 pub mod ink;
 pub mod motion;
 pub mod role;
+pub mod visibility;
 
 pub use datum::{
     DATUM_OUTPUT, DatumAxis, DatumPlane, DatumPoint, datum_axes, datum_axis, datum_axis_choices,

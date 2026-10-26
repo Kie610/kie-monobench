@@ -14,11 +14,13 @@ pub mod regions;
 pub mod stop_at;
 pub mod thin;
 mod timeline;
+mod visibility;
 pub use axis::AxisRef;
 pub use chain::{TANGENT_DEG, smooth_faces, tangent_chain, tangent_chains};
 pub use face_profile::{FaceProfile, face_profile};
 pub use flush::{EXTENSIONS, extend_flush};
 pub use inspect::{InspectCommands, MEASURE};
+pub use visibility::SET_VISIBILITY;
 
 use kmb_core::{Descriptor, Field, category};
 
@@ -788,14 +790,16 @@ pub fn full_turn() -> String {
     "360 deg".into()
 }
 
-/// この crate の名乗り(操作と、ボディに付けた物理材料の区画 `cad.materials`)。組み立て(kmb-bundle)が
-/// 1 回だけ並べる。
+/// この crate の名乗り(操作と、ボディに付けた物理材料の区画 `cad.materials`・目の区画
+/// `cad.visibility`)。組み立て(kmb-bundle)が 1 回だけ並べる。
 pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad", |reg| {
         reg.declare_section::<kmb_look::material::BodyMaterials>();
+        reg.declare_section::<kmb_interchange::visibility::Visibility>();
     })
     .with_extension(InspectCommands)
     .with_extension(timeline::TimelineCommands)
+    .with_extension(visibility::VisibilityCommands)
 }
 
 #[cfg(test)]
