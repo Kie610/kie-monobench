@@ -107,7 +107,7 @@ fn has_fix(sk: &Sketch3d, sel: &[Sel]) -> bool {
 
 impl Sketch3dEditor {
     /// 右クリックのメニューの中身。押した項目を返す。
-    pub(crate) fn menu_ui(
+    pub(crate) fn sketch3d_menu(
         &self,
         ui: &mut egui::Ui,
         sk: &Sketch3d,

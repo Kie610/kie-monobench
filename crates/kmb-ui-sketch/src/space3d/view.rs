@@ -870,7 +870,7 @@ pub(crate) fn view(
         }
     }
     let mut ask = None;
-    resp.right_menu(|ui| ask = ed.menu_ui(ui, &sk, &shown));
+    resp.right_menu(|ui| ask = ed.sketch3d_menu(ui, &sk, &shown));
 
     // キー(ほかの欄に打っている時は使わない)。Tab は egui が欄から欄へ移るのにも使うので、
     // 前のコマの時点で欄に打っていなければ作図面を替え、欄へ移った分は戻す
