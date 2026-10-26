@@ -502,7 +502,7 @@ pub(crate) fn sketch_view(
     let mut ask = None;
     response.right_menu(|ui| {
         if let Some(cx) = &editor.menu {
-            ask = crate::menu::show(ui, cx, base_sketch);
+            ask = crate::menu::sketch_menu(ui, cx, base_sketch);
         }
     });
     if x_toggle && result.is_none() {

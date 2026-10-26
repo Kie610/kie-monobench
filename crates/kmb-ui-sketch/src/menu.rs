@@ -192,7 +192,7 @@ fn item(ui: &mut egui::Ui, icon: &str, text: &str, key: &str, out: &mut Option<A
 
 /// 右クリックのメニューの中身。押した項目を返す。
 /// 区切りは、決める・捨てる/寸法と拘束/形を変える/写す・消す/表示 のように種類ごとに入れる。
-pub(crate) fn show(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<Ask> {
+pub(crate) fn sketch_menu(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<Ask> {
     let mut out = None;
     let sel = &cx.selection;
     let undo = kmb_ui::keys::label("undo");
