@@ -281,6 +281,7 @@ impl Workspace {
                 renderer_note: None,
                 mouse3d: None,
                 view_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
+                view_panes: None,
                 history: Vec::new(),
                 history_at: Vec::new(),
                 history_tone: Vec::new(),
