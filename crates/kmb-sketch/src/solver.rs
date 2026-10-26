@@ -865,7 +865,7 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
 }
 
 /// まとまりの拘束 `id`(オフセット)の関係のうち、ほかの式で既に決まる(余分な)関係の番号。
-/// 関係を順に足し、ヤコビ行列の階数が増えないものを余分とする。
+/// 関係を順に足し、ヤコビ行列の階数が増えないものを余分とする(疎な分解に行を足して見る)。
 pub(crate) fn redundant_parts(
     sketch: &Sketch,
     values: &HashMap<ConstraintId, f64>,
@@ -873,7 +873,7 @@ pub(crate) fn redundant_parts(
 ) -> Result<Vec<usize>, SketchError> {
     let sys = build(sketch, values)?;
     let eqs = &sys.equations;
-    let j = jacobian(eqs, &sys.x0);
+    let j = sparse_jacobian(eqs, &sys.x0);
     let mine: Vec<(usize, usize)> = sys
         .part_rows
         .iter()
@@ -881,20 +881,16 @@ pub(crate) fn redundant_parts(
         .map(|r| (r.0, r.2))
         .collect();
     let own: BTreeSet<usize> = mine.iter().map(|r| r.0).collect();
-    let mut rows: Vec<usize> = (0..eqs.len()).filter(|i| !own.contains(i)).collect();
-    let mut current = rank(&j.select_rows(rows.iter()));
-    let mut out = vec![];
-    for (row, part) in mine {
-        rows.push(row);
-        let r = rank(&j.select_rows(rows.iter()));
-        if r > current {
-            current = r;
-        } else {
-            rows.pop();
-            out.push(part);
-        }
+    let mut space = Factor::empty(&j, sys.x0.len());
+    for i in (0..eqs.len()).filter(|i| !own.contains(i)) {
+        space.add(&j[i]);
     }
-    Ok(out)
+    // 広げない行は分解に入らない(前のやり方で外した行と同じ)
+    Ok(mine
+        .into_iter()
+        .filter(|&(row, _)| !space.add(&j[row]))
+        .map(|(_, part)| part)
+        .collect())
 }
 
 /// 2 つの曲線のいちばん近い所のパラメータ(接する拘束の補助の変数の初めの値)。
@@ -1216,17 +1212,16 @@ pub(crate) fn determined_by(
     }
     let sys = build(&s, &values)?;
     let eqs = &sys.equations;
-    let j = jacobian(eqs, &sys.x0);
-    // 印が `keep` に合う行の張る空間に、候補の行を足すと広がるか(候補ごと・拘束ごとに SVD を
-    // し直さない。RowSpace)
+    let j = sparse_jacobian(eqs, &sys.x0);
+    // 印が `keep` に合う行の張る空間に、候補の行を足すと広がるか(疎な分解に行を足して見る)
     let mine: Vec<usize> = (0..eqs.len()).filter(|&i| eqs[i].0 == Some(id)).collect();
-    let empty = RowSpace::empty_like(&j);
+    let empty = Factor::empty(&j, sys.x0.len());
     let grows = |keep: &dyn Fn(Option<ConstraintId>) -> bool| -> bool {
         let mut span = empty.clone();
         for i in (0..eqs.len()).filter(|&i| eqs[i].0 != Some(id) && keep(eqs[i].0)) {
-            span.add(j.row(i).transpose());
+            span.add(&j[i]);
         }
-        mine.iter().any(|&i| span.add(j.row(i).transpose()))
+        mine.iter().any(|&i| span.add(&j[i]))
     };
     if grows(&|_| true) {
         return Ok(None);
@@ -1268,8 +1263,8 @@ pub(crate) struct Independent {
 /// 候補の拘束(寸法なら今の形で測った値と組)を渡した順に 1 つずつ試し、足すと式の数だけ
 /// 階数が上がる(自由度が減り、余分にならない)物だけを残す(自動拘束)。順は呼ぶ側の
 /// 種類の表で 1 回決め、ここでは並べ直さない(docs/避ける形.md の自動の拘束 (b))。
-/// 形は動かさず、今の位置でのヤコビ行列の行を、それまでに残した行の張る空間から外して
-/// 残りが有るかで見る(候補ごとに SVD をし直さない)。
+/// 形は動かさず、今の位置でのヤコビ行列の行(長さ 1 にした物)を、それまでに残した行の
+/// 疎な分解に足して、外した残りが有るかで見る(候補ごとに SVD をし直さない)。
 pub(crate) fn independent(
     sketch: &Sketch,
     values: &HashMap<ConstraintId, f64>,
@@ -1288,36 +1283,17 @@ pub(crate) fn independent(
         }
     }
     let sys = build(&s, &values)?;
-    let j = jacobian(&sys.equations, &sys.x0);
-    let n = j.ncols();
-    let row = |i: usize| -> Vec<f64> { (0..n).map(|c| j[(i, c)]).collect() };
-    let mut basis: Vec<Vec<f64>> = Vec::new();
-    // `v` を基底の張る空間から外した残り(2 回外して丸めの誤差を抑える)。残りが無ければ `None`
-    let reduce = |basis: &[Vec<f64>], mut v: Vec<f64>| -> Option<Vec<f64>> {
-        let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-        if norm < 1e-12 {
-            return None;
-        }
-        v.iter_mut().for_each(|x| *x /= norm);
-        for _ in 0..2 {
-            for b in basis {
-                let d: f64 = v.iter().zip(b).map(|(x, y)| x * y).sum();
-                v.iter_mut().zip(b).for_each(|(x, y)| *x -= d * y);
-            }
-        }
-        let rest = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-        (rest > INDEPENDENT_TOL).then(|| v.into_iter().map(|x| x / rest).collect())
-    };
+    let j = sparse_jacobian(&sys.equations, &sys.x0);
+    let n = sys.x0.len();
+    let mut space = Factor::empty(&j, n);
     let first = ConstraintId(base);
     let is_candidate = |t: Option<ConstraintId>| t.is_some_and(|t| t.0 >= first.0);
     for (i, (tag, _)) in sys.equations.iter().enumerate() {
-        if !is_candidate(*tag)
-            && let Some(v) = reduce(&basis, row(i))
-        {
-            basis.push(v);
+        if !is_candidate(*tag) {
+            space.add_unit(&j[i], INDEPENDENT_TOL);
         }
     }
-    let dof_before = n - basis.len();
+    let dof_before = n - space.rank();
     let mut kept = Vec::new();
     for (k, id) in ids.iter().enumerate() {
         let rows: Vec<usize> = (0..sys.equations.len())
@@ -1326,23 +1302,16 @@ pub(crate) fn independent(
         if rows.is_empty() {
             continue;
         }
-        let mut trial = basis.clone();
-        let all = rows.iter().all(|&i| match reduce(&trial, row(i)) {
-            Some(v) => {
-                trial.push(v);
-                true
-            }
-            None => false,
-        });
-        if all {
-            basis = trial;
+        let mut trial = space.clone();
+        if rows.iter().all(|&i| trial.add_unit(&j[i], INDEPENDENT_TOL)) {
+            space = trial;
             kept.push(k);
         }
     }
     Ok(Independent {
         kept,
         dof_before,
-        dof_after: n - basis.len(),
+        dof_after: n - space.rank(),
     })
 }
 
@@ -1353,3 +1322,7 @@ const INDEPENDENT_TOL: f64 = 1e-6;
 #[cfg(test)]
 #[path = "solver_speed_tests.rs"]
 mod speed_tests;
+
+#[cfg(test)]
+#[path = "solver_check_tests.rs"]
+mod check_tests;

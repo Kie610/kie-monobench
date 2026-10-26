@@ -44,3 +44,6 @@
 "kmb-ui gpu_edge_ids_pick_the_same_edges_as_the_cpu" = "2026-10-24 Kie 承認(E7 辺を拾う道を 1 本に): 比べる相手の GPU の番号の絵を外した"
 # 2026-10-25 u9: 先頭のカンマの小数(`,5`)を 0.5 と読むのをやめ、誤りにした。全角の数字を受けるのは full_width_digits_and_signs_are_numbers
 "kmb-expr a_leading_decimal_comma_is_a_number" = "2026-10-25 判定「直す」(10-22 u9、ルールに合わない物を直す): 誤りにするので a_leading_decimal_comma_is_an_error へ名前を変えた"
+# 2026-10-26 2-B1 ①-b: 拘束を足す前の確かめも疎な分解(kmb_sketch_solver::sparse::Factor)で調べるようにし、
+# 密な行の空間(RowSpace)を使う所が無くなったので外した
+"kmb-sketch-solver row_space_agrees_with_taking_the_rank_again" = "2026-10-26 2-B1 ①-b: 確かめる相手の RowSpace を外した。同じ確かめ(階数・決まった変数・広がる行)は agrees_with_dense_svd が疎な分解で行う"
