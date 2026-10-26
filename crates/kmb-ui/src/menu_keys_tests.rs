@@ -1,4 +1,5 @@
-//! Esc で窓を閉じる・右クリックのメニューの試験(10-25 u5・u7・u8、片付けの残り#L20)。人の操作で通す。
+//! Esc で窓を閉じる・右クリックのメニュー・スケッチの出入りの試験(10-25 u5・u7・u8・t4・t10、片付けの残り#L20)。
+//! 人の操作で通す。
 
 use crate::select_ui::Hit;
 use crate::*;
@@ -141,4 +142,122 @@ fn right_menu_rows_line_up_and_open_their_lists() {
         h.query_by_label("このボディのパラメータの表を作る")
             .is_none()
     );
+}
+
+/// 3D のビューの `at` を右クリックする(押して離す)。
+fn right_click(h: &mut Harness<'_, Workspace>, at: Pos2) {
+    h.input_mut().events.push(egui::Event::PointerMoved(at));
+    h.run();
+    for pressed in [true, false] {
+        h.input_mut().events.push(egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: Default::default(),
+        });
+        h.step();
+    }
+    h.run();
+}
+
+/// 中央のビューを持つスケッチの編集器の代わり(本物は kmb-ui-sketch。ビューの切り替わりだけを見る)。
+struct SketchView;
+
+impl FeatureEditor for SketchView {
+    fn handles(&self, type_id: &str) -> bool {
+        type_id == kmb_sketch::SKETCH
+    }
+    fn takes_view(&self) -> bool {
+        true
+    }
+    fn fresh(&self) -> Box<dyn FeatureEditor> {
+        Box::new(SketchView)
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+/// 選んでいない平らな面を右クリックしても、メニューの「面にスケッチ」からその面にスケッチを
+/// 始められ、そのままスケッチを直す画面に入る(10-25 t4)。
+#[test]
+fn right_clicking_a_flat_face_starts_a_sketch_on_it() {
+    let part = kmb_samples::reference_part();
+    let ws = Workspace::new(part.doc, None, kmb_bundle::modules()).with_editor(SketchView);
+    let mut h = harness(ws);
+    h.state_mut().wait();
+    h.run();
+    // 真上から見て、板の上の面の手前(穴・ポケット・ボスを避ける)を右クリック
+    let ws = h.state_mut();
+    ws.cur.camera.set_view(-90.0, 89.9);
+    let rect = ws.win.view_rect;
+    ws.cur.camera.fit(&ws.cur.scene, rect);
+    let at = ws.cur.camera.project([30.0, 8.0, 10.0], rect).0;
+    let n = ws.document().data().features.len();
+    assert!(ws.picked().is_none());
+    right_click(&mut h, at);
+    h.get_by_label("面にスケッチ").click();
+    h.run();
+    let ws = h.state();
+    assert_eq!(
+        ws.document().data().features.len(),
+        n + 1,
+        "スケッチが足されない"
+    );
+    let s = ws.selected().expect("足したスケッチを選ぶ");
+    let entry = ws.document().data().feature(s).unwrap();
+    let sk: kmb_sketch::Sketch = serde_json::from_value(entry.data.clone()).unwrap();
+    assert!(
+        matches!(&sk.plane, kmb_sketch::SketchPlane::Face { face, .. } if face.ends_with(":end")),
+        "右クリックした上の面に描く: {:?}",
+        sk.plane
+    );
+    assert!(
+        ws.view_editor_type().is_some(),
+        "そのままスケッチを直す画面に入る"
+    );
+}
+
+/// スケッチを終えると、ツールバーはスケッチを始める前に使っていたタブへ戻る(最初のタブへ
+/// 選び直さない。10-25 t10)。
+#[test]
+fn finishing_a_sketch_keeps_the_toolbar_tab_in_use() {
+    let part = kmb_samples::reference_part();
+    let sketch = part.top_sketch;
+    let ws = Workspace::new(part.doc, None, kmb_bundle::modules()).with_editor(SketchView);
+    let mut h = harness(ws);
+    let tabs: Vec<String> = h
+        .state()
+        .ribbon_tabs()
+        .into_iter()
+        .map(|t| t.name)
+        .collect();
+    let used = tabs.last().unwrap().clone();
+    h.get_by_label(&used).click();
+    h.run();
+    assert_eq!(h.state().win.tab, used);
+    h.state_mut().open_edit(sketch);
+    h.run();
+    // スケッチを直している間は、スケッチのタブだけ
+    assert!(
+        h.state().view_editor_type().is_some(),
+        "スケッチを直す画面に入る"
+    );
+    assert!(
+        h.query_by_label(&used).is_none(),
+        "{used} のタブが残っている"
+    );
+    // ツールバーの「スケッチを終了」(編集パネルの下にも同じボタンがある)
+    h.get_all_by_label(crate::panel_ui::SKETCH_FINISH)
+        .next()
+        .unwrap()
+        .click();
+    h.run();
+    assert!(h.state().view_editor_type().is_none(), "スケッチを終えた");
+    assert_eq!(h.state().win.tab, used, "タブが変わった");
+    h.get_by_label(&used);
+    assert_eq!(h.state().selected(), Some(sketch), "スケッチは選んだまま");
 }
