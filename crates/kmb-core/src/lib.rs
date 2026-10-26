@@ -9,6 +9,7 @@ mod bodies;
 mod descriptor;
 mod document;
 mod extension;
+mod face_names;
 mod feature;
 mod ids;
 pub mod kernel;
@@ -41,6 +42,7 @@ pub use extension::{
     TableMark, TableOption, sibling_path,
 };
 pub use extension::{JobControl, JobProgress};
+pub use face_names::{FaceAliases, SPLIT_BY};
 pub use feature::{
     CONCURRENT, EvalCtx, EvalError, Factory, Feature, InputRef, ModelParam, Names, Outputs,
     Registry, Value, WARNINGS, add_warnings, expr_inputs, warnings_of,

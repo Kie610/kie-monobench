@@ -88,6 +88,10 @@ pub struct RecomputeReport {
     /// ボディの系譜の表(機能が読むボディをどの形に解いたか)。文書から決まるので、比べる時は見ない
     #[serde(skip)]
     pub bodies: std::sync::Arc<crate::BodyTable>,
+    /// そろえた面の名前と前の決まりの名前の表([`crate::FaceAliases`])。前の文書の参照を書き換えるのに
+    /// 使う。形から決まるので、比べる時は見ない
+    #[serde(skip)]
+    pub face_aliases: std::sync::Arc<crate::FaceAliases>,
 }
 
 impl PartialEq for RecomputeReport {
@@ -175,8 +179,8 @@ impl RecomputeReport {
 /// [`recompute_detached`] に渡した後で [`crate::Document::put_cache`] で戻す。
 #[derive(Default)]
 pub struct Cache {
-    /// (入力のハッシュ、出力、計算にかかった時間 ms)
-    entries: HashMap<FeatureId, Vec<(u64, Outputs, f64)>>,
+    /// (入力のハッシュ、出力、計算にかかった時間 ms、そろえた面の名前と前の決まりの名前)
+    entries: HashMap<FeatureId, Vec<(u64, Outputs, f64, Aliases)>>,
     /// 結果のほかに、カーネルに残させる形状(画面がまだ出している前の形。M27)
     held: HashSet<ShapeHandle>,
 }
@@ -187,18 +191,18 @@ impl Cache {
 
     /// 入力のハッシュが `key` の結果。見つかったものは一番新しいものとして並べ直す。
     /// 計算にかかった時間(ms)も返す。
-    fn get(&mut self, id: FeatureId, key: u64) -> Option<(&Outputs, f64)> {
+    fn get(&mut self, id: FeatureId, key: u64) -> Option<(&Outputs, f64, &Aliases)> {
         let list = self.entries.get_mut(&id)?;
-        let i = list.iter().position(|(k, _, _)| *k == key)?;
+        let i = list.iter().position(|(k, ..)| *k == key)?;
         let hit = list.remove(i);
         list.insert(0, hit);
-        Some((&list[0].1, list[0].2))
+        Some((&list[0].1, list[0].2, &list[0].3))
     }
 
-    fn insert(&mut self, id: FeatureId, key: u64, out: Outputs, ms: f64) {
+    fn insert(&mut self, id: FeatureId, key: u64, out: Outputs, ms: f64, aliases: Aliases) {
         let list = self.entries.entry(id).or_default();
-        list.retain(|(k, _, _)| *k != key);
-        list.insert(0, (key, out, ms));
+        list.retain(|(k, ..)| *k != key);
+        list.insert(0, (key, out, ms, aliases));
         list.truncate(Self::KEEP);
     }
 
@@ -207,7 +211,7 @@ impl Cache {
         self.entries
             .values()
             .flatten()
-            .flat_map(|(_, out, _)| out.values())
+            .flat_map(|(_, out, ..)| out.values())
             .filter_map(|v| match v {
                 Value::Shape(h) => Some(*h),
                 _ => None,
@@ -362,6 +366,7 @@ pub(crate) fn run(
     let mut times: HashMap<FeatureId, f64> = HashMap::new();
     let active = data.active_len();
     let bodies = crate::BodyTable::build(data, registry);
+    let mut aliases = crate::FaceAliases::default();
 
     // 別のスレッドで計算を待つ機能(互いに依存しない、形を作らない種類)。依存する機能か、
     // 形を作る機能が来たら、先に計算し終える(結果は機能の順に並べるので、順に計算した時と同じ)
@@ -421,6 +426,7 @@ pub(crate) fn run(
                 &mut outputs,
                 &mut features,
                 &mut times,
+                &mut aliases,
             );
         }
         if let Some(inputs) = concurrent {
@@ -442,9 +448,10 @@ pub(crate) fn run(
             let key = hasher.finish();
             let status = match checked {
                 Err(st) => Some(st),
-                Ok(()) => cache.get(entry.id, key).map(|(out, ms)| {
+                Ok(()) => cache.get(entry.id, key).map(|(out, ms, pairs)| {
                     reused += 1;
                     times.insert(entry.id, ms);
+                    aliases.extend(pairs);
                     FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -509,9 +516,10 @@ pub(crate) fn run(
                     }
                 }
                 let key = hasher.finish();
-                if let Some((out, ms)) = cache.get(entry.id, key) {
+                if let Some((out, ms, pairs)) = cache.get(entry.id, key) {
                     reused += 1;
                     times.insert(entry.id, ms);
+                    aliases.extend(pairs);
                     return FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -532,8 +540,10 @@ pub(crate) fn run(
                 let ms = t.elapsed().as_secs_f64() * 1e3;
                 times.insert(entry.id, ms);
                 match result {
-                    Ok(out) => {
-                        cache.insert(entry.id, key, out.clone(), ms);
+                    Ok(mut out) => {
+                        let pairs = shorten_names(kernel, entry.id, &mut out, &aliases);
+                        aliases.extend(&pairs);
+                        cache.insert(entry.id, key, out.clone(), ms, pairs);
                         FeatureStatus::Ok {
                             outputs: out,
                             reused: false,
@@ -563,6 +573,7 @@ pub(crate) fn run(
         &mut outputs,
         &mut features,
         &mut times,
+        &mut aliases,
     );
     cache.entries.retain(|id, _| position.contains_key(id));
     pin_warnings(data, &bodies, &mut features);
@@ -576,6 +587,7 @@ pub(crate) fn run(
         stamp: next_stamp(),
         times,
         bodies: std::sync::Arc::new(bodies),
+        face_aliases: std::sync::Arc::new(aliases),
     };
     log::info!(
         "再計算: 機能 {} 個、評価 {}、再利用 {}、誤り {}、{:.1} ms",
@@ -641,6 +653,72 @@ struct Job {
     key: u64,
 }
 
+/// そろえた面の名前と、前の決まり(そろえない)での名前の組。
+type Aliases = Vec<(String, String)>;
+
+/// 機能 `id` の結果の形の面の名前をそろえる([`crate::face_names`]。2 回以上割った面を
+/// `元~f{id}#k` に)。そろえた名前と前の決まりの名前の組を返す。`aliases` はそれより前の機能の組。
+fn shorten_names(
+    kernel: &dyn Kernel,
+    id: FeatureId,
+    out: &mut Outputs,
+    aliases: &crate::FaceAliases,
+) -> Aliases {
+    let tag = format!("f{}", id.0);
+    let mut done: HashMap<ShapeHandle, ShapeHandle> = HashMap::new();
+    let mut pairs = Vec::new();
+    for v in out.values_mut() {
+        let Value::Shape(h) = v else {
+            continue;
+        };
+        if let Some(n) = done.get(h) {
+            *h = *n;
+            continue;
+        }
+        let Ok(names) = kernel.face_names(*h) else {
+            continue;
+        };
+        let list: Vec<(String, String)> = crate::face_names::shorten(&names, &tag)
+            .into_iter()
+            .map(|(i, new)| (names[i].clone(), new))
+            .collect();
+        if list.is_empty() {
+            done.insert(*h, *h);
+            continue;
+        }
+        // 付け替えは名前で面を探すので、新しい名前が今ある名前と重なる時は仮の名前を挟む
+        let renamed = if list.iter().any(|(_, to)| names.contains(to)) {
+            let tmp: Vec<(String, String)> = list
+                .iter()
+                .enumerate()
+                .map(|(i, (from, _))| (from.clone(), format!("{tag}\u{0}{i}")))
+                .collect();
+            let back: Vec<(String, String)> = tmp
+                .iter()
+                .zip(&list)
+                .map(|((_, t), (_, to))| (t.clone(), to.clone()))
+                .collect();
+            kernel
+                .rename_faces(*h, &tmp)
+                .and_then(|m| kernel.rename_faces(m, &back))
+        } else {
+            kernel.rename_faces(*h, &list)
+        };
+        match renamed {
+            Ok(n) => {
+                pairs.extend(
+                    list.iter()
+                        .map(|(old, new)| (new.clone(), aliases.legacy(old))),
+                );
+                done.insert(*h, n);
+                *h = n;
+            }
+            Err(e) => log::warn!("機能 {tag} の面の名前をそろえられなかった: {e}"),
+        }
+    }
+    pairs
+}
+
 /// 機能の結果を記録する(ログ、後ろの機能が読む出力、結果の並び)。
 fn finish(
     entry: &crate::FeatureEntry,
@@ -693,6 +771,7 @@ fn run_jobs(
     outputs: &mut HashMap<FeatureId, Outputs>,
     features: &mut [FeatureResult],
     times: &mut HashMap<FeatureId, f64>,
+    aliases: &mut crate::FaceAliases,
 ) {
     if pending.is_empty() {
         return;
@@ -748,8 +827,10 @@ fn run_jobs(
         let entry = &data.features[job.index];
         times.insert(job.id, ms);
         let status = match result {
-            Ok(out) => {
-                cache.insert(job.id, job.key, out.clone(), ms);
+            Ok(mut out) => {
+                let pairs = shorten_names(kernel, job.id, &mut out, aliases);
+                aliases.extend(&pairs);
+                cache.insert(job.id, job.key, out.clone(), ms, pairs);
                 FeatureStatus::Ok {
                     outputs: out,
                     reused: false,
