@@ -14,6 +14,45 @@ pub(crate) enum Tone {
     Error,
 }
 
+/// 今の言語の文言(窓の状態を持たない、部品を描く関数のため。作るのは [`WinState::words`])。
+#[derive(Clone)]
+pub(crate) struct Words {
+    texts: Arc<kmb_i18n::Catalog>,
+    lang: kmb_i18n::Lang,
+}
+
+impl Words {
+    fn key() -> egui::Id {
+        egui::Id::new("kmb_words")
+    }
+
+    /// egui の記憶に置く(毎フレーム、見た目と一緒に)。
+    pub(crate) fn share(self, ctx: &egui::Context) {
+        ctx.data_mut(|d| d.insert_temp(Words::key(), self));
+    }
+
+    /// egui の記憶に置いた文言。まだ無ければ日本語(試験で画面の部品だけを描く時)。
+    pub(crate) fn of(ctx: &egui::Context) -> Words {
+        ctx.data_mut(|d| {
+            d.get_temp_mut_or_insert_with(Words::key(), || Words {
+                texts: Arc::new(kmb_i18n::Catalog::with_os(kmb_i18n::Lang::Ja)),
+                lang: kmb_i18n::Lang::Ja,
+            })
+            .clone()
+        })
+    }
+
+    /// 文言 `id` の文。
+    pub(crate) fn t(&self, id: &str) -> String {
+        self.texts.text(self.lang, id)
+    }
+
+    /// 差し込み口のある文言。
+    pub(crate) fn t_with(&self, id: &str, args: &[(&str, kmb_i18n::Arg)]) -> String {
+        self.texts.text_with(self.lang, id, args)
+    }
+}
+
 /// 窓全体・PC 全体の画面の状態。
 pub(crate) struct WinState {
     pub(crate) registry: Arc<Registry>,
@@ -60,7 +99,7 @@ pub(crate) struct WinState {
     /// 選べるテーマ(同梱と、データフォルダの `themes/` から読んだもの。U38)
     pub(crate) themes: themes::Themes,
     /// 画面の文言の訳(全言語。「自動」は起動の時の OS の言語。試験では日本語にそろえる)
-    pub(crate) texts: kmb_i18n::Catalog,
+    pub(crate) texts: Arc<kmb_i18n::Catalog>,
     /// 入れてある字の書体の設定(変わったら入れ直す。`None` はまだ見ていない)
     pub(crate) font_applied: Option<Option<String>>,
     /// 知らせの一覧を開いて見た時の数(鐘の数は、これより後ろの知らせ)
@@ -148,6 +187,14 @@ impl WinState {
             Space::Animation => "toolbar-space-animation",
             Space::Simulation => "toolbar-space-simulation",
         })
+    }
+
+    /// 今の言語の文言の手(部品を描く関数に渡す。egui の記憶にも毎フレーム置く [`Words::share`])。
+    pub(crate) fn words(&self) -> Words {
+        Words {
+            texts: self.texts.clone(),
+            lang: self.lang(),
+        }
     }
 
     /// 差し込み口のある文言。

@@ -542,8 +542,10 @@ impl Workspace {
     /// ボディの操作だけを出し、ボディを最後に変えた機能(`last`)の操作は出さない。
     pub(crate) fn body_menu(&mut self, ui: &mut egui::Ui, root: FeatureId, last: FeatureId) {
         let mut done = false;
-        if crate::theme::menu_row(ui, "rename", "名前変更", "", true)
-            .on_hover_text("ブラウザに出るボディの名前を変える(取り消せる。行のダブルクリックでも)")
+        let words = self.win.words();
+        let t = |id: &str| words.t(id);
+        if crate::theme::menu_row(ui, "rename", &t("browser-body-rename"), "", true)
+            .on_hover_text(t("browser-body-rename-tip"))
             .clicked()
         {
             self.start_rename_body(root);
@@ -557,11 +559,15 @@ impl Workspace {
         if crate::theme::menu_row(
             ui,
             if hidden { "eye" } else { "eyeoff" },
-            if hidden { "表示" } else { "非表示" },
+            &t(if hidden {
+                "browser-body-show"
+            } else {
+                "browser-body-hide"
+            }),
             &crate::keys::label("toggle_visible"),
             true,
         )
-        .on_hover_text("3D のビューで出す・隠す(隠したボディは書き出さない)")
+        .on_hover_text(t("browser-body-visible-tip"))
         .clicked()
         {
             self.set_body_hidden(root, !hidden);
@@ -569,42 +575,38 @@ impl Workspace {
         }
         let roots = self.bodies_to_isolate(root);
         if self.isolated_bodies() == roots.as_slice() {
-            if crate::theme::menu_row(ui, "isolate", "選択表示の解除", "", true)
-                .on_hover_text("ほかのボディも前と同じように出す")
+            if crate::theme::menu_row(ui, "isolate", &t("browser-body-unisolate"), "", true)
+                .on_hover_text(t("browser-body-unisolate-tip"))
                 .clicked()
             {
                 self.end_isolation();
                 done = true;
             }
-        } else if crate::theme::menu_row(ui, "isolate", "選択表示", "", true)
-            .on_hover_text(
-                "このボディ(と一緒に選んでいるボディ)だけを出す。3D のビューの上の札の「選択表示の解除」で戻す",
-            )
+        } else if crate::theme::menu_row(ui, "isolate", &t("browser-body-isolate"), "", true)
+            .on_hover_text(t("browser-body-isolate-tip"))
             .clicked()
         {
             self.isolate_bodies(roots);
             done = true;
         }
         if self.any_body_hidden()
-            && crate::theme::menu_row(ui, "eye", "すべてのボディを表示", "", true)
-                .on_hover_text("選択表示をやめ、隠したボディを全部出す")
+            && crate::theme::menu_row(ui, "eye", &t("browser-body-show-all"), "", true)
+                .on_hover_text(t("browser-body-show-all-tip"))
                 .clicked()
         {
             self.show_all_bodies();
             done = true;
         }
         ui.separator();
-        if crate::theme::menu_row(ui, "param", "このボディのパラメータの表を作る", "", true)
-            .on_hover_text(
-                "このボディに関わるパラメータ・寸法・機能の値だけを出す表を、パラメータの窓に作る(取り消せる)",
-            )
+        if crate::theme::menu_row(ui, "param", &t("browser-body-param-view"), "", true)
+            .on_hover_text(t("browser-body-param-view-tip"))
             .clicked()
         {
             self.make_body_param_view(root);
             done = true;
         }
-        if crate::theme::menu_row(ui, "search", "タイムライン内を検索", "", true)
-            .on_hover_text("このボディを最後に変えた機能を、タイムラインで光らせる")
+        if crate::theme::menu_row(ui, "search", &t("browser-body-find-in-timeline"), "", true)
+            .on_hover_text(t("browser-body-find-in-timeline-tip"))
             .clicked()
         {
             self.find_in_timeline(last);
@@ -716,23 +718,25 @@ impl Workspace {
         let n = self.cur.work.doc().data().features.len();
         let i = self.index_of(id).unwrap_or(0);
         let mut done = false;
+        let words = self.win.words();
+        let t = |id: &str| words.t(id);
         // 注意・エラーのある機能は、まず確かめる・文を写す
         let health = crate::timeline_ui::Health::of(self.cur.work.report().feature(id));
         if health.is_problem() {
-            let what = if health.is_red() {
-                "エラー"
+            let review = t(if health.is_red() {
+                "timeline-menu-review-error"
             } else {
-                "注意"
-            };
-            if crate::theme::menu_row(ui, "warn", &format!("{what}を確かめる"), "", true)
-                .on_hover_text("ビューの右下に、知らせの全文と直し方の手がかりを出す")
+                "timeline-menu-review-warning"
+            });
+            if crate::theme::menu_row(ui, "warn", &review, "", true)
+                .on_hover_text(t("timeline-menu-review-tip"))
                 .clicked()
             {
                 self.open_review(id);
                 done = true;
             }
-            if crate::theme::menu_row(ui, "copy", "文を写す", "", true)
-                .on_hover_text("機能の名前と知らせの文をクリップボードへ(質問や報告に貼る)")
+            if crate::theme::menu_row(ui, "copy", &t("timeline-menu-copy"), "", true)
+                .on_hover_text(t("timeline-menu-copy-tip"))
                 .clicked()
             {
                 ui.ctx().copy_text(self.review_text(id));
@@ -741,8 +745,8 @@ impl Workspace {
             if let crate::timeline_ui::Health::Blocked {
                 feature: Some(up), ..
             } = &health
-                && crate::theme::menu_row(ui, "select", "原因のフィーチャを選ぶ", "", true)
-                    .on_hover_text("止めている前の機能を選ぶ")
+                && crate::theme::menu_row(ui, "select", &t("timeline-menu-select-cause"), "", true)
+                    .on_hover_text(t("timeline-menu-select-cause-tip"))
                     .clicked()
             {
                 self.select(*up);
@@ -751,9 +755,15 @@ impl Workspace {
             ui.separator();
         }
         // 直すのは、ここかダブルクリックで開いた時だけ(選んだだけでは直さない)
-        if crate::theme::menu_row(ui, "edit", "フィーチャを編集", "", !self.is_editing(id))
-            .on_hover_text("編集パネルでこの機能を直す(ダブルクリックでも開く)")
-            .clicked()
+        if crate::theme::menu_row(
+            ui,
+            "edit",
+            &t("timeline-menu-edit"),
+            "",
+            !self.is_editing(id),
+        )
+        .on_hover_text(t("timeline-menu-edit-tip"))
+        .clicked()
         {
             self.open_edit(id);
             done = true;
@@ -765,11 +775,13 @@ impl Workspace {
             && crate::theme::menu_row(
                 ui,
                 "copy",
-                &format!("{} 個をまとめて編集", sel.len()),
+                &self
+                    .win
+                    .t_with("timeline-menu-edit-many", &[("count", sel.len().into())]),
                 "",
                 !self.cur.multi_edit && self.can_multi_edit(&sel),
             )
-            .on_hover_text("共通の欄を、選んだ全部に入れて直す(同じ種類の機能を選ぶと直せる)")
+            .on_hover_text(t("timeline-menu-edit-many-tip"))
             .clicked()
         {
             self.cur.multi_edit = true;
@@ -788,21 +800,22 @@ impl Workspace {
                 })
                 .collect();
         for sk in &sketches {
+            let named = |id: &str| words.t_with(id, &[("name", sk.name.as_str().into())]);
             let label = if sketches.len() == 1 {
-                "スケッチを編集".to_string()
+                t("timeline-menu-edit-sketch")
             } else {
-                format!("元のスケッチ「{}」を直す", sk.name)
+                named("timeline-menu-edit-sketch-of")
             };
             if crate::theme::menu_row(ui, "sketch", &label, "", true)
-                .on_hover_text(format!("この機能が使うスケッチ「{}」を開いて直す", sk.name))
+                .on_hover_text(named("timeline-menu-edit-sketch-tip"))
                 .clicked()
             {
                 self.open_edit(sk.id);
                 done = true;
             }
         }
-        if crate::theme::menu_row(ui, "rename", "名前変更", "", true)
-            .on_hover_text("タイムラインとブラウザに出る名前を変える(取り消せる)")
+        if crate::theme::menu_row(ui, "rename", &t("timeline-menu-rename"), "", true)
+            .on_hover_text(t("timeline-menu-rename-tip"))
             .clicked()
         {
             self.start_rename_feature(id);
@@ -837,7 +850,8 @@ impl Workspace {
                     continue;
                 }
                 shown_groups.push(&a.menu);
-                if let Some(Some(hit)) = crate::theme::menu_sub(ui, &a.icon, &a.menu, |ui| {
+                let sub = self.win.t_or(crate::ribbon::group_id(&a.menu), &a.menu);
+                if let Some(Some(hit)) = crate::theme::menu_sub(ui, &a.icon, &sub, |ui| {
                     let mut hit = None;
                     for b in &same {
                         let keys = self.key_of(&crate::CommandId::Action(b.id.clone()));
@@ -870,35 +884,38 @@ impl Workspace {
         if !actions.is_empty() {
             ui.separator();
         }
-        let label = if f.suppressed {
-            "抑制を解除"
+        let label = t(if f.suppressed {
+            "timeline-menu-unsuppress"
         } else {
-            "抑制"
-        };
-        if crate::theme::menu_row(ui, "suppress", label, "", true).clicked() {
+            "timeline-menu-suppress"
+        });
+        if crate::theme::menu_row(ui, "suppress", &label, "", true).clicked() {
             self.set_suppressed(id, !f.suppressed);
             done = true;
         }
-        if crate::theme::menu_row(ui, "back", "ここまで戻す", "", true)
-            .on_hover_text("この機能より後ろを一時的に無効にする(後ろの機能は消えない)")
+        if crate::theme::menu_row(ui, "back", &t("timeline-menu-roll-back"), "", true)
+            .on_hover_text(t("timeline-menu-roll-back-tip"))
             .clicked()
         {
             self.roll_back_after(Some(id));
             done = true;
         }
         if self.cur.work.doc().data().rollback.is_some()
-            && crate::theme::menu_row(ui, "last", "最後まで進める", "", true).clicked()
+            && crate::theme::menu_row(ui, "last", &t("timeline-menu-roll-forward"), "", true)
+                .clicked()
         {
             self.roll_back_after(None);
             done = true;
         }
         // 並べ方(順とグループ)
         ui.separator();
-        if crate::theme::menu_row(ui, "up", "上へ", "", i > 0).clicked() {
+        if crate::theme::menu_row(ui, "up", &t("timeline-menu-move-up"), "", i > 0).clicked() {
             self.move_feature(id, -1);
             done = true;
         }
-        if crate::theme::menu_row(ui, "down", "下へ", "", i + 1 < n).clicked() {
+        if crate::theme::menu_row(ui, "down", &t("timeline-menu-move-down"), "", i + 1 < n)
+            .clicked()
+        {
             self.move_feature(id, 1);
             done = true;
         }
@@ -907,7 +924,9 @@ impl Workspace {
         if crate::theme::menu_row(
             ui,
             "folder",
-            &format!("グループにする({} 個)", ids.len()),
+            &self
+                .win
+                .t_with("timeline-menu-group", &[("count", ids.len().into())]),
             &crate::keys::label("group"),
             true,
         )
@@ -927,7 +946,10 @@ impl Workspace {
                 && crate::theme::menu_row(
                     ui,
                     "ungroup",
-                    &format!("「{}」から出す", g.name),
+                    &self.win.t_with(
+                        "timeline-menu-take-out",
+                        &[("name", g.name.as_str().into())],
+                    ),
                     "",
                     true,
                 )
@@ -940,8 +962,8 @@ impl Workspace {
             }
         }
         ui.separator();
-        if crate::theme::menu_row(ui, "trash", "削除", "Delete", true)
-            .on_hover_text("取り消し(Ctrl+Z)で戻せる")
+        if crate::theme::menu_row(ui, "trash", &t("timeline-menu-delete"), "Delete", true)
+            .on_hover_text(t("timeline-menu-delete-tip"))
             .clicked()
         {
             self.ask_remove_features(&[id]);

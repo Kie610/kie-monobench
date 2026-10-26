@@ -791,7 +791,7 @@ fn a_failed_feature_can_be_reviewed_and_its_message_copied() {
     assert_eq!(ws.problems().first().map(|(id, _)| *id), Some(op));
     // 窓の文は内部の面の名前を出さない
     assert!(
-        !ws.health(op).message().contains(":end"),
+        !ws.health(op).message(&ws.win.words()).contains(":end"),
         "{:?}",
         ws.health(op)
     );

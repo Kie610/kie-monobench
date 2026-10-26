@@ -206,14 +206,15 @@ fn each_feature_carries_its_compute_time_and_the_chip_tip_shows_it() {
     let before = ws.report().clone();
     ws.recompute();
     assert_eq!(*ws.report(), before, "時間は比べる時に見ない");
+    let w = &crate::window_state::Words::of(&egui::Context::default());
     let tip =
-        crate::timeline_ui::chip_tip("板", &crate::timeline_ui::Health::Ok, Some(12.34), true);
+        crate::timeline_ui::chip_tip(w, "板", &crate::timeline_ui::Health::Ok, Some(12.34), true);
     assert_eq!(
         tip,
         "板\n計算 12 ms(前の結果を使い回し)\nダブルクリックで編集・ドラッグで並べ替え・右クリックでほかの操作"
     );
-    assert_eq!(crate::timeline_ui::time_text(0.42), "0.4 ms");
-    assert_eq!(crate::timeline_ui::time_text(2345.0), "2.3 秒");
+    assert_eq!(crate::timeline_ui::time_text(w, 0.42), "0.4 ms");
+    assert_eq!(crate::timeline_ui::time_text(w, 2345.0), "2.3 秒");
 }
 
 /// 「正面から見る」は面のほか、選んだスケッチの平面とブラウザで選んだ原点の平面にも効き、

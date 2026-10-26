@@ -4,6 +4,7 @@
 
 use crate::theme::RightMenu as _;
 use crate::timeline_ui::Health;
+use crate::window_state::Words;
 use crate::{Found, Space, Workspace, icons, theme};
 use egui::{Color32, Rect, Sense, Stroke, Vec2};
 use kmb_core::{FeatureEntry, FeatureId, FeatureStatus, category};
@@ -22,15 +23,16 @@ pub enum Kind {
 }
 
 impl Kind {
-    fn label(self) -> &'static str {
+    /// 札の名前の文言の ID。
+    fn text_id(self) -> &'static str {
         match self {
-            Kind::All => "すべて",
-            Kind::Sketch => "スケッチ",
-            Kind::Body => "ボディ",
-            Kind::Params => "パラメータ",
-            Kind::Operation => "操作",
-            Kind::Tools => "工具",
-            Kind::Other => "そのほか",
+            Kind::All => "browser-kind-all",
+            Kind::Sketch => "browser-kind-sketch",
+            Kind::Body => "browser-kind-body",
+            Kind::Params => "browser-kind-params",
+            Kind::Operation => "browser-kind-operation",
+            Kind::Tools => "browser-kind-tools",
+            Kind::Other => "browser-kind-other",
         }
     }
 
@@ -103,6 +105,8 @@ fn row(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool) {
 /// [`row`] と同じだが、丸いボタンを押したかも返す。
 fn row_radio(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool, bool) {
     let l = theme::look(ui.ctx());
+    let words = Words::of(ui.ctx());
+    let named = |id: &str| words.t_with(id, &[("name", r.name.into())]);
     let w = ui.available_width();
     // 字とアイコンの倍率で行を広げる(1 倍なら 24)
     let b = theme::band();
@@ -116,18 +120,18 @@ fn row_radio(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool, bool
             egui::pos2(rect.right() - 16.0 * b, rect.center().y),
             Vec2::new(22.0, 20.0) * b,
         );
-        let name = if shown {
-            format!("{} を隠す", r.name)
+        let name = named(if shown {
+            "browser-eye-hide"
         } else {
-            format!("{} を出す", r.name)
-        };
+            "browser-eye-show"
+        });
         let resp = ui
             .interact(er, resp.id.with("eye"), Sense::click())
-            .on_hover_text(if shown {
-                "3D のビューで隠す(計算と加工には使う)"
+            .on_hover_text(words.t(if shown {
+                "browser-eye-hide-tip"
             } else {
-                "3D のビューに出す"
-            });
+                "browser-eye-show-tip"
+            }));
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
         (er, shown, resp)
     });
@@ -139,18 +143,18 @@ fn row_radio(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool, bool
             None => rect.right() - 16.0 * b,
         };
         let rr = Rect::from_center_size(egui::pos2(cx, rect.center().y), Vec2::splat(20.0 * b));
-        let label = if on {
-            format!("{} はアクティブ", r.name)
+        let label = named(if on {
+            "browser-active"
         } else {
-            format!("{} をアクティブにする", r.name)
-        };
+            "browser-activate"
+        });
         let rresp = ui
             .interact(rr, resp.id.with("radio"), Sense::click())
-            .on_hover_text(if on {
-                "アクティブ: 新しく作るボディと部品はこの中に入る"
+            .on_hover_text(words.t(if on {
+                "browser-active-tip"
             } else {
-                "アクティブにする: 新しく作るボディと部品をこの中に入れ、ほかの部品を淡く出す"
-            });
+                "browser-activate-tip"
+            }));
         rresp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
         (rr, on, rresp)
     });
@@ -387,7 +391,7 @@ impl Workspace {
         ui.painter().text(
             egui::pos2(head.left() + 10.0, head.center().y),
             egui::Align2::LEFT_CENTER,
-            "ブラウザ",
+            self.win.t("browser-title"),
             theme::prop(11.0),
             l.pal.ink2,
         );
@@ -397,10 +401,9 @@ impl Workspace {
         );
         let xr = ui
             .interact(x, ui.id().with("browser_close"), Sense::click())
-            .on_hover_text("ブラウザを隠す(左の端の「ブラウザ」で戻す)");
-        xr.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "ブラウザを隠す")
-        });
+            .on_hover_text(self.win.t("browser-hide-tip"));
+        let hide = self.win.t("browser-hide");
+        xr.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &hide));
         if xr.hovered() {
             ui.painter().rect_filled(x, 3.0, l.pal.chrome2);
         }
@@ -415,7 +418,7 @@ impl Workspace {
                 ui.spacing_mut().item_spacing = Vec2::new(4.0, 5.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.browser.query)
-                        .hint_text("名前で探す")
+                        .hint_text(self.win.t("browser-search"))
                         .desired_width(f32::INFINITY)
                         .margin(egui::Margin::symmetric(8, 4)),
                 );
@@ -425,7 +428,9 @@ impl Workspace {
                         self.browser.kind = Kind::All;
                     }
                     for k in kinds {
-                        if theme::chip_toggle(ui, self.browser.kind == *k, k.label()).clicked() {
+                        if theme::chip_toggle(ui, self.browser.kind == *k, &self.win.t(k.text_id()))
+                            .clicked()
+                        {
                             self.browser.kind = *k;
                         }
                     }
@@ -580,7 +585,11 @@ impl Workspace {
             _ => r,
         };
         let r = if health.is_problem() {
-            r.on_hover_text(crate::timeline_ui::health_tip(&f.name, &health))
+            r.on_hover_text(crate::timeline_ui::health_tip(
+                &self.win.words(),
+                &f.name,
+                &health,
+            ))
         } else if detail.is_empty() {
             r
         } else {
@@ -653,7 +662,7 @@ impl Workspace {
             .and_then(|p| p.file_stem())
             .map(|n| n.to_string_lossy().to_string())
             .or_else(|| self.cur.doc_label.clone())
-            .unwrap_or_else(|| "(無題)".to_string());
+            .unwrap_or_else(|| self.win.t("browser-untitled"));
         let items = self.browser_items();
         let filtering = !self.browser.query.trim().is_empty() || self.browser.kind != Kind::All;
         self.browser.marked = self.marked_bodies();
@@ -680,9 +689,15 @@ impl Workspace {
         r.right_menu(|ui| {
             if has_parts
                 && !root_active
-                && crate::theme::menu_row(ui, "component", "アクティブにする", "", true)
-                    .on_hover_text("文書の直下をアクティブに戻す(新しく作るボディは部品に入らない)")
-                    .clicked()
+                && crate::theme::menu_row(
+                    ui,
+                    "component",
+                    &self.win.t("browser-root-activate"),
+                    "",
+                    true,
+                )
+                .on_hover_text(self.win.t("browser-root-activate-tip"))
+                .clicked()
             {
                 self.activate_component(None);
                 ui.close();
@@ -690,7 +705,9 @@ impl Workspace {
             ui.separator();
             self.branch_menu(ui, None);
             ui.separator();
-            if crate::theme::menu_row(ui, "table", "設計の属性…", "", true).clicked() {
+            if crate::theme::menu_row(ui, "table", &self.win.t("browser-properties"), "", true)
+                .clicked()
+            {
                 self.open_properties();
                 ui.close();
             }
@@ -707,7 +724,7 @@ impl Workspace {
                 "origin",
                 1,
                 "origin",
-                "原点",
+                &self.win.t("browser-origin"),
                 "",
                 false,
                 None,
@@ -727,13 +744,14 @@ impl Workspace {
                 "named_views",
                 1,
                 "folder",
-                "名前の付いたビュー",
+                &self.win.t("browser-named-views"),
                 &n,
                 false,
                 None,
             );
             r.right_menu(|ui| {
-                if crate::theme::menu_row(ui, "camera", "今のビューを保存", "", true).clicked()
+                if crate::theme::menu_row(ui, "camera", &self.win.t("browser-save-view"), "", true)
+                    .clicked()
                 {
                     if let Some(id) = self.save_named_view("") {
                         // すぐ名前を打てるようにする
@@ -763,7 +781,7 @@ impl Workspace {
                     "motion_studies",
                     1,
                     "folder",
-                    "モーション スタディ",
+                    &self.win.t("browser-motion-studies"),
                     &n.to_string(),
                     false,
                     None,
@@ -781,7 +799,7 @@ impl Workspace {
                     "contact_sets",
                     1,
                     "folder",
-                    "接触セット",
+                    &self.win.t("browser-contact-sets"),
                     &contacts.sets.len().to_string(),
                     false,
                     None,
@@ -811,7 +829,7 @@ impl Workspace {
                     depth: 1,
                     open: None,
                     icon: "param",
-                    name: "パラメータ",
+                    name: &self.win.t("browser-params"),
                     meta: &n,
                     dot: None,
                     health: None,
@@ -822,16 +840,15 @@ impl Workspace {
                     radio: None,
                 },
             );
-            if r.on_hover_text("Ctrl+P。右の編集パネルに一覧を出す")
-                .clicked()
-            {
+            if r.on_hover_text(self.win.t("browser-params-tip")).clicked() {
                 self.win.show_params = !self.win.show_params;
             }
         }
-        for (title, kind) in [
-            ("スケッチ", Kind::Sketch),
-            ("ボディ", Kind::Body),
-            ("そのほかの機能", Kind::Other),
+        // 鍵(開け閉めの覚え)は日本語の名前のまま、出す名前だけ訳す
+        for (key, title, kind) in [
+            ("スケッチ", "browser-folder-sketch", Kind::Sketch),
+            ("ボディ", "browser-folder-body", Kind::Body),
+            ("そのほかの機能", "browser-folder-other", Kind::Other),
         ] {
             let list: Vec<FeatureEntry> = items
                 .iter()
@@ -857,10 +874,10 @@ impl Workspace {
             let (open, folder, eye_clicked) = folder_row(
                 ui,
                 &mut self.cur.tree_open,
-                title,
+                key,
                 1,
                 "folder",
-                title,
+                &self.win.t(title),
                 &n,
                 kind != Kind::Other || filtering,
                 worst,
@@ -920,9 +937,10 @@ impl Workspace {
                 .inner_margin(egui::Margin::symmetric(10, 0))
                 .show(ui, |ui| {
                     ui.label(
-                        egui::RichText::new(format!(
-                            "加工の操作 {ops} 個は作業空間「加工」で出します"
-                        ))
+                        egui::RichText::new(
+                            self.win
+                                .t_with("browser-cam-elsewhere", &[("count", ops.into())]),
+                        )
                         .size(theme::fs(11.0))
                         .color(self.win.look.pal.ink3),
                     );
@@ -932,15 +950,15 @@ impl Workspace {
 
     /// 右クリックの「下を全部開く」「下を全部閉じる」(10-25 u4)。`at` は部品(`None` なら文書の行で、木の全体)。
     pub(crate) fn branch_menu(&mut self, ui: &mut egui::Ui, at: Option<u64>) {
-        if crate::theme::menu_row(ui, "chev", "下を全部開く", "", true)
-            .on_hover_text("この行と、下の枝をすべて開く")
+        if crate::theme::menu_row(ui, "chev", &self.win.t("browser-expand-all"), "", true)
+            .on_hover_text(self.win.t("browser-expand-all-tip"))
             .clicked()
         {
             self.set_branches_under(at, true);
             ui.close();
         }
-        if crate::theme::menu_row(ui, "chevr", "下を全部閉じる", "", true)
-            .on_hover_text("下の枝をすべて閉じる(この行は開いたまま、すぐ下の行だけが並ぶ)")
+        if crate::theme::menu_row(ui, "chevr", &self.win.t("browser-collapse-all"), "", true)
+            .on_hover_text(self.win.t("browser-collapse-all-tip"))
             .clicked()
         {
             self.set_branches_under(at, false);
@@ -996,9 +1014,16 @@ impl Workspace {
     /// 平面の行は押すと選び(正面から見るの向き)、もう一度押すと外す。
     fn origin_rows(&mut self, ui: &mut egui::Ui) {
         let shown = self.is_origin_shown();
-        for (i, p) in ["XY 平面", "YZ 平面", "ZX 平面", "X 軸", "Y 軸", "Z 軸"]
-            .into_iter()
-            .enumerate()
+        for (i, p) in [
+            "browser-plane-xy",
+            "browser-plane-yz",
+            "browser-plane-zx",
+            "browser-axis-x",
+            "browser-axis-y",
+            "browser-axis-z",
+        ]
+        .into_iter()
+        .enumerate()
         {
             let plane = i < ORIGIN_PLANES.len();
             let (resp, _, _) = row(
@@ -1007,7 +1032,7 @@ impl Workspace {
                     depth: 2,
                     open: None,
                     icon: if plane { "rect" } else { "line" },
-                    name: p,
+                    name: &self.win.t(p),
                     meta: "",
                     dot: None,
                     health: None,
@@ -1043,7 +1068,7 @@ impl Workspace {
             "studies",
             0,
             "folder",
-            "研究",
+            &self.win.t("browser-studies"),
             "",
             true,
             None,
@@ -1056,11 +1081,9 @@ impl Workspace {
                 .inner_margin(egui::Margin::symmetric(30, 4))
                 .show(ui, |ui| {
                     ui.label(
-                        egui::RichText::new(
-                            "まだありません。上の「静的応力」「熱」「固有振動」「軽い形の参考」「翼の揚力」「2D の流れ」「3D の流れ」から足す",
-                        )
-                        .size(theme::fs(11.0))
-                        .color(self.win.look.pal.ink3),
+                        egui::RichText::new(self.win.t("browser-studies-empty"))
+                            .size(theme::fs(11.0))
+                            .color(self.win.look.pal.ink3),
                     );
                 });
         }
@@ -1091,7 +1114,7 @@ impl Workspace {
                     depth: 0,
                     open: None,
                     icon: "box",
-                    name: "機械",
+                    name: &self.win.t("browser-machine"),
                     meta: &machine,
                     dot: None,
                     health: None,
@@ -1102,12 +1125,20 @@ impl Workspace {
                     radio: None,
                 },
             );
-            let r = r.on_hover_text("機械の値は設定の「機械」で直す");
+            let r = r.on_hover_text(self.win.t("browser-machine-tip"));
             if r.clicked() {
                 self.toggle_machine_settings();
             }
             r.right_menu(|ui| {
-                if crate::theme::menu_row(ui, "machine", "機械の設定", "", true).clicked() {
+                if crate::theme::menu_row(
+                    ui,
+                    "machine",
+                    &self.win.t("browser-machine-settings"),
+                    "",
+                    true,
+                )
+                .clicked()
+                {
                     self.open_machine_settings();
                     ui.close();
                 }
@@ -1126,7 +1157,7 @@ impl Workspace {
                 "setups",
                 0,
                 "folder",
-                "セットアップ",
+                &self.win.t("browser-setups"),
                 "",
                 true,
                 None,
@@ -1140,11 +1171,15 @@ impl Workspace {
                     .filter(|a| a.menu == "セットアップ" && a.is_at(kmb_core::Place::Toolbar))
                     .collect();
                 if acts.is_empty() {
-                    ui.weak("使える操作はありません");
+                    ui.weak(self.win.t("browser-setups-none"));
                 }
+                // まとまりと同じ名前の操作(セットアップを足す)は「新しいセットアップ」と出す
+                let group = self
+                    .win
+                    .t_or(crate::ribbon::group_id("セットアップ"), "セットアップ");
                 for a in acts {
-                    let label = if a.label == "セットアップ" {
-                        "新しいセットアップ".to_string()
+                    let label = if a.label == group {
+                        self.win.t("browser-new-setup")
                     } else {
                         a.label.clone()
                     };
@@ -1165,7 +1200,7 @@ impl Workspace {
                         .inner_margin(egui::Margin::symmetric(30, 4))
                         .show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new("まだありません。上の「セットアップ」から足す")
+                                egui::RichText::new(self.win.t("browser-setups-empty"))
                                     .size(theme::fs(11.0))
                                     .color(self.win.look.pal.ink3),
                             );
@@ -1201,8 +1236,10 @@ impl Workspace {
                                     depth: 2,
                                     open: None,
                                     icon: "lock",
-                                    name: "固定具",
-                                    meta: &format!("クランプ {n}"),
+                                    name: &self.win.t("browser-fixture"),
+                                    meta: &self
+                                        .win
+                                        .t_with("browser-clamps", &[("count", n.into())]),
                                     dot: None,
                                     health: None,
                                     selected: false,
@@ -1235,7 +1272,7 @@ impl Workspace {
                         "orphans",
                         1,
                         "folder",
-                        "セットアップのない操作",
+                        &self.win.t("browser-orphans"),
                         "",
                         true,
                     );
@@ -1262,7 +1299,7 @@ impl Workspace {
                 "tools",
                 0,
                 "tools",
-                "この文書の工具",
+                &self.win.t("browser-tools"),
                 &n,
                 true,
             );
@@ -1411,7 +1448,7 @@ pub(crate) fn folder_row_radio(
         },
     );
     let r = match worst.filter(|_| !open) {
-        Some(h) => r.on_hover_text(format!("中に{}があります(開くと見える)", h.title())),
+        Some(h) => r.on_hover_text(h.inside(&Words::of(ui.ctx()), "browser")),
         None => r,
     };
     if !eye_clicked && !radio_clicked && (tw || r.double_clicked() || r.clicked()) {
@@ -1469,7 +1506,10 @@ impl Workspace {
                     radio: None,
                 },
             );
-            let r = r.on_hover_text(format!("ぶつかり合うボディ: {}", names[i]));
+            let r = r.on_hover_text(self.win.t_with(
+                "browser-contact-bodies",
+                &[("names", names[i].as_str().into())],
+            ));
             if eye {
                 let mut c = contacts.clone();
                 c.sets[i].enabled = !s.enabled;
@@ -1485,7 +1525,15 @@ impl Workspace {
                 self.set_contacts(&label, c);
             }
             r.right_menu(|ui| {
-                if crate::theme::menu_row(ui, "trash", "削除", "", true).clicked() {
+                if crate::theme::menu_row(
+                    ui,
+                    "trash",
+                    &self.win.t("browser-contact-delete"),
+                    "",
+                    true,
+                )
+                .clicked()
+                {
                     let mut c = contacts.clone();
                     c.sets.remove(i);
                     self.set_contacts(&format!("接触セット「{}」を消す", s.name), c);

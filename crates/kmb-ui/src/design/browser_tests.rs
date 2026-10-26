@@ -283,3 +283,73 @@ fn the_folder_eyes_reach_the_feature_editors() {
     ws.set_folder_hidden(browser_ui::Kind::Sketch, false);
     assert!(!ws.with_editors(|_, host| host.body_hidden(plate) || host.hidden.contains(&sketch)));
 }
+
+/// 表示の言語を English にすると、ブラウザ・タイムライン・機能の右クリックが英語になり、開け閉めの
+/// 覚え(まとまりの鍵)は言語を替えても変わらない。日本語に戻すと元の字。
+#[test]
+fn the_browser_and_timeline_follow_the_display_language() {
+    let doc = kmb_samples::reference_document();
+    let design = doc.data().features.len();
+    let mut ws = Workspace::new(doc, None, reg());
+    ws.win.layout.appearance.language = "en".into();
+    let mut h = harness(ws);
+    h.state_mut().clear_selection();
+    h.run();
+    h.get_by_label("Hide Browser");
+    h.get_by_label("Rollback Marker");
+    h.get_by_label("All");
+    h.get_by_label("Hide Bodies");
+    h.get_by_label("Show Origin");
+    h.get_by_label(&format!("{design} features"));
+    // 機能の右クリック
+    let first = h.state().document().data().features[0].name.clone();
+    h.get_all_by_label(&first).next().unwrap().click_secondary();
+    h.run();
+    h.get_by_label("Edit Feature");
+    h.get_by_label("Roll Back to Here");
+    h.get_by_label("Rename");
+    assert!(h.query_by_label("フィーチャを編集").is_none());
+    h.key_press(egui::Key::Escape);
+    h.run();
+    // 日本語に戻す
+    h.state_mut().win.layout.appearance.language = "ja".into();
+    h.run();
+    h.get_by_label("ブラウザを隠す");
+    h.get_by_label("ボディ を隠す");
+    h.get_by_label("今の位置の印");
+}
+
+/// 見本の文書の機能の右クリックに出るモジュールの操作は、みな文言の ID を持つ(英語で出せる)。
+#[test]
+fn every_feature_menu_command_has_texts() {
+    let mut missing = vec![];
+    for doc in [
+        kmb_samples::reference_document(),
+        kmb_samples::reference_cam_document(),
+    ] {
+        let ids: Vec<_> = doc.data().features.iter().map(|f| f.id).collect();
+        let ws = Workspace::new(doc, None, reg());
+        for id in ids {
+            for a in ws.win.extensions.actions(&ws.context_with(Some(id), None)) {
+                // 相手ごとに並べる操作(`…:1`。工具の名前を名前に含む)は ID を持たない
+                if !a.is_at(kmb_core::Place::FeatureMenu)
+                    || a.label.is_empty()
+                    || a.id.contains(':')
+                {
+                    continue;
+                }
+                let tid = kmb_i18n::action_id(&a.id);
+                if !ws.win.texts.has(kmb_i18n::Lang::En, &tid) {
+                    missing.push(format!("{tid} = {}\n{tid}-tip = {}", a.label, a.hint));
+                }
+            }
+        }
+    }
+    missing.sort();
+    missing.dedup();
+    assert!(
+        missing.is_empty(),
+        "crates/kmb-i18n/locales の ja と en の action.ftl に足す:\n{}",
+        missing.join("\n")
+    );
+}
