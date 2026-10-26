@@ -352,6 +352,8 @@ pub struct Layout {
     pub middle_drag: MiddleDrag,
     /// 回し方: 真ならフリーオービット(上下の軸に縛らない)、偽なら拘束オービット(Z が上。既定)
     pub free_orbit: bool,
+    /// 3D マウスの速さ・割り当て(設定の「マウス」)
+    pub mouse3d: crate::mouse3d::Mouse3dSettings,
     pub brightness: Brightness,
     /// 3D のビューの表示の形
     pub shading: Shading,
@@ -440,6 +442,7 @@ impl Default for Layout {
             tab_order: BTreeMap::new(),
             middle_drag: MiddleDrag::Pan,
             free_orbit: false,
+            mouse3d: Default::default(),
             brightness: Brightness::System,
             shading: Shading::ShadedEdges,
             effects: Effects::default(),
@@ -530,6 +533,7 @@ impl Layout {
             space: self.space,
             middle_drag: self.middle_drag,
             free_orbit: self.free_orbit,
+            mouse3d: self.mouse3d.clone(),
             brightness: self.brightness,
             shading: self.shading,
             effects: self.effects.clone(),
