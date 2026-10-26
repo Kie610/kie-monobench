@@ -1,0 +1,23 @@
+# スケッチの右クリックのアイコンと区切り(10-19 M17 の 2 本目)。前はアイコンが無く、キーは名前の
+# 後ろの括弧に書いていた。行は左にアイコン、右にキーを出し、種類ごとに区切る。
+#! sample part
+#! size 1280x800
+
+dclick "板の輪郭"
+wait
+# 図の真ん中(穴の中心の点)を右クリック: 点を選んでから、選んだ時のメニューを出す
+rclick "スケッチの図"
+shot 点を選んだ時
+expect "固定する" exists
+expect "選択を外す" exists
+expect "選択を外す(Esc)" missing
+key Escape
+key Escape
+
+# 道具の中: 決める・捨てる・補助線で描く
+click "線分"
+rclick "スケッチの図"
+shot 道具の中
+expect "補助線で描く" exists
+expect "キャンセル(Esc)" missing
+key Escape

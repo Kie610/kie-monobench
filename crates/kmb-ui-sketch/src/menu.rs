@@ -182,40 +182,40 @@ fn has_coincident(sketch: &Sketch, sel: &[EntityId]) -> bool {
     })
 }
 
-fn item(ui: &mut egui::Ui, text: &str, key: &str, out: &mut Option<Ask>, ask: Ask) {
-    let label = if key.is_empty() {
-        text.to_string()
-    } else {
-        format!("{text}({key})")
-    };
-    if ui.button(label).clicked() {
+/// メニューの 1 行(左にアイコン、右にキー)。キーは名前に書かない(画面の要素の名前は名前だけ)。
+fn item(ui: &mut egui::Ui, icon: &str, text: &str, key: &str, out: &mut Option<Ask>, ask: Ask) {
+    if kmb_ui::theme::menu_row(ui, icon, text, key, true).clicked() {
         *out = Some(ask);
         ui.close();
     }
 }
 
 /// 右クリックのメニューの中身。押した項目を返す。
+/// 区切りは、決める・捨てる/寸法と拘束/形を変える/写す・消す/表示 のように種類ごとに入れる。
 pub(crate) fn show(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<Ask> {
     let mut out = None;
     let sel = &cx.selection;
+    let undo = kmb_ui::keys::label("undo");
+    let redo = kmb_ui::keys::label("redo");
     if cx.tool != Tool::Select {
         // 道具の中
         ui.weak(crate::tool_label(cx.tool));
-        item(ui, "OK", "Enter", &mut out, Ask::Ok);
-        item(ui, "キャンセル", "Esc", &mut out, Ask::Cancel);
+        item(ui, "check", "OK", "Enter", &mut out, Ask::Ok);
+        item(ui, "x", "キャンセル", "Esc", &mut out, Ask::Cancel);
         if crate::view::draws(cx.tool) {
             let text = if cx.drawing_construction {
                 "補助線で描くのをやめる"
             } else {
                 "補助線で描く"
             };
-            item(ui, text, "X", &mut out, Ask::DrawConstruction);
+            let key = kmb_ui::keys::label("sketch_construction");
+            item(ui, "dashline", text, &key, &mut out, Ask::DrawConstruction);
         }
         // 寸法の道具: 置く前に寸法の種類を選び直す
         if !cx.dim_options.is_empty() {
             ui.separator();
             for (label, c) in &cx.dim_options {
-                item(ui, label, "", &mut out, Ask::DimChoice(*c));
+                item(ui, "dim", label, "", &mut out, Ask::DimChoice(*c));
             }
         }
         if let Some((mode, round)) = cx.offset_mode {
@@ -240,148 +240,223 @@ pub(crate) fn show(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<A
         }
         if !sel.is_empty() && !cx.busy {
             ui.separator();
-            item(ui, "削除", "Delete", &mut out, Ask::Delete);
-            item(ui, "移動/コピー", "", &mut out, Ask::Move);
+            item(ui, "movecopy", "移動/コピー", "", &mut out, Ask::Move);
+            item(ui, "trash", "削除", "Delete", &mut out, Ask::Delete);
         }
-    } else {
-        match cx.last_tool {
-            Some(t) => item(
-                ui,
-                &format!("繰り返し: {}", crate::tool_label(t)),
-                "",
-                &mut out,
-                Ask::Tool(t),
-            ),
-            None => {
-                ui.label("繰り返す道具はまだありません");
-            }
-        }
-        if let Some(diameter) = cx.round_dim {
-            let label = if diameter {
-                "半径の寸法にする"
-            } else {
-                "直径の寸法にする"
-            };
-            item(ui, label, "", &mut out, Ask::RoundDim);
-        }
-        if let Some(reference) = cx.reference_dim {
-            let label = if reference {
-                "駆動にする"
-            } else {
-                "参照にする"
-            };
-            item(ui, label, "", &mut out, Ask::Driving(reference));
-        }
-        if let Some(name) = cx.picked_constraint {
-            item(
-                ui,
-                &format!("{name}の拘束を外す"),
-                "Delete",
-                &mut out,
-                Ask::Unconstrain,
-            );
-        }
-        if sel.is_empty() {
-            item(ui, "元に戻す", "Ctrl+Z", &mut out, Ask::Undo);
-            item(ui, "やり直し", "Ctrl+Y", &mut out, Ask::Redo);
-            if cx.can_paste {
-                item(ui, "貼り付け", "Ctrl+V", &mut out, Ask::Paste);
-            }
-            ui.separator();
-            item(ui, "すべて表示", "ホイール二度押し", &mut out, Ask::Fit);
-            item(ui, "パラメータを変更", "", &mut out, Ask::Params);
-            item(
-                ui,
-                "DXF として保存…",
-                "",
-                &mut out,
-                Ask::Run(kmb_interchange::role::action::EXPORT_SKETCH_DXF),
-            );
-            item(
-                ui,
-                "押し出し",
-                &kmb_ui::keys::label("extrude"),
-                &mut out,
-                Ask::Extrude,
-            );
-            let recent: Vec<Tool> = if cx.recent.is_empty() {
-                vec![Tool::Line, Tool::Rectangle, Tool::Circle]
-            } else {
-                cx.recent.clone()
-            };
-            ui.separator();
-            ui.weak("最近の道具");
-            for t in recent {
-                let key = crate::view::tool_key(t).unwrap_or_default();
-                item(ui, crate::tool_label(t), &key, &mut out, Ask::Tool(t));
-            }
-        } else {
-            // 選んだ要素
-            item(
-                ui,
-                "スケッチ寸法",
-                &kmb_ui::keys::label("sketch_dimension"),
-                &mut out,
-                Ask::Dimension,
-            );
-            if has_curves(sketch, sel) {
-                item(ui, "標準/補助線", "X", &mut out, Ask::Construction);
-            }
-            if sel
-                .iter()
-                .any(|id| matches!(sketch.entity(*id), Some(Entity::Line { .. })))
-            {
-                item(ui, "標準/中心線", "", &mut out, Ask::Centerline);
-            }
-            if has_fix(sketch, sel) {
-                item(ui, "固定解除", "", &mut out, Ask::Fix(false));
-            } else {
-                item(ui, "固定する", "", &mut out, Ask::Fix(true));
-            }
-            // 円は中心だけも固定できる(大きさは動く)
-            if let [id] = sel.as_slice()
-                && let Some(Entity::Circle { center, .. }) = sketch.entity(*id)
-            {
-                if has_fix(sketch, &[*center]) {
-                    item(ui, "中心の固定を解除", "", &mut out, Ask::FixCenter(false));
-                } else {
-                    item(ui, "中心だけ固定する", "", &mut out, Ask::FixCenter(true));
-                }
-            }
-            if crate::constraints_ui::align(sketch, sel, true).is_some() {
-                item(ui, "水平にする", "", &mut out, Ask::Horizontal);
-                item(ui, "垂直にする", "", &mut out, Ask::Vertical);
-            }
-            // 2 つを選んだら、そのまま付けられる拘束(帯の拘束と同じ。K20)
-            for (name, as_name) in crate::constraint_tool::fitting(sketch, sel) {
-                item(
-                    ui,
-                    &constrain_label(name, as_name),
-                    "",
-                    &mut out,
-                    Ask::Constrain(name),
-                );
-            }
-            if has_coincident(sketch, sel) {
-                item(ui, "一致を解除", "", &mut out, Ask::Uncoincide);
-            }
-            if has_curves(sketch, sel) {
-                item(ui, "オフセット", "O", &mut out, Ask::Offset);
-            }
-            if !offsets_of(sketch, sel).is_empty() {
-                item(ui, "オフセットの連動を外す", "", &mut out, Ask::BreakOffset);
-            }
-            item(ui, "移動/コピー", "", &mut out, Ask::Move);
-            ui.separator();
-            item(ui, "切り取り", "Ctrl+X", &mut out, Ask::Cut);
-            item(ui, "コピー", "Ctrl+C", &mut out, Ask::Copy);
-            if cx.can_paste {
-                item(ui, "貼り付け", "Ctrl+V", &mut out, Ask::Paste);
-            }
-            item(ui, "削除", "Delete", &mut out, Ask::Delete);
-            item(ui, "選択を外す", "Esc", &mut out, Ask::Deselect);
+        return out;
+    }
+    match cx.last_tool {
+        Some(t) => item(
+            ui,
+            "repeat",
+            &format!("繰り返し: {}", crate::tool_label(t)),
+            "",
+            &mut out,
+            Ask::Tool(t),
+        ),
+        None => {
+            ui.weak("繰り返す道具はまだありません");
         }
     }
+    // 図の印で選んだ寸法・拘束
+    if cx.round_dim.is_some() || cx.reference_dim.is_some() || cx.picked_constraint.is_some() {
+        ui.separator();
+    }
+    if let Some(diameter) = cx.round_dim {
+        let label = if diameter {
+            "半径の寸法にする"
+        } else {
+            "直径の寸法にする"
+        };
+        item(ui, "dim", label, "", &mut out, Ask::RoundDim);
+    }
+    if let Some(reference) = cx.reference_dim {
+        let label = if reference {
+            "駆動にする"
+        } else {
+            "参照にする"
+        };
+        item(ui, "dim", label, "", &mut out, Ask::Driving(reference));
+    }
+    if let Some(name) = cx.picked_constraint {
+        item(
+            ui,
+            crate::constraint_icon(name),
+            &format!("{name}の拘束を外す"),
+            "Delete",
+            &mut out,
+            Ask::Unconstrain,
+        );
+    }
+    if sel.is_empty() {
+        ui.separator();
+        item(ui, "undo", "元に戻す", &undo, &mut out, Ask::Undo);
+        item(ui, "redo", "やり直し", &redo, &mut out, Ask::Redo);
+        if cx.can_paste {
+            item(ui, "paste", "貼り付け", "Ctrl+V", &mut out, Ask::Paste);
+        }
+        ui.separator();
+        item(
+            ui,
+            "fit",
+            "すべて表示",
+            "ホイール二度押し",
+            &mut out,
+            Ask::Fit,
+        );
+        item(
+            ui,
+            "param",
+            "パラメータを変更",
+            &kmb_ui::keys::label("params"),
+            &mut out,
+            Ask::Params,
+        );
+        ui.separator();
+        item(
+            ui,
+            "dxfout",
+            "DXF として保存…",
+            "",
+            &mut out,
+            Ask::Run(kmb_interchange::role::action::EXPORT_SKETCH_DXF),
+        );
+        item(
+            ui,
+            "extrude",
+            "押し出し",
+            &kmb_ui::keys::label("extrude"),
+            &mut out,
+            Ask::Extrude,
+        );
+        let recent: Vec<Tool> = if cx.recent.is_empty() {
+            vec![Tool::Line, Tool::Rectangle, Tool::Circle]
+        } else {
+            cx.recent.clone()
+        };
+        ui.separator();
+        ui.weak("最近の道具");
+        for t in recent {
+            let key = crate::view::tool_key(t).unwrap_or_default();
+            item(
+                ui,
+                crate::tool_icon(t),
+                crate::tool_label(t),
+                &key,
+                &mut out,
+                Ask::Tool(t),
+            );
+        }
+        return out;
+    }
+    // 選んだ要素: 寸法・線の種類
+    ui.separator();
+    item(
+        ui,
+        "dim",
+        "スケッチ寸法",
+        &kmb_ui::keys::label("sketch_dimension"),
+        &mut out,
+        Ask::Dimension,
+    );
+    if has_curves(sketch, sel) {
+        let key = kmb_ui::keys::label("sketch_construction");
+        item(
+            ui,
+            "dashline",
+            "標準/補助線",
+            &key,
+            &mut out,
+            Ask::Construction,
+        );
+    }
+    if sel
+        .iter()
+        .any(|id| matches!(sketch.entity(*id), Some(Entity::Line { .. })))
+    {
+        item(ui, "midline", "標準/中心線", "", &mut out, Ask::Centerline);
+    }
+    // 拘束
+    ui.separator();
+    if has_fix(sketch, sel) {
+        item(ui, "fix", "固定解除", "", &mut out, Ask::Fix(false));
+    } else {
+        item(ui, "fix", "固定する", "", &mut out, Ask::Fix(true));
+    }
+    // 円は中心だけも固定できる(大きさは動く)
+    if let [id] = sel.as_slice()
+        && let Some(Entity::Circle { center, .. }) = sketch.entity(*id)
+    {
+        if has_fix(sketch, &[*center]) {
+            item(
+                ui,
+                "fix",
+                "中心の固定を解除",
+                "",
+                &mut out,
+                Ask::FixCenter(false),
+            );
+        } else {
+            item(
+                ui,
+                "fix",
+                "中心だけ固定する",
+                "",
+                &mut out,
+                Ask::FixCenter(true),
+            );
+        }
+    }
+    if crate::constraints_ui::align(sketch, sel, true).is_some() {
+        item(ui, "horiz", "水平にする", "", &mut out, Ask::Horizontal);
+        item(ui, "vert", "垂直にする", "", &mut out, Ask::Vertical);
+    }
+    // 2 つを選んだら、そのまま付けられる拘束(帯の拘束と同じ。K20)
+    for (name, as_name) in crate::constraint_tool::fitting(sketch, sel) {
+        // 一致が線上・円周上になる時は、なる方の絵
+        let icon = match crate::constraint_icon(as_name) {
+            "" => crate::constraint_icon(name),
+            i => i,
+        };
+        item(
+            ui,
+            icon,
+            &constrain_label(name, as_name),
+            "",
+            &mut out,
+            Ask::Constrain(name),
+        );
+    }
+    if has_coincident(sketch, sel) {
+        item(ui, "coinc", "一致を解除", "", &mut out, Ask::Uncoincide);
+    }
+    // 形を写す・動かす
+    ui.separator();
+    if has_curves(sketch, sel) {
+        let key = kmb_ui::keys::label("sketch_offset");
+        item(ui, "skoffset", "オフセット", &key, &mut out, Ask::Offset);
+    }
+    if !offsets_of(sketch, sel).is_empty() {
+        item(
+            ui,
+            "link",
+            "オフセットの連動を外す",
+            "",
+            &mut out,
+            Ask::BreakOffset,
+        );
+    }
+    item(ui, "movecopy", "移動/コピー", "", &mut out, Ask::Move);
+    // 写す・消す
+    ui.separator();
+    item(ui, "cut", "切り取り", "Ctrl+X", &mut out, Ask::Cut);
+    item(ui, "copy", "コピー", "Ctrl+C", &mut out, Ask::Copy);
+    if cx.can_paste {
+        item(ui, "paste", "貼り付け", "Ctrl+V", &mut out, Ask::Paste);
+    }
+    item(ui, "trash", "削除", "Delete", &mut out, Ask::Delete);
+    ui.separator();
+    item(ui, "select", "選択を外す", "Esc", &mut out, Ask::Deselect);
     out
 }
 

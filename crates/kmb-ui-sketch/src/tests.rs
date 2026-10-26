@@ -944,7 +944,7 @@ fn a_drawing_tool_continues_after_a_shape_and_can_be_repeated() {
     click_at(&mut h, [16.83, 16.36]);
     right_click_at(&mut h, [19.44, 18.97]);
     assert_eq!(editor(h.state_mut()).editor.tool, Tool::Rectangle);
-    h.get_by_label("キャンセル(Esc)").click();
+    menu_item(&h, "キャンセル").click();
     h.run();
     assert_eq!(editor(h.state_mut()).editor.tool, Tool::Select);
     assert_eq!(count_of(&current_sketch(h.state()), is_line), 4);
@@ -2099,4 +2099,20 @@ fn a_horizontal_dimension_on_a_slanted_line_does_not_move_its_points() {
             "{a:?} → {b:?}"
         );
     }
+}
+
+/// 右クリックのメニューの行。同じ名前のボタンがほかにもあれば(帯の「元に戻す」・パネルの
+/// 「キャンセル」など)、メニューを開いた所(マウスの位置)にいちばん近い物。
+pub(crate) fn menu_item<'h, S>(
+    h: &'h Harness<'_, S>,
+    label: &'h str,
+) -> egui_kittest::Node<'h> {
+    let at = h.ctx.input(|i| i.pointer.latest_pos()).unwrap_or_default();
+    h.get_all_by_label(label)
+        .min_by(|a, b| {
+            a.rect()
+                .distance_sq_to_pos(at)
+                .total_cmp(&b.rect().distance_sq_to_pos(at))
+        })
+        .unwrap_or_else(|| panic!("右クリックのメニューに「{label}」が無い"))
 }
