@@ -102,6 +102,49 @@ pub struct Controls {
     pub free_orbit: bool,
 }
 
+/// 3D マウスの 1 コマ分の視点の量(画面の基準)。手で持った形を動かす向き: 量の向きへ形が動く。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Nav {
+    /// 画面移動(画素。[`Camera::pan_by`] と同じ向き)
+    pub pan: Vec2,
+    /// ズーム(倍率の自然対数。正で寄る)。寄る所は画面の中心(回す中心)
+    pub zoom: f32,
+    /// 画面の上の軸のまわりの回転(ラジアン。正は右へ引いた時と同じ向き)
+    pub spin: f32,
+    /// 画面の右の軸のまわりの回転(ラジアン。正は下へ引いた時と同じ向き)
+    pub tilt: f32,
+    /// 視線のまわりの回転(ラジアン。フリーオービットだけ)
+    pub roll: f32,
+    /// ボタンで押した視点の操作(押した時の 1 コマだけ)
+    pub press: Option<NavPress>,
+}
+
+/// 3D マウスのボタンに割り当てる視点の操作。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavPress {
+    /// 全体表示
+    Fit,
+    /// [`VIEW_BUTTONS`] の表の向き(上・前・右・等角)
+    View(usize),
+}
+
+impl Nav {
+    /// 動かす量もボタンも無いか。
+    pub fn is_none(&self) -> bool {
+        self.pan == Vec2::ZERO
+            && self.zoom == 0.0
+            && self.spin == 0.0
+            && self.tilt == 0.0
+            && self.roll == 0.0
+            && self.press.is_none()
+    }
+
+    /// 回す量があるか(回す中心の印を出す)。
+    pub fn turns(&self) -> bool {
+        self.spin != 0.0 || self.tilt != 0.0 || self.roll != 0.0
+    }
+}
+
 /// 左ドラッグの働き。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LeftDrag {
@@ -409,6 +452,49 @@ impl Camera {
             self.target[i] += r[i] * d.x - u[i] * d.y;
         }
         self.zoom = new;
+    }
+
+    /// 3D マウスの量 `nav` を当てる。回すのは今の回す中心のまわりで、`free` ならフリーオービット
+    /// (今の向きの基準で 3 軸とも回す)、偽なら拘束オービット(Z を上に保ち、視線のまわりは回さない)。
+    /// ズームは画面の中心(回す中心)へ寄る。ボタンの操作もここで行う。
+    pub fn nav(&mut self, nav: &Nav, rect: Rect, free: bool) {
+        if nav.turns() {
+            self.turn = None;
+            if free {
+                let (r, u, e) = self.basis();
+                let turn = |v: [f32; 3]| {
+                    let v = rotate(v, u, -nav.spin);
+                    let v = rotate(v, r, -nav.tilt);
+                    rotate(v, e, nav.roll)
+                };
+                self.set_basis(turn(r), turn(e));
+            } else {
+                self.level();
+                // 傾けてあれば、画面の基準の量を傾ける前の向きに直す(マウスで回すのと同じ)
+                let (sr, cr) = self.roll.sin_cos();
+                let spin = nav.spin * cr + nav.tilt * sr;
+                let tilt = nav.tilt * cr - nav.spin * sr;
+                self.yaw -= spin;
+                self.pitch = (self.pitch + tilt).clamp(-1.55, 1.55);
+            }
+        }
+        if nav.pan != Vec2::ZERO {
+            self.pan_by(nav.pan);
+        }
+        if nav.zoom != 0.0 {
+            self.turn = None;
+            self.zoom_at(nav.zoom.exp(), rect.center() + self.pan, rect);
+        }
+        match nav.press {
+            Some(NavPress::Fit) => self.refit(),
+            Some(NavPress::View(i)) => {
+                if let Some(b) = VIEW_BUTTONS.get(i) {
+                    self.turn_to(b.yaw, b.pitch);
+                    log::info!("視点(3D マウス): {}", b.label);
+                }
+            }
+            None => {}
+        }
     }
 
     /// 回す中心を `p` にする(`p` が画面の中心に来る)。

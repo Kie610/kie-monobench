@@ -34,11 +34,39 @@ fn orbit(cam: &mut Camera, controls: Controls, d: Vec2) {
     }
 }
 
+/// このコマの 3D マウスの量を渡す(画面の枠が毎コマ 1 回)。受けるのは、ポインタの下の 3D のビュー、
+/// 無ければ最後にポインタが乗った 3D のビュー(初めはこのコマで最初に描いたビュー)の 1 つだけ。
+pub fn set_nav(ctx: &egui::Context, nav: Nav) {
+    ctx.data_mut(|m| m.insert_temp(nav_id(), nav));
+}
+
+fn nav_id() -> egui::Id {
+    egui::Id::new("kmb-view3d-nav")
+}
+
+/// 3D マウスの量を受けるビューを決め、受けるならこのコマの量を取る(2 つ目のビューは受けない)。
+fn take_nav(ctx: &egui::Context, view: egui::Id, hovered: bool) -> Option<Nav> {
+    let last = egui::Id::new("kmb-view3d-nav-view");
+    ctx.data_mut(|m| {
+        if hovered {
+            m.insert_temp(last, view);
+        }
+        let mine = m.get_temp::<egui::Id>(last).is_none_or(|v| v == view);
+        let nav = m.get_temp::<Nav>(nav_id()).filter(|n| mine && !n.is_none())?;
+        m.remove::<Nav>(nav_id());
+        if m.get_temp::<egui::Id>(last).is_none() {
+            m.insert_temp(last, view);
+        }
+        Some(nav)
+    })
+}
+
 /// 3D のビューを描き、視点の操作を受け付ける。選びに関わる出来事は [`ViewEvents`] で返す。
 ///
 /// マウス: 右ドラッグ=回す、ホイール押しドラッグ=動かす(設定で回すと入れ替え、Shift で逆)、
 /// Ctrl+ホイール押しドラッグとホイール=拡大(ホイールはカーソルの位置へ寄る)、Alt+左ドラッグ=回す、
 /// 左ドラッグ=範囲で選ぶ、左の長押し=重なった候補、右クリック=メニュー、ホイールのダブルクリック=回す中心を置く。
+/// 3D マウスの量は [`set_nav`] で受ける。
 #[allow(clippy::too_many_arguments)]
 pub fn view3d(
     ui: &mut egui::Ui,
@@ -112,6 +140,11 @@ pub fn view3d(
     }
     if !resp.dragged() {
         cam.end_drag();
+    }
+    if let Some(nav) = take_nav(ui.ctx(), resp.id, resp.hovered()) {
+        cam.nav(&nav, rect, controls.free_orbit);
+        ev.orbiting |= nav.turns();
+        ui.ctx().request_repaint();
     }
     // 範囲は押した所と今の所で持つ(向きで選び方が替わる)
     let box_id = resp.id.with("box");

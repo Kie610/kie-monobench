@@ -1,0 +1,12 @@
+# 設定の「マウス」に 3D マウスの欄が出て、切ると速さなどの欄が隠れる。
+#! sample part
+
+click "設定"
+click "マウスとキー"
+expect "3D マウスで視点を動かす" exists
+expect "主な軸だけ" exists
+shot マウスの設定
+click "3D マウスで視点を動かす"
+expect "主な軸だけ" missing
+click "3D マウスで視点を動かす"
+expect "主な軸だけ" exists

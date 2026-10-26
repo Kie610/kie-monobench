@@ -26,6 +26,7 @@ pub mod keys;
 pub mod layout;
 mod live_ui;
 mod menus_ui;
+mod mouse3d;
 mod outer_ui;
 mod plain_error;
 pub mod ribbon;
@@ -611,6 +612,7 @@ impl Workspace {
                 .options_mut(|o| o.input_options.max_click_dist = 4.0);
         }
         set_doc_scope(ui.ctx(), self.tab_uid());
+        self.feed_mouse3d(ui.ctx());
         // 編集器が Tab を使っている(描いている途中の寸法の欄): 画面の欄へ入力を移さない
         let ctx = ui.ctx();
         if ctx

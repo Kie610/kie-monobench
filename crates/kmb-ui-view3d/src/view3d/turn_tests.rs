@@ -422,3 +422,80 @@ fn the_grid_stays_under_the_middle_of_the_view_when_zoomed_in_above_the_part() {
         "格子 {lo:?}〜{hi:?} が真ん中 {hit:?} を覆わない"
     );
 }
+
+#[test]
+fn the_3d_mouse_turns_like_the_orbit_and_zooms_to_the_pivot() {
+    let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+    // 拘束オービット: マウスで引くのと同じ向きに回り、視線のまわりは回さず Z が上のまま
+    let mut c = Camera::default();
+    let mut m = Camera::default();
+    m.orbit(Vec2::new(20.0, 10.0));
+    c.nav(
+        &Nav {
+            spin: 0.2,
+            tilt: 0.1,
+            roll: 0.5,
+            ..Nav::default()
+        },
+        rect,
+        false,
+    );
+    assert!((c.yaw - m.yaw).abs() < 1e-5 && (c.pitch - m.pitch).abs() < 1e-5);
+    assert_eq!(c.roll, 0.0);
+    assert!(c.basis_pub().1[2] > 0.0, "上は Z の側");
+    // フリーオービット: 視線のまわりにも回る(傾く)。視線の向きは変わらない
+    let mut f = Camera::default();
+    let e0 = f.basis_pub().2;
+    f.nav(
+        &Nav {
+            roll: 0.3,
+            ..Nav::default()
+        },
+        rect,
+        true,
+    );
+    assert!(close3(f.basis_pub().2, e0), "視線のまわりだけ");
+    assert!((f.roll - 0.3).abs() < 1e-3 || (f.roll + 0.3).abs() < 1e-3, "{}", f.roll);
+    // ズームは回す中心が動かずに寄る。画面移動は回す中心も動く
+    let mut z = Camera::default();
+    let (t0, k0) = (z.target, z.zoom);
+    z.nav(
+        &Nav {
+            zoom: 2f32.ln(),
+            ..Nav::default()
+        },
+        rect,
+        false,
+    );
+    assert!(close3(z.target, t0) && (z.zoom - 2.0 * k0).abs() < 1e-3);
+    z.nav(
+        &Nav {
+            pan: Vec2::new(10.0, 0.0),
+            ..Nav::default()
+        },
+        rect,
+        false,
+    );
+    assert!(!close3(z.target, t0));
+    // ボタン: 全体表示は次に描く時に合わせ直す。視点のボタンは表の向きへ滑らかに回す
+    z.fitted = true;
+    z.nav(
+        &Nav {
+            press: Some(NavPress::Fit),
+            ..Nav::default()
+        },
+        rect,
+        false,
+    );
+    assert!(!z.fitted);
+    z.nav(
+        &Nav {
+            press: Some(NavPress::View(3)),
+            ..Nav::default()
+        },
+        rect,
+        false,
+    );
+    assert!(z.is_view(-60.0, 30.0));
+    assert!(Nav::default().is_none() && !Nav::default().turns());
+}
