@@ -226,7 +226,7 @@ impl Workspace {
                 colors.machine,
                 marked.map(|k| (k, pick)),
             );
-        } else if self.cur.origin_shown && !drawn_empty && !controls.no_guide_planes {
+        } else if self.cur.visibility.origin_shown && !drawn_empty && !controls.no_guide_planes {
             view3d::origin_planes(&ui.painter_at(rect), &self.cur.camera, rect, colors.machine);
         }
         let shape = overlay.shape.as_ref().map(|s| s.label.clone());

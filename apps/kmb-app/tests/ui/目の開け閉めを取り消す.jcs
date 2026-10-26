@@ -1,0 +1,19 @@
+# 目の開け閉めを取り消す(2026-10-26): ブラウザのまとまりの目で隠すと文書の変更になり、Ctrl+Z で
+# 目も戻る。部品の目・原点の目も同じ操作「表示/非表示」を通る。
+#! sample part
+
+click "ボディ を隠す"
+wait
+expect "ボディ を出す"
+shot 隠した
+key ctrl+z
+wait
+expect "ボディ を隠す"
+expect "ボディ を出す" missing
+click "原点 を出す"
+wait
+expect "原点 を隠す"
+key ctrl+z
+wait
+expect "原点 を出す"
+shot 戻した

@@ -636,8 +636,8 @@ fn hidden_bodies_leave_the_view_but_not_the_machining() {
     assert_eq!(ws.visible_bodies(), bodies);
     assert_eq!(path_lines(&ws), lines);
     assert_eq!(ws.report().error_count(), 0);
-    // 文書は変えない
-    assert!(!ws.is_modified());
+    // 目は文書に保存する(変更ありになり、取り消せる)。形は計算し直さない
+    assert!(ws.is_modified());
     // 出すと網を作り直さずに戻る
     let key = ws.cur.scene.key().to_vec();
     ws.set_hidden(body, false);

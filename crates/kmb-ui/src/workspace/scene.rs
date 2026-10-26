@@ -15,14 +15,15 @@ impl Workspace {
         self.cur.picked.as_ref()
     }
 
-    /// 機能 `id` を 3D のビューで隠しているか(行の目のほか、ボディやまとまりの目で隠した物も)。
+    /// 機能 `id` を 3D のビューで隠しているか(行の目のほか、ボディ・部品・まとまりの目と選択表示で
+    /// 隠した物も。直す間に一時的に見せている物は入らない)。
     pub fn is_hidden(&self, id: FeatureId) -> bool {
         self.cur.hidden_now.contains(&id)
     }
 
     /// 機能 `id` の行の目を閉じているか(まとまりの目で隠れていても、行の目は別に覚える)。
     pub(crate) fn is_own_hidden(&self, id: FeatureId) -> bool {
-        self.cur.hidden.contains(&id)
+        self.cur.visibility.hidden.contains(&id)
     }
 
     /// 表示しているボディの(最後の機能、最初に作った機能)。
@@ -39,146 +40,88 @@ impl Workspace {
             .collect()
     }
 
-    /// ボディ(最初に作った機能 `root`、今の最後の機能 `last`)の目を閉じているか。
-    pub(crate) fn is_body_hidden(&self, root: FeatureId, last: FeatureId) -> bool {
-        self.cur.hidden_bodies.contains(&root) || self.cur.hidden.contains(&last)
+    /// ボディ(最初に作った機能 `root`)の行の目を閉じているか。
+    pub(crate) fn is_body_hidden(&self, root: FeatureId) -> bool {
+        self.cur.visibility.hidden.contains(&root)
     }
 
-    /// ボディを 3D のビューで隠す・出す。最初に作った機能で覚えるので、隠したボディに後から
-    /// 機能を足しても(最後の機能が替わっても)隠したまま。
-    pub fn set_body_hidden(&mut self, root: FeatureId, hide: bool) {
-        if hide {
-            self.cur.hidden_bodies.insert(root);
-        } else {
-            self.cur.hidden_bodies.remove(&root);
-            // 前の作りで最後の機能に付けた目も外す
-            let lasts: Vec<FeatureId> = self
-                .body_roots()
-                .into_iter()
-                .filter(|(_, r)| *r == root)
-                .map(|(l, _)| l)
-                .collect();
-            for l in lasts {
-                self.cur.hidden.remove(&l);
+    /// 文書の目を、操作「表示/非表示」(役割 `SET_VISIBILITY`。CLI・MCP と同じ道)を引数 `args` で
+    /// 流して替える。文書の変更なので取り消せる。替えたら真。
+    pub(crate) fn run_visibility(&mut self, args: serde_json::Value) -> bool {
+        let Some(id) = self.action_for_role(&kmb_interchange::role::action::SET_VISIBILITY) else {
+            self.win.fail("表示/非表示の操作がありません");
+            return false;
+        };
+        log::info!("表示/非表示: {args}");
+        match self.run_through(&id, self.cur.selected, None, &args) {
+            // 選んでいる物はそのまま(隠した物は refresh_hidden が選びから外す)
+            Ok(ran) if matches!(ran.handled, kmb_session::Handled::Changed(_)) => {
+                self.after_change(Ok(()))
+            }
+            Ok(ran) => {
+                self.take_ran(ran, None);
+                false
+            }
+            Err(e) => {
+                self.win.fail(e);
+                false
             }
         }
-        self.refresh_hidden();
+    }
+
+    /// ボディ(どの機能でもよい)を 3D のビューで隠す・出す。最初に作った機能で覚えるので、隠した
+    /// ボディに後から機能を足しても隠したまま。
+    pub fn set_body_hidden(&mut self, root: FeatureId, hide: bool) {
+        self.run_visibility(serde_json::json!({"features": [root.0], "show": !hide}));
     }
 
     /// ブラウザのまとまり(スケッチ・ボディ)を、まとめて隠しているか。
     pub(crate) fn is_folder_hidden(&self, kind: browser_ui::Kind) -> bool {
-        self.cur.hidden_folders.contains(&kind)
+        folder_of(kind).is_some_and(|f| self.cur.visibility.hidden_folders.contains(&f))
     }
 
     /// ブラウザのまとまり(スケッチ・ボディ)をまとめて隠す・出す。中の行の目は変えない。
     pub fn set_folder_hidden(&mut self, kind: browser_ui::Kind, hide: bool) {
-        if hide {
-            self.cur.hidden_folders.insert(kind);
-        } else {
-            self.cur.hidden_folders.remove(&kind);
+        if let Some(f) = folder_of(kind) {
+            self.run_visibility(serde_json::json!({"folder": f.key(), "show": !hide}));
         }
-        self.refresh_hidden();
+    }
+
+    /// 部品 `id` の目を閉じているか(中のボディを全部隠す)。
+    pub(crate) fn is_component_hidden(&self, id: u64) -> bool {
+        self.cur.visibility.hidden_components.contains(&id)
+    }
+
+    /// 部品 `id` の目を開け閉めする。中のボディの行の目は変えない。
+    pub fn set_component_hidden(&mut self, id: u64, hide: bool) {
+        self.run_visibility(serde_json::json!({"components": [id], "show": !hide}));
     }
 
     /// 原点の平面をいつも 3D のビューに出しているか(ブラウザの「原点」の目)。
     pub fn is_origin_shown(&self) -> bool {
-        self.cur.origin_shown
+        self.cur.visibility.origin_shown
     }
 
     pub fn set_origin_shown(&mut self, shown: bool) {
-        self.cur.origin_shown = shown;
+        self.run_visibility(serde_json::json!({"origin": true, "show": shown}));
     }
 
     /// 機能 `id` を 3D のビューで隠す・出す(見えなくなるだけで、計算と加工には使う)。
-    /// 隠したボディの面と辺は選びから外す。
+    /// ボディの機能なら、そのボディの目を替える。隠したボディの面と辺は選びから外す。
     pub fn set_hidden(&mut self, id: FeatureId, hide: bool) {
-        self.cur.auto_hidden.remove(&id);
-        let mut set = self.cur.hidden.clone();
-        if hide {
-            set.insert(id);
-        } else {
-            set.remove(&id);
-        }
-        self.set_all_hidden(set);
+        self.run_visibility(serde_json::json!({"features": [id.0], "show": !hide}));
     }
 
-    /// 後の機能が使い始めたスケッチを 3D のビューで隠し、使われなくなった(取り消した)ものは
-    /// 自動で隠した時だけ出し直す。利用者が目で替えたものはそのままにする。
-    pub(crate) fn hide_used_sketches(&mut self) {
-        let data = self.cur.work.doc().data();
-        let sketch = |id: FeatureId| {
-            data.feature(id).is_some_and(|f| {
-                self.win
-                    .registry
-                    .descriptor(&f.type_id)
-                    .is_some_and(|d| d.category == kmb_core::category::SKETCH)
-            })
-        };
-        let mut used = HashSet::new();
-        for f in data.features.iter().filter(|f| !f.suppressed) {
-            let Some(Ok(feature)) = self.win.registry.instantiate(&f.type_id, &f.data) else {
-                continue;
-            };
-            for i in feature.inputs().unwrap_or_default() {
-                if let kmb_core::InputRef::Output { feature, .. } = i
-                    && feature != f.id
-                    && sketch(feature)
-                {
-                    used.insert(feature);
-                }
-            }
-        }
-        let mut hidden = self.cur.hidden.clone();
-        for id in used.difference(&self.cur.used_sketches) {
-            if hidden.insert(*id) {
-                self.cur.auto_hidden.insert(*id);
-            }
-        }
-        for id in self.cur.used_sketches.difference(&used) {
-            if self.cur.auto_hidden.remove(id) {
-                hidden.remove(id);
-            }
-        }
-        self.cur.used_sketches = used;
-        if hidden != self.cur.hidden {
-            self.set_all_hidden(hidden);
-        }
-    }
-
-    /// 直している機能がスケッチを使うなら、それより前の、使って自動で隠したスケッチ(ほかの輪郭も
-    /// 選べるように見せる。目で隠したものと、後のスケッチは入れない)。
-    fn sketches_shown_while_editing(&self) -> Vec<FeatureId> {
+    /// 直している機能が使うスケッチと作業平面など(隠れていても、直す間だけ一時的に見せる。
+    /// 目は変えない)。
+    fn shown_while_editing(&self) -> Vec<FeatureId> {
         let Some(id) = self.cur.editing else {
             return Vec::new();
         };
-        let data = self.cur.work.doc().data();
-        let Some(at) = data.features.iter().position(|f| f.id == id) else {
-            return Vec::new();
-        };
-        let f = &data.features[at];
-        let uses_sketch = self
-            .win
-            .registry
-            .instantiate(&f.type_id, &f.data)
-            .and_then(Result::ok)
-            .and_then(|feature| feature.inputs().ok())
-            .unwrap_or_default()
-            .into_iter()
-            .any(|i| {
-                matches!(i, kmb_core::InputRef::Output { feature, .. }
-                    if self.cur.used_sketches.contains(&feature))
-            });
-        if !uses_sketch {
-            return Vec::new();
-        }
-        data.features[..at]
-            .iter()
-            .map(|f| f.id)
-            .filter(|f| self.cur.auto_hidden.contains(f))
-            .collect()
+        kmb_interchange::visibility::references(&self.context(), id)
     }
 
-    /// 直す機能が替わったら、隠す物を決め直す(直す間だけ使ったスケッチを見せるため)。
+    /// 直す機能が替わったら、隠す物を決め直す(直す間だけ使う物を見せるため)。
     pub(crate) fn follow_editing_for_hidden(&mut self) {
         if self.cur.shown_for_edit != self.cur.editing {
             self.refresh_hidden();
@@ -358,21 +301,16 @@ impl Workspace {
         out
     }
 
-    /// 隠す機能(行の目)をまとめて替える。
-    pub(crate) fn set_all_hidden(&mut self, set: HashSet<FeatureId>) {
-        self.cur.hidden = set;
-        self.refresh_hidden();
-    }
-
-    /// 行の目・ボディの目・まとまりの目から、3D のビューで実際に隠す物を決め直す。
-    /// ボディの最後の機能は機能を足すと替わるので、計算し直した後にも呼ぶ。
+    /// 文書の目・一時の見せ・選択表示から、3D のビューで実際に隠す物を決め直す。文書が変わった時
+    /// (取り消しも)と、ボディの最後の機能が替わる計算し直しの後に呼ぶ。
     pub(crate) fn refresh_hidden(&mut self) {
         // ボディの最後の機能が替わると、色を付けるボディの ID も替わる
         self.refresh_body_colors();
-        let mut now = self.cur.hidden.clone();
-        // 押し出し・回転などを直す間は、使って自動で隠したスケッチを一時的に見せる(行の目は変えない)
+        self.cur.visibility = self.cur.work.visibility();
+        let mut now: HashSet<FeatureId> = self.cur.work.hidden_features().into_iter().collect();
+        // 押し出し・回転などを直す間は、使うスケッチと作業平面などを一時的に見せる(目は変えない)
         self.cur.shown_for_edit = self.cur.editing;
-        for id in self.sketches_shown_while_editing() {
+        for id in self.shown_while_editing() {
             now.remove(&id);
         }
         let bodies = self.body_roots();
@@ -380,28 +318,14 @@ impl Workspace {
         self.cur
             .isolated
             .retain(|iso| bodies.iter().any(|(_, r)| r == iso));
-        let all_bodies = self.cur.hidden_folders.contains(&browser_ui::Kind::Body);
         let isolated = &self.cur.isolated;
-        now.extend(
-            bodies
-                .iter()
-                .filter(|(_, root)| {
-                    all_bodies
-                        || self.cur.hidden_bodies.contains(root)
-                        || (!isolated.is_empty() && !isolated.contains(root))
-                })
-                .map(|(last, _)| *last),
-        );
-        if self.cur.hidden_folders.contains(&browser_ui::Kind::Sketch) {
-            let data = self.cur.work.doc().data();
-            now.extend(data.features.iter().map(|f| f.id).filter(|id| {
-                data.feature(*id).is_some_and(|f| {
-                    self.win
-                        .registry
-                        .descriptor(&f.type_id)
-                        .is_some_and(|d| d.category == kmb_core::category::SKETCH)
-                })
-            }));
+        if !isolated.is_empty() {
+            now.extend(
+                bodies
+                    .iter()
+                    .filter(|(_, root)| !isolated.contains(root))
+                    .map(|(last, _)| *last),
+            );
         }
         self.cur.hidden_now = now;
         self.cur.scene.set_hidden(&self.cur.hidden_now);
@@ -563,5 +487,15 @@ impl Workspace {
         let yes = cx.picked_plane().is_some();
         self.cur.planar_hover = Some((pick.clone(), yes));
         yes
+    }
+}
+
+/// ブラウザのまとまりの、文書の目のまとまり。
+fn folder_of(kind: browser_ui::Kind) -> Option<kmb_interchange::visibility::Folder> {
+    use kmb_interchange::visibility::Folder;
+    match kind {
+        browser_ui::Kind::Sketch => Some(Folder::Sketches),
+        browser_ui::Kind::Body => Some(Folder::Bodies),
+        _ => None,
     }
 }

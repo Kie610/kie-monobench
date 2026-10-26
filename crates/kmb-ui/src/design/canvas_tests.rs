@@ -62,7 +62,7 @@ fn a_canvas_overlays_the_view_and_calibrates_about_the_first_point() {
     );
 
     // 目を閉じると 3D のビューに出さない
-    ws.set_all_hidden([id].into());
+    ws.set_hidden(id, true);
     assert!(ws.pictures(&ctx).is_empty());
     std::fs::remove_file(path).ok();
 }
