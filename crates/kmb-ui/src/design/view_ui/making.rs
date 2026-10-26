@@ -75,7 +75,7 @@ impl Workspace {
             }
             if let Some(p) = ev.click {
                 let mut hit = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p);
-                // 直している機能の計算が失敗している間は前の形を出していて、押した面にはその機能の
+                // 機能の計算が失敗している間は前の形を出していることがあり、押した面にはその機能の
                 // 番号が付くが、その機能に形は無い。面を持つ、計算できた前の機能の面として読む
                 if let Some(h) = &mut hit
                     && !matches!(
