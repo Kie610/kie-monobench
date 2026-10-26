@@ -251,7 +251,14 @@ impl Workspace {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 if outer {
                     self.window_buttons(ui);
-                } else if window_button(ui, WinButton::Close, false).clicked() {
+                } else if window_button(
+                    ui,
+                    WinButton::Close,
+                    false,
+                    &self.win.t("frame-window-close"),
+                )
+                .clicked()
+                {
                     *act = Some(DockAction::Return(pane));
                 }
             });

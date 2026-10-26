@@ -659,9 +659,11 @@ impl Workspace {
     pub(crate) fn start_status(&mut self, ui: &mut egui::Ui) {
         let l = crate::theme::look(ui.ctx());
         ui.horizontal_centered(|ui| {
-            let t = self.win.message.clone().unwrap_or_else(|| {
-                "ファイルはこの PC に保存します。ネット接続は要りません。".into()
-            });
+            let t = self
+                .win
+                .message
+                .clone()
+                .unwrap_or_else(|| self.win.t("frame-status-files-local"));
             let c = if self.win.message.is_some() {
                 l.pal.warn
             } else {
@@ -680,30 +682,39 @@ impl Workspace {
 
     /// 「ファイル」のメニュー。
     pub(crate) fn file_menu(&mut self, ui: &mut egui::Ui) {
-        let r = crate::theme::menu_trigger(ui, "file", "ファイル");
+        let r = crate::theme::menu_trigger(ui, "file", &self.win.t("menu-file"));
         egui::Popup::menu(&r).show(|ui| {
-            if ui.button("新規デザイン   Ctrl+N").clicked() {
+            // 名前とキーの間は字 3 つぶん空ける(キーの名前は訳さない)
+            let with_key = |name: String, key: &str| format!("{name}   {key}");
+            if ui
+                .button(with_key(self.win.t("menu-file-new"), "Ctrl+N"))
+                .clicked()
+            {
                 self.new_document();
                 ui.close();
             }
-            if ui.button("開く…   Ctrl+O").clicked() {
+            if ui
+                .button(with_key(self.win.t("menu-file-open"), "Ctrl+O"))
+                .clicked()
+            {
                 self.open_document();
                 ui.close();
             }
             let recent = self.recent_entries();
             ui.add_enabled_ui(!recent.is_empty(), |ui| {
-                ui.menu_button("最近使ったデザイン", |ui| {
+                ui.menu_button(self.win.t("menu-file-recent"), |ui| {
                     let mut act = None;
                     for (p, missing) in recent {
-                        let pin = if self.home.recent.is_pinned(&p) {
-                            "[ピン留め] "
-                        } else {
-                            ""
+                        let id = match (self.home.recent.is_pinned(&p), missing) {
+                            (false, false) => None,
+                            (true, false) => Some("menu-file-recent-pinned"),
+                            (false, true) => Some("menu-file-recent-missing"),
+                            (true, true) => Some("menu-file-recent-pinned-missing"),
                         };
-                        let text = if missing {
-                            format!("{pin}{}(見つかりません)", p.display())
-                        } else {
-                            format!("{pin}{}", p.display())
+                        let path = p.display().to_string();
+                        let text = match id {
+                            Some(id) => self.win.t_with(id, &[("path", path.as_str().into())]),
+                            None => path,
                         };
                         let r = ui.add_enabled(!missing, egui::Button::new(text));
                         if r.clicked() {
@@ -712,17 +723,13 @@ impl Workspace {
                         }
                         if missing {
                             // 見つからないものは押せないので、横に外すボタンを出す
-                            r.on_disabled_hover_text(
-                                "見つかりません。ホームで右クリックすると一覧から外せます",
-                            );
+                            r.on_disabled_hover_text(self.win.t("menu-file-recent-missing-tip"));
                         }
                     }
                     ui.separator();
                     if ui
-                        .button("一覧を消す")
-                        .on_hover_text(
-                            "ピン留めしていないデザインを一覧から外す(ファイルは消さない)",
-                        )
+                        .button(self.win.t("menu-file-recent-clear"))
+                        .on_hover_text(self.win.t("menu-file-recent-clear-tip"))
                         .clicked()
                     {
                         act = Some(RecentAction::ClearUnpinned);
@@ -734,23 +741,27 @@ impl Workspace {
                 });
             });
             ui.separator();
-            if ui.button("保存   Ctrl+S").clicked() {
+            if ui
+                .button(with_key(self.win.t("menu-file-save"), "Ctrl+S"))
+                .clicked()
+            {
                 self.save();
                 ui.close();
             }
-            if ui.button("名前を付けて保存…   Ctrl+Shift+S").clicked() {
+            if ui
+                .button(with_key(self.win.t("menu-file-save-as"), "Ctrl+Shift+S"))
+                .clicked()
+            {
                 self.save_as();
                 ui.close();
             }
             if ui
                 .add_enabled(
                     self.cur.work.path().is_some(),
-                    egui::Button::new("版の履歴…"),
+                    egui::Button::new(self.win.t("menu-file-versions")),
                 )
-                .on_hover_text(
-                    "保存のたびに残る版の一覧。前の版を開く・最新として戻す・節目の名前を付ける",
-                )
-                .on_disabled_hover_text("保存すると、そのたびに版が残ります")
+                .on_hover_text(self.win.t("menu-file-versions-tip"))
+                .on_disabled_hover_text(self.win.t("menu-file-versions-disabled-tip"))
                 .clicked()
             {
                 self.cur.versions.open = true;
@@ -758,10 +769,8 @@ impl Workspace {
                 ui.close();
             }
             if ui
-                .button("設計の属性…")
-                .on_hover_text(
-                    "部品名・部品番号・改訂・作者など。部品名などは G-code の頭の注に入る",
-                )
+                .button(self.win.t("menu-file-properties"))
+                .on_hover_text(self.win.t("menu-file-properties-tip"))
                 .clicked()
             {
                 self.open_properties();
@@ -785,7 +794,7 @@ impl Workspace {
             if !imports.is_empty() {
                 ui.separator();
             }
-            if ui.button("ホーム").clicked() {
+            if ui.button(self.win.t("menu-file-home")).clicked() {
                 self.show_home();
                 ui.close();
             }
