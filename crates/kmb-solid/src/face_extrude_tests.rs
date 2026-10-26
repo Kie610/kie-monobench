@@ -301,30 +301,80 @@ fn two_coplanar_faces_extrude_together() {
     assert!(close(v, want), "{v} vs {want}");
 }
 
+/// 板の面のうち、外向きの法線が `n` の平らな面の名前。
+fn face_toward(k: &dyn Kernel, doc: &mut Document, p: FeatureId, n: [f64; 3]) -> String {
+    let report = doc.recompute(&registry(), k);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(p) else {
+        panic!("板が作れない")
+    };
+    let Some(Value::Shape(h)) = outputs.get("body") else {
+        panic!("板が作れない")
+    };
+    k.faces(*h)
+        .unwrap()
+        .into_iter()
+        .find(|f| {
+            f.planar
+                .is_some_and(|q| (0..3).all(|i| (q.normal[i] - n[i]).abs() < 1e-6))
+        })
+        .expect("その向きの面がある")
+        .name
+}
+
+#[test]
+fn faces_on_different_planes_extrude_along_their_own_normals() {
+    // 上・下・横(x の大きい側)の面を一緒に選ぶと、それぞれの面の外向きへ押し出す。
+    // 上と横の道具は板の角の辺で接するだけ
+    let k = SmlibKernel::new();
+    let (b, p) = plate(None);
+    let mut doc = b.finish("板");
+    let side = face_toward(&k, &mut doc, p, [1.0, 0.0, 0.0]);
+    let top = format!("f{}:end", p.0);
+    let bottom = format!("f{}:start", p.0);
+    let plate_v = 30.0 * 20.0 * 5.0;
+    for (faces, dir, op, want) in [
+        (
+            vec![&top, &bottom, &side],
+            Direction::Normal,
+            Operation::Join,
+            plate_v + 2.0 * 30.0 * 20.0 + 20.0 * 5.0,
+        ),
+        // 逆向きに押し込むと面ごとに切り取る(上と横の切り取りは角で重なる)
+        (
+            vec![&top, &side],
+            Direction::Reverse,
+            Operation::Cut,
+            plate_v - 30.0 * 20.0 - 20.0 * 5.0 + 20.0,
+        ),
+    ] {
+        let (mut b, p) = plate(None);
+        let id = face_extrude(
+            &mut b,
+            p,
+            faces.iter().map(|n| face(p, n)).collect(),
+            "1 mm",
+            dir,
+            op,
+        );
+        let mut doc = b.finish("平面の違う面");
+        let v = volume(&mut doc, &k);
+        assert!(close(v, want), "{op:?}: {v} vs {want}");
+        // 下絵は面ごとの輪郭を出す
+        let report = doc.recompute(&registry(), &k);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+            panic!("押し出せない")
+        };
+        let preview: kmb_core::ToolPreview =
+            kmb_core::Payload::from_value(&outputs[kmb_core::TOOL_PREVIEW]).unwrap();
+        assert_eq!(preview.profile.len(), faces.len());
+    }
+}
+
 #[test]
 fn bad_picks_are_explained() {
     let k = SmlibKernel::new();
-    let (mut b, p) = plate(None);
-    let top = format!("f{}:end", p.0);
-    let bottom = format!("f{}:start", p.0);
-    // 上と下の面は同じ平面にない
-    let bad = face_extrude(
-        &mut b,
-        p,
-        vec![face(p, &top), face(p, &bottom)],
-        "1 mm",
-        Direction::Normal,
-        Operation::Join,
-    );
-    let mut doc = b.finish("同じ平面でない");
-    match status_of(&mut doc, &k, bad) {
-        FeatureStatus::Error { message } => {
-            assert!(message.contains("同じ平面"), "{message}")
-        }
-        s => panic!("{s:?}"),
-    }
-
-    // 面でない物(ボディ)は押し出せない、何も選ばなければそう言う
+    // 面でない物(ボディ)は押し出せない、何も選ばなければそう言う(板の機能の番号はどの文書も同じ)
+    let p = plate(None).1;
     for (faces, word) in [
         (vec![Ref::Body(p)], "平らな面だけ"),
         (vec![], "平らな面を選んで"),
@@ -901,7 +951,7 @@ fn a_union_that_leaves_no_solid_is_refused_by_the_kernel() {
 /// スケッチの押し出しへ移らず、理由を出して止める(ボタンも同じ理由で押せない)。
 /// 別のボディの面が混ざった時も同じ。曲がった面だけを選んでいる時は前のとおりスケッチの押し出し
 #[test]
-fn picking_flat_faces_on_different_planes_stops_with_the_reason() {
+fn picking_flat_faces_of_two_bodies_stops_but_different_planes_extrude() {
     use kmb_core::{Context, Extension, FacePick};
     let k: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(SmlibKernel::new());
     let reg = registry();
@@ -929,10 +979,24 @@ fn picking_flat_faces_on_different_planes_stops_with_the_reason() {
         },
     );
     let two = b.finish("板と柱");
-    for (mut doc, top, also, word) in [
-        (one, pick(p, "end"), vec![pick(p, "start")], "同じ平面"),
-        (two, pick(p, "end"), vec![pick(post, "end")], "1 つのボディ"),
-    ] {
+    // 同じボディの平面の違う面(上と下)は、両方を押し出す
+    let mut doc = one;
+    let report = doc.recompute(&reg, k.as_ref());
+    let (top, also) = (pick(p, "end"), vec![pick(p, "start")]);
+    let cx = Context {
+        picked: Some(&top),
+        also_picked: &also,
+        ..Context::new(doc.data(), &report, &reg, &k)
+    };
+    match ExtrudeCommands.run(EXTRUDE_SKETCH, &cx) {
+        Some(Ok(c)) => {
+            let s = format!("{c:?}");
+            assert!(s.contains("f2:start") && s.contains("f2:end"), "{s}")
+        }
+        other => panic!("上と下の面を押し出さない: {other:?}"),
+    }
+    let (mut doc, top, also, word) = (two, pick(p, "end"), vec![pick(post, "end")], "1 つのボディ");
+    {
         let report = doc.recompute(&reg, k.as_ref());
         let cx = Context {
             picked: Some(&top),

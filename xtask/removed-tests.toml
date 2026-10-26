@@ -47,3 +47,5 @@
 # 2026-10-26 2-B1 ①-b: 拘束を足す前の確かめも疎な分解(kmb_sketch_solver::sparse::Factor)で調べるようにし、
 # 密な行の空間(RowSpace)を使う所が無くなったので外した
 "kmb-sketch-solver row_space_agrees_with_taking_the_rank_again" = "2026-10-26 2-B1 ①-b: 確かめる相手の RowSpace を外した。同じ確かめ(階数・決まった変数・広がる行)は agrees_with_dense_svd が疎な分解で行う"
+# 2026-10-26 同じ平面に無い面の押し出し: 平面の違う面を止めずに押し出すようにしたので、別のボディの面だけを確かめる試験へ名前を変えた
+"kmb-solid picking_flat_faces_on_different_planes_stops_with_the_reason" = "2026-10-26 Kie 回答 1(同じ平面に無い面も押し出す): picking_flat_faces_of_two_bodies_stops_but_different_planes_extrude へ名前を変えた"

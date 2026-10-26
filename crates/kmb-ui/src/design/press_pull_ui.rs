@@ -65,7 +65,7 @@ impl Workspace {
             PressPull::Extrude
         } else {
             PressPull::Refuse(
-                "いくつかの面を一緒に押し出すのは、1 つのボディの同じ平面にある面だけです".into(),
+                "いくつかの面を一緒に押し出すのは、1 つのボディの平らな面だけです".into(),
             )
         }
     }

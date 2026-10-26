@@ -1,7 +1,7 @@
 //! 押し出し(`solid.extrude@1`)と、スケッチを押し出す操作。
 use kmb_cad::*;
 use kmb_core::{
-    EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, RefKind, Registry,
+    BooleanOp, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, RefKind, Registry,
     ShapeHandle, Value,
 };
 use serde::{Deserialize, Serialize};
@@ -31,8 +31,8 @@ pub const EXTRUDE_SKETCH: &str = "cad.extrude";
 ///
 /// 押し出す物 `"source": "faces"` は、スケッチの代わりにボディの平らな面 `faces` の縁を輪郭にする
 /// (例: `{"source": "faces", "faces": {"kind": "face", "feature": 3, "face": "f3:end"}, "distance": "5 mm",
-/// "operation": "join", "target": 3}`)。面はどれも同じボディの、
-/// 同じ平面にある面にする。
+/// "operation": "join", "target": 3}`)。面はどれも同じボディの面にする。平面の違う面は、
+/// 平面ごとにそれぞれの外向きの法線へ押し出す。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Extrude {
@@ -573,6 +573,21 @@ fn goes_into(
     })
 }
 
+/// 1 つの平面の道具の輪郭(薄い押し出しなら壁ごと)。平らな面の時は、その平面の面の名前と、
+/// 縁を近い形にした注意。
+struct Plan {
+    profiles: Vec<kmb_core::Profile>,
+    warn: Option<String>,
+    faces: Vec<String>,
+}
+
+/// 1 つの平面の道具の作り方・下絵と、面の縁の曲線のまま押し出した道具。
+struct Built {
+    recipe: Recipe,
+    preview: kmb_core::ToolPreview,
+    exact: Option<ShapeHandle>,
+}
+
 impl Extrude {
     /// 押し出す物が平らな面の時の、面を持つボディの機能と面の名前(どれも同じボディの面)。
     fn face_source(&self) -> Result<(FeatureId, Vec<String>), EvalError> {
@@ -600,18 +615,25 @@ impl Extrude {
             .ok_or_else(|| EvalError::InvalidData("押し出すスケッチ(輪郭)を選んでください".into()))
     }
 
-    /// 押し出す輪郭(スケッチの輪郭か、平らな面の縁)。面の縁を近い形にした時は注意を返す。
-    fn profile(&self, ctx: &EvalCtx<'_>) -> Result<(kmb_core::Profile, Option<String>), EvalError> {
+    /// 押し出す輪郭(スケッチの輪郭か、平らな面の縁)。平らな面は平面ごとに 1 つ。面の縁を
+    /// 近い形にした組は注意と面の名前を返す(面の縁の曲線のまま押し出す道具に使う)。
+    fn profiles(&self, ctx: &EvalCtx<'_>) -> Result<Vec<Plan>, EvalError> {
         if self.source == Source::Faces {
             let (feature, names) = self.face_source()?;
             let body = body_of(ctx, feature)?;
-            let fp = kmb_cad::face_profile(ctx.kernel(), body, &names)
+            let groups = kmb_cad::face_profiles(ctx.kernel(), body, &names)
                 .map_err(EvalError::InvalidData)?;
-            let warn = fp.approximated.then(|| {
-                "面の縁に直線と円弧でない線があるので、細かい折れ線で近い形にして押し出しました"
-                    .to_string()
-            });
-            return Ok((fp.profile, warn));
+            return Ok(groups
+                .into_iter()
+                .map(|g| Plan {
+                    profiles: vec![g.profile.profile],
+                    warn: g.profile.approximated.then(|| {
+                        "面の縁に直線と円弧でない線があるので、細かい折れ線で近い形にして押し出しました"
+                            .to_string()
+                    }),
+                    faces: g.faces,
+                })
+                .collect());
         }
         let profile = self.sketch()?;
         let p = if self.regions.is_empty() {
@@ -626,22 +648,27 @@ impl Extrude {
                 .profile(&self.regions)
                 .map_err(EvalError::InvalidData)?
         };
-        Ok((p, None))
+        Ok(vec![Plan {
+            profiles: vec![p],
+            warn: None,
+            faces: Vec::new(),
+        }])
     }
 
     /// 面の縁の曲線のまま押し出した道具(始まりのずらしを入れる)。カーネルが対応していなければ無し。
     fn face_tool(
         &self,
         ctx: &EvalCtx<'_>,
+        names: &[String],
         from: f64,
         to: f64,
     ) -> Result<Option<ShapeHandle>, EvalError> {
-        let (feature, names) = self.face_source()?;
+        let (feature, _) = self.face_source()?;
         let body = body_of(ctx, feature)?;
         let s = self.start_offset(ctx)?;
         match ctx
             .kernel()
-            .extrude_faces(body, &names, from + s, to + s, &tag(ctx))
+            .extrude_faces(body, names, from + s, to + s, &tag(ctx))
         {
             Ok(t) => Ok(Some(t)),
             Err(kmb_core::KernelError::Unsupported(_)) => Ok(None),
@@ -654,31 +681,55 @@ impl Extrude {
         self.thin != Thin::None && self.source == Source::Sketch && self.regions.is_empty()
     }
 
-    /// 押し出す道具の輪郭(薄い押し出しで線が 2 本以上なら線ごと)と注意。始まりのずらしを入れた後。
+    /// 押し出す道具の輪郭を平面ごとに(薄い押し出しで線が 2 本以上なら線ごと)。始まりのずらしを入れた後。
+    fn tool_plans(&self, ctx: &EvalCtx<'_>) -> Result<Vec<Plan>, EvalError> {
+        let mut plans = if self.thin_from_curves() {
+            vec![Plan {
+                profiles: Vec::new(),
+                warn: None,
+                faces: Vec::new(),
+            }]
+        } else {
+            self.profiles(ctx)?
+        };
+        let s = self.start_offset(ctx)?;
+        for plan in &mut plans {
+            plan.profiles = self.tool_profiles(ctx, std::mem::take(&mut plan.profiles))?;
+            if s != 0.0 {
+                for p in &mut plan.profiles {
+                    p.plane = p.plane.offset(s);
+                }
+            }
+        }
+        Ok(plans)
+    }
+
+    /// 1 つの平面の道具の輪郭 `given`(薄い押し出しの線を使う時は空)を、薄い押し出しなら壁にする。
     fn tool_profiles(
         &self,
         ctx: &EvalCtx<'_>,
-    ) -> Result<(Vec<kmb_core::Profile>, Option<String>), EvalError> {
+        given: Vec<kmb_core::Profile>,
+    ) -> Result<Vec<kmb_core::Profile>, EvalError> {
         let bad = |m: String| EvalError::InvalidData(m);
-        let (mut out, warn) = match self.thin.wall() {
+        let out = match self.thin.wall() {
             Some(w) if self.thin_from_curves() => {
                 let sketch = self.sketch()?;
                 let curves = kmb_core::Curves::from_value(ctx.output(sketch, "curves")?)
                     .ok_or_else(|| bad(format!("{sketch} は線のあるスケッチではありません")))?;
                 let chains = kmb_cad::thin::chains(&curves.segments);
                 let t = self.thickness(ctx)?;
-                (
-                    kmb_cad::thin::walls(curves.plane, &chains, t, w).map_err(bad)?,
-                    None,
-                )
+                kmb_cad::thin::walls(curves.plane, &chains, t, w).map_err(bad)?
             }
             wall => {
-                let (p, warn) = self.profile(ctx)?;
+                let p = given
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| bad("押し出す輪郭がありません".into()))?;
                 if p.regions.is_empty() {
                     return Err(bad("スケッチに閉じた輪郭がありません".into()));
                 }
                 match wall {
-                    None => (vec![p], warn),
+                    None => vec![p],
                     Some(w) => {
                         // 領域の縁(外周と穴)を壁にする。穴の縁の「内側」は領域の材料の側
                         let t = self.thickness(ctx)?;
@@ -707,18 +758,112 @@ impl Extrude {
                                 });
                             }
                         }
-                        (v, warn)
+                        v
                     }
                 }
             }
         };
-        let s = self.start_offset(ctx)?;
-        if s != 0.0 {
-            for p in &mut out {
-                p.plane = p.plane.offset(s);
+        Ok(out)
+    }
+
+    /// 1 つの平面の道具: 範囲を決め、作り方・下絵と、面の縁の曲線のまま押し出した道具(使える時)を作る。
+    /// 注意は `warnings` へ足す。
+    fn build(
+        &self,
+        ctx: &EvalCtx<'_>,
+        plan: Plan,
+        taper: f64,
+        warnings: &mut Vec<String>,
+    ) -> Result<Built, EvalError> {
+        let Plan {
+            profiles,
+            warn,
+            faces,
+        } = plan;
+        // 範囲と下絵は、道具の輪郭の全部を合わせた物で決める(薄い押し出しの線ごとの壁も同じ平面)
+        let profile = kmb_core::Profile {
+            plane: profiles[0].plane,
+            regions: profiles.iter().flat_map(|p| p.regions.clone()).collect(),
+        };
+        let mut notes = Vec::new();
+        let ((from, to), stop) = match self.extent {
+            _ if self.direction == Direction::TwoSides => {
+                self.range_two_sides(ctx, &profile, &mut notes)?
             }
+            Extent::Distance => (self.range(ctx)?, None),
+            Extent::All => (self.range_all(ctx, &profile)?, None),
+            // 「対象まで」にした直後で面がまだ無い間は、距離のまま作る(形と道具の箱が消えないように)
+            Extent::ToFace if self.to_face.is_none() => {
+                notes.push(NO_FACE_YET.into());
+                (self.range(ctx)?, None)
+            }
+            Extent::ToFace => self.range_to_face(ctx, &profile)?,
+        };
+        let loops = outline(&profile);
+        let c = centroid(&profile);
+        let n = profile.plane.normal();
+        let arrows = [to, from]
+            .into_iter()
+            .filter(|t| t.abs() > 1e-9)
+            .map(|t| [c, [0, 1, 2].map(|i| c[i] + n[i] * t)])
+            .collect();
+        let cap = kmb_cad::prism::PrismCap::new(&loops, profile.plane.normal());
+        // テーパーは予告の時から傾いた壁で見せる(できる形と同じ寄せ方)
+        let lean = taper.tan();
+        let preview = kmb_core::ToolPreview {
+            op: kmb_core::ToolOp::from_boolean(self.operation.boolean()),
+            lines: if taper != 0.0 && stop.is_none() {
+                tapered_lines(&cap, from, to, lean)
+            } else {
+                tool_lines(&profile, from, to, stop.as_ref())
+            },
+            faces: match &stop {
+                Some(s) => cap.solid_to_plane(0.0, s.point, s.normal),
+                None if taper != 0.0 => cap.solid_tapered(from, to, lean),
+                None => cap.solid(from, to),
+            },
+            profile: loops,
+            arrows,
+        };
+        let part = |profile: kmb_core::Profile| Recipe::Extrude {
+            operation: self.operation,
+            profile,
+            from,
+            to,
+            through: false,
+            stop,
+            taper,
+        };
+        let recipe = if profiles.len() == 1 {
+            part(profile)
+        } else {
+            // 薄い押し出しの線ごとの壁は重なることがあるので、1 つずつ効かせる(新しいボディなら足し合わせる)
+            Recipe::Many {
+                parts: profiles.into_iter().map(part).collect(),
+            }
+        };
+        // 縁を近い形にした面は、面の縁の曲線のまま押し出した道具を使う(近い形の壁はもとの辺から
+        // わずかにずれ、結合も切り取りも壊れた形になっていた)
+        let exact = if warn.is_some()
+            && self.source == Source::Faces
+            && self.thin == Thin::None
+            && taper == 0.0
+            && stop.is_none()
+        {
+            self.face_tool(ctx, &faces, from, to)?
+        } else {
+            None
+        };
+        // 近い形にした注意は先頭に(面の縁のまま押し出した時は出さない)
+        if exact.is_none() {
+            warnings.extend(warn);
         }
-        Ok((out, warn))
+        warnings.extend(notes);
+        Ok(Built {
+            recipe,
+            preview,
+            exact,
+        })
     }
 
     /// 薄い押し出しの壁の厚さ。
@@ -783,112 +928,83 @@ impl Feature for Extrude {
     }
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
-        let (profiles, warning) = self.tool_profiles(ctx)?;
+        let plans = self.tool_plans(ctx)?;
         let taper = self.taper(ctx)?;
-        // 範囲と下絵は、道具の輪郭の全部を合わせた物で決める(薄い押し出しの線ごとの壁も同じ平面)
-        let profile = kmb_core::Profile {
-            plane: profiles[0].plane,
-            regions: profiles.iter().flat_map(|p| p.regions.clone()).collect(),
+        let mut warnings: Vec<String> = Vec::new();
+        let mut built = Vec::new();
+        for plan in plans {
+            built.push(self.build(ctx, plan, taper, &mut warnings)?);
+        }
+        // 平面ごとの道具を 1 つずつ効かせる(新しいボディなら足し合わせる)
+        let op = self.operation;
+        let mut body = match self.target {
+            Some(t) if op != Operation::New => Some(body_of(ctx, t)?),
+            _ => None,
         };
-        let approximated = warning.is_some();
-        let mut warnings: Vec<String> = warning.into_iter().collect();
-        let ((from, to), stop) = match self.extent {
-            _ if self.direction == Direction::TwoSides => {
-                self.range_two_sides(ctx, &profile, &mut warnings)?
+        let kernel = ctx.kernel();
+        let tag = tag(ctx);
+        let union = |a, b| kernel.boolean(BooleanOp::Union, a, b).map_err(kernel_err);
+        for b in &built {
+            let tool = match b.exact {
+                Some(tool) => tool,
+                None if op == Operation::New => apply_recipe(ctx, &b.recipe, None, &tag)?,
+                None => {
+                    body = Some(apply_recipe(ctx, &b.recipe, body, &tag)?);
+                    continue;
+                }
+            };
+            body = Some(match (op.boolean(), body) {
+                (None, None) => tool,
+                (None, Some(prev)) => union(prev, tool)?,
+                (Some(bo), Some(t)) => kernel.boolean(bo, t, tool).map_err(kernel_err)?,
+                (Some(_), None) => {
+                    return Err(EvalError::InvalidData(
+                        "結合・切り取り・交差には対象のボディ(target)が必要です".into(),
+                    ));
+                }
+            });
+        }
+        let body = body.ok_or_else(|| EvalError::InvalidData("道具がありません".into()))?;
+        let mut preview: Option<kmb_core::ToolPreview> = None;
+        let mut parts = Vec::new();
+        for b in built {
+            match &mut preview {
+                None => preview = Some(b.preview),
+                Some(p) => {
+                    p.lines.extend(b.preview.lines);
+                    p.faces.extend(b.preview.faces);
+                    p.profile.extend(b.preview.profile);
+                    p.arrows.extend(b.preview.arrows);
+                }
             }
-            Extent::Distance => (self.range(ctx)?, None),
-            Extent::All => (self.range_all(ctx, &profile)?, None),
-            // 「対象まで」にした直後で面がまだ無い間は、距離のまま作る(形と道具の箱が消えないように)
-            Extent::ToFace if self.to_face.is_none() => {
-                warnings.push(NO_FACE_YET.into());
-                (self.range(ctx)?, None)
-            }
-            Extent::ToFace => self.range_to_face(ctx, &profile)?,
-        };
-        let loops = outline(&profile);
-        let c = centroid(&profile);
-        let n = profile.plane.normal();
-        let arrows = [to, from]
-            .into_iter()
-            .filter(|t| t.abs() > 1e-9)
-            .map(|t| [c, [0, 1, 2].map(|i| c[i] + n[i] * t)])
-            .collect();
-        let cap = kmb_cad::prism::PrismCap::new(&loops, profile.plane.normal());
-        // テーパーは予告の時から傾いた壁で見せる(できる形と同じ寄せ方)
-        let lean = taper.tan();
-        let preview = kmb_core::ToolPreview {
-            op: kmb_core::ToolOp::from_boolean(self.operation.boolean()),
-            lines: if taper != 0.0 && stop.is_none() {
-                tapered_lines(&cap, from, to, lean)
-            } else {
-                tool_lines(&profile, from, to, stop.as_ref())
-            },
-            faces: match &stop {
-                Some(s) => cap.solid_to_plane(0.0, s.point, s.normal),
-                None if taper != 0.0 => cap.solid_tapered(from, to, lean),
-                None => cap.solid(from, to),
-            },
-            profile: loops,
-            arrows,
-        };
-        let part = |profile: kmb_core::Profile| Recipe::Extrude {
-            operation: self.operation,
-            profile,
-            from,
-            to,
-            through: false,
-            stop,
-            taper,
-        };
-        let recipe = if profiles.len() == 1 {
-            part(profile)
+            parts.push(b.recipe);
+        }
+        let recipe = if parts.len() == 1 {
+            parts.remove(0)
         } else {
-            // 薄い押し出しの線ごとの壁は重なることがあるので、1 つずつ効かせる(新しいボディなら足し合わせる)
             Recipe::Many {
-                parts: profiles.into_iter().map(part).collect(),
+                parts: parts
+                    .into_iter()
+                    .flat_map(|p| match p {
+                        Recipe::Many { parts } => parts,
+                        p => vec![p],
+                    })
+                    .collect(),
             }
         };
-        // 縁を近い形にした面は、面の縁の曲線のまま押し出した道具を使う(近い形の壁はもとの辺から
-        // わずかにずれ、結合も切り取りも壊れた形になっていた)
-        let exact = if approximated
-            && self.source == Source::Faces
-            && self.thin == Thin::None
-            && taper == 0.0
-            && stop.is_none()
-        {
-            self.face_tool(ctx, from, to)?
-        } else {
-            None
-        };
-        let mut out = match exact {
-            Some(tool) => {
-                // 近い形にした注意は先頭(tool_profiles の注意)
-                warnings.remove(0);
-                let target = match self.target {
-                    Some(t) if self.operation != Operation::New => Some(body_of(ctx, t)?),
-                    _ => None,
-                };
-                let body = match (self.operation.boolean(), target) {
-                    (None, _) => tool,
-                    (Some(b), Some(t)) => ctx.kernel().boolean(b, t, tool).map_err(kernel_err)?,
-                    (Some(_), None) => {
-                        return Err(EvalError::InvalidData(
-                            "結合・切り取り・交差には対象のボディ(target)が必要です".into(),
-                        ));
-                    }
-                };
-                [
-                    ("body".to_string(), Value::Shape(body)),
-                    ("recipe".to_string(), kmb_core::Payload::to_value(&recipe)),
-                ]
-                .into()
-            }
-            None => finish(ctx, recipe, self.target)?,
-        };
-        out.insert(
-            kmb_core::TOOL_PREVIEW.into(),
-            kmb_core::Payload::to_value(&preview),
-        );
+        let mut out: Outputs = [
+            ("body".to_string(), Value::Shape(body)),
+            ("recipe".to_string(), kmb_core::Payload::to_value(&recipe)),
+        ]
+        .into();
+        if let Some(preview) = preview {
+            out.insert(
+                kmb_core::TOOL_PREVIEW.into(),
+                kmb_core::Payload::to_value(&preview),
+            );
+        }
+        let mut seen = std::collections::HashSet::new();
+        warnings.retain(|w| seen.insert(w.clone()));
         if !warnings.is_empty() {
             kmb_core::add_warnings(&mut out, warnings);
         }
@@ -919,7 +1035,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::pick("faces", "面", &[RefKind::PlanarFace], 1, None)
                     .only("source", "faces", "sketch")
-                    .help("押し出す平らな面(1 つのボディの、同じ平面にある面をいくつでも)。もう一度クリックすると外す"),
+                    .help("押し出す平らな面(1 つのボディの面をいくつでも。平面の違う面は、それぞれの面の向きへ押し出す)。もう一度クリックすると外す"),
             )
             .field(
                 Field::choice(
@@ -1147,10 +1263,10 @@ fn add_extrude(
     ))
 }
 
-/// 平らな面を押し出す時の面と、その縁の輪郭。選んでいる面(CLI・MCP は引数 `faces`、参照の
-/// 1 つか並び)が、1 つのボディの、同じ平面にある平らな面の時だけ。スケッチを選んでいる時、
+/// 平らな面を押し出す時の面と、その縁の輪郭(平面の違う面があれば、最初の面の平面の輪郭)。
+/// 選んでいる面(CLI・MCP は引数 `faces`、参照の 1 つか並び)が、1 つのボディの平らな面の時だけ。スケッチを選んでいる時、
 /// スケッチや領域を指定した時、画面で選んだ面に平らな面が 1 つも無い時は無し(スケッチの押し出しにする)。
-/// 面を一緒に押し出せない時(同じ平面に無い、別のボディ)は、黙ってスケッチへ移らず理由を返す。
+/// 面を一緒に押し出せない時(平らでない、別のボディ)は、黙ってスケッチへ移らず理由を返す。
 fn chosen_faces(
     cx: &Context<'_>,
 ) -> Option<Result<(Vec<kmb_core::Ref>, kmb_core::Profile), String>> {
@@ -1191,7 +1307,7 @@ fn planar_face(cx: &Context<'_>, r: &kmb_core::Ref) -> bool {
         .is_ok_and(|v| v.iter().any(|f| &f.name == face && f.planar.is_some()))
 }
 
-/// 面 `refs` が 1 つのボディの同じ平面にある平らな面なら、面とその縁の輪郭。でなければ理由。
+/// 面 `refs` が 1 つのボディの平らな面なら、面と最初の面の平面の縁の輪郭。でなければ理由。
 fn faces_profile(
     cx: &Context<'_>,
     refs: Vec<kmb_core::Ref>,
@@ -1216,8 +1332,8 @@ fn faces_profile(
     let Some(kmb_core::Value::Shape(h)) = cx.output(feature, "body") else {
         return Err(format!("{feature} はボディではありません"));
     };
-    let fp = kmb_cad::face_profile(cx.kernel.as_ref(), *h, &names)?;
-    Ok((refs, fp.profile))
+    let mut groups = kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)?;
+    Ok((refs, groups.remove(0).profile.profile))
 }
 
 /// 平らな面を押し出す。面のボディに結合する(距離 `distance` が負なら切り取る)。
@@ -1480,8 +1596,11 @@ fn extrude_profile(cx: &Context<'_>, e: &Extrude) -> Option<kmb_core::Profile> {
                 return None;
             };
             Some(
-                kmb_cad::face_profile(cx.kernel.as_ref(), *h, &names)
+                kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)
                     .ok()?
+                    .into_iter()
+                    .next()?
+                    .profile
                     .profile,
             )
         }
