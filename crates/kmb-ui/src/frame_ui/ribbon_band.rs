@@ -18,9 +18,9 @@ impl Workspace {
             check.to_string(),
             Item {
                 key: "u:measure".into(),
-                label: "計測".into(),
+                label: self.win.t("toolbar-measure"),
                 icon: "measure".into(),
-                hint: "M。点・辺・面をクリックして、距離・角度・径・面積を測る".into(),
+                hint: self.win.t("toolbar-measure-tip"),
                 disabled: None,
                 front: true,
                 formerly: Vec::new(),
@@ -30,10 +30,9 @@ impl Workspace {
             check.to_string(),
             Item {
                 key: "u:section".into(),
-                label: "断面解析".into(),
+                label: self.win.t("toolbar-section"),
                 icon: "section".into(),
-                hint: "平面で切って中を見る(形は変えない)。平らな面を選んでから押すと、その面に平行に切る"
-                    .into(),
+                hint: self.win.t("toolbar-section-tip"),
                 disabled: None,
                 // 加工では ▾ の一覧だけ(Kie 2026-10-21 の画板)
                 front: space != Space::Machining,
@@ -44,9 +43,9 @@ impl Workspace {
             "修正".to_string(),
             Item {
                 key: crate::press_pull_ui::PRESS_PULL.into(),
-                label: "プレス/プル".into(),
+                label: self.win.t("toolbar-press-pull"),
                 icon: "presspull".into(),
-                hint: "選んだ物で決める: スケッチの形・平らな面は押し出し、辺はフィレット、フィレット・面取り・穴の面はその機能を直す".into(),
+                hint: self.win.t("toolbar-press-pull-tip"),
                 disabled: None,
                 front: true,
                 formerly: Vec::new(),
@@ -88,9 +87,9 @@ impl Workspace {
                     "設定".into(),
                     Item {
                         key: "u:scene".into(),
-                        label: "シーンの設定".into(),
+                        label: self.win.t("toolbar-scene"),
                         icon: "gear".into(),
-                        hint: "環境の光(スタジオ・屋外)と明るさ・回転、背景(環境・単色・透明)、グラウンド面、カメラの焦点距離・露出・被写界深度、縦横比、絵と動画の大きさと長さ。設定の「レンダリング」".into(),
+                        hint: self.win.t("toolbar-scene-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -100,9 +99,9 @@ impl Workspace {
                     "設定".into(),
                     Item {
                         key: "u:appearance".into(),
-                        label: "外観".into(),
+                        label: self.win.t("toolbar-appearance"),
                         icon: "swatch".into(),
-                        hint: "A。ボディ・部品・面に外観(色・金属・粗さ)を付ける窓を開く。ライブラリを分類と名前で探し、このデザイン内の外観を直す".into(),
+                        hint: self.win.t("toolbar-appearance-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -112,9 +111,9 @@ impl Workspace {
                     "キャンバス内レンダリング".into(),
                     Item {
                         key: "u:canvas_render".into(),
-                        label: "キャンバス内レンダリング".into(),
+                        label: self.win.t("toolbar-canvas-render"),
                         icon: "render".into(),
-                        hint: "今のビューを光線追跡で描き、止まっている間に少しずつきれいにする(影と映り込み)。もう一度押すと止める".into(),
+                        hint: self.win.t("toolbar-canvas-render-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -125,33 +124,22 @@ impl Workspace {
                 let action_labels: Vec<String> =
                     items.iter().map(|(_, i)| i.label.clone()).collect();
                 for (type_id, label, why) in self.addable(kmb_core::category::SOLID) {
-                    let d = self.win.registry.descriptor(&type_id);
+                    let (menu, mut item) = self.feature_item(&type_id, &label, why);
                     // 同じ名前の操作(クリックで作る流れ)があれば、欄で指定して足す方だと分かる名前にする
-                    let label = if action_labels.contains(&label) {
-                        format!("{label}(欄で指定)")
-                    } else {
-                        label
-                    };
-                    items.push((
-                        d.as_ref().map(|d| d.menu.clone()).unwrap_or_default(),
-                        Item {
-                            key: format!("f:{type_id}"),
-                            label,
-                            icon: d.as_ref().map(|d| d.icon.clone()).unwrap_or_default(),
-                            hint: d.as_ref().map(|d| d.hint.clone()).unwrap_or_default(),
-                            disabled: why,
-                            front: d.is_some_and(|d| d.pinned),
-                            formerly: Vec::new(),
-                        },
-                    ));
+                    if action_labels.contains(&item.label) {
+                        item.label = self
+                            .win
+                            .t_with("toolbar-feature-by-fields", &[("name", item.label.into())]);
+                    }
+                    items.push((menu, item));
                 }
                 items.push((
                     "修正".into(),
                     Item {
                         key: "u:params".into(),
-                        label: "パラメータ".into(),
+                        label: self.win.t("toolbar-params"),
                         icon: "param".into(),
-                        hint: "Ctrl+P。右の編集パネルにパラメータの一覧を出す".into(),
+                        hint: self.win.t("toolbar-params-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -162,19 +150,7 @@ impl Workspace {
             Space::Simulation => {
                 // 研究は欄で条件を付ける機能(固定・荷重の面は 3D のビューでクリックして足す)
                 for (type_id, label, why) in self.addable(kmb_core::category::STUDY) {
-                    let d = self.win.registry.descriptor(&type_id);
-                    items.push((
-                        d.as_ref().map(|d| d.menu.clone()).unwrap_or_default(),
-                        Item {
-                            key: format!("f:{type_id}"),
-                            label,
-                            icon: d.as_ref().map(|d| d.icon.clone()).unwrap_or_default(),
-                            hint: d.as_ref().map(|d| d.hint.clone()).unwrap_or_default(),
-                            disabled: why,
-                            front: d.is_some_and(|d| d.pinned),
-                            formerly: Vec::new(),
-                        },
-                    ));
+                    items.push(self.feature_item(&type_id, &label, why));
                 }
             }
             Space::Machining => {
@@ -182,9 +158,9 @@ impl Workspace {
                     "管理".into(),
                     Item {
                         key: "u:tools".into(),
-                        label: "工具ライブラリ".into(),
+                        label: self.win.t("toolbar-tools"),
                         icon: "tools".into(),
-                        hint: "工具の一覧を選ぶ(なければ足す)".into(),
+                        hint: self.win.t("toolbar-tools-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -195,9 +171,9 @@ impl Workspace {
                     Item {
                         key: "u:machines".into(),
                         // 機械は 1 台だけなので、一覧(ライブラリ)ではなく設定と呼ぶ(Z7)
-                        label: "機械の設定".into(),
+                        label: self.win.t("toolbar-machine"),
                         icon: "machine".into(),
-                        hint: "機械の値(作業範囲、回転数、コレット、ベッド)。設定の「機械」。複数の機械を持つマシンライブラリはまだ無い".into(),
+                        hint: self.win.t("toolbar-machine-tip"),
                         disabled: None,
                         front: true,
                         formerly: Vec::new(),
@@ -208,14 +184,42 @@ impl Workspace {
         ribbon::tabs(space, items, &self.win.layout)
     }
 
+    /// 欄で足す機能の種類 `type_id` の項目と、入れるまとまりの名前。名前と説明は今の言語にする
+    /// (分野 `feature`、ID は [`kmb_i18n::feature_id`])。`why` は使えない理由。
+    fn feature_item(&self, type_id: &str, label: &str, why: Option<String>) -> (String, Item) {
+        let d = self.win.registry.descriptor(type_id);
+        let id = kmb_i18n::feature_id(type_id);
+        let hint = d.as_ref().map(|d| d.hint.as_str()).unwrap_or_default();
+        let item = Item {
+            key: format!("f:{type_id}"),
+            label: self.win.t_or(Some(&id), label),
+            icon: d.as_ref().map(|d| d.icon.clone()).unwrap_or_default(),
+            hint: if hint.is_empty() {
+                String::new()
+            } else {
+                self.win.t_or(Some(&format!("{id}-tip")), hint)
+            },
+            disabled: why,
+            front: d.as_ref().is_some_and(|d| d.pinned),
+            formerly: Vec::new(),
+        };
+        (d.map(|d| d.menu).unwrap_or_default(), item)
+    }
+
     /// ツールバーの項目のボタン。押したら実行して真を返す。
     pub(crate) fn ribbon_item_button(&mut self, ui: &mut egui::Ui, it: &Item) -> bool {
         let r = ui.add_enabled(it.disabled.is_none(), egui::Button::new(it.label.as_str()));
         let r = match &it.disabled {
             Some(why) => r.on_disabled_hover_text(why),
             None => match (self.key_of_item(&it.key), it.hint.is_empty()) {
-                (Some(k), true) => r.on_hover_text(format!("キー: {k}")),
-                (Some(k), false) => r.on_hover_text(format!("{}\nキー: {k}", it.hint)),
+                (Some(k), true) => {
+                    r.on_hover_text(self.win.t_with("toolbar-key", &[("key", k.into())]))
+                }
+                (Some(k), false) => r.on_hover_text(format!(
+                    "{}\n{}",
+                    it.hint,
+                    self.win.t_with("toolbar-key", &[("key", k.into())])
+                )),
                 (None, false) => r.on_hover_text(&it.hint),
                 (None, true) => r,
             },
@@ -291,7 +295,7 @@ impl Workspace {
                 Some(why) => self.win.fail(format!("{}: {why}", it.label)),
                 None => self.run_item(key),
             },
-            None => self.win.message = Some("この作業空間では使えないキーです".into()),
+            None => self.win.message = Some(self.win.t("toolbar-key-not-here")),
         }
     }
 
@@ -354,16 +358,21 @@ impl Workspace {
                         ui.add_space(8.0);
                         ui.spacing_mut().item_spacing.x = 2.0;
                         if sketch.is_some() {
-                            tab_button(ui, "スケッチ", true, true);
+                            tab_button(ui, &self.win.t("toolbar-tab-sketch"), true, true);
                         }
                         for t in &tabs {
-                            let r = tab_button(ui, &t.name, self.win.tab == t.name, false);
+                            let shown = self.win.t_or(ribbon::tab_id(&t.name), &t.name);
+                            let r = tab_button(ui, &shown, self.win.tab == t.name, false);
                             if r.clicked() {
                                 self.win.tab = t.name.clone();
                             }
+                            let (left, right, reset) = (
+                                self.win.t("toolbar-move-left"),
+                                self.win.t("toolbar-move-right"),
+                                self.win.t("toolbar-tab-order-reset"),
+                            );
                             r.right_menu(|ui| {
-                                if crate::theme::menu_row(ui, "chevl", "左へ", "", true).clicked()
-                                {
+                                if crate::theme::menu_row(ui, "chevl", &left, "", true).clicked() {
                                     ribbon::move_tab(
                                         self.win.layout.space,
                                         &tabs,
@@ -373,8 +382,7 @@ impl Workspace {
                                     );
                                     ui.close();
                                 }
-                                if crate::theme::menu_row(ui, "chevr", "右へ", "", true).clicked()
-                                {
+                                if crate::theme::menu_row(ui, "chevr", &right, "", true).clicked() {
                                     ribbon::move_tab(
                                         self.win.layout.space,
                                         &tabs,
@@ -385,15 +393,7 @@ impl Workspace {
                                     ui.close();
                                 }
                                 ui.separator();
-                                if crate::theme::menu_row(
-                                    ui,
-                                    "undo",
-                                    "タブの順を既定に戻す",
-                                    "",
-                                    true,
-                                )
-                                .clicked()
-                                {
+                                if crate::theme::menu_row(ui, "undo", &reset, "", true).clicked() {
                                     self.win.layout.tab_order.clear();
                                     ui.close();
                                 }
@@ -439,18 +439,20 @@ impl Workspace {
         // 字を大きくしても「作業空間」と作業空間の名前が箱に収まる幅にする(1 倍なら 116)。
         // 作業空間を替えても右のタブとツールバーがずれないよう、一番長い名前(アニメーション)で決める
         let name = ui.painter().layout_no_wrap(
-            space.label().to_string(),
+            self.win.space_name(space),
             crate::theme::prop(16.0),
             l.ws(),
         );
-        let head =
-            ui.painter()
-                .layout_no_wrap("作業空間".into(), crate::theme::prop(10.5), l.pal.ink2);
+        let head = ui.painter().layout_no_wrap(
+            self.win.t("toolbar-space"),
+            crate::theme::prop(10.5),
+            l.pal.ink2,
+        );
         let widest = Space::ALL
             .iter()
             .map(|s| {
                 ui.painter()
-                    .layout_no_wrap(s.label().to_string(), crate::theme::prop(16.0), l.ws())
+                    .layout_no_wrap(self.win.space_name(*s), crate::theme::prop(16.0), l.ws())
                     .size()
                     .x
             })
@@ -465,7 +467,10 @@ impl Workspace {
         );
         let rect = outer.shrink(8.0);
         let r = ui.interact(rect, ui.id().with("space_box"), egui::Sense::click());
-        let label = format!("作業空間: {}", space.label());
+        let label = self.win.t_with(
+            "toolbar-space-now",
+            &[("name", self.win.space_name(space).into())],
+        );
         r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
         let p = ui.painter();
         let fill = if r.hovered() {
@@ -501,7 +506,7 @@ impl Workspace {
             l.ws(),
             1.6,
         );
-        let r = r.on_hover_text("作業空間: 設計(形を作る)と加工(経路を作る)");
+        let r = r.on_hover_text(self.win.t("toolbar-space-tip"));
         // 一覧は箱と同じ幅にし、行の字は箱の名前と同じ大きさにする(字の倍率にもついていく)
         let pad = 4.0;
         let frame = egui::Frame::popup(ui.style()).inner_margin(pad);
@@ -516,11 +521,10 @@ impl Workspace {
                 let bg = ui.visuals().window_fill;
                 for s in Space::ALL {
                     let c = l.pal.ws(s);
-                    let g = ui.painter().layout_no_wrap(
-                        s.label().to_string(),
-                        crate::theme::prop(16.0),
-                        c,
-                    );
+                    let shown = self.win.space_name(s);
+                    let g = ui
+                        .painter()
+                        .layout_no_wrap(shown.clone(), crate::theme::prop(16.0), c);
                     let (row, rr) = ui.allocate_exact_size(
                         egui::vec2(row_w, g.size().y + 20.0),
                         egui::Sense::click(),
@@ -530,7 +534,7 @@ impl Workspace {
                             egui::WidgetType::SelectableLabel,
                             true,
                             s == space,
-                            s.label(),
+                            &shown,
                         )
                     });
                     let p = ui.painter();
@@ -577,16 +581,26 @@ impl Workspace {
                 front
             })
             .collect();
-        let widths: Vec<ribbon::Widths> = tab
+        // まとまりの見せる名前(名前そのものはピンの鍵なので訳さずに持つ)
+        let names: Vec<String> = tab
             .groups
             .iter()
+            .map(|g| self.win.t_or(ribbon::group_id(&g.name), &g.name))
+            .collect();
+        let widths: Vec<ribbon::Widths> = names
+            .iter()
             .zip(&fronts)
-            .map(|(g, f)| group_widths(ui, &g.name, f.len(), labels))
+            .map(|(name, f)| group_widths(ui, name, f.len(), labels))
             .collect();
         let select_w = 196.0 * theme::band();
         let fold = ribbon::fit(&widths, select_w, more_width(ui), ui.available_width());
         let tall = labels;
-        for ((g, front), f) in tab.groups.iter().zip(&fronts).zip(&fold) {
+        let (unpin, pin, reset) = (
+            self.win.t("toolbar-unpin"),
+            self.win.t("toolbar-pin"),
+            self.win.t("toolbar-pins-reset"),
+        );
+        for (((g, name), front), f) in tab.groups.iter().zip(&names).zip(&fronts).zip(&fold) {
             let shown: Vec<&Item> = match f {
                 ribbon::Fold::Hidden => continue,
                 ribbon::Fold::Collapsed => Vec::new(),
@@ -594,7 +608,7 @@ impl Workspace {
             };
             let compact = !labels || *f != ribbon::Fold::Full;
             let n = shown.len().max(1) as f32;
-            let w = (n * tile_width(compact) + (n - 1.0) * 2.0 + 8.0).max(name_width(ui, &g.name));
+            let w = (n * tile_width(compact) + (n - 1.0) * 2.0 + 8.0).max(name_width(ui, name));
             let lit = g.items.iter().any(|i| Some(&i.key) == active.as_ref());
             let (rect, _) =
                 ui.allocate_exact_size(egui::vec2(w, self.band_height()), egui::Sense::hover());
@@ -616,7 +630,7 @@ impl Workspace {
                         .or(front.first())
                         .or(g.items.first())
                         .map_or("", |i| i.icon.as_str());
-                    opens.push(group_tile(ui, icon, &g.name, lit, tall));
+                    opens.push(group_tile(ui, &self.win, icon, name, lit, tall));
                 }
                 for it in &shown {
                     let on = Some(&it.key) == active.as_ref();
@@ -628,7 +642,7 @@ impl Workspace {
                 ui,
                 rect,
                 ("glabel", &tab.name, &g.name),
-                &g.name,
+                name,
                 lit,
             ));
             for r in &opens {
@@ -643,18 +657,14 @@ impl Workspace {
                             let pr = theme::icon_button(
                                 ui,
                                 "pin",
-                                if pinned {
-                                    "前から外す"
-                                } else {
-                                    "前に出す"
-                                },
+                                if pinned { &unpin } else { &pin },
                                 true,
                                 pinned,
                             )
                             .on_hover_text(if pinned {
-                                "前から外す"
+                                &unpin
                             } else {
-                                "前に出す"
+                                &pin
                             });
                             if pr.clicked() {
                                 let e = if pinned {
@@ -684,7 +694,7 @@ impl Workspace {
                         });
                     }
                     ui.separator();
-                    if ui.button("前の並びを既定に戻す").clicked() {
+                    if ui.button(&reset).clicked() {
                         ribbon::edit_pins(
                             space,
                             &tab.name,
@@ -718,9 +728,10 @@ impl Workspace {
             for r in [tile, label] {
                 egui::Popup::menu(&r).show(|ui| {
                     for g in &hidden {
+                        let name = self.win.t_or(ribbon::group_id(&g.name), &g.name);
                         let icon = g.items.first().map_or("", |i| i.icon.as_str());
                         let lit = g.items.iter().any(|i| Some(&i.key) == active.as_ref());
-                        let row = sub_menu_row(ui, icon, &g.name, lit);
+                        let row = sub_menu_row(ui, icon, &name, lit);
                         egui::containers::menu::SubMenu::new().show(ui, &row, |ui| {
                             for it in &g.items {
                                 let on = Some(&it.key) == active.as_ref();
@@ -766,18 +777,17 @@ impl Workspace {
                 .layout(egui::Layout::top_down(egui::Align::Center)),
         );
         col.add_space(3.0);
+        let more = self.win.t("toolbar-group-more");
         let tile = icon_tile(
             &mut col,
             "chevr",
-            MORE,
+            &more,
             true,
             lit,
             self.win.layout.appearance.tool_labels,
         )
-        .on_hover_text(
-            "帯に入りきらないまとまり。窓を広げるか、ボタンの名前を出さない設定にすると帯に並ぶ",
-        );
-        let label = group_label(ui, rect, "more_group", MORE, lit);
+        .on_hover_text(self.win.t("toolbar-group-more-tip"));
+        let label = group_label(ui, rect, "more_group", &more, lit);
         ui.painter().vline(
             rect.right() - 0.5,
             rect.y_range(),
@@ -800,7 +810,19 @@ impl Workspace {
     /// 選ぶ欄が受けている間は、その欄が受ける種類を見せる。
     fn select_group(&mut self, ui: &mut egui::Ui) {
         let l = theme::look(ui.ctx());
-        let items = self.pick_filter_items();
+        const KINDS: [&str; 4] = [
+            "toolbar-pick-vertex",
+            "toolbar-pick-edge",
+            "toolbar-pick-face",
+            "toolbar-pick-body",
+        ];
+        let names: Vec<String> = KINDS.iter().map(|id| self.win.t(id)).collect();
+        let items: Vec<(&str, bool, bool)> = self
+            .pick_filter_items()
+            .iter()
+            .zip(&names)
+            .map(|((_, on, enabled), name)| (name.as_str(), *on, *enabled))
+            .collect();
         let field = self.active_pick_field().map(|(_, f)| f.label);
         let labels = self.win.layout.appearance.tool_labels;
         let (rect, _) = ui.allocate_exact_size(
@@ -820,9 +842,11 @@ impl Workspace {
         if labels {
             col.add_space(3.0);
             let now = match &field {
-                Some(label) => format!("欄「{label}」が受ける物"),
-                None if self.win.pick_filter.body => "面を押すとボディごと選ぶ".to_string(),
-                None => "頂点・辺・面を混ぜて選ぶ".to_string(),
+                Some(label) => self
+                    .win
+                    .t_with("toolbar-pick-field", &[("name", label.as_str().into())]),
+                None if self.win.pick_filter.body => self.win.t("toolbar-pick-now-body"),
+                None => self.win.t("toolbar-pick-now-mixed"),
             };
             col.label(
                 egui::RichText::new(now)
@@ -830,16 +854,18 @@ impl Workspace {
                     .color(l.pal.ink3),
             );
         }
-        let r = group_label(ui, rect, "select_group", "選択", false)
-            .on_hover_text("選べる種類。ボディを入れると、面を押した時にそのボディごと選ぶ");
+        let title = self.win.t("toolbar-group-select");
+        let r = group_label(ui, rect, "select_group", &title, false)
+            .on_hover_text(self.win.t("toolbar-group-select-tip"));
+        let texts: Vec<String> = KINDS
+            .iter()
+            .map(|id| self.win.t(&format!("{id}-check")))
+            .collect();
+        let all = self.win.t("toolbar-pick-all");
         egui::Popup::menu(&r).show(|ui| {
-            for (k, (label, on, enabled)) in self.pick_filter_items().into_iter().enumerate() {
+            for (k, (_, on, enabled)) in self.pick_filter_items().into_iter().enumerate() {
                 let mut v = on;
-                let text = if k == 3 {
-                    "ボディを選ぶ(面を押すとボディごと)".to_string()
-                } else {
-                    format!("{label}を選ぶ")
-                };
+                let text = texts[k].clone();
                 if ui
                     .add_enabled(enabled, egui::Checkbox::new(&mut v, text))
                     .clicked()
@@ -848,7 +874,7 @@ impl Workspace {
                 }
             }
             ui.separator();
-            if ui.button("すべて選べるようにする").clicked() {
+            if ui.button(&all).clicked() {
                 self.reset_pick_filter();
                 ui.close();
             }
@@ -892,20 +918,26 @@ impl Workspace {
         if r.clicked() {
             self.run_item(&it.key);
         }
+        let texts = [
+            "toolbar-move-left",
+            "toolbar-move-right",
+            "toolbar-unpin",
+            "toolbar-group-reset",
+        ]
+        .map(|id| self.win.t(id));
         r.right_menu(|ui| {
             let mut e = None;
-            if crate::theme::menu_row(ui, "chevl", "左へ", "", true).clicked() {
+            if crate::theme::menu_row(ui, "chevl", &texts[0], "", true).clicked() {
                 e = Some(PinEdit::Move(it.key.clone(), -1));
             }
-            if crate::theme::menu_row(ui, "chevr", "右へ", "", true).clicked() {
+            if crate::theme::menu_row(ui, "chevr", &texts[1], "", true).clicked() {
                 e = Some(PinEdit::Move(it.key.clone(), 1));
             }
             ui.separator();
-            if crate::theme::menu_row(ui, "pin", "前から外す", "", true).clicked() {
+            if crate::theme::menu_row(ui, "pin", &texts[2], "", true).clicked() {
                 e = Some(PinEdit::Unpin(it.key.clone()));
             }
-            if crate::theme::menu_row(ui, "undo", "このまとまりを既定に戻す", "", true).clicked()
-            {
+            if crate::theme::menu_row(ui, "undo", &texts[3], "", true).clicked() {
                 e = Some(PinEdit::Reset);
             }
             if let Some(e) = e {
@@ -1052,8 +1084,10 @@ pub(super) fn group_widths(ui: &egui::Ui, name: &str, n: usize, labels: bool) ->
 }
 
 /// 畳んだまとまりのボタン(まとまりの道具のアイコン 1 つ)。押すとまとまりの一覧を出す。
+/// `win` は名前と説明の文言に使う。
 pub(super) fn group_tile(
     ui: &mut egui::Ui,
+    win: &crate::window_state::WinState,
     icon: &str,
     name: &str,
     lit: bool,
@@ -1063,7 +1097,7 @@ pub(super) fn group_tile(
     let r = icon_tile(
         ui,
         icon,
-        &format!("{name}(畳んだまとまり)"),
+        &win.t_with("toolbar-collapsed", &[("name", name.into())]),
         true,
         lit,
         tall,
@@ -1080,9 +1114,7 @@ pub(super) fn group_tile(
         if lit { l.ws() } else { l.pal.ink2 },
         1.6,
     );
-    r.on_hover_text(format!(
-        "{name}: 窓が狭いので 1 つに畳んだまとまり。押すと道具の一覧を出す"
-    ))
+    r.on_hover_text(win.t_with("toolbar-collapsed-tip", &[("name", name.into())]))
 }
 
 /// 右端の「その他」のまとまりの幅。
