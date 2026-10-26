@@ -239,3 +239,24 @@ fn finishing_a_sketch_keeps_the_view_it_was_seen_from() {
         "回した向き {seen:?} で戻る: {after:?}"
     );
 }
+
+/// 平らな図(正面の図)でも、前にできたボディを線の下に描く(表示と非表示の決まり 6)。前は 3D の視点の
+/// 時だけボディを用意し、平らな図では置いた面の輪郭だけが出た。
+#[test]
+fn the_flat_view_draws_the_bodies_before_the_sketch() {
+    let part = kmb_samples::reference_part();
+    let mut ws = crate::tests::ws_of(part.doc, None, crate::tests::reg());
+    ws.open_edit(part.top_sketch);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.run();
+    let ed = editor(h.state_mut());
+    assert!(ed.view.space.is_none(), "平らな図で開いていない");
+    assert!(
+        ed.scene.key().iter().any(|(f, _)| *f == part.plate),
+        "平らな図で板のボディを描かない: {:?}",
+        ed.scene.key()
+    );
+}

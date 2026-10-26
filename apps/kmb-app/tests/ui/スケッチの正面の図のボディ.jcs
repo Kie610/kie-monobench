@@ -1,0 +1,11 @@
+# スケッチの正面の図でもボディを描く(表示と非表示の決まり 6)。前は、平らな図ではボディを描かず、
+# 置いた面の輪郭だけが出た。今は、スケッチの平面を真正面から見る向きで、見えているボディを陰つきで
+# 描き、その上にスケッチの線を重ねる(描いた事の確かめは kmb-ui-sketch の
+# the_flat_view_draws_the_bodies_before_the_sketch)。
+#! sample part
+#! size 1280x800
+
+dclick "ポケットの輪郭#1"
+wait
+expect ~"ポケットの輪郭" exists
+shot 正面の図

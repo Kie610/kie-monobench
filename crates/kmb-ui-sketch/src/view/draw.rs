@@ -16,6 +16,8 @@ pub(super) struct Frame<'a> {
     pub(super) sections: &'a [Section],
     pub(super) origins: &'a [([f64; 2], kmb_sketch::FaceOrigin)],
     pub(super) plane: Option<kmb_core::Plane>,
+    /// 前にできたボディ(見えている物)。平らな図でも線の下に描く
+    pub(super) scene: &'a kmb_ui::view3d::Scene,
     pub(super) sketch: &'a Sketch,
     pub(super) sol: &'a Solution,
     pub(super) values: Option<&'a DimValues>,
@@ -55,6 +57,7 @@ pub(super) fn draw(
         sections,
         origins,
         plane,
+        scene,
         sketch,
         sol,
         values,
@@ -82,9 +85,13 @@ pub(super) fn draw(
     let sol = preview.as_ref().unwrap_or(sol);
     let painter = ui.painter_at(rect);
     let l = kmb_ui::theme::look(ui.ctx());
-    // 3D の視点では、下にボディを描いた 3D のビューの上に重ねる
+    // 3D の視点では、下にボディを描いた 3D のビューの上に重ねる。平らな図(正面の図)でも、見えている
+    // ボディを平面を真正面から見る向きで陰つきに描き、その上に線を重ねる(輪郭だけにしない)
     if t.space.is_none() {
         painter.rect_filled(rect, kmb_ui::theme::corner(0.0), l.pal.canvas);
+        if let Some(pl) = plane {
+            flat_bodies(ui, rect, response.id.with("bodies"), &t, pl, scene, l.pal.canvas);
+        }
     }
     if editor.display.grid {
         // 刻みに吸い付く時は、その刻み(とその倍)で線を引く
@@ -767,4 +774,40 @@ pub(crate) fn corner_preview(
             _ => None,
         })
         .collect()
+}
+
+/// 平らな図の下に、前にできたボディを描く。平らな図と同じ所に同じ大きさで写る、平面を真正面から見る
+/// 平行投影の視点で描き、地はスケッチの地の色にする(3D の視点へ回した時と同じ陰と辺)。
+fn flat_bodies(
+    ui: &egui::Ui,
+    rect: Rect,
+    id: egui::Id,
+    t: &Transform,
+    plane: kmb_core::Plane,
+    scene: &kmb_ui::view3d::Scene,
+    canvas: Color32,
+) {
+    if scene.is_empty() {
+        return;
+    }
+    let mut cam = space_camera(t, rect, plane);
+    cam.perspective = false;
+    // ボディの色は作業空間の色のまま(画面の差し色はスケッチ中に水色になる。3D の視点と同じ)
+    let colors = kmb_ui::view3d::Colors {
+        background: canvas,
+        background_low: canvas,
+        ..kmb_ui::view3d::Colors::from_look(&kmb_ui::theme::Look {
+            sketch: false,
+            ..kmb_ui::theme::look(ui.ctx())
+        })
+    };
+    kmb_ui::view3d::paint_bodies(
+        ui,
+        rect,
+        id,
+        &cam,
+        scene,
+        &colors,
+        kmb_ui::Shading::ShadedEdges,
+    );
 }
