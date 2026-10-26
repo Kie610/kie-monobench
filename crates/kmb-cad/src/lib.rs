@@ -778,11 +778,70 @@ pub fn finish(
         _ => None,
     };
     let body = apply_recipe(ctx, &recipe, target, &tag(ctx))?;
-    Ok([
+    let mut out: Outputs = [
         ("body".to_string(), Value::Shape(body)),
         ("recipe".to_string(), kmb_core::Payload::to_value(&recipe)),
     ]
-    .into())
+    .into();
+    if let Some(t) = target
+        && recipe.operation() == Operation::Join
+        && let Some(w) = detached_join(ctx.kernel(), t, body)
+    {
+        kmb_core::add_warnings(&mut out, vec![w]);
+    }
+    Ok(out)
+}
+
+/// 結合した道具が対象のボディに付かず、離れた塊のまま同じボディに入ったか(結合の前 `before` より
+/// 結合の後 `after` の塊が増えたか)。入っていれば注意の文。結合したつもりで離れたまま、別の塊だと
+/// 気付かずに先へ進まないように知らせる(形は作る。後で動かして付けることもある。10-25 k7)。
+pub fn detached_join(
+    kernel: &dyn kmb_core::Kernel,
+    before: ShapeHandle,
+    after: ShapeHandle,
+) -> Option<String> {
+    (pieces(kernel, after)? > pieces(kernel, before)?).then(|| {
+        "結合した形が対象のボディに付かず、離れた塊のまま同じボディに入っています。位置か大きさを見直してください".into()
+    })
+}
+
+/// 形の網の、頂点でつながる三角形の組の数(離れた塊ごとに 1 つ。空洞の殻も 1 つに数える)。
+/// 面ごとに重ねて持つ頂点は、位置を 0.001 mm で丸めて 1 つにする。網が作れなければ `None`。
+fn pieces(kernel: &dyn kmb_core::Kernel, shape: ShapeHandle) -> Option<usize> {
+    let m = kernel.mesh(shape, 0.5).ok()?;
+    let mut at: std::collections::HashMap<[i64; 3], usize> = std::collections::HashMap::new();
+    let ids: Vec<usize> = m
+        .positions
+        .iter()
+        .map(|p| {
+            let n = at.len();
+            *at.entry(p.map(|v| (f64::from(v) * 1e3).round() as i64))
+                .or_insert(n)
+        })
+        .collect();
+    let mut up: Vec<usize> = (0..at.len()).collect();
+    fn root(up: &mut [usize], mut i: usize) -> usize {
+        while up[i] != i {
+            up[i] = up[up[i]];
+            i = up[i];
+        }
+        i
+    }
+    for t in &m.triangles {
+        let a = root(&mut up, ids[t[0] as usize]);
+        for &v in &t[1..] {
+            let b = root(&mut up, ids[v as usize]);
+            up[b] = a;
+        }
+    }
+    let mut roots: Vec<usize> = m
+        .triangles
+        .iter()
+        .map(|t| root(&mut up, ids[t[0] as usize]))
+        .collect();
+    roots.sort_unstable();
+    roots.dedup();
+    Some(roots.len())
 }
 
 /// 角度の既定(1 周)。

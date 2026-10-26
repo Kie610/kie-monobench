@@ -305,8 +305,11 @@ impl Workspace {
     }
 
     /// 今使えるかどうかつきの、モジュールの操作。
+    /// 今の言語の名前と説明にして返す(`WinState::localize_action`)。
     pub fn actions(&self) -> Vec<Action> {
-        self.win.extensions.actions(&self.context())
+        let mut v = self.win.extensions.actions(&self.context());
+        v.iter_mut().for_each(|a| self.win.localize_action(a));
+        v
     }
 
     /// 役割の印 `role` を持つ操作の名前(画面は機能の名前を書かず、役割で探す)。
@@ -319,9 +322,12 @@ impl Workspace {
 
     /// 機能 `id` を選んだとした時の操作(右クリックのメニュー用)。
     pub(crate) fn actions_for(&self, id: FeatureId) -> Vec<Action> {
-        self.win
+        let mut v = self
+            .win
             .extensions
-            .actions(&self.context_with(Some(id), None))
+            .actions(&self.context_with(Some(id), None));
+        v.iter_mut().for_each(|a| self.win.localize_action(a));
+        v
     }
 
     /// 操作 `id` を実行する。ファイルを求める操作はダイアログで選ばせる。

@@ -156,3 +156,115 @@ fn the_addable_list_is_rebuilt_when_the_document_changes() {
     ws.wait();
     assert!(why(&ws).is_some(), "ボディが無くなると足せない");
 }
+
+/// 作業空間ごとの見本の作業場(設計・加工・レンダリング・アニメーション・解析)。
+fn every_space() -> Vec<(Workspace, Space)> {
+    [
+        (reference_document(), Space::Design),
+        (reference_cam_document(), Space::Machining),
+        (reference_document(), Space::Render),
+        (reference_document(), Space::Animation),
+        (reference_document(), Space::Simulation),
+    ]
+    .into_iter()
+    .map(|(doc, space)| {
+        let mut ws = Workspace::new(doc, None, kmb_bundle::modules());
+        ws.switch_space(space);
+        (ws, space)
+    })
+    .collect()
+}
+
+/// ツールバーとファイルのメニューに出る操作と機能は、みな文言の ID を持ち(英語で出せる)、
+/// 日本語の文言はモジュールが付けた名前・説明と同じ(`kmb-i18n` の action.ftl・feature.ftl)。
+#[test]
+fn every_toolbar_command_has_texts_matching_its_module() {
+    let mut wrong = vec![];
+    for (ws, _) in every_space() {
+        let texts = &ws.win.texts;
+        let mut check = |id: String, module: &str| {
+            if module.is_empty() {
+                return;
+            }
+            match texts.has(kmb_i18n::Lang::Ja, &id) {
+                false => wrong.push(format!("{id} が無い(日本語「{module}」)")),
+                true if texts.text(kmb_i18n::Lang::Ja, &id) != module => wrong.push(format!(
+                    "{id} の日本語「{}」がモジュールの「{module}」と違う",
+                    texts.text(kmb_i18n::Lang::Ja, &id)
+                )),
+                true => {}
+            }
+        };
+        let shown: Vec<String> = ws
+            .ribbon_tabs()
+            .into_iter()
+            .flat_map(|t| t.groups)
+            .flat_map(|g| g.items)
+            .map(|i| i.key)
+            .collect();
+        for a in ws.win.extensions.actions(&ws.context()) {
+            let in_file_menu =
+                a.is_at(kmb_core::Place::FileMenu) || !matches!(a.input, kmb_core::Input::None);
+            if in_file_menu || shown.contains(&format!("a:{}", a.id)) {
+                let id = kmb_i18n::action_id(&a.id);
+                check(id.clone(), &a.label);
+                check(format!("{id}-tip"), &a.hint);
+            }
+        }
+        for key in &shown {
+            if let Some(t) = key.strip_prefix("f:") {
+                let d = ws.win.registry.descriptor(t).unwrap();
+                let id = kmb_i18n::feature_id(t);
+                check(id.clone(), &d.label);
+                check(format!("{id}-tip"), &d.hint);
+            }
+        }
+    }
+    wrong.sort();
+    wrong.dedup();
+    assert!(
+        wrong.is_empty(),
+        "crates/kmb-i18n/locales の ja と en の action.ftl・feature.ftl を直す:\n{}",
+        wrong.join("\n")
+    );
+}
+
+/// 表示の言語を English にすると、ツールバーのタブ・まとまり・操作・機能・画面のボタンが英語になり、
+/// ピンの鍵(まとまりの名前)は変わらない。
+#[test]
+fn the_toolbar_follows_the_display_language() {
+    for (mut ws, space) in every_space() {
+        ws.win.layout.appearance.language = "en".into();
+        for t in ws.ribbon_tabs() {
+            assert!(ribbon::tab_id(&t.name).is_some(), "タブ「{}」の ID", t.name);
+            for g in &t.groups {
+                assert!(
+                    ribbon::group_id(&g.name).is_some(),
+                    "まとまり「{}」の ID",
+                    g.name
+                );
+                for i in &g.items {
+                    assert!(
+                        !i.label
+                            .chars()
+                            .any(|c| ('\u{3040}'..='\u{30ff}').contains(&c)
+                                || ('\u{4e00}'..='\u{9fff}').contains(&c)),
+                        "{space:?} の {} が英語でない: {}",
+                        i.key,
+                        i.label
+                    );
+                }
+            }
+        }
+    }
+    let (mut ws, _) = every_space().remove(0);
+    ws.win.layout.appearance.language = "en".into();
+    let label = |ws: &Workspace, key: &str| ws.item_of(key).unwrap().label;
+    assert_eq!(label(&ws, "a:cad.extrude"), "Extrude");
+    assert_eq!(label(&ws, "u:measure"), "Measure");
+    assert_eq!(label(&ws, "f:solid.shell@1"), "Shell");
+    assert_eq!(label(&ws, "f:solid.hole@1"), "Hole (by Fields)");
+    ws.win.layout.appearance.language = "ja".into();
+    assert_eq!(label(&ws, "a:cad.extrude"), "押し出し");
+    assert_eq!(label(&ws, "f:solid.hole@1"), "穴(欄で指定)");
+}

@@ -28,12 +28,12 @@ pub(crate) struct DocTab {
     pub parked: Option<Box<DocState>>,
 }
 
-/// タブに出す名前(拡張子なし。無題は「(無題)」)。
-fn tab_name(path: Option<&Path>, label: Option<&str>) -> String {
+/// タブに出す名前(拡張子なし。無題は今の言語の「(無題)」の `untitled`)。
+fn tab_name(path: Option<&Path>, label: Option<&str>, untitled: &str) -> String {
     match (path.and_then(|p| p.file_stem()), label) {
         (Some(n), _) => n.to_string_lossy().to_string(),
         (None, Some(l)) => l.to_string(),
-        (None, None) => "(無題)".to_string(),
+        (None, None) => untitled.to_string(),
     }
 }
 
@@ -56,13 +56,21 @@ impl Workspace {
 
     /// タブの名前と、未保存か(並べた順)。
     pub fn tab_titles(&self) -> Vec<(String, bool)> {
+        let untitled = self.win.t("frame-tab-untitled");
         self.win
             .doc_tabs
             .iter()
             .map(|t| match &t.parked {
-                Some(w) => (tab_name(w.work.path(), w.doc_label.as_deref()), w.modified),
+                Some(w) => (
+                    tab_name(w.work.path(), w.doc_label.as_deref(), &untitled),
+                    w.modified,
+                ),
                 None => (
-                    tab_name(self.cur.work.path(), self.cur.doc_label.as_deref()),
+                    tab_name(
+                        self.cur.work.path(),
+                        self.cur.doc_label.as_deref(),
+                        &untitled,
+                    ),
                     self.cur.modified,
                 ),
             })
@@ -319,6 +327,13 @@ impl Workspace {
         let mut close = None;
         let mut close_others = None;
         let mut moved = None;
+        let t = |id: &str| self.win.t(id);
+        let (close_text, close_others_text) = (t("frame-tab-close"), t("frame-tab-close-others"));
+        let (saved_mod, unsaved, unsaved_mod) = (
+            "frame-tab-saved-modified",
+            t("frame-tab-unsaved"),
+            t("frame-tab-unsaved-modified"),
+        );
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let h = ui.available_height() - 6.0;
@@ -456,18 +471,17 @@ impl Workspace {
                 {
                     moved = Some((i, slot(x)));
                 }
-                let tip = match &paths[i] {
-                    Some(p) => format!("{p}{}", if *modified { "(未保存)" } else { "" }),
-                    None => format!(
-                        "まだ保存していない文書{}",
-                        if *modified { "(未保存)" } else { "" }
-                    ),
+                let tip = match (&paths[i], *modified) {
+                    (Some(p), false) => p.clone(),
+                    (Some(p), true) => self.win.t_with(saved_mod, &[("path", p.as_str().into())]),
+                    (None, false) => unsaved.clone(),
+                    (None, true) => unsaved_mod.clone(),
                 };
                 r.on_hover_text(tip).right_menu(|ui| {
                     if crate::theme::menu_row(
                         ui,
                         "x",
-                        "閉じる",
+                        &close_text,
                         &crate::keys::label("close_tab"),
                         true,
                     )
@@ -476,7 +490,7 @@ impl Workspace {
                         close = Some(i);
                         ui.close();
                     }
-                    if crate::theme::menu_row(ui, "", "ほかのタブを閉じる", "", titles.len() > 1)
+                    if crate::theme::menu_row(ui, "", &close_others_text, "", titles.len() > 1)
                         .clicked()
                     {
                         close_others = Some(i);
@@ -485,8 +499,17 @@ impl Workspace {
                 });
             }
             if k < n {
-                let r = crate::theme::icon_button(ui, "chev", "ほかのタブ", true, false)
-                    .on_hover_text(format!("帯に入らないタブ {} 枚(押すと一覧)", n - k));
+                let r = crate::theme::icon_button(
+                    ui,
+                    "chev",
+                    &self.win.t("frame-tab-more"),
+                    true,
+                    false,
+                )
+                .on_hover_text(
+                    self.win
+                        .t_with("frame-tab-more-tip", &[("count", (n - k).into())]),
+                );
                 egui::Popup::menu(&r).show(|ui| {
                     for (i, (name, modified)) in titles.iter().enumerate() {
                         let text = if *modified {
@@ -501,8 +524,8 @@ impl Workspace {
                     }
                 });
             }
-            if crate::theme::icon_button(ui, "plus", "新しいタブ", true, false)
-                .on_hover_text("新規デザインを別のタブで開く(Ctrl+N)")
+            if crate::theme::icon_button(ui, "plus", &self.win.t("frame-tab-new"), true, false)
+                .on_hover_text(self.win.t("frame-tab-new-tip"))
                 .clicked()
             {
                 self.new_document();

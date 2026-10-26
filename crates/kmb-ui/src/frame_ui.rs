@@ -45,19 +45,19 @@ impl Workspace {
             ui.add_space(6.0);
             // データパネルを出し入れ(ホームを出している間は文書へ戻ると出る)
             let data = self.win.layout.data_open;
-            if theme::icon_button(ui, "apps", "データパネル", true, data)
-                .on_hover_text(if data {
-                    "データパネルを隠す"
+            if theme::icon_button(ui, "apps", &self.win.t("frame-data-panel"), true, data)
+                .on_hover_text(self.win.t(if data {
+                    "frame-data-panel-hide"
                 } else {
-                    "データパネルを表示: 最近・プロジェクトのデザインを左に並べ、開く・3D のビューへ引いてリンクで挿入する"
-                })
+                    "frame-data-panel-show"
+                }))
                 .clicked()
             {
                 self.win.layout.data_open = !data;
             }
             self.file_menu(ui);
-            if theme::icon_button(ui, "save", "保存", true, false)
-                .on_hover_text("保存(Ctrl+S)")
+            if theme::icon_button(ui, "save", &self.win.t("frame-save"), true, false)
+                .on_hover_text(self.win.t("frame-save-tip"))
                 .clicked()
             {
                 self.save();
@@ -65,11 +65,11 @@ impl Workspace {
             if theme::icon_button(
                 ui,
                 "undo",
-                "元に戻す",
+                &self.win.t("frame-undo"),
                 self.cur.work.doc().can_undo(),
                 false,
             )
-            .on_hover_text("取り消し(Ctrl+Z)")
+            .on_hover_text(self.win.t("frame-undo-tip"))
             .clicked()
             {
                 self.undo();
@@ -77,11 +77,11 @@ impl Workspace {
             if theme::icon_button(
                 ui,
                 "redo",
-                "やり直し",
+                &self.win.t("frame-redo"),
                 self.cur.work.doc().can_redo(),
                 false,
             )
-            .on_hover_text("やり直し(Ctrl+Y)")
+            .on_hover_text(self.win.t("frame-redo-tip"))
             .clicked()
             {
                 self.redo();
@@ -89,11 +89,11 @@ impl Workspace {
             if theme::icon_button(
                 ui,
                 "hist",
-                "取り消しの履歴",
+                &self.win.t("frame-undo-history"),
                 true,
                 self.win.undo_history_open,
             )
-            .on_hover_text("取り消しの履歴: 済んだ変更の一覧。行を押すと、その時点へ戻る")
+            .on_hover_text(self.win.t("frame-undo-history-tip"))
             .clicked()
             {
                 self.toggle_undo_history();
@@ -107,9 +107,15 @@ impl Workspace {
                     self.window_buttons(ui);
                 });
                 self.help_menu(ui);
-                if theme::icon_button(ui, "gear", "設定", true, self.settings.open)
-                    .on_hover_text("設定: マウス、画面の配置、機械など、この PC 全体の設定")
-                    .clicked()
+                if theme::icon_button(
+                    ui,
+                    "gear",
+                    &self.win.t("frame-settings"),
+                    true,
+                    self.settings.open,
+                )
+                .on_hover_text(self.win.t("frame-settings-tip"))
+                .clicked()
                 {
                     self.settings.open = !self.settings.open;
                 }
@@ -132,7 +138,7 @@ impl Workspace {
         let l = theme::look(ui.ctx());
         // 字が大きい時は「コマンドを探す」と「Ctrl+K」が重ならない幅にする(1 倍なら 250)
         let name = ui.painter().layout_no_wrap(
-            "コマンドを探す".into(),
+            self.win.t("frame-search-placeholder"),
             crate::theme::prop(12.5),
             l.pal.ink3,
         );
@@ -145,7 +151,8 @@ impl Workspace {
             egui::vec2(need.max(250.0), crate::theme::fs(24.0).max(icon + 8.0)),
             egui::Sense::click(),
         );
-        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "コマンド検索"));
+        let search = self.win.t("frame-search");
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &search));
         let p = ui.painter();
         p.rect(
             rect,
@@ -169,9 +176,7 @@ impl Workspace {
             key,
             l.pal.ink3,
         );
-        if r.on_hover_text("名前や読みでコマンドを探して実行する(Ctrl+K)")
-            .clicked()
-        {
+        if r.on_hover_text(self.win.t("frame-search-tip")).clicked() {
             self.toggle_command_palette();
         }
     }
@@ -184,7 +189,9 @@ impl Workspace {
         let k = theme::band();
         let w = (if unseen > 0 { 48.0 } else { 30.0 }) * k;
         let (rect, r) = ui.allocate_exact_size(egui::vec2(w, 26.0 * k), egui::Sense::click());
-        let label = format!("知らせ({})", self.win.history.len());
+        let label = self
+            .win
+            .t_with("frame-notices", &[("count", self.win.history.len().into())]);
         r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
         let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&r));
         if r.hovered() || open {
@@ -213,23 +220,28 @@ impl Workspace {
                 l.pal.chrome,
             );
         }
-        let r = r.on_hover_text("知らせ: 計算の注意、保存、書き出しの結果");
+        let r = r.on_hover_text(self.win.t("frame-notices-tip"));
         egui::Popup::menu(&r)
             .width(360.0)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {
                 self.win.notices_seen = self.win.history.len();
                 ui.label(
-                    egui::RichText::new(format!("知らせ ・ {} 件", self.win.history.len()))
-                        .size(crate::theme::fs(10.5))
-                        .color(l.pal.ink3),
+                    egui::RichText::new(self.win.t_with(
+                        "frame-notices-heading",
+                        &[("count", self.win.history.len().into())],
+                    ))
+                    .size(crate::theme::fs(10.5))
+                    .color(l.pal.ink3),
                 );
                 if self.win.history.is_empty() {
-                    ui.weak("知らせはありません");
+                    ui.weak(self.win.t("frame-notices-empty"));
                 }
                 egui::ScrollArea::vertical()
                     .max_height(320.0)
                     .show(ui, |ui| {
+                        let copy = self.win.t("frame-notices-copy");
+                        let copy_tip = self.win.t("frame-notices-copy-tip");
                         let rows = self
                             .win
                             .history
@@ -256,8 +268,8 @@ impl Workspace {
                                         .color(l.pal.ink3),
                                 );
                                 if ui
-                                    .small_button("写す")
-                                    .on_hover_text("この知らせをクリップボードへ写す")
+                                    .small_button(copy.as_str())
+                                    .on_hover_text(copy_tip.as_str())
                                     .clicked()
                                 {
                                     ui.ctx().copy_text(m.clone());
@@ -269,14 +281,14 @@ impl Workspace {
                 ui.separator();
                 if !self.win.history.is_empty()
                     && ui
-                        .button("全部を写す")
-                        .on_hover_text("知らせを古い順に、時刻つきでクリップボードへ写す")
+                        .button(self.win.t("frame-notices-copy-all"))
+                        .on_hover_text(self.win.t("frame-notices-copy-all-tip"))
                         .clicked()
                 {
                     ui.ctx()
                         .copy_text(notices_text(&self.win.history, &self.win.history_at));
                 }
-                if ui.button("履歴を消す").clicked() {
+                if ui.button(self.win.t("frame-notices-clear")).clicked() {
                     self.win.history.clear();
                     self.win.history_at.clear();
                     self.win.history_tone.clear();
@@ -322,13 +334,16 @@ impl Workspace {
                 if ui
                     .add(
                         egui::Label::new(
-                            egui::RichText::new(format!("単位 {}", self.length_unit().name()))
-                                .size(crate::theme::fs(11.5))
-                                .color(l.pal.ink2),
+                            egui::RichText::new(self.win.t_with(
+                                "frame-status-unit",
+                                &[("unit", self.length_unit().name().into())],
+                            ))
+                            .size(crate::theme::fs(11.5))
+                            .color(l.pal.ink2),
                         )
                         .sense(egui::Sense::click()),
                     )
-                    .on_hover_text("この文書の長さの単位。押すと設定の「単位」で変えられる")
+                    .on_hover_text(self.win.t("frame-status-unit-tip"))
                     .clicked()
                 {
                     self.open_settings_at("general/units");
@@ -361,17 +376,18 @@ impl Workspace {
                         ui.spinner();
                         // 長くかかる時は経った秒数も出す(画面は止めずに計算している)
                         let text = match self.busy_for().map(|d| d.as_secs()) {
-                            Some(s) if s >= 1 => format!("再計算中 {s} 秒"),
-                            _ => "再計算中".to_string(),
+                            Some(s) if s >= 1 => self.win.t_with(
+                                "frame-status-recalculating-secs",
+                                &[("secs", (s as f64).into())],
+                            ),
+                            _ => self.win.t("frame-status-recalculating"),
                         };
                         ui.label(
                             egui::RichText::new(text)
                                 .size(crate::theme::fs(11.5))
                                 .color(l.pal.ink2),
                         )
-                        .on_hover_text(
-                            "計算の間もビューを回したり選んだりできる。終わると形を差し替える",
-                        );
+                        .on_hover_text(self.win.t("frame-status-recalculating-tip"));
                         ui.add_space(12.0);
                     }
                     if self.is_running() {
@@ -382,23 +398,28 @@ impl Workspace {
                                 ui.spinner();
                                 // シミュレーションなどの仕事も、経った秒数を出す(U66。止まっていないと分かる)
                                 let text = match self.task_for().map(|d| d.as_secs()) {
-                                    Some(s) if s >= 1 => format!("計算中 {s} 秒"),
-                                    _ => "計算中".to_string(),
+                                    Some(s) if s >= 1 => self.win.t_with(
+                                        "frame-status-computing-secs",
+                                        &[("secs", (s as f64).into())],
+                                    ),
+                                    _ => self.win.t("frame-status-computing"),
                                 };
                                 ui.label(
                                     egui::RichText::new(text)
                                         .size(crate::theme::fs(11.5))
                                         .color(l.pal.ink2),
                                 )
-                                .on_hover_text(
-                                    "計算の間もビューを回したり選んだりできる。終わると結果を知らせる",
-                                );
+                                .on_hover_text(self.win.t("frame-status-computing-tip"));
                             }
                         }
                         ui.add_space(12.0);
                     }
                     // 入りきらない案内は途中で切らず、そこから後ろを出さない(字が大きい時)
                     let mut full = false;
+                    // 文言は窓の状態の訳から引く(知らせを消す時に窓の状態の別の欄を書くので、訳だけを借りる)
+                    let lang = self.win.lang();
+                    let texts = &self.win.texts;
+                    let t = |id: &str| texts.text(lang, id);
                     let mut hint = |ui: &mut egui::Ui, key: &str, text: &str| {
                         let w = |t: &str, f| {
                             ui.painter()
@@ -425,11 +446,11 @@ impl Workspace {
                     if let Some(g) = &self.cur.gesture {
                         let ready = g.ready();
                         if ready {
-                            hint(ui, "Enter", "OK");
+                            hint(ui, "Enter", &t("frame-hint-ok"));
                         }
-                        hint(ui, "左", "クリックで決める");
-                        hint(ui, "数字", "値を打つ");
-                        hint(ui, "Esc", "キャンセル");
+                        hint(ui, &t("frame-key-left"), &t("frame-hint-click-to-set"));
+                        hint(ui, &t("frame-key-digits"), &t("frame-hint-type-value"));
+                        hint(ui, "Esc", &t("frame-hint-cancel"));
                     } else if let Some(m) = self.win.message.clone() {
                         ui.label(
                             egui::RichText::new(&m)
@@ -443,7 +464,7 @@ impl Workspace {
                                 )
                                 .frame(false),
                             )
-                            .on_hover_text("この知らせを消す(鐘の一覧には残る)")
+                            .on_hover_text(t("frame-status-dismiss-tip"))
                             .clicked()
                         {
                             self.win.message = None;
@@ -457,25 +478,26 @@ impl Workspace {
                         }
                     } else if self.selection().len() >= 2 {
                         ui.label(
-                            egui::RichText::new(format!(
-                                "{} 個を選んでいます",
-                                self.selection().len()
+                            egui::RichText::new(texts.text_with(
+                                lang,
+                                "frame-status-selected",
+                                &[("count", self.selection().len().into())],
                             ))
                             .size(crate::theme::fs(11.5))
                             .color(l.pal.ink2),
                         );
                         ui.add_space(12.0);
-                        hint(ui, "Ctrl+G", "グループ");
-                        hint(ui, "Delete", "削除");
+                        hint(ui, "Ctrl+G", &t("frame-hint-group"));
+                        hint(ui, "Delete", &t("frame-hint-delete"));
                     } else {
-                        hint(ui, "左", "選ぶ ・ ドラッグで範囲 ・ 長押しで重なり");
-                        hint(ui, "右", "メニュー ・ ドラッグで回す");
+                        hint(ui, &t("frame-key-left"), &t("frame-hint-select"));
+                        hint(ui, &t("frame-key-right"), &t("frame-hint-menu-orbit"));
                         let mid = match self.win.layout.middle_drag {
-                            MiddleDrag::Pan => "動かす ・ 二度押しでそこを回す中心に",
-                            MiddleDrag::Orbit => "回す ・ 二度押しでそこを回す中心に",
+                            MiddleDrag::Pan => "frame-hint-middle-pan",
+                            MiddleDrag::Orbit => "frame-hint-middle-orbit",
                         };
-                        hint(ui, "ホイール押し", mid);
-                        hint(ui, "ホイール", "拡大");
+                        hint(ui, &t("frame-key-middle"), &t(mid));
+                        hint(ui, &t("frame-key-wheel"), &t("frame-hint-zoom"));
                     }
                 });
             });
@@ -708,31 +730,36 @@ impl Workspace {
         let left = (0.03..1.0)
             .contains(&f)
             .then(|| elapsed * (1.0 - f as f64) / f as f64);
-        let text = format!(
-            "{} · 経過 {}{}",
-            p.note,
-            clock(elapsed),
-            left.map(|s| format!(" · 残り 約 {}", clock(s)))
-                .unwrap_or_default()
-        );
+        let note = || ("note", kmb_i18n::Arg::from(p.note.as_str()));
+        let el = || ("elapsed", kmb_i18n::Arg::from(clock(elapsed)));
+        let text = match left {
+            Some(s) => self.win.t_with(
+                "frame-status-progress-left",
+                &[note(), el(), ("left", clock(s).into())],
+            ),
+            None => self.win.t_with("frame-status-progress", &[note(), el()]),
+        };
         ui.label(
             egui::RichText::new(text)
                 .size(crate::theme::fs(11.5))
                 .color(l.pal.ink2),
         )
-        .on_hover_text("計算の間もビューを回したり選んだりできる。終わると結果を知らせる");
+        .on_hover_text(self.win.t("frame-status-computing-tip"));
         let stopping = self.task_stopping();
         if let Some(name) = &p.finish
             && ui
                 .add_enabled(!stopping, egui::Button::new(name.as_str()).small())
-                .on_hover_text("ここまでの回数で絵を仕上げてファイルに書く(粗さが残ることがある)")
+                .on_hover_text(self.win.t("frame-status-finish-tip"))
                 .clicked()
         {
             self.finish_task();
         }
         if ui
-            .add_enabled(!stopping, egui::Button::new("中止").small())
-            .on_hover_text("途中でやめる。ファイルは書かない")
+            .add_enabled(
+                !stopping,
+                egui::Button::new(self.win.t("frame-status-stop")).small(),
+            )
+            .on_hover_text(self.win.t("frame-status-stop-tip"))
             .clicked()
         {
             self.cancel_task();

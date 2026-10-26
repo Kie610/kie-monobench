@@ -129,7 +129,7 @@ impl Workspace {
                         .find(|t| t.on)
                         .or(all.first())
                         .map_or("", |t| t.icon.as_str());
-                    opens.push(group_tile(ui, icon, &g.name, lit, labels));
+                    opens.push(group_tile(ui, &self.win, icon, &g.name, lit, labels));
                 }
                 for t in &shown {
                     // 親のある道具は、同じ親の道具が前に 1 つだけなら親の名前で出す(「2 点指定の長方形」は
