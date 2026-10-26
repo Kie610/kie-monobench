@@ -130,6 +130,8 @@ impl Headless {
     }
 
     pub fn with_document(modules: Modules, mut doc: Document, path: Option<PathBuf>) -> Self {
+        // 古い版の文書の、読むボディを固定する印のうち要らない物を外す(読む形は変わらない)
+        doc.release_pins(&modules.registry);
         let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
         Headless {
             doc,
@@ -159,6 +161,7 @@ impl Headless {
             bg.forget_running();
         }
         let old = std::mem::replace(&mut self.doc, doc);
+        self.doc.release_pins(&self.modules.registry);
         self.path = path;
         self.active = Default::default();
         self.recompute();

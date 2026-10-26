@@ -464,6 +464,7 @@ mod tests {
             name: type_id.into(),
             data,
             suppressed: false,
+            pin_bodies: false,
         };
         while doc.data().next_id <= 10 {
             doc.alloc_feature_id();

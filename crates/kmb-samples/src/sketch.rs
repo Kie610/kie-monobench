@@ -107,6 +107,7 @@ pub fn sample_document() -> Document {
                     name: "板の輪郭".into(),
                     data: serde_json::to_value(sketch).expect("JSON にできる"),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             },
         ],
@@ -185,6 +186,7 @@ pub fn sketch_tools_document() -> Document {
                 name: "作図の見本".into(),
                 data: serde_json::to_value(s).expect("JSON にできる"),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -283,6 +285,7 @@ pub fn sketch_dims_document() -> Document {
                 name: "寸法の見本".into(),
                 data: serde_json::to_value(s).expect("JSON にできる"),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

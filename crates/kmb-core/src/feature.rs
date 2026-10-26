@@ -347,6 +347,8 @@ pub struct EvalCtx<'a> {
     pub(crate) declared: &'a [InputRef],
     pub(crate) params: &'a HashMap<String, Quantity>,
     pub(crate) outputs: &'a HashMap<FeatureId, Outputs>,
+    /// 読むボディの付け替え(データの形 → 読む形。[`crate::BodyTable::redirects`])
+    pub(crate) redirect: &'a BTreeMap<crate::BodyState, crate::BodyState>,
     pub(crate) kernel: &'a dyn Kernel,
     pub(crate) registry: &'a Registry,
     /// 計算している文書。誤りの文でボディ・部品を名前で指すためだけに読む
@@ -399,6 +401,11 @@ impl EvalCtx<'_> {
         if !declared {
             return Err(EvalError::Undeclared(format!("{feature} の出力 {slot}")));
         }
+        // ボディは、この機能の手前でのそのボディの最新の形を読む
+        let (feature, slot) = match self.redirect.get(&(feature, slot.to_string())) {
+            Some((f, s)) => (*f, s.as_str()),
+            None => (feature, slot),
+        };
         self.outputs
             .get(&feature)
             .and_then(|o| o.get(slot))

@@ -616,10 +616,11 @@ fn a_datum_plane_mirrors_and_splits_a_body_and_follows_its_distance() {
     let (_, hi) = k.bounds(body_handle(&mut doc, &k, mirror)).unwrap();
     assert!((hi[0] - 120.0).abs() < 1e-3, "{hi:?}");
 
-    // 板を x = 15 の作業平面で割る。法線の側(x 15〜40)が元のボディの名前を受け継ぐ
+    // 写した後の板(x 0〜120。割るは手前の最新の形を読む)を x = 15 の作業平面で割る。
+    // 法線の側(x 15〜120)が元のボディの名前を受け継ぐ
     let (lo, hi) = k.bounds(body_handle(&mut doc, &k, split)).unwrap();
     assert!(
-        (lo[0] - 15.0).abs() < 1e-3 && (hi[0] - 40.0).abs() < 1e-3,
+        (lo[0] - 15.0).abs() < 1e-3 && (hi[0] - 120.0).abs() < 1e-3,
         "{lo:?} {hi:?}"
     );
     set_param(&mut doc, "cut_at", "25 mm");
