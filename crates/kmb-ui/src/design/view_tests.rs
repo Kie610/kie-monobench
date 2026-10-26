@@ -122,7 +122,11 @@ fn sketches_show_in_the_view_until_a_feature_uses_them() {
     // 目で出すと、板の輪郭(長方形の 4 本と中央の穴)が出る
     ws.set_hidden(sketch, false);
     assert_eq!(ws.sketch_lines().len(), 5);
-    // 使っている機能を消すと、自動で隠したものは出し直す
+    // 目の開け閉めは文書の変更(変更ありになり、取り消せる)
+    assert!(ws.is_modified());
+    ws.undo();
+    assert!(ws.is_hidden(sketch), "取り消すと目も戻る");
+    // 使っている機能を消しても、道具は目を出し直さない
     ws.set_hidden(sketch, true);
     let top = part.top_sketch;
     assert!(ws.is_hidden(top));
@@ -145,9 +149,9 @@ fn sketches_show_in_the_view_until_a_feature_uses_them() {
     );
     ws.apply(tx);
     ws.wait();
-    assert!(!ws.is_hidden(top), "使う機能が無くなったので出す");
+    assert!(ws.is_hidden(top), "使う機能が無くなっても出し直さない");
     assert!(ws.is_hidden(sketch), "利用者が隠したものはそのまま");
-    assert!(!ws.sketch_lines().is_empty());
+    assert!(ws.sketch_lines().is_empty());
 }
 
 #[test]

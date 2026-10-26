@@ -429,11 +429,7 @@ impl Workspace {
             .filter(|(_, r, _)| c.bodies.contains(r))
             .collect();
         let all = self.cur.work.doc().data().component_bodies(id);
-        let shown = all.is_empty()
-            || numbered
-                .iter()
-                .filter(|(_, r, _)| all.contains(r))
-                .any(|(_, r, f)| !self.is_body_hidden(*r, f.id));
+        let shown = !self.is_component_hidden(id);
         let link = self.link_of_component(&c);
         let meta = match &link {
             Some(l) => link_meta(l).to_string(),
@@ -470,9 +466,7 @@ impl Workspace {
         self.tree_drag_source(ui, TreeDrag::Component(id), &r);
         self.browser.component_drop_rows.push((Some(id), r.rect));
         if eye {
-            for root in &all {
-                self.set_body_hidden(*root, shown);
-            }
+            self.set_component_hidden(id, shown);
         }
         let r = match &link {
             Some(l) => {
@@ -592,9 +586,7 @@ impl Workspace {
             .on_hover_text("中のボディをまとめて隠す・出す")
             .clicked()
         {
-            for root in all {
-                self.set_body_hidden(*root, shown);
-            }
+            self.set_component_hidden(c.id, shown);
             ui.close();
         }
         ui.separator();

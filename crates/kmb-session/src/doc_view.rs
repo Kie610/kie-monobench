@@ -1,11 +1,10 @@
-//! 文書ごとの画面の見え方の覚え(ブラウザの木の開け閉め・原点とまとまりの目・行の目・畳んだ
-//! タイムラインのグループ)。文書を開き直しても前の見え方に戻すため、データフォルダの
+//! 文書ごとの画面の見え方の覚え(ブラウザの木の開け閉め・畳んだタイムラインのグループ)。目の開け閉めは
+//! 文書の区画 `cad.visibility` に保存するので、ここには置かない。文書を開き直しても前の見え方に戻すため、データフォルダの
 //! `doc-views.json` に文書のパスごとに置く。
 //!
 //! - 文書のファイルには書かない(開け閉めで「変更あり」にせず、取り消しの履歴にも乗せない)。
 //! - 読めなければ空(設定のせいで起動できなくしない)。覚えるのは新しい順に [`DOC_VIEWS_MAX`] 件まで。
 
-use kmb_core::FeatureId;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -19,21 +18,6 @@ pub struct DocView {
     /// ブラウザの木の枝の開け閉め(枝の鍵 → 開いているか)
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub open: BTreeMap<String, bool>,
-    /// 原点の平面をいつも出すか
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub origin: bool,
-    /// まとめて隠しているまとまり(画面の名前)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hidden_folders: Vec<String>,
-    /// 目を閉じた機能(自動で隠した物は入れない)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hidden: Vec<FeatureId>,
-    /// 使われて自動で隠れるのに、目を開けて出しているスケッチ
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub shown: Vec<FeatureId>,
-    /// 目を閉じたボディ(最初に作った機能)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hidden_bodies: Vec<FeatureId>,
     /// 畳んでいるタイムラインのグループ
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed: Vec<u64>,
@@ -114,8 +98,6 @@ mod tests {
         assert!(v.get(&a).is_none(), "無ければ空");
         let open = DocView {
             open: [("\"origin\"".to_string(), true)].into(),
-            origin: true,
-            hidden: vec![FeatureId(3)],
             collapsed: vec![7],
             ..DocView::default()
         };
@@ -123,7 +105,7 @@ mod tests {
         v.set(
             &b,
             DocView {
-                origin: true,
+                collapsed: vec![1],
                 ..DocView::default()
             },
         );

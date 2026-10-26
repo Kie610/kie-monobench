@@ -174,8 +174,8 @@ fn the_shape_follows_a_value_while_it_is_still_being_typed() {
 
 #[test]
 fn a_used_sketch_shows_while_the_feature_that_uses_it_is_edited() {
-    // 10-26 k3: 押し出しを直す間は、使って自動で隠したスケッチも見せる(ほかの輪郭を選べるように)。
-    // 行の目は閉じたままで、直し終えると隠れる。後のスケッチと、目で隠したスケッチは出さない
+    // 10-26 k3・表示と非表示の決まり 5: 押し出しを直す間は、その機能が使うスケッチだけを一時的に
+    // 見せる(目で隠した物も)。行の目は閉じたままで、直し終えると隠れる。使わないスケッチは出さない
     let part = kmb_samples::reference_part();
     let (sketch, plate, top, pocket) =
         (part.plate_sketch, part.plate, part.top_sketch, part.pocket);
@@ -198,14 +198,15 @@ fn a_used_sketch_shows_while_the_feature_that_uses_it_is_edited() {
     h.state_mut().finish_edit();
     h.run();
     assert!(h.state().is_hidden(sketch), "直し終えると隠れる");
-    // 目で隠したスケッチ(自動で隠したのでない物)は、直している間も隠したまま
+    // 目で隠したスケッチも、それを使う機能を直す間は見える。使わないスケッチは隠したまま
     let ws = h.state_mut();
     ws.set_hidden(top, false);
     ws.set_hidden(top, true);
     ws.open_edit(pocket);
     h.run();
-    assert!(h.state().is_hidden(top), "目で隠したスケッチは出さない");
-    assert!(!h.state().is_hidden(sketch), "前の使ったスケッチは見える");
+    assert!(!h.state().is_hidden(top), "直す機能が使うスケッチは見える");
+    assert!(h.state().is_own_hidden(top), "行の目は閉じたまま");
+    assert!(h.state().is_hidden(sketch), "直す機能が使わないスケッチは隠したまま");
 }
 
 #[test]

@@ -107,8 +107,8 @@ impl Workspace {
         };
         log::info!("{what}: 法線 {n:?}{}", if back { "(裏から)" } else { "" });
     }
-    /// 選んだボディ・機能を隠す・出す。ボディはボディの目、ほかは行の目を替える。
-    /// 1 つでも見えている物があれば全部隠し、全部隠れていれば全部出す。
+    /// 選んだボディ・機能を隠す・出す(1 回の変更)。ボディはボディの目、ほかは行の目を替える。
+    /// 1 つでも見えている物があれば全部隠し、全部隠れていれば全部出す(操作「表示/非表示」が決める)。
     pub fn toggle_selected_visible(&mut self) {
         let mut ids: Vec<FeatureId> = self.picked_faces().iter().map(|p| p.feature).collect();
         ids.extend(self.selection());
@@ -117,25 +117,8 @@ impl Workspace {
             self.win.message = Some("隠す・出すボディか機能を選んでください".into());
             return;
         }
-        let roots = self.body_roots();
-        let target: Vec<(FeatureId, Option<FeatureId>)> = ids
-            .iter()
-            .map(|id| (*id, roots.iter().find(|(l, _)| l == id).map(|(_, r)| *r)))
-            .collect();
-        let hide = target.iter().any(|(id, root)| match root {
-            Some(r) => !self.is_body_hidden(*r, *id),
-            None => !self.is_own_hidden(*id),
-        });
-        for (id, root) in target {
-            match root {
-                Some(r) => self.set_body_hidden(r, hide),
-                None => self.set_hidden(id, hide),
-            }
-        }
-        log::info!(
-            "表示の切り替え: {ids:?} を{}",
-            if hide { "隠す" } else { "出す" }
-        );
+        let features: Vec<u64> = ids.iter().map(|id| id.0).collect();
+        self.run_visibility(serde_json::json!({ "features": features }));
     }
 
     pub(crate) fn focus_selected(&mut self) {

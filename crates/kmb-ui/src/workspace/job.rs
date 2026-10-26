@@ -17,7 +17,8 @@ impl Workspace {
     pub(crate) fn start_recompute(&mut self) {
         // 文書が変わった(取り消し・やり直しも): リンクの様子を次の描画で調べ直す
         self.cur.links_at = None;
-        self.hide_used_sketches();
+        // 目は文書の区画なので、取り消し・やり直しでも読み直す(形を計算し直さない変更もある)
+        self.refresh_hidden();
         // 出している形は、次の計算が失敗しても出し続けられるよう、カーネルに残させる(M27)
         let shown: Vec<ShapeHandle> = self.cur.scene.key().iter().map(|(_, h)| *h).collect();
         self.cur.work.keep_shapes(shown);
