@@ -245,6 +245,35 @@ fn a_failed_edit_keeps_the_last_good_shape_on_screen() {
 }
 
 #[test]
+fn a_value_that_cannot_make_the_shape_clears_the_preview_while_editing() {
+    // 採用分の点検 B14: 編集パネルの欄に形が作れない値を打ったら、予告の形を消す
+    // (前に作れた形を出し続けない)
+    let part = reference_part();
+    let mut ws = Workspace::new(part.doc, None, reg());
+    let good: Vec<_> = ws.cur.scene.key().to_vec();
+    ws.open_edit(part.pocket);
+    let mut data = ws
+        .document()
+        .data()
+        .feature(part.pocket)
+        .unwrap()
+        .data
+        .clone();
+    data["distance"] = serde_json::json!("0 mm");
+    assert!(ws.set_feature_data(part.pocket, data));
+    assert!(matches!(
+        ws.report().feature(part.pocket),
+        Some(kmb_core::FeatureStatus::Error { .. })
+    ));
+    assert!(ws.held_features().is_empty(), "前の形を出し続けない");
+    assert_ne!(ws.cur.scene.key(), &good[..], "予告の形が消える");
+    // 作れる値に戻すと形が出る
+    ws.undo();
+    assert_eq!(ws.report().error_count(), 0);
+    assert!(ws.held_features().is_empty());
+}
+
+#[test]
 fn a_step_file_is_read_and_stood_up_when_the_user_says_so() {
     // 順に確かめる:
     // - STEP を読み込むと名前の付いた 1 つのボディになり、STEP でないファイルは断る

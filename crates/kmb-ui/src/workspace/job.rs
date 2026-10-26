@@ -49,7 +49,8 @@ impl Workspace {
     /// `old` は前の計算の結果。直した機能の計算が失敗した時(前の結果では計算できていた、または
     /// 前から出し続けている)は、前に計算できた形を出し続ける(入れた値で形が
     /// 消えない)。機能を足した・消した・並べ替えた時、選ぶ欄が受けている間、文書を入れ替えた時は
-    /// 出し直す。
+    /// 出し直す。編集パネルで直している機能の失敗も出し直す(欄に形が作れない値を打ったら予告の
+    /// 形を消す。採用分の点検 B14)。
     pub(crate) fn hold_scene(&mut self, old: &RecomputeReport) -> bool {
         let fresh = std::mem::take(&mut self.cur.scene_fresh);
         let new = self.cur.work.report();
@@ -65,6 +66,7 @@ impl Workspace {
             .filter(|r| matches!(r.status, FeatureStatus::Error { .. }))
             // 形を作る機能(ソリッド)の失敗だけ。加工の操作が失敗しても形は今のものを出す
             .filter(|r| self.is_copyable_feature(r.id))
+            .filter(|r| self.cur.editing != Some(r.id))
             .filter(|r| {
                 self.cur.held.contains(&r.id)
                     || matches!(old.feature(r.id), Some(FeatureStatus::Ok { .. }))
