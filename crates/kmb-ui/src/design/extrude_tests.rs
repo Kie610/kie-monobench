@@ -637,3 +637,46 @@ fn the_quick_profile_check_agrees_with_reading_the_profile() {
     assert_eq!(quick, vec![false, true]);
     assert_eq!(quick, read);
 }
+
+/// 10-26 k15: 開始をずらした押し出しを「対象まで」にすると、結合か切り取りかを、ずらした開始の
+/// 所から面までの間で決める。板(高さ 0〜10)の底の平面に描いた輪郭を、20 浮かせた所から下へ
+/// 結合で押し出し、板の上の面までにする: 20 から 10 までは板の外なので結合のまま。
+/// 直す前は輪郭の平面(高さ 0)から測り、板の中を通ると見て切り取りに変えていた。
+#[test]
+fn stopping_an_offset_extrude_at_a_face_judges_the_operation_from_its_start() {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let square = |b: &mut DocBuilder, name: &str, x: f64, w: f64| {
+        let mut s = SketchBuilder::xy();
+        let o = s.fixed_point(0.0, 0.0);
+        let c = s.point_from(o, &format!("{x} mm"), &format!("{x} mm"), [x, x]);
+        s.rectangle(c, &format!("{w} mm"), &format!("{w} mm"), [x, x, w, w]);
+        b.sketch(name, s)
+    };
+    let mut b = DocBuilder::new();
+    let ps = square(&mut b, "板の輪郭", 0.0, 30.0);
+    let plate = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "板",
+        serde_json::json!({"profile": ps.0, "distance": "10 mm"}),
+    );
+    let bs = square(&mut b, "柱の輪郭", 10.0, 10.0);
+    let post = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "浮いた柱",
+        serde_json::json!({
+            "profile": bs.0, "distance": "5 mm", "direction": "reverse",
+            "start": "offset", "start_offset": "20 mm",
+            "operation": "join", "target": plate.0,
+        }),
+    );
+    let mut ws = Workspace::new(b.finish("浮いた柱"), None, reg());
+    ws.wait();
+    ws.select(post);
+    ws.run_action_args(
+        kmb_cad_extrude::EXTRUDE_TO_FACE,
+        serde_json::json!({"face": format!("f{}:end", plate.0)}),
+    );
+    let data = ws.document().data().feature(post).unwrap().data.clone();
+    assert_eq!(data["extent"], "to_face", "{:?}", ws.message());
+    assert_eq!(data["operation"], "join", "20 から 10 までは板の外");
+}
