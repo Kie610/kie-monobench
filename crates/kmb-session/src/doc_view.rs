@@ -99,7 +99,6 @@ mod tests {
         let open = DocView {
             open: [("\"origin\"".to_string(), true)].into(),
             collapsed: vec![7],
-            ..DocView::default()
         };
         v.set(&a, open.clone());
         v.set(
