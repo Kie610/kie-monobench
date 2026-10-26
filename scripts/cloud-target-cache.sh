@@ -11,8 +11,11 @@
 #
 # 共有フォルダは別のコンテナも同時に使う。読み書きは次の印で譲り合う。
 #   readers/<組>.<…>  restore が読んでいる間だけ置く。save はこれが消えるまで前の組を消さない
-#   saving/           save が書いている間だけ置く。ほかの save は置かずに終える
+#   saving/           save が書いている間だけ置く。ほかの save は置かずに終える。持ち主(owner)と、生きている
+#                     間 1 分ごとに触る beat、待つ間に預かった前の組の索引(info)を中に持つ
 # 印は置いたコンテナが途中で終わると残るので、決めた分(stale_min・lock_stale_min)より古い物は無いものと見る。
+# 古い saving/ を見つけたら、restore も save も預かっていた索引を戻してから外す(前は索引を消したまま
+# 止まると、次の save が終わるまで誰も戻せず、restore は何も言わずに終わっていた。2026-10-26)。
 # restore は別の場所へ取り出し、終わってから target/debug へ移す(途中で切れても半分だけ戻さない)。
 #
 # 共有フォルダは 1 ファイルがおよそ 0.5 GB を超えると上がらず、コンテナが終わると消える
@@ -30,8 +33,10 @@ part_mb=256
 margin_gb=10
 # restore は 3〜5 分(2026-10-23)。これより古い印は終わったコンテナが残した物
 stale_min=${JC_CACHE_STALE_MIN:-30}
-# save は 10 分ほど。書いている途中の組を別の save が消さないよう、長めに見る
-lock_stale_min=${JC_CACHE_LOCK_STALE_MIN:-90}
+# save は生きている間 1 分ごとに saving/beat を触る。これより長く触られていなければ持ち主は終わっている
+lock_stale_min=${JC_CACHE_LOCK_STALE_MIN:-10}
+# beat を持たない前の版の save は 10 分ほどかかるので、その印は長めに見る
+old_lock_stale_min=90
 # save が読み終わりを待つ長さ。過ぎたら前の組を消さずに置くのをやめる
 wait_s=${JC_CACHE_WAIT_S:-900}
 cd "$(dirname "$0")/.."
@@ -57,12 +62,45 @@ for p in json.load(sys.stdin)["packages"]:
 }
 # 古い印を消す
 drop_stale() { [ -d "$1" ] && find "$1" -mindepth 1 -maxdepth 1 -mmin +"$stale_min" -exec rm -rf {} + 2>/dev/null || true; }
+# 今の時刻から何分前に変えたか
+age_min() { echo $(( ($(date +%s) - $(stat -c %Y "$1")) / 60 )); }
+# saving/ の持ち主と、最後に生きていた時(分)
+lock_desc() {
+    b=$lock/beat
+    [ -e "$b" ] || b=$lock
+    echo "持ち主 $(cat "$lock/owner" 2>/dev/null || echo 不明)、最後に動いたのは $(age_min "$b") 分前"
+}
+# saving/ が終わったコンテナの残した物なら、預かっていた前の組の索引を戻してから外す。外したら 0 を返す。
+# 共有フォルダでは、別のコンテナが作ったフォルダの名前を変えると中がすぐ読めない(2026-10-26 に見た)ので、
+# 名前を変えて奪わず、外す直前に持ち主をもう一度読み、別の save が置き直していれば触らない
+take_stale_lock() {
+    [ -d "$lock" ] || return 1
+    if [ -e "$lock/beat" ]; then
+        [ -n "$(find "$lock/beat" -mmin +"$lock_stale_min")" ] || return 1
+    else
+        [ -n "$(find "$lock" -maxdepth 0 -mmin +"$old_lock_stale_min")" ] || return 1
+    fi
+    who=$(cat "$lock/owner" 2>/dev/null || true)
+    desc=$(lock_desc)
+    held=$(sed -n 's/^parts: //p' "$lock/info" 2>/dev/null || true)
+    [ -n "$who" ] && [ "$(cat "$lock/owner" 2>/dev/null || true)" = "$who" ] || return 1
+    if [ -n "$held" ] && [ -d "$dir/$held" ] && [ ! -e "$info" ] && mv "$lock/info" "$info" 2>/dev/null; then
+        echo "止まった save の印を外し、預かっていた前の組($held)の索引を戻しました($desc)"
+    else
+        echo "止まった save の印を外しました($desc)"
+    fi
+    rm -rf "$lock"
+    return 0
+}
 mark=""
 staging=target/.debug-restoring
+owner_line=""
+beat_pid=""
 cleanup() {
+    [ -n "$beat_pid" ] && kill "$beat_pid" 2>/dev/null
     [ -n "$mark" ] && rm -f "$mark"
     [ -d "$staging" ] && rm -rf "$staging"
-    [ -d "$lock" ] && [ "$(cat "$lock/owner" 2>/dev/null)" = "$$@$(hostname)" ] && rm -rf "$lock"
+    [ -n "$owner_line" ] && [ -d "$lock" ] && [ "$(cat "$lock/owner" 2>/dev/null)" = "$owner_line" ] && rm -rf "$lock"
     return 0
 }
 trap cleanup EXIT
@@ -85,8 +123,20 @@ restore)
     rm -rf "$staging"
     # 組の名前を読み、読む印を置いてから、名前が変わっていないかをもう一度見る。save は debug-linux.txt を
     # 外してから印を見るので、もう一度見た時に名前が残っていれば、その組は読み終わるまで消されない
-    parts=$(sed -n 's/^parts: //p' "$info" 2>/dev/null)
-    [ -n "$parts" ] && [ -d "$dir/$parts" ] || { echo "置いた target がまだありません($dir)"; exit 0; }
+    # 索引が無いのは、save が置き直している途中か、置き直す途中で止まったか、まだ置いていないか
+    if [ ! -e "$info" ] && [ -d "$lock" ] && ! take_stale_lock; then
+        echo "別のコンテナが置き直している途中なので戻しません($(lock_desc))"
+        exit 0
+    fi
+    parts=$(sed -n 's/^parts: //p' "$info" 2>/dev/null || true)
+    if [ -z "$parts" ] || [ ! -d "$dir/$parts" ]; then
+        if ls -d "$dir"/debug-linux-* >/dev/null 2>&1; then
+            echo "置いた組の索引(debug-linux.txt)が無いので戻しません(前の save が途中で止まった残り。次の save が置き直します)"
+        else
+            echo "置いた target がまだありません($dir)"
+        fi
+        exit 0
+    fi
     mkdir -p "$readers"
     mark=$readers/$parts.$(hostname).$$
     : >"$mark"
@@ -160,24 +210,31 @@ save)
         exit 1
     fi
     # 書くのは 1 つのコンテナだけ(mkdir は在るか確かめるのと作るのを 1 度にする)
-    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +"$lock_stale_min")" ]; then rm -rf "$lock"; fi
+    take_stale_lock || true
     if ! mkdir "$lock" 2>/dev/null; then
-        echo "別のコンテナが置いている途中なので置きません($(cat "$lock/owner" 2>/dev/null || echo 不明))"
+        echo "別のコンテナが置いている途中なので置きません($(lock_desc))"
         exit 0
     fi
-    echo "$$@$(hostname)" >"$lock/owner"
-    # 新しい restore を始めさせないよう、先に debug-linux.txt を外してから、読んでいる途中の物を待つ
-    kept_info=$(mktemp)
-    cp "$info" "$kept_info" 2>/dev/null || true
-    rm -f "$info"
+    # コンテナの名前はどれも同じ(vm)なので、持ち主は番号と時刻と乱数で見分ける
+    owner_line="$$@$(hostname) $(date -u +%Y-%m-%dT%H:%MZ) $(cat /proc/sys/kernel/random/uuid)"
+    echo "$owner_line" >"$lock/owner"
+    : >"$lock/beat"
+    # このプロセスが消えたか、印が別の持ち主の物になったら触るのをやめる(出力の管を握らない)
+    (trap - EXIT; while sleep 60; do
+        kill -0 $$ 2>/dev/null && [ "$(cat "$lock/owner" 2>/dev/null)" = "$owner_line" ] || exit 0
+        touch "$lock/beat"
+    done) </dev/null >/dev/null 2>&1 &
+    beat_pid=$!
+    # 新しい restore を始めさせないよう、先に debug-linux.txt を saving/ へ預けてから、読んでいる途中の物を
+    # 待つ。止まっても、印が古くなれば次の restore か save が預けた索引を戻す
+    [ -e "$info" ] && mv "$info" "$lock/info"
     waited=0
     while :; do
         drop_stale "$readers"
         busy=$(ls "$readers" 2>/dev/null | wc -l)
         [ "$busy" -eq 0 ] && break
         if [ "$waited" -ge "$wait_s" ]; then
-            [ -s "$kept_info" ] && cp "$kept_info" "$info"
-            rm -f "$kept_info"
+            [ -e "$lock/info" ] && mv "$lock/info" "$info"
             echo "前の組を読んでいるコンテナが ${wait_s} 秒たっても終わらないので置きません(前の組はそのまま)"
             exit 1
         fi
@@ -185,7 +242,8 @@ save)
         sleep 10
         waited=$(( waited + 10 ))
     done
-    rm -f "$kept_info"
+    # ここから前の組を消すので、預けた索引も捨てる
+    rm -f "$lock/info"
     for old in "$dir"/debug-linux-* "$dir"/debug-linux.tar.zst; do
         if [ -e "$old" ]; then rm -rf "$old"; fi
     done
