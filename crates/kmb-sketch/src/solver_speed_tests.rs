@@ -137,15 +137,14 @@ fn report(name: &str, s: &Sketch, values: &HashMap<ConstraintId, f64>) {
     let (t_build, sys) = best(reps, || build(s, values).expect("式を組む"));
     let (t_values, (x, it)) = best(reps, || solve_values(&sys));
     let (t_finish, sol) = best(reps, || finish(s, &sys, x.clone(), it));
-    let j = jacobian(&sys.equations, &x);
-    let (t_jac, _) = best(reps, || jacobian(&sys.equations, &x));
-    let (t_rows, _) = best(reps, || RowSpace::of(&j));
-    let (t_empty, _) = best(reps, || RowSpace::empty_like(&j));
-    let (t_svd, _) = best(reps, || j.clone().svd(true, true));
+    let j = sparse_jacobian(&sys.equations, &x);
+    let (t_jac, _) = best(reps, || sparse_jacobian(&sys.equations, &x));
+    let (t_factor, _) = best(reps, || Factor::new(&j, x.len(), None));
+    let (t_fixed, _) = best(reps, || Factor::new(&j, x.len(), None).determined());
     let (t_all, _) = best(reps, || solve(s, values).expect("解く"));
     eprintln!(
         "{name}: 線 {lines}・変数 {}・式 {}・反復 {it} | 全体 {t_all:.1} ms = 式を組む {t_build:.1} + 解く {t_values:.1} + 自由度と余分 {t_finish:.1} \
-         | 内訳: ヤコビ行列 {t_jac:.1}・行の空間の SVD {t_rows:.1}・tol だけの SVD {t_empty:.1}・解く 1 歩の SVD {t_svd:.1} | {:?} 自由度 {}",
+         | 内訳: ヤコビ行列 {t_jac:.1}・疎な分解 {t_factor:.1}・分解と決まった変数 {t_fixed:.1} | {:?} 自由度 {}",
         sys.x0.len(),
         sys.equations.len(),
         status_name(&sol.status),
@@ -207,7 +206,7 @@ fn report_drag(
     let (t_svd, _) = best(reps, || j.clone().svd(true, true));
     eprintln!(
         "{name}: 変数 {n}・式 {} | 1 コマ {t_frame:.1} ms・付いて来た {follows} | 試す範囲 {tiers}(上限 {MAX_TIERS})+ 全部 1 回 \
-         | 全部を動かす 1 回 {t_full:.1} ms(反復 {k})・自由度と余分 {t_finish:.1} ms・式×変数の SVD 1 回 {t_svd:.2} ms",
+         | 全部を動かす 1 回 {t_full:.1} ms(反復 {k})・自由度と余分 {t_finish:.1} ms・引く 1 歩の密な SVD 1 回 {t_svd:.2} ms",
         sys.equations.len(),
     );
 }
