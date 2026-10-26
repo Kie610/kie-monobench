@@ -1630,6 +1630,12 @@ impl FeatureEditor for SketchEditor {
         "スケッチを編集"
     }
 
+    fn undo_step(&mut self) -> bool {
+        // スプラインの描きかけは最後の点だけ戻す(スケッチ全体を戻さない)
+        let e = &mut self.editor;
+        matches!(e.tool, Tool::FitSpline | Tool::ControlSpline) && e.spline_pts.pop().is_some()
+    }
+
     fn status_hints(&self) -> Vec<(String, String)> {
         let e = &self.editor;
         let mut v: Vec<(&str, &str)> = match e.tool {

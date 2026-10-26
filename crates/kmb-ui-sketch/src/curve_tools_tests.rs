@@ -150,3 +150,48 @@ fn blend_joins_two_line_ends_with_curvature_or_tangency() {
         }
     }
 }
+
+/// スプラインの描きかけで取り消す(Ctrl+Z)と、置いた最後の点だけが戻る(スケッチ全体は戻らない)。
+/// 描きかけが無ければ、いつもの取り消しで描いたスプラインが消える。
+#[test]
+fn undo_while_drawing_a_spline_takes_back_only_the_last_point() {
+    let mut h = empty_sketch();
+    clicks(
+        &mut h,
+        Tool::FitSpline,
+        &[[-4.03, 11.15], [0.15, 14.28], [4.32, 10.1]],
+    );
+    let undo = |h: &mut Harness<'static, Workspace>| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+        h.run();
+        h.run();
+    };
+    undo(&mut h);
+    assert_eq!(
+        editor(h.state_mut()).editor.spline_pts.len(),
+        2,
+        "最後の点だけ戻る"
+    );
+    assert_eq!(
+        editor(h.state_mut()).editor.tool,
+        Tool::FitSpline,
+        "道具は続く"
+    );
+    // 戻した後に置き直せる
+    click_at(&mut h, [6.4, 12.0]);
+    press_enter(&mut h);
+    let spline_points = |h: &Harness<'static, Workspace>| {
+        current_sketch(h.state())
+            .entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Spline { points, .. } => Some(points.len()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(spline_points(&h), vec![3]);
+    // 描きかけが無い時はスケッチの変更を戻す
+    undo(&mut h);
+    assert_eq!(spline_points(&h), Vec::<usize>::new());
+}

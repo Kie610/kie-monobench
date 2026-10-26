@@ -305,6 +305,10 @@ pub(super) fn keys(
                     _ => None,
                 }
             }),
+            reference_dim: editor.picked_constraint.and_then(|id| {
+                let c = base_sketch.constraints.iter().find(|c| c.id == id)?;
+                c.kind.value().is_some().then_some(c.reference)
+            }),
             drawing_construction: editor.draw_construction,
             busy: editor.pending.is_some(),
             offset_mode: (editor.tool == Tool::Offset)

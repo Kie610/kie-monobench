@@ -26,6 +26,8 @@ pub(crate) enum Ask {
     Unconstrain,
     /// 選んだ半径の寸法を直径に、直径を半径にする
     RoundDim,
+    /// 選んだ寸法を駆動の寸法にする(真)か、参照の寸法にする(偽)
+    Driving(bool),
     /// 補助線の切り替え(X)
     Construction,
     /// 中心線の切り替え(線分だけ)
@@ -77,6 +79,8 @@ pub(crate) struct Context {
     pub picked_constraint: Option<&'static str>,
     /// 選んだ寸法が直径なら真、半径なら偽(半径・直径の寸法でなければ `None`)
     pub round_dim: Option<bool>,
+    /// 選んだ寸法が参照なら真、駆動なら偽(寸法でなければ `None`)
+    pub reference_dim: Option<bool>,
     pub drawing_construction: bool,
     /// 描いている途中か
     pub busy: bool,
@@ -259,6 +263,14 @@ pub(crate) fn show(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> Option<A
                 "直径の寸法にする"
             };
             item(ui, label, "", &mut out, Ask::RoundDim);
+        }
+        if let Some(reference) = cx.reference_dim {
+            let label = if reference {
+                "駆動にする"
+            } else {
+                "参照にする"
+            };
+            item(ui, label, "", &mut out, Ask::Driving(reference));
         }
         if let Some(name) = cx.picked_constraint {
             item(
@@ -516,6 +528,21 @@ pub(crate) fn apply(
             let mut s = sketch.clone();
             s.adopt_solution(sol);
             s.toggle_radius(id).then_some(s)
+        }
+        Ask::Driving(driving) => {
+            let id = editor.picked_constraint?;
+            let mut s = sketch.clone();
+            s.adopt_solution(sol);
+            match s.set_driving(id, driving, values?) {
+                Ok(()) => {
+                    editor.dim_error = None;
+                    Some(s)
+                }
+                Err(e) => {
+                    editor.dim_error = Some(e);
+                    None
+                }
+            }
         }
         Ask::Construction => {
             crate::constraints_ui::selection_action(editor, sketch, sol, "construction")

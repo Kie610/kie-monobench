@@ -199,16 +199,10 @@ impl Sketch {
         self.centerlines.retain(|c| !gone.contains(c));
     }
 
-    /// 基準点(mm)に最も近い点。`tol` より遠ければ `None`。
+    /// 基準点(mm)に最も近い点。`tol` より遠ければ `None`。同じ近さなら投影でない点
+    /// (投影した点・原点に重ねて描いた自分の点を掴める)。
     pub fn nearest_point(&self, sol: &Solution, x: f64, y: f64, tol: f64) -> Option<Hit> {
-        sol.points
-            .iter()
-            .map(|(id, p)| Hit {
-                entity: *id,
-                distance: (p[0] - x).hypot(p[1] - y),
-            })
-            .filter(|h| h.distance <= tol)
-            .min_by(|a, b| a.distance.total_cmp(&b.distance))
+        self.point_hits(sol, x, y, tol).into_iter().next()
     }
 
     /// 基準点に最も近い要素(点を優先し、次に線分・円・円弧)。
@@ -221,6 +215,13 @@ impl Sketch {
 
     /// 基準点から `tol` 以内の要素の全部(点が先、それぞれ近い順)。重なったものから選び分けるのに使う。
     pub fn hits(&self, sol: &Solution, x: f64, y: f64, tol: f64) -> Vec<Hit> {
+        let mut points = self.point_hits(sol, x, y, tol);
+        points.extend(self.curve_hits(sol, x, y, tol));
+        points
+    }
+
+    /// 基準点から `tol` 以内の点(近い順)。
+    fn point_hits(&self, sol: &Solution, x: f64, y: f64, tol: f64) -> Vec<Hit> {
         let mut points: Vec<Hit> = sol
             .points
             .iter()
@@ -230,8 +231,7 @@ impl Sketch {
             })
             .filter(|h| h.distance <= tol)
             .collect();
-        points.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-        points.extend(self.curve_hits(sol, x, y, tol));
+        sort_hits(&mut points, &self.projected_parts().0);
         points
     }
 
@@ -275,9 +275,23 @@ impl Sketch {
                 });
             }
         }
-        out.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+        let projected = self.projections.iter().map(|p| p.entity).collect();
+        sort_hits(&mut out, &projected);
         out
     }
+}
+
+/// 近い順に並べる。同じ近さ(解いた位置の誤差の内)なら投影でない方を先にする。
+fn sort_hits(hits: &mut [Hit], projected: &std::collections::BTreeSet<EntityId>) {
+    // 一致させた点どうしも解いた後に少しずれるので、この差までは同じ近さとみなす(mm)
+    const SAME: f64 = 1e-6;
+    let key = |h: &Hit| {
+        (
+            (h.distance / SAME).round() as i64,
+            projected.contains(&h.entity),
+        )
+    };
+    hits.sort_by(|a, b| key(a).cmp(&key(b)).then(a.distance.total_cmp(&b.distance)));
 }
 
 /// 円弧(中心 `c`、`s` から `e` へ反時計回り)までの距離。円弧の無い向きでは近い端までの距離
