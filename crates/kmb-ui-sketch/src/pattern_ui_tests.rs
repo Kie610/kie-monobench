@@ -184,3 +184,51 @@ fn dragging_the_original_brings_the_copies_along() {
         );
     }
 }
+
+/// パターンの数の欄を引いている間は、ビューに作り直した見本を出し、文書はまだ変えない。
+/// 離すと見本の数で文書に入り、見本は消える(10-26 t3)。
+#[test]
+fn dragging_the_count_shows_the_result_before_release() {
+    let mut h = four_circles_in_a_row();
+    click_at(&mut h, [8.52, 11.15]);
+    h.run();
+    let a = h
+        .query_all_by_role_and_label(Role::SpinButton, "数")
+        .next()
+        .expect("数の欄")
+        .rect()
+        .center();
+    h.hover_at(a);
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: a,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run();
+    for k in 1..=10 {
+        h.event(egui::Event::PointerMoved(
+            a + egui::vec2(3.0 * k as f32, 0.0),
+        ));
+        h.run();
+    }
+    let shown = editor(h.state_mut())
+        .editor
+        .pattern_ghost
+        .as_ref()
+        .map(|(_, s, _)| count_of(s, |e| matches!(e, Entity::Circle { .. })));
+    // 引いている途中: 見本は 4 より多く、文書は 4 のまま
+    assert!(shown.is_some_and(|n| n > 4), "見本が出ていない: {shown:?}");
+    assert_eq!(circles(&h), 4);
+    h.event(egui::Event::PointerButton {
+        pos: a + egui::vec2(30.0, 0.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run();
+    h.run();
+    assert_eq!(Some(circles(&h)), shown);
+    assert!(editor(h.state_mut()).editor.pattern_ghost.is_none());
+}

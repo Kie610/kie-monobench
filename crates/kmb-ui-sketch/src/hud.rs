@@ -79,6 +79,8 @@ pub(crate) fn spec(tool: Tool, step: usize) -> Option<&'static [(&'static str, U
         (Tool::Arc, 2) => &[("角度", Unit::Deg)],
         (Tool::Slot, 1) => &[("長さ", Unit::Mm)],
         (Tool::Slot, 2) => &[("幅", Unit::Mm)],
+        (Tool::OverallSlot, 1) => &[("全長", Unit::Mm)],
+        (Tool::CenterSlot, 1) => &[("長さ", Unit::Mm)],
         (Tool::Polygon, 1) => &[("辺の数", Unit::Count), ("半径", Unit::Mm)],
         (Tool::Offset, s) if s >= 1 => &[("距離", Unit::Mm)],
         _ => return None,

@@ -209,13 +209,41 @@ fn typed_half(typed: &str, fallback: f64) -> f64 {
     typed_length(&typed_value(typed)).map_or(fallback, |v| v / 2.0)
 }
 
+/// まっすぐな長穴の 2 段目で打つ長さの欄の名前(全長か、両端の中心の間)。
+pub(crate) fn slot_length_label(t: Tool) -> &'static str {
+    if t == Tool::OverallSlot {
+        "全長"
+    } else {
+        "長さ"
+    }
+}
+
+/// まっすぐな長穴の 2 つ目の位置を、打った長さ `l` で `a` から `toward` の向きに決める。
+/// 全長の長穴は反対の先、中心からの長穴は片方の端の中心(中心の間の半分の所)。
+pub(crate) fn slot_aim(t: Tool, a: [f64; 2], toward: [f64; 2], l: f64) -> [f64; 2] {
+    let d = [toward[0] - a[0], toward[1] - a[1]];
+    let n = d[0].hypot(d[1]);
+    let u = if n > 1e-9 {
+        [d[0] / n, d[1] / n]
+    } else {
+        [1.0, 0.0]
+    };
+    let k = if t == Tool::CenterSlot { l / 2.0 } else { l };
+    [a[0] + u[0] * k, a[1] + u[1] * k]
+}
+
+/// 打った長さを、単位つきの式にする(数だけなら mm)。
+fn typed_mm(v: &str) -> String {
+    match typed_length(v) {
+        Some(x) => format!("{x} mm"),
+        None => v.to_string(),
+    }
+}
+
 /// 長穴に幅の寸法を付ける。端の円弧の直径の寸法にする。
 fn slot_width_dimension(s: &mut Sketch, cap: EntityId, typed: Option<String>) {
     let Some(v) = typed else { return };
-    let value = match typed_length(&v) {
-        Some(x) => format!("{x} mm"),
-        None => v,
-    };
+    let value = typed_mm(&v);
     s.add_constraint(kmb_sketch::ConstraintKind::Diameter { circle: cap, value });
 }
 
@@ -583,6 +611,18 @@ pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
             }
         }
         Tool::OverallSlot | Tool::CenterSlot => {
+            // 2 つ目の位置: 欄に長さを打っていれば、カーソルの向きにその長さで決める(Enter でも)
+            if let (Some(a), None) = (editor.pending, editor.pending2)
+                && let Some(l) = editor.hud.fixed(slot_length_label(editor.tool))
+                && (inp.clicked || inp.enter)
+            {
+                let toward = inp.cursor.unwrap_or([a.pos[0] + 1.0, a.pos[1]]);
+                editor.pending2 = Some(Pick {
+                    point: None,
+                    pos: slot_aim(editor.tool, a.pos, toward, l),
+                });
+                return None;
+            }
             let at = click.or_else(|| typed.as_ref().and(w.or(editor.pending2.map(|p| p.pos))));
             let w = at?;
             match (editor.pending, editor.pending2) {
@@ -600,10 +640,29 @@ pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
                         s.add_center_slot(spot(a), spot(b), half)
                     };
                     if let Some([_, _, left, _]) = made {
+                        let width = typed.as_deref().map(typed_mm);
                         slot_width_dimension(&mut s, left, typed);
+                        // 前の段で打った長さを、両端の中心を結ぶ補助線(最後に足した線)の寸法にする
+                        let axis = s.entities.iter().rev().find_map(|e| match e {
+                            Entity::Line { id, .. } => Some(*id),
+                            _ => None,
+                        });
+                        if let (Some(line), Some(l)) =
+                            (axis, editor.hud.dim(slot_length_label(editor.tool)))
+                        {
+                            // 全長は中心の間に幅を足した長さ(幅を打っていなければ描いた幅)
+                            let value = if editor.tool == Tool::OverallSlot {
+                                let w = width.unwrap_or_else(|| format!("{} mm", 2.0 * half));
+                                format!("{l} - {w}")
+                            } else {
+                                l
+                            };
+                            s.add_constraint(kmb_sketch::ConstraintKind::Length { line, value });
+                        }
                         out = Some(s);
                     }
                     editor.cancel();
+                    editor.hud.clear();
                 }
             }
         }
@@ -1082,6 +1141,11 @@ pub(crate) fn preview(
         Tool::OverallSlot | Tool::CenterSlot => {
             let (c1, c2, half) = match b {
                 None => {
+                    // 長さを打っていれば、その長さで見せる
+                    let w = editor
+                        .hud
+                        .fixed(slot_length_label(editor.tool))
+                        .map_or(w, |l| slot_aim(editor.tool, a, w, l));
                     let b = if editor.tool == Tool::CenterSlot {
                         [2.0 * a[0] - w[0], 2.0 * a[1] - w[1]]
                     } else {

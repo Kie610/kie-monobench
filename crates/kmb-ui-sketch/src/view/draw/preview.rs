@@ -170,6 +170,15 @@ pub(super) fn previews(
                     }
                 }
             }
+            Tool::OverallSlot | Tool::CenterSlot if editor.pending2.is_none() => {
+                // 長さの欄の札(見本の線は more_tools が描く)。中心からの長穴は両端の中心の間
+                let k = if editor.tool == Tool::CenterSlot {
+                    2.0
+                } else {
+                    1.0
+                };
+                spots.push((mid_out(s, ws, 18.0), Some(k * dist(start.pos, w))));
+            }
             Tool::Polygon => {
                 let n = polygon_sides(editor);
                 let c = start.pos;

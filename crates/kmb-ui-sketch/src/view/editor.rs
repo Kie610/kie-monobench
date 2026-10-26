@@ -65,6 +65,9 @@ pub(crate) struct Editor {
     /// `ghost` を出した時の選び(カーソルが図の外へ出ても、選びが同じなら寸法の種類を覚えておき、
     /// パネルの値の欄と Enter で付ける寸法をそれに合わせる)
     pub(crate) ghost_sel: Vec<EntityId>,
+    /// パターンの欄を引いている間の見本(引いている途中の定義、それで作り直したスケッチと
+    /// 解いた形)。ビューは文書の代わりにこれを描く。引き終えると消して文書へ入れる
+    pub(crate) pattern_ghost: Option<(kmb_sketch::PatternDef, Sketch, Solution)>,
     /// 寸法の道具で、置く位置をクリックした寸法(その場に値を打つ欄を出している)
     pub(crate) placing: Option<Placing>,
     /// 道具の知らせ(拘束の道具で、既に決まっているので付けなかった時など)。案内の下に出す
@@ -222,6 +225,7 @@ impl Default for Editor {
             others_hover: None,
             ghost: None,
             ghost_sel: Vec::new(),
+            pattern_ghost: None,
             placing: None,
             notice: None,
             look_front: false,

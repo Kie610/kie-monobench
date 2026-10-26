@@ -606,7 +606,12 @@ pub(crate) fn sketch_view(
     if result.is_some() {
         editor.regions.clear();
     }
-    let (sketch, sol) = (base_sketch, base_sol);
+    // パターンの欄を引いている間は、その値で作り直した見本を文書の代わりに描く
+    let ghost = editor.pattern_ghost.clone();
+    let (sketch, sol, preview) = match &ghost {
+        Some((_, s, so)) => (s, so, None),
+        None => (base_sketch, base_sol, preview),
+    };
 
     draw(
         ui,
