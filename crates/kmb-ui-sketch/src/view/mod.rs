@@ -624,6 +624,7 @@ pub(crate) fn sketch_view(
             sections,
             origins,
             plane,
+            scene,
             sketch,
             sol,
             values,

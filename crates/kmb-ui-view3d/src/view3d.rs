@@ -235,235 +235,10 @@ pub fn view3d(
         return (ev, resp, rect);
     }
     if !scene.is_empty() || guides.any() {
-        // 加工の途中の形を出す時は、部品の代わりにそれを描く(選びは部品のまま)
-        let shape_scene: Option<std::sync::Arc<Scene>> = overlay.shape.as_ref().map(|sh| {
-            let sid = resp.id.with("shape");
-            // テーマを替えたら塗り直す
-            match ui
-                .ctx()
-                .data(|d| d.get_temp::<(u64, Inks, std::sync::Arc<Scene>)>(sid))
-            {
-                Some((k, i, sc)) if k == sh.key && i == colors.inks => sc,
-                _ => {
-                    let mut sc = Scene::default();
-                    sc.set(&[], vec![(FeatureId(u64::MAX), sh.mesh.clone())]);
-                    sc.set_face_colors(&sh.face_colors, &colors.inks);
-                    let sc = std::sync::Arc::new(sc);
-                    ui.ctx()
-                        .data_mut(|d| d.insert_temp(sid, (sh.key, colors.inks, sc.clone())));
-                    sc
-                }
-            }
-        });
-        let gpu = crate::gpu3d::get(ui.ctx());
-        // 描画の設定の「描く細かさ」。CPU で描く時は、回す・動かす間だけ半分にする(止まると描き直す)
-        let settings = crate::render::current();
         let moving = resp.dragged() || cam.turning();
-        let lighter = gpu.is_none() && settings.dynamic && moving;
-        let ppp = ui.ctx().pixels_per_point() * settings.scale * if lighter { 0.5 } else { 1.0 };
-        let size = [
-            (rect.width() * ppp).round().max(1.0) as usize,
-            (rect.height() * ppp).round().max(1.0) as usize,
-        ];
-        let key = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            for v in [
-                cam.yaw, cam.pitch, cam.roll, cam.zoom, cam.pan.x, cam.pan.y, ppp,
-            ] {
-                v.to_bits().hash(&mut h);
-            }
-            cam.target.map(f32::to_bits).hash(&mut h);
-            (cam.perspective, shading, guides).hash(&mut h);
-            size.hash(&mut h);
-            scene.generation.hash(&mut h);
-            // ボディの外観の色と、ボディ・面の材質(網を作り直さずに替わる。材質を鍵に入れないと、
-            // 色の同じ外観で粗さだけを直した時に絵が替わらない)
-            let look_key = |l: &kmb_render::Look| {
-                (
-                    l.color,
-                    l.finish.metallic.to_bits(),
-                    l.finish.roughness.to_bits(),
-                    // デカール: 絵と置き方(置き方は面の平面の枠に表れる)
-                    l.decal.as_ref().map(|d| {
-                        (
-                            d.image.key,
-                            d.place.opacity.to_bits(),
-                            d.frame
-                                .map(|f| [f.origin, f.u, f.v].map(|v| v.map(f32::to_bits))),
-                        )
-                    }),
-                )
-            };
-            scene.bodies.iter().for_each(|b| {
-                b.tint.map(|c| c.to_array()).hash(&mut h);
-                b.look.as_ref().map(look_key).hash(&mut h);
-                b.face_looks
-                    .iter()
-                    .for_each(|l| l.as_ref().map(look_key).hash(&mut h));
-            });
-            scene.faded().hash(&mut h);
-            scene.lamps.iter().for_each(|l| {
-                [l.pos, l.dir, l.power]
-                    .map(|v| v.map(f32::to_bits))
-                    .hash(&mut h);
-                [l.cos_outer, l.cos_inner, l.radius]
-                    .map(f32::to_bits)
-                    .hash(&mut h);
-            });
-            scene
-                .glow()
-                .map(|(s, c, k)| (s, c.to_array(), k))
-                .hash(&mut h);
-            picked
-                .iter()
-                .map(|p| (p.feature, p.face.clone()))
-                .for_each(|k| k.hash(&mut h));
-            hover
-                .as_ref()
-                .map(|p| (p.feature, p.face.clone()))
-                .hash(&mut h);
-            [
-                colors.background,
-                colors.background_low,
-                colors.body,
-                colors.picked,
-                colors.edge,
-                colors.line,
-            ]
-            .map(|c| c.to_array())
-            .hash(&mut h);
-            scene.effects.hash(&mut h);
-            overlay.shape.as_ref().map(|s| s.key).hash(&mut h);
-            ghosts.iter().map(Ghost::key).for_each(|k| k.hash(&mut h));
-            if let Some(sec) = scene.section {
-                sec.hash_into(&mut h);
-            }
-            (
-                settings.samples,
-                settings.hidden_alpha.to_bits(),
-                settings.edge_px.to_bits(),
-            )
-                .hash(&mut h);
-            h.finish()
-        };
-        let id = resp.id.with("render");
-        let started = std::time::Instant::now();
-        let texture = match &gpu {
-            // GPU: 毎回描き直しても軽い(網は形が変わった時だけ送る)
-            Some(g) => {
-                let frame = ui.ctx().cumulative_frame_nr();
-                let gid = id.with("gpu");
-                let last: Option<(u64, egui::TextureId)> = ui.ctx().data(|d| d.get_temp(gid));
-                match last {
-                    Some((k, t)) if k == key => t,
-                    _ => {
-                        let t = match &shape_scene {
-                            Some(sc) => {
-                                let c = Colors {
-                                    body: colors.shape,
-                                    ..*colors
-                                };
-                                g.render(
-                                    id,
-                                    frame,
-                                    sc,
-                                    cam,
-                                    size,
-                                    ppp,
-                                    &[],
-                                    None,
-                                    &c,
-                                    shading,
-                                    guides,
-                                    &[],
-                                )
-                            }
-                            None => g.render(
-                                id,
-                                frame,
-                                scene,
-                                cam,
-                                size,
-                                ppp,
-                                picked,
-                                hover.as_ref(),
-                                colors,
-                                shading,
-                                guides,
-                                ghosts,
-                            ),
-                        };
-                        ui.ctx().data_mut(|d| d.insert_temp(gid, (key, t)));
-                        t
-                    }
-                }
-            }
-            None => {
-                let cached: Option<(u64, egui::TextureHandle)> = ui.ctx().data(|d| d.get_temp(id));
-                let texture = match cached {
-                    Some((k, t)) if k == key => t,
-                    other => {
-                        let image = match &shape_scene {
-                            Some(sc) => {
-                                let c = Colors {
-                                    body: colors.shape,
-                                    ..*colors
-                                };
-                                render_guided(
-                                    sc,
-                                    cam,
-                                    size,
-                                    ppp,
-                                    &[],
-                                    None,
-                                    &c,
-                                    shading,
-                                    guides,
-                                    &[],
-                                )
-                            }
-                            None => render_guided(
-                                scene,
-                                cam,
-                                size,
-                                ppp,
-                                picked,
-                                hover.as_ref(),
-                                colors,
-                                shading,
-                                guides,
-                                ghosts,
-                            ),
-                        };
-                        let t = match other {
-                            Some((_, mut t)) => {
-                                t.set(image, egui::TextureOptions::LINEAR);
-                                t
-                            }
-                            None => {
-                                ui.ctx()
-                                    .load_texture("view3d", image, egui::TextureOptions::LINEAR)
-                            }
-                        };
-                        ui.ctx().data_mut(|d| d.insert_temp(id, (key, t.clone())));
-                        t
-                    }
-                };
-                texture.id()
-            }
-        };
-        let ms = started.elapsed().as_secs_f64() * 1000.0;
-        crate::perf::add(crate::perf::Part::Draw, ms);
-        log::trace!(
-            "3D のビュー({}): {ms:.2} ms",
-            if gpu.is_some() { "GPU" } else { "CPU" },
-        );
-        painter.image(
-            texture,
-            rect,
-            Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-            Color32::WHITE,
+        paint_scene(
+            ui, &painter, rect, resp.id, moving, cam, scene, picked, &hover, overlay, ghosts,
+            colors, shading, guides,
         );
     }
     // 下絵(キャンバス)は形の上に半透明で重ね、ほかの線はその上に描く
@@ -671,6 +446,294 @@ pub fn view3d(
         draw_select_box(&painter, a, b, colors);
     }
     (ev, resp, rect)
+}
+
+/// ボディだけを `rect` に描く(視点の操作も選びも受け付けない)。2D スケッチの平らな図が、
+/// スケッチの平面を真正面から見る視点で、線の下にボディを陰つきで描くのに使う。
+/// `base` は描いた絵を控える鍵の元(呼ぶ所ごとに替える)。
+pub fn paint_bodies(
+    ui: &egui::Ui,
+    rect: Rect,
+    base: egui::Id,
+    cam: &Camera,
+    scene: &Scene,
+    colors: &Colors,
+    shading: Shading,
+) {
+    if scene.is_empty() {
+        return;
+    }
+    let guides = Guides {
+        grid: false,
+        axes: false,
+    };
+    let painter = ui.painter_at(rect);
+    paint_scene(
+        ui,
+        &painter,
+        rect,
+        base,
+        cam.turning(),
+        cam,
+        scene,
+        &[],
+        &None,
+        &kmb_core::Overlay::default(),
+        &[],
+        colors,
+        shading,
+        guides,
+    );
+}
+
+/// ボディ(加工の途中の形があればそれ)を描いた絵を作り、`rect` に貼る。GPU があれば GPU で、
+/// 無ければ CPU で描き、同じ見え方なら前の絵を使い回す。
+#[allow(clippy::too_many_arguments)]
+fn paint_scene(
+    ui: &egui::Ui,
+    painter: &egui::Painter,
+    rect: Rect,
+    base: egui::Id,
+    moving: bool,
+    cam: &Camera,
+    scene: &Scene,
+    picked: &[Pick],
+    hover: &Option<Pick>,
+    overlay: &kmb_core::Overlay,
+    ghosts: &[Ghost],
+    colors: &Colors,
+    shading: Shading,
+    guides: Guides,
+) {
+    // 加工の途中の形を出す時は、部品の代わりにそれを描く(選びは部品のまま)
+    let shape_scene: Option<std::sync::Arc<Scene>> = overlay.shape.as_ref().map(|sh| {
+        let sid = base.with("shape");
+        // テーマを替えたら塗り直す
+        match ui
+            .ctx()
+            .data(|d| d.get_temp::<(u64, Inks, std::sync::Arc<Scene>)>(sid))
+        {
+            Some((k, i, sc)) if k == sh.key && i == colors.inks => sc,
+            _ => {
+                let mut sc = Scene::default();
+                sc.set(&[], vec![(FeatureId(u64::MAX), sh.mesh.clone())]);
+                sc.set_face_colors(&sh.face_colors, &colors.inks);
+                let sc = std::sync::Arc::new(sc);
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(sid, (sh.key, colors.inks, sc.clone())));
+                sc
+            }
+        }
+    });
+    let gpu = crate::gpu3d::get(ui.ctx());
+    // 描画の設定の「描く細かさ」。CPU で描く時は、回す・動かす間だけ半分にする(止まると描き直す)
+    let settings = crate::render::current();
+    let lighter = gpu.is_none() && settings.dynamic && moving;
+    let ppp = ui.ctx().pixels_per_point() * settings.scale * if lighter { 0.5 } else { 1.0 };
+    let size = [
+        (rect.width() * ppp).round().max(1.0) as usize,
+        (rect.height() * ppp).round().max(1.0) as usize,
+    ];
+    let key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for v in [
+            cam.yaw, cam.pitch, cam.roll, cam.zoom, cam.pan.x, cam.pan.y, ppp,
+        ] {
+            v.to_bits().hash(&mut h);
+        }
+        cam.target.map(f32::to_bits).hash(&mut h);
+        (cam.perspective, shading, guides).hash(&mut h);
+        size.hash(&mut h);
+        scene.generation.hash(&mut h);
+        // ボディの外観の色と、ボディ・面の材質(網を作り直さずに替わる。材質を鍵に入れないと、
+        // 色の同じ外観で粗さだけを直した時に絵が替わらない)
+        let look_key = |l: &kmb_render::Look| {
+            (
+                l.color,
+                l.finish.metallic.to_bits(),
+                l.finish.roughness.to_bits(),
+                // デカール: 絵と置き方(置き方は面の平面の枠に表れる)
+                l.decal.as_ref().map(|d| {
+                    (
+                        d.image.key,
+                        d.place.opacity.to_bits(),
+                        d.frame
+                            .map(|f| [f.origin, f.u, f.v].map(|v| v.map(f32::to_bits))),
+                    )
+                }),
+            )
+        };
+        scene.bodies.iter().for_each(|b| {
+            b.tint.map(|c| c.to_array()).hash(&mut h);
+            b.look.as_ref().map(look_key).hash(&mut h);
+            b.face_looks
+                .iter()
+                .for_each(|l| l.as_ref().map(look_key).hash(&mut h));
+        });
+        scene.faded().hash(&mut h);
+        scene.lamps.iter().for_each(|l| {
+            [l.pos, l.dir, l.power]
+                .map(|v| v.map(f32::to_bits))
+                .hash(&mut h);
+            [l.cos_outer, l.cos_inner, l.radius]
+                .map(f32::to_bits)
+                .hash(&mut h);
+        });
+        scene
+            .glow()
+            .map(|(s, c, k)| (s, c.to_array(), k))
+            .hash(&mut h);
+        picked
+            .iter()
+            .map(|p| (p.feature, p.face.clone()))
+            .for_each(|k| k.hash(&mut h));
+        hover
+            .as_ref()
+            .map(|p| (p.feature, p.face.clone()))
+            .hash(&mut h);
+        [
+            colors.background,
+            colors.background_low,
+            colors.body,
+            colors.picked,
+            colors.edge,
+            colors.line,
+        ]
+        .map(|c| c.to_array())
+        .hash(&mut h);
+        scene.effects.hash(&mut h);
+        overlay.shape.as_ref().map(|s| s.key).hash(&mut h);
+        ghosts.iter().map(Ghost::key).for_each(|k| k.hash(&mut h));
+        if let Some(sec) = scene.section {
+            sec.hash_into(&mut h);
+        }
+        (
+            settings.samples,
+            settings.hidden_alpha.to_bits(),
+            settings.edge_px.to_bits(),
+        )
+            .hash(&mut h);
+        h.finish()
+    };
+    let id = base.with("render");
+    let started = std::time::Instant::now();
+    let texture = match &gpu {
+        // GPU: 毎回描き直しても軽い(網は形が変わった時だけ送る)
+        Some(g) => {
+            let frame = ui.ctx().cumulative_frame_nr();
+            let gid = id.with("gpu");
+            let last: Option<(u64, egui::TextureId)> = ui.ctx().data(|d| d.get_temp(gid));
+            match last {
+                Some((k, t)) if k == key => t,
+                _ => {
+                    let t = match &shape_scene {
+                        Some(sc) => {
+                            let c = Colors {
+                                body: colors.shape,
+                                ..*colors
+                            };
+                            g.render(
+                                id,
+                                frame,
+                                sc,
+                                cam,
+                                size,
+                                ppp,
+                                &[],
+                                None,
+                                &c,
+                                shading,
+                                guides,
+                                &[],
+                            )
+                        }
+                        None => g.render(
+                            id,
+                            frame,
+                            scene,
+                            cam,
+                            size,
+                            ppp,
+                            picked,
+                            hover.as_ref(),
+                            colors,
+                            shading,
+                            guides,
+                            ghosts,
+                        ),
+                    };
+                    ui.ctx().data_mut(|d| d.insert_temp(gid, (key, t)));
+                    t
+                }
+            }
+        }
+        None => {
+            let cached: Option<(u64, egui::TextureHandle)> = ui.ctx().data(|d| d.get_temp(id));
+            let texture = match cached {
+                Some((k, t)) if k == key => t,
+                other => {
+                    let image = match &shape_scene {
+                        Some(sc) => {
+                            let c = Colors {
+                                body: colors.shape,
+                                ..*colors
+                            };
+                            render_guided(
+                                sc,
+                                cam,
+                                size,
+                                ppp,
+                                &[],
+                                None,
+                                &c,
+                                shading,
+                                guides,
+                                &[],
+                            )
+                        }
+                        None => render_guided(
+                            scene,
+                            cam,
+                            size,
+                            ppp,
+                            picked,
+                            hover.as_ref(),
+                            colors,
+                            shading,
+                            guides,
+                            ghosts,
+                        ),
+                    };
+                    let t = match other {
+                        Some((_, mut t)) => {
+                            t.set(image, egui::TextureOptions::LINEAR);
+                            t
+                        }
+                        None => {
+                            ui.ctx()
+                                .load_texture("view3d", image, egui::TextureOptions::LINEAR)
+                        }
+                    };
+                    ui.ctx().data_mut(|d| d.insert_temp(id, (key, t.clone())));
+                    t
+                }
+            };
+            texture.id()
+        }
+    };
+    let ms = started.elapsed().as_secs_f64() * 1000.0;
+    crate::perf::add(crate::perf::Part::Draw, ms);
+    log::trace!(
+        "3D のビュー({}): {ms:.2} ms",
+        if gpu.is_some() { "GPU" } else { "CPU" },
+    );
+    painter.image(
+        texture,
+        rect,
+        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+        Color32::WHITE,
+    );
 }
 
 /// 囲んでいる範囲を描く(U30。2D スケッチと同じ見分け方)。左から右へ囲む(全部入った物を選ぶ)は

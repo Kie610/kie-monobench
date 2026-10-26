@@ -1139,14 +1139,11 @@ impl FeatureEditor for SketchEditor {
             view::status_text(&solution)
         );
         self.editor.feature = Some(entry.id);
-        // 3D の視点で見ている間は、前にできたボディを描く(ブラウザの目で隠した物は描かない。
-        // 3D スケッチと同じ)
-        if self.view.space.is_some() {
-            // 置いた面のボディを足す `bodies_before` は使わない(後の機能が受け継いだ同じボディと重なって
-            // 面がちらつく)。見えているボディだけを描く
-            let bodies = host.bodies_before(entry.id);
-            self.scene.update(host.kernel.as_ref(), &bodies);
-        }
+        // 前にできたボディを描く。3D の視点でも平らな図(正面の図)でも描く(ブラウザの目で隠した物は
+        // 描かない。3D スケッチと同じ)。置いた面のボディを足す `bodies_before` は使わない(後の機能が
+        // 受け継いだ同じボディと重なって面がちらつく)。見えているボディだけを描く
+        let shown = host.bodies_before(entry.id);
+        self.scene.update(host.kernel.as_ref(), &shown);
         let mut changed = view::sketch_view(
             ui,
             &mut self.view,
