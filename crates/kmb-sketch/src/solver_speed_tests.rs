@@ -1,8 +1,8 @@
 //! 拘束を解く速さを測る道具。普段の検査では流さない(`#[ignore]`)。
 //! `cargo test -p kmb-sketch --release speed_ -- --ignored --nocapture --test-threads 1`
 //!
-//! 線の多いスケッチ・大きなパターン・形が付いて来られない向きに引く 1 コマを測り、解く手順の
-//! 段ごと(式を組む・解く・自由度と余分な拘束を調べる)の時間と、行列の大きさを出す。
+//! 線の多いスケッチ・大きなパターン・形が付いて来られない向きに引く 1 コマ・拘束を足す前の確かめと
+//! 自動拘束を測り、解く手順の段ごと(式を組む・解く・自由度と余分な拘束を調べる)の時間と、行列の大きさを出す。
 
 use super::*;
 use crate::pattern::{
@@ -34,7 +34,7 @@ fn best<T>(n: usize, mut f: impl FnMut() -> T) -> (f64, T) {
 /// 横に並べた `k` 個の長方形(線 4k 本)。隣の長方形と左下と右下の点を共有する。
 /// `dims` なら左端を固定し、幅の寸法を付ける。`heights` なら高さの寸法も付ける(完全拘束)。
 /// 付けなければ、右上の点は縦にだけ動ける。返すのは寸法の値と、長方形ごとの右上の点。
-fn chain(
+pub(super) fn chain(
     k: usize,
     dims: bool,
     heights: bool,
@@ -81,7 +81,7 @@ fn chain(
     (s, values, tops)
 }
 
-fn lines_of(s: &Sketch) -> Vec<EntityId> {
+pub(super) fn lines_of(s: &Sketch) -> Vec<EntityId> {
     s.entities
         .iter()
         .filter(|e| matches!(e, Entity::Line { .. }))
@@ -90,7 +90,7 @@ fn lines_of(s: &Sketch) -> Vec<EntityId> {
 }
 
 /// 幅と高さを決めた長方形 1 つ(左下を固定)を `count` 個、原点から 100 mm の所を中心に一周に並べる。
-fn circular(count: usize) -> (Sketch, HashMap<ConstraintId, f64>) {
+pub(super) fn circular(count: usize) -> (Sketch, HashMap<ConstraintId, f64>) {
     let (mut s, values, _) = chain(1, true, true);
     let lines = lines_of(&s);
     s.add_circular_pattern(CircularPattern {
@@ -106,7 +106,7 @@ fn circular(count: usize) -> (Sketch, HashMap<ConstraintId, f64>) {
 }
 
 /// 幅(`heights` なら高さも)を決めた長方形 1 つ(左下を固定)を `n` × `n` に並べたパターン。
-fn pattern(n: usize, heights: bool) -> (Sketch, HashMap<ConstraintId, f64>) {
+pub(super) fn pattern(n: usize, heights: bool) -> (Sketch, HashMap<ConstraintId, f64>) {
     let (mut s, values, _) = chain(1, true, heights);
     let lines = lines_of(&s);
     let dir = |angle: f64| PatternDirection {
@@ -202,11 +202,9 @@ fn report_drag(
     let (t_full, (x, k)) = best(reps, || solve_moving(&sys, &sys.x0, &target, &weight));
     let (t_finish, _) = best(reps, || finish(&start, &sys, x.clone(), k));
     let n = sys.x0.len();
-    let j = jacobian(&sys.equations, &sys.x0);
-    let (t_svd, _) = best(reps, || j.clone().svd(true, true));
     eprintln!(
         "{name}: 変数 {n}・式 {} | 1 コマ {t_frame:.1} ms・付いて来た {follows} | 試す範囲 {tiers}(上限 {MAX_TIERS})+ 全部 1 回 \
-         | 全部を動かす 1 回 {t_full:.1} ms(反復 {k})・自由度と余分 {t_finish:.1} ms・引く 1 歩の密な SVD 1 回 {t_svd:.2} ms",
+         | 全部を動かす 1 回 {t_full:.1} ms(反復 {k})・自由度と余分 {t_finish:.1} ms",
         sys.equations.len(),
     );
 }
@@ -276,5 +274,40 @@ fn speed_drag_frame() {
         report_drag(&name, &s, &v, corner, [3.0, 2.0], reps);
         let name = format!("高さの自由な長方形のパターン {n}×{n} の元の右上を真上に引く");
         report_drag(&name, &s, &v, corner, [0.0, 2.0], reps);
+    }
+}
+
+/// 拘束を足す前の確かめ(既に決まっているか。決めている拘束も探す)と、自動拘束の 1 回を測る。
+fn report_checks(name: &str, s: &Sketch, values: &HashMap<ConstraintId, f64>, reps: usize) {
+    let sol = solve(s, values).expect("解く");
+    let line = lines_of(s)[0];
+    let (t_by, by) = best(reps, || {
+        redundant_with(s, values, &ConstraintKind::Horizontal { line })
+    });
+    let opts = crate::auto_constrain::AutoOptions::default();
+    let (t_auto, auto) = best(reps, || {
+        crate::auto_constrain::auto_constrain(s, &sol, values, &opts).expect("自動拘束")
+    });
+    eprintln!(
+        "{name}: 変数 {} | 足す前の確かめ {t_by:.1} ms(決めている拘束 {:?} 個)| 自動拘束 {t_auto:.1} ms(候補のうち残した物 {} 個)",
+        build(s, values).expect("式を組む").x0.len(),
+        by.map(|b| b.len()),
+        auto.suggestions.len(),
+    );
+}
+
+#[test]
+#[ignore = "速さを測る道具(--release で手で流す)"]
+fn speed_checks() {
+    for k in [13, 25, 50] {
+        let reps = if k > 25 { 1 } else { 3 };
+        let (s, v, _) = chain(k, true, true);
+        report_checks(&format!("寸法つきの長方形 {k} 個"), &s, &v, reps);
+        let (s, v, _) = chain(k, false, false);
+        report_checks(&format!("寸法の無い長方形 {k} 個"), &s, &v, reps);
+    }
+    for n in [5, 8] {
+        let (s, v) = pattern(n, true);
+        report_checks(&format!("長方形のパターン {n}×{n}"), &s, &v, 1);
     }
 }

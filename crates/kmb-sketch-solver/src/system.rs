@@ -793,78 +793,6 @@ fn rank_tol(sv: &DVector<f64>) -> f64 {
     1e-8 * sv.max().max(1.0)
 }
 
-/// 行列の行の張る空間。1 回の SVD から作り、変数ごと・拘束ごとに階数を取り直さずに調べる
-/// (取り直すと SVD の回数が変数の数だけ増え、線 16 本のスケッチで解くたびに 100 回を超えた)。
-/// 0 と見なす大きさは [`rank`] と同じ。
-#[derive(Clone)]
-pub struct RowSpace {
-    /// 長さ 1 で互いに直交する行(行の数が階数)
-    basis: Vec<DVector<f64>>,
-    tol: f64,
-}
-
-impl RowSpace {
-    /// `m` の行の張る空間。
-    pub fn of(m: &DMatrix<f64>) -> Self {
-        if m.nrows() == 0 || m.ncols() == 0 {
-            return Self::empty_like(m);
-        }
-        let svd = m.clone().svd(false, true);
-        let tol = rank_tol(&svd.singular_values);
-        let vt = svd.v_t.expect("v_t を求めた");
-        let basis = (0..svd.singular_values.len())
-            .filter(|&k| svd.singular_values[k] > tol)
-            .map(|k| vt.row(k).transpose())
-            .collect();
-        Self { basis, tol }
-    }
-
-    /// 何も張らない空間。行を [`Self::add`] で足していく。0 と見なす大きさは `m` の [`rank`] と同じ。
-    pub fn empty_like(m: &DMatrix<f64>) -> Self {
-        let tol = if m.nrows() == 0 || m.ncols() == 0 {
-            1e-8
-        } else {
-            rank_tol(&m.clone().svd(false, false).singular_values)
-        };
-        Self { basis: vec![], tol }
-    }
-
-    /// 階数(張る空間の次元)。
-    pub fn rank(&self) -> usize {
-        self.basis.len()
-    }
-
-    /// `v` を空間から外した残り(2 回外して丸めの誤差を抑える)。
-    fn rest(&self, mut v: DVector<f64>) -> DVector<f64> {
-        for _ in 0..2 {
-            for b in &self.basis {
-                let d = b.dot(&v);
-                v.axpy(-d, b, 1.0);
-            }
-        }
-        v
-    }
-
-    /// 行 `row` を足す。空間が広がったら true(残りが 0 と見なす大きさ以下なら足さない)。
-    pub fn add(&mut self, row: DVector<f64>) -> bool {
-        let rest = self.rest(row);
-        let norm = rest.norm();
-        if norm > self.tol {
-            self.basis.push(rest / norm);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// 変数 `v` の単位ベクトルが空間にあるか(その変数が式で決まっているか)。
-    pub fn has_unit(&self, v: usize, n: usize) -> bool {
-        let mut e = DVector::zeros(n);
-        e[v] = 1.0;
-        self.rest(e).norm() <= self.tol
-    }
-}
-
 pub fn max_abs(v: &DVector<f64>) -> f64 {
     v.iter().fold(0.0_f64, |m, x| m.max(x.abs()))
 }
@@ -919,7 +847,7 @@ pub fn gauss_newton(
             }
             // ドラッグ: 拘束を満たす向きに加えて、拘束の式を変えない向き(零空間)の中で
             // 始めの形にいちばん近い所へ寄せる
-            Some(g) => match g.step(&to_dense(&j, cols.len()), &f, &x, &reference, &w, &cols) {
+            Some(g) => match g.step(&j, &f, &x, &reference, &w, &cols) {
                 Some(d) => d,
                 None => break,
             },
@@ -976,10 +904,16 @@ pub const KEEP_RADIUS: f64 = 10.0;
 impl Near<'_> {
     /// 測り直した変数での 1 歩。拘束を満たす最小ノルムの歩 d0 に、零空間の中で
     /// 基準の残差 g(点の動きと半径の変化)を最小にする歩を足す(ガウス・ニュートン)。
-    /// `j` は変数 `cols` の列だけの行列で、歩も `cols` の順に返す(ほかの変数は動かさない)。
+    /// `j` は変数 `cols` の列だけの疎な行列で、歩も `cols` の順に返す(ほかの変数は動かさない)。
+    ///
+    /// 零空間の基底は作らない(変数の数の 2 乗の大きさになる)。基準の行列は単位行列に
+    /// 半径の行 U(k 行)を足したものなので、零空間への写し P⊥ と U だけで解ける:
+    /// 足す歩 e は零空間の中で ‖e + b1‖² + ‖U e + b2‖² を最小にし(b = g + G d0)、
+    /// V = P⊥ Uᵀ、t = U e として (I + VᵀV) t = -Vᵀ b1 - VᵀV b2、e = -P⊥ b1 - V (t + b2)。
+    /// P⊥ は疎な分解の行の空間への写しで求める(写しは k + 1 回)。
     pub fn step(
         &self,
-        j: &DMatrix<f64>,
+        j: &[Row],
         f: &DVector<f64>,
         x: &[f64],
         reference: &[f64],
@@ -992,21 +926,17 @@ impl Near<'_> {
         for (k, &v) in cols.iter().enumerate() {
             col_of[v] = Some(k);
         }
-        // 零空間をすべて得るため、行が足りなければ 0 の行で埋めて正方にする
-        let rows = j.nrows().max(n);
-        let mut full = DMatrix::zeros(rows, n);
-        full.view_mut((0, 0), (j.nrows(), n)).copy_from(j);
-        let svd = full.svd(true, true);
-        let v_t = svd.v_t.as_ref()?;
-        let tol = 1e-8 * svd.singular_values.max().max(1.0);
-        let mut fz = DVector::zeros(rows);
-        fz.rows_mut(0, f.len()).copy_from(&(-f));
-        let d0 = svd.solve(&fz, 1e-12).ok()?;
-        let null: Vec<usize> = (0..n).filter(|&k| svd.singular_values[k] <= tol).collect();
-        if null.is_empty() {
+        let rhs: Vec<f64> = f.iter().map(|v| -v).collect();
+        let mut a = Factor::new(j, n, Some(&rhs));
+        let d0 = DVector::from_vec(a.min_norm());
+        if a.rank() == n {
             return Some(d0);
         }
-        let basis = DMatrix::from_fn(n, null.len(), |r, c| v_t[(null[c], r)]);
+        // 零空間への写し(2 回外して丸めの誤差を抑える)
+        let mut perp = |v: DVector<f64>| -> DVector<f64> {
+            let v = &v - DVector::from_vec(a.project(v.as_slice()));
+            &v - DVector::from_vec(a.project(v.as_slice()))
+        };
         // 基準の残差とその微分(測り直した変数 y で)。動かす変数に関わる円・円弧の半径だけを数える
         let rounds: Vec<(Radius, f64)> = self
             .rounds
@@ -1021,37 +951,48 @@ impl Near<'_> {
             .map(|(r, r0)| (*r, *r0))
             .collect();
         let k = rounds.len();
-        let mut g = DVector::zeros(n + k);
-        let mut gj = DMatrix::zeros(n + k, n);
+        // 点の動きの行は単位行列(残差 g1)、半径の行は U(残差 g2)
+        let mut g1 = DVector::zeros(n);
         for (c, &v) in cols.iter().enumerate() {
-            g[c] = (x[v] - reference[v]) / w[v];
-            gj[(c, c)] = 1.0;
+            g1[c] = (x[v] - reference[v]) / w[v];
         }
         let s = KEEP_RADIUS.sqrt();
-        let mut add = |row: usize, v: usize, d: f64| {
-            if let Some(c) = col_of[v] {
-                gj[(row, c)] += d * w[v];
-            }
-        };
+        let mut g2 = DVector::zeros(k);
+        let mut u = DMatrix::zeros(k, n);
         for (i, (r, r0)) in rounds.iter().enumerate() {
-            g[n + i] = s * (r.get(x) - r0);
+            g2[i] = s * (r.get(x) - r0);
+            let mut add = |v: usize, d: f64| {
+                if let Some(c) = col_of[v] {
+                    u[(i, c)] += d * w[v];
+                }
+            };
             match *r {
-                Radius::Var(v) => add(n + i, v, s),
+                Radius::Var(v) => add(v, s),
                 Radius::Arc(c, p) => {
                     let (cc, pp) = (c.get(x), p.get(x));
                     let l = safe(dist(cc, pp));
                     let (ux, uy) = ((pp.0 - cc.0) / l, (pp.1 - cc.1) / l);
-                    add(n + i, p.0, s * ux);
-                    add(n + i, p.0 + 1, s * uy);
-                    add(n + i, c.0, -s * ux);
-                    add(n + i, c.0 + 1, -s * uy);
+                    add(p.0, s * ux);
+                    add(p.0 + 1, s * uy);
+                    add(c.0, -s * ux);
+                    add(c.0 + 1, -s * uy);
                 }
             }
         }
-        let a = &gj * &basis;
-        let b = -(g + &gj * &d0);
-        let z = a.svd(true, true).solve(&b, 1e-12).ok()?;
-        Some(d0 + basis * z)
+        let b1 = g1 + &d0;
+        let b2 = g2 + &u * &d0;
+        let pb1 = perp(b1.clone());
+        if k == 0 {
+            return Some(d0 - pb1);
+        }
+        let mut v = DMatrix::zeros(n, k);
+        for i in 0..k {
+            v.set_column(i, &perp(u.row(i).transpose()));
+        }
+        let vtv = v.transpose() * &v;
+        let m = DMatrix::identity(k, k) + &vtv;
+        let t = m.cholesky()?.solve(&(-(v.transpose() * &b1) - &vtv * &b2));
+        Some(d0 - pb1 - v * (t + b2))
     }
 }
 
@@ -1148,31 +1089,117 @@ pub fn solve_moving(
 mod tests {
     use super::*;
 
-    /// 行の空間から求めた階数・決まっている変数・広がる行が、行列ごとに SVD を取り直す
-    /// 前のやり方([`rank`])と同じになる。
+    /// 前の密な SVD による引く時の 1 歩(零空間の基底を作って解く)。疎な [`Near::step`] と比べる。
+    fn dense_step(
+        near: &Near<'_>,
+        j: &DMatrix<f64>,
+        f: &DVector<f64>,
+        x: &[f64],
+        reference: &[f64],
+        w: &[f64],
+        cols: &[usize],
+    ) -> DVector<f64> {
+        let n = cols.len();
+        let mut col_of = vec![None; x.len()];
+        for (k, &v) in cols.iter().enumerate() {
+            col_of[v] = Some(k);
+        }
+        let rows = j.nrows().max(n);
+        let mut full = DMatrix::zeros(rows, n);
+        full.view_mut((0, 0), (j.nrows(), n)).copy_from(j);
+        let svd = full.svd(true, true);
+        let v_t = svd.v_t.as_ref().expect("v_t");
+        let tol = 1e-8 * svd.singular_values.max().max(1.0);
+        let mut fz = DVector::zeros(rows);
+        fz.rows_mut(0, f.len()).copy_from(&(-f));
+        let d0 = svd.solve(&fz, 1e-12).expect("解ける");
+        let null: Vec<usize> = (0..n).filter(|&k| svd.singular_values[k] <= tol).collect();
+        let basis = DMatrix::from_fn(n, null.len(), |r, c| v_t[(null[c], r)]);
+        // (半径はどれも動かす変数に関わるものを渡す)
+        let k = near.rounds.len();
+        let mut g = DVector::zeros(n + k);
+        let mut gj = DMatrix::zeros(n + k, n);
+        for (c, &v) in cols.iter().enumerate() {
+            g[c] = (x[v] - reference[v]) / w[v];
+            gj[(c, c)] = 1.0;
+        }
+        let s = KEEP_RADIUS.sqrt();
+        let mut add = |row: usize, v: usize, d: f64| {
+            if let Some(c) = col_of[v] {
+                gj[(row, c)] += d * w[v];
+            }
+        };
+        for (i, (r, r0)) in near.rounds.iter().zip(&near.radii).enumerate() {
+            g[n + i] = s * (r.get(x) - r0);
+            match *r {
+                Radius::Var(v) => add(n + i, v, s),
+                Radius::Arc(c, p) => {
+                    let (cc, pp) = (c.get(x), p.get(x));
+                    let l = safe(dist(cc, pp));
+                    let (ux, uy) = ((pp.0 - cc.0) / l, (pp.1 - cc.1) / l);
+                    add(n + i, p.0, s * ux);
+                    add(n + i, p.0 + 1, s * uy);
+                    add(n + i, c.0, -s * ux);
+                    add(n + i, c.0 + 1, -s * uy);
+                }
+            }
+        }
+        let a = &gj * &basis;
+        let b = -(g + &gj * &d0);
+        let z = a.svd(true, true).solve(&b, 1e-12).expect("解ける");
+        d0 + basis * z
+    }
+
+    /// 引く時の 1 歩が、零空間の基底を密な SVD で作って解く前のやり方と同じになる
+    /// (余分な行・式に出ない変数・円の半径・円弧の半径・動かさない変数・重みを含む)。
     #[test]
-    fn row_space_agrees_with_taking_the_rank_again() {
-        // 4 変数。1 行目と 3 行目は同じ向き(余分)、変数 3 は式に出ない(決まらない)
+    fn drag_step_agrees_with_dense_null_space() {
+        // 変数 0..8: 点 (0,1) (2,3) (4,5)、円の半径 6、式に出ない 7
+        let n = 8;
         let j = DMatrix::from_row_slice(
             4,
-            4,
+            n,
             &[
-                1.0, 0.0, 0.0, 0.0, //
-                0.0, 1.0, -1.0, 0.0, //
-                2.0, 0.0, 0.0, 0.0, //
-                0.0, 0.0, 1.0, 0.0,
+                1.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, //
+                0.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.5, 0.0, //
+                2.0, 0.0, -2.0, 0.0, 0.0, 0.0, 0.0, 0.0, //
+                0.0, 0.0, 0.3, 0.0, -0.7, 0.2, 0.0, 0.0,
             ],
         );
-        let space = RowSpace::of(&j);
-        assert_eq!(space.rank(), rank(&j));
-        for v in 0..4 {
-            let mut m = j.clone().insert_row(4, 0.0);
-            m[(4, v)] = 1.0;
-            assert_eq!(space.has_unit(v, 4), rank(&m) == rank(&j), "変数 {v}");
+        let x = [0.1, 0.2, 1.3, 0.4, 2.5, 1.1, 0.9, 3.0];
+        let reference = [0.0, 0.25, 1.0, 0.5, 2.4, 1.0, 1.0, 3.0];
+        let f = DVector::from_vec(vec![0.01, -0.02, 0.02, 0.005]);
+        let mut w = vec![1.0; n];
+        w[2] = HELD_WEIGHT;
+        w[3] = HELD_WEIGHT;
+        let rounds = [Radius::Var(6), Radius::Arc(Pt(0), Pt(4))];
+        let near = Near {
+            weight: &w,
+            rounds: &rounds,
+            radii: vec![1.0, 2.0],
+        };
+        for cols in [(0..n).collect::<Vec<_>>(), vec![0, 1, 2, 3, 6]] {
+            let jc = j.select_columns(cols.iter());
+            let mut jw = jc.clone();
+            for (c, &v) in cols.iter().enumerate() {
+                jw.column_mut(c).scale_mut(w[v]);
+            }
+            let sparse_rows: Vec<Row> = (0..jw.nrows())
+                .map(|i| {
+                    (0..jw.ncols())
+                        .filter(|&c| jw[(i, c)] != 0.0)
+                        .map(|c| (c, jw[(i, c)]))
+                        .collect()
+                })
+                .collect();
+            let got = near
+                .step(&sparse_rows, &f, &x, &reference, &w, &cols)
+                .expect("解ける");
+            let want = dense_step(&near, &jw, &f, &x, &reference, &w, &cols);
+            assert!(
+                (&got - &want).amax() < 1e-10,
+                "列 {cols:?}: {got} と {want}"
+            );
         }
-        let mut span = RowSpace::empty_like(&j);
-        let grew: Vec<bool> = (0..4).map(|r| span.add(j.row(r).transpose())).collect();
-        assert_eq!(grew, [true, true, false, true]);
-        assert_eq!(span.rank(), rank(&j));
     }
 }
