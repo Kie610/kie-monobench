@@ -1149,41 +1149,75 @@ fn add_extrude(
 
 /// 平らな面を押し出す時の面と、その縁の輪郭。選んでいる面(CLI・MCP は引数 `faces`、参照の
 /// 1 つか並び)が、1 つのボディの、同じ平面にある平らな面の時だけ。スケッチを選んでいる時、
-/// スケッチや領域を指定した時は使わない(スケッチの押し出しにする)。
-fn chosen_faces(cx: &Context<'_>) -> Option<(Vec<kmb_core::Ref>, kmb_core::Profile)> {
+/// スケッチや領域を指定した時、画面で選んだ面に平らな面が 1 つも無い時は無し(スケッチの押し出しにする)。
+/// 面を一緒に押し出せない時(同じ平面に無い、別のボディ)は、黙ってスケッチへ移らず理由を返す。
+fn chosen_faces(
+    cx: &Context<'_>,
+) -> Option<Result<(Vec<kmb_core::Ref>, kmb_core::Profile), String>> {
     if selected_profile(cx).is_some() || cx.arg("profile").is_some() || cx.arg("regions").is_some()
     {
         return None;
     }
     let refs: Vec<kmb_core::Ref> = match cx.arg("faces") {
         Some(v) => Field::info("faces", "").refs(&serde_json::json!({ "faces": v })),
-        None => cx
-            .picked_faces()
-            .into_iter()
-            .map(|p| kmb_core::Ref::from(p.clone()))
-            .collect(),
+        None => {
+            let refs: Vec<kmb_core::Ref> = cx
+                .picked_faces()
+                .into_iter()
+                .map(|p| kmb_core::Ref::from(p.clone()))
+                .collect();
+            if !refs.iter().any(|r| planar_face(cx, r)) {
+                return None;
+            }
+            refs
+        }
     };
-    faces_profile(cx, refs)
+    if refs.is_empty() {
+        return None;
+    }
+    Some(faces_profile(cx, refs))
 }
 
-/// 面 `refs` が 1 つのボディの同じ平面にある平らな面なら、面とその縁の輪郭。
+/// 参照 `r` がボディの平らな面か。
+fn planar_face(cx: &Context<'_>, r: &kmb_core::Ref) -> bool {
+    let kmb_core::Ref::Face { feature, face } = r else {
+        return false;
+    };
+    let Some(kmb_core::Value::Shape(h)) = cx.output(*feature, "body") else {
+        return false;
+    };
+    cx.kernel
+        .faces(*h)
+        .is_ok_and(|v| v.iter().any(|f| &f.name == face && f.planar.is_some()))
+}
+
+/// 面 `refs` が 1 つのボディの同じ平面にある平らな面なら、面とその縁の輪郭。でなければ理由。
 fn faces_profile(
     cx: &Context<'_>,
     refs: Vec<kmb_core::Ref>,
-) -> Option<(Vec<kmb_core::Ref>, kmb_core::Profile)> {
-    let feature = refs.first()?.feature();
+) -> Result<(Vec<kmb_core::Ref>, kmb_core::Profile), String> {
+    let feature = refs
+        .first()
+        .ok_or("押し出す平らな面を選んでください")?
+        .feature();
     let mut names = Vec::new();
     for r in &refs {
         match r {
             kmb_core::Ref::Face { feature: f, face } if *f == feature => names.push(face.clone()),
-            _ => return None,
+            kmb_core::Ref::Face { .. } => {
+                return Err(
+                    "押し出す面は 1 つのボディから選んでください(別のボディの面が混ざっています)"
+                        .into(),
+                );
+            }
+            _ => return Err("押し出す物には平らな面だけを選んでください".into()),
         }
     }
     let Some(kmb_core::Value::Shape(h)) = cx.output(feature, "body") else {
-        return None;
+        return Err(format!("{feature} はボディではありません"));
     };
-    let fp = kmb_cad::face_profile(cx.kernel.as_ref(), *h, &names).ok()?;
-    Some((refs, fp.profile))
+    let fp = kmb_cad::face_profile(cx.kernel.as_ref(), *h, &names)?;
+    Ok((refs, fp.profile))
 }
 
 /// 平らな面を押し出す。面のボディに結合する(距離 `distance` が負なら切り取る)。
@@ -1460,19 +1494,13 @@ pub struct ExtrudeCommands;
 impl Extension for ExtrudeCommands {
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let sketch = selected_profile(cx).is_some();
-        let none =
-            candidates(cx).is_empty() && open_sketches(cx).is_empty() && chosen_faces(cx).is_none();
-        // 引数で面を渡された時は、その面を一緒に押し出せるかだけを答える(画面のプレス/プルが聞く)
-        let why = match cx.arg("faces") {
-            Some(v) => faces_profile(
-                cx,
-                Field::info("faces", "").refs(&serde_json::json!({ "faces": v })),
-            )
-            .is_none()
-            .then_some(
-                "いくつかの面を一緒に押し出すのは、1 つのボディの同じ平面にある平らな面だけです",
-            ),
-            None => none.then_some("閉じた輪郭のあるスケッチか、ボディの平らな面を選んでいません"),
+        // 選んだ面(引数の面も)を一緒に押し出せない時は、その理由で止める(画面のプレス/プルも聞く)
+        let why = match chosen_faces(cx) {
+            Some(Err(why)) => Some(why),
+            Some(Ok(_)) => None,
+            None => (candidates(cx).is_empty() && open_sketches(cx).is_empty()).then(|| {
+                "閉じた輪郭のあるスケッチか、ボディの平らな面を選んでいません".to_string()
+            }),
         };
         vec![
             Action::new(EXTRUDE_SKETCH, "押し出し", "cad")
@@ -1490,7 +1518,7 @@ impl Extension for ExtrudeCommands {
                 .hint("押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)")
                 .at(&[Place::Toolbar])
                 .at(if sketch { &[Place::FeatureMenu] } else { &[] })
-                .disabled_if(why),
+                .disabled_if(why.as_deref()),
             Action::new(EXTRUDE_TO_FACE, "対象の面までにする", "cad")
                 .args(kmb_cad::stop_at::args())
                 .menu("作成")
@@ -1546,7 +1574,8 @@ impl Extension for ExtrudeCommands {
                 })
             })(),
             EXTRUDE_SKETCH => match chosen_faces(cx) {
-                Some((faces, _)) => add_face_extrude(cx, faces),
+                Some(Ok((faces, _))) => add_face_extrude(cx, faces),
+                Some(Err(why)) => Err(why.into()),
                 None => chosen(cx)
                     .ok_or_else(|| {
                         "押し出す領域(閉じた輪郭のあるスケッチ)か、ボディの平らな面を選んでいません"
@@ -1585,7 +1614,7 @@ impl Extension for ExtrudeCommands {
             return None;
         }
         // 平らな面を選んでいれば、その面から高さを決める(前へ引くと結合、逆へ引くと切り取り)
-        if let Some((_, p)) = chosen_faces(cx) {
+        if let Some(Ok((_, p))) = chosen_faces(cx) {
             return Some(vec![Handle {
                 ops: Some([kmb_core::ToolOp::Join, kmb_core::ToolOp::Cut]),
                 ..distance_handle(&p)
