@@ -498,9 +498,79 @@ impl Headless {
 
     /// 組み立てた変更([`crate::edit`])を適用して再計算する。
     pub fn apply(&mut self, tx: Transaction) -> Result<(), String> {
-        self.doc.apply(tx).map_err(|e| e.to_string())?;
+        let touched: Vec<FeatureId> = tx
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                kmb_core::Op::SetFeatureData { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        self.commit(touched, |doc| doc.apply(tx))?;
         self.recompute();
         Ok(())
+    }
+
+    /// 文書を変える `change` を走らせ、足した機能と直した機能 `touched` が初めて使うスケッチと
+    /// 作業平面などを同じ取り消し単位で隠す(使った時に 1 回隠す。変更を取り消せば目も戻る)。
+    /// 再計算はしない。
+    pub(crate) fn commit<T>(
+        &mut self,
+        mut touched: Vec<FeatureId>,
+        change: impl FnOnce(&mut Document) -> Result<T, kmb_core::TxError>,
+    ) -> Result<T, String> {
+        use kmb_interchange::visibility as vis;
+        let depth = self.doc.undo_depth();
+        let ids: std::collections::HashSet<FeatureId> =
+            self.doc.data().features.iter().map(|f| f.id).collect();
+        let before: std::collections::BTreeSet<FeatureId> = {
+            let cx = self.context(None, None, &Json::Null);
+            touched
+                .iter()
+                .flat_map(|id| vis::references(&cx, *id))
+                .collect()
+        };
+        let out = change(&mut self.doc).map_err(|e| e.to_string())?;
+        touched.extend(
+            self.doc
+                .data()
+                .features
+                .iter()
+                .map(|f| f.id)
+                .filter(|id| !ids.contains(id)),
+        );
+        let cx = self.context(None, None, &Json::Null);
+        let Some(v) = vis::hide_first_used(&cx, &touched, &before) else {
+            return Ok(out);
+        };
+        let op = match self.doc.data().section_op(&v) {
+            Ok(op) => op,
+            Err(e) => {
+                log::warn!("使ったスケッチを隠せない: {e}");
+                return Ok(out);
+            }
+        };
+        let Some(label) = self.doc.undo_labels().last().map(|l| l.to_string()) else {
+            return Ok(out);
+        };
+        match self.doc.apply(Transaction::new(label.clone(), vec![op])) {
+            Ok(()) => {
+                self.doc.squash_since(depth, &label);
+            }
+            Err(e) => log::warn!("使ったスケッチを隠せない: {e}"),
+        }
+        Ok(out)
+    }
+
+    /// 変更 `edits` で直す機能。
+    fn edited(edits: &[kmb_core::Edit]) -> Vec<FeatureId> {
+        edits
+            .iter()
+            .filter_map(|e| match e {
+                kmb_core::Edit::SetData { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect()
     }
 
     /// 読めない機能のデータ(数の欄に文字の "NaN" など)を、文書に入れる前に断る。文書に入れると
@@ -541,9 +611,8 @@ impl Headless {
                 .registry
                 .descriptor(&ctype)
                 .map_or_else(|| ctype.clone(), |_| self.new_feature_name(&ctype));
-            let added = self
-                .doc
-                .apply_edits(
+            let added = self.commit(Vec::new(), |doc| {
+                doc.apply_edits(
                     "機能を追加",
                     vec![
                         kmb_core::Edit::Insert {
@@ -558,7 +627,7 @@ impl Headless {
                         },
                     ],
                 )
-                .map_err(|e| e.to_string())?;
+            })?;
             self.recompute();
             return Ok(added[0]);
         }
@@ -684,10 +753,7 @@ impl Headless {
         label: &str,
         edits: Vec<kmb_core::Edit>,
     ) -> Result<Vec<FeatureId>, String> {
-        let added = self
-            .doc
-            .apply_edits(label, edits)
-            .map_err(|e| e.to_string())?;
+        let added = self.commit(Self::edited(&edits), |doc| doc.apply_edits(label, edits))?;
         self.recompute();
         Ok(added)
     }
