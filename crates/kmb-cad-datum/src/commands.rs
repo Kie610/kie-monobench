@@ -289,7 +289,7 @@ fn plane_choices(cx: &Context<'_>) -> Vec<HandleChoice> {
         .enumerate()
         .map(|(k, key)| HandleChoice::origin_plane(k, json!(key)))
         .collect();
-    v.extend(kmb_interchange::datum_choices(cx));
+    v.extend(kmb_interchange::datum_choices(cx, None));
     v
 }
 

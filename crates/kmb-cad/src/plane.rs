@@ -1,9 +1,11 @@
-//! 平面の選び方の共通部: 原点の XY・YZ・ZX 平面と、ボディの平らな面(ミラー、ボディの分割が使う)。
-//! 平面を選ぶ間は原点の平面の四角とボディの平らな面をクリックで選べる。
+//! 平面の選び方の共通部: 原点の XY・YZ・ZX 平面と、ボディの平らな面と、作業平面(ミラー、ボディの
+//! 分割、勾配が使う)。平面を選ぶ間は原点の平面の四角・作業平面の四角・ボディの平らな面をクリックで
+//! 選べる。
 use crate::{body_of, kernel_err, output};
 use kmb_core::kernel::P3;
-use kmb_core::{Context, EvalCtx, EvalError, FeatureId, InputRef, Value};
+use kmb_core::{Context, EvalCtx, EvalError, FeatureId, HandleChoice, InputRef, Value};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 /// 平面。`Vector` は機能の数の欄(通る点と法線)で決める。
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -22,17 +24,34 @@ pub enum PlaneRef {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         face: Option<String>,
     },
+    /// 作業平面の機能 `feature`(kmb-cad-datum)。作業平面を作れなかった時は、別の平面に替えず誤りにする
+    Datum {
+        feature: FeatureId,
+    },
 }
 
-/// 平面の欄の選択肢(`Vector` の名前は機能ごと)。
-pub fn plane_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 5] {
+/// 平面の欄の選択肢(`Vector` の名前は機能ごと)。`datum` は平面を選ぶ手順で作業平面をクリックした時
+/// だけ入るので、欄では隠す(`Field::hide_choice`)。
+pub fn plane_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 6] {
     [
         ("vector", vector),
         ("origin_xy", "原点の XY 平面"),
         ("origin_yz", "原点の YZ 平面"),
         ("origin_zx", "原点の ZX 平面"),
         ("face", "平らな面(クリックで選ぶ)"),
+        ("datum", "作業平面"),
     ]
+}
+
+/// 平面を選ぶ手順の候補: 原点の XY・YZ・ZX 平面の四角(値 xy・yz・zx)と、機能 `owner` より前の
+/// 作業平面の四角(値は機能の番号)。ボディの平らな面は手順の `faces` で選ぶ。
+pub fn plane_choices(cx: &Context<'_>, owner: FeatureId) -> Vec<HandleChoice> {
+    ["xy", "yz", "zx"]
+        .iter()
+        .enumerate()
+        .map(|(i, v)| HandleChoice::origin_plane(i, json!(v)))
+        .chain(kmb_interchange::datum_choices(cx, Some(owner)))
+        .collect()
 }
 
 impl PlaneRef {
@@ -45,6 +64,9 @@ impl PlaneRef {
             PlaneRef::Face {
                 feature: Some(f), ..
             } => vec![output(*f, "body")],
+            PlaneRef::Datum { feature } => {
+                vec![output(*feature, kmb_interchange::DATUM_OUTPUT)]
+            }
             _ => Vec::new(),
         }
     }
@@ -80,16 +102,34 @@ impl PlaneRef {
                     })?;
                 (p.point, p.normal)
             }
+            PlaneRef::Datum { feature } => {
+                let p = kmb_interchange::datum_plane(ctx, *feature)?;
+                (p.origin, p.normal())
+            }
         }))
     }
 
-    /// 手順で選んだ値(`plane` が xy・yz・zx か face)から平面を作る。face ならクリックした面
-    /// (CLI・MCP は引数 `face` と `feature`)。面は機能 `owner` より前の形から探す(`owner` の後の
-    /// ボディの面を選んでも、元のボディの同じ面を使う)。
+    /// 手順で選んだ値(`plane` が xy・yz・zx か face か作業平面の機能の番号)から平面を作る。face なら
+    /// クリックした面(CLI・MCP は引数 `face` と `feature`)。面は機能 `owner` より前の形から探す
+    /// (`owner` の後のボディの面を選んでも、元のボディの同じ面を使う)。作業平面も `owner` より前の物
+    /// だけ(後ろの物を指すと計算の順が回る)。
     pub fn from_choice(cx: &Context<'_>, owner: FeatureId, what: &str) -> Result<Self, String> {
-        let v = cx
-            .arg_str("plane")
-            .ok_or("plane に xy・yz・zx か face(クリックした平らな面)を指定します")?;
+        const NEED: &str =
+            "plane に xy・yz・zx か face(クリックした平らな面)か作業平面の機能の番号を指定します";
+        let arg = cx.arg("plane").ok_or(NEED)?;
+        if let Some(n) = arg.as_u64() {
+            let feature = FeatureId(n);
+            if kmb_interchange::datum_choices(cx, Some(owner))
+                .iter()
+                .all(|c| c.value != json!(n))
+            {
+                return Err(format!(
+                    "機能 {n} はこの機能より前の作業平面ではありません(作業平面を作れていない時は、先にその誤りを直してください)"
+                ));
+            }
+            return Ok(PlaneRef::Datum { feature });
+        }
+        let v = arg.as_str().ok_or(NEED)?;
         Ok(match v {
             "xy" => PlaneRef::OriginXy,
             "yz" => PlaneRef::OriginYz,
@@ -121,7 +161,11 @@ impl PlaneRef {
                     face: Some(face),
                 }
             }
-            other => return Err(format!("平面 {other} はありません(xy・yz・zx か face)")),
+            other => {
+                return Err(format!(
+                    "平面 {other} はありません(xy・yz・zx か face か作業平面の機能の番号)"
+                ));
+            }
         })
     }
 }
@@ -140,10 +184,9 @@ pub fn has_planar_face(cx: &Context<'_>, f: FeatureId, face: &str) -> bool {
 pub fn args() -> Vec<kmb_core::Arg> {
     use kmb_core::Arg;
     vec![
-        Arg::choice(
+        Arg::value(
             "plane",
-            "平面(face ならクリックした平らな面か引数 face)",
-            &[("xy", "XY"), ("yz", "YZ"), ("zx", "ZX"), ("face", "面")],
+            "平面(xy・yz・zx・face か作業平面の機能の番号。face ならクリックした平らな面か引数 face)",
         ),
         Arg::text("face", "平面にする平らな面の名前(省くと選んでいる面)"),
         Arg::feature("feature", "面を持つ機能の番号"),

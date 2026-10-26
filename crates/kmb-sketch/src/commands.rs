@@ -454,7 +454,7 @@ impl Extension for SketchCommands {
                     ..Default::default()
                 }
             })
-            .chain(kmb_interchange::datum_choices(cx))
+            .chain(kmb_interchange::datum_choices(cx, None))
             .collect();
         // 原点の平面と作業平面のほかに、ボディの平らな面もそのままクリックで選べる
         Some(vec![Handle {
