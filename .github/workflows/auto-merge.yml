@@ -7,15 +7,18 @@
 # - リポジトリの変数 AUTO_MERGE が on の時だけ動く。止める時は変数を off にする。
 name: 自動の取り込み
 
+# pull_request_target で動かす。pull_request は PR と main を合わせたコミットにあるワークフローを使うので、
+# この仕組みより前に main から分かれた PR では、下書きを外しても回が起きなかった。pull_request_target は
+# main のワークフローを main の鍵で動かす。PR のコードは取り出さず、動かすのは main の scripts/ だけにする。
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
 
 permissions: {}
 
 jobs:
   arm:
-    # fork からの PR はここで外す(その回の鍵は読むだけで、取り込みはできない)
+    # fork からの PR と外の人の PR はここで外す。pull_request_target の鍵は書き込めるので、この条件が守りになる
     if: >-
       vars.AUTO_MERGE == 'on' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -30,9 +33,11 @@ jobs:
       group: auto-merge-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
+      # main を取り出す(pull_request_target の既定)。PR の先頭は取り出さない
       - uses: actions/checkout@v4
         with:
           sparse-checkout: scripts/取り込み
+          persist-credentials: false
       - name: 自動の取り込みを入れる・外す
         env:
           GH_TOKEN: ${{ github.token }}

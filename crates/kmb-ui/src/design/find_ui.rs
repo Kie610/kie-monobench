@@ -34,8 +34,23 @@ impl Workspace {
         }
     }
 
-    /// 機能 `id` をタイムラインで光らせ、見える所まで送る。
+    /// 機能 `id` をタイムラインで光らせ、見える所まで送る(畳んだグループの中なら開く。10-26 b1)。
     pub(crate) fn find_in_timeline(&mut self, id: FeatureId) {
+        let data = self.cur.work.doc().data();
+        if let Some(at) = data.index_of(id) {
+            let within = |f: FeatureId, ok: fn(usize, usize) -> bool| {
+                data.index_of(f).is_some_and(|i| ok(i, at))
+            };
+            let around: Vec<u64> = data
+                .groups
+                .iter()
+                .filter(|g| within(g.first, |i, at| i <= at) && within(g.last, |i, at| at <= i))
+                .map(|g| g.id)
+                .collect();
+            for g in around {
+                self.cur.collapsed.remove(&g);
+            }
+        }
         self.cur.found = Some((Found::Timeline(id), Instant::now()));
         self.cur.found_scroll = Some(Found::Timeline(id));
         let name = self
@@ -50,7 +65,8 @@ impl Workspace {
         ));
     }
 
-    /// 機能 `feature` のボディを、ブラウザで光らせ、見える所まで送る(畳んでいれば開く)。
+    /// 機能 `feature` のボディを、ブラウザで光らせ、見える所まで送る。畳んでいれば、文書と
+    /// ボディのまとまり、ボディの入っている部品と親の部品を開く(10-26 b1)。
     pub(crate) fn find_in_browser(&mut self, feature: FeatureId) {
         let root = self.body_root(feature);
         self.cur.found = Some((Found::Browser(root), Instant::now()));
@@ -58,7 +74,21 @@ impl Workspace {
         self.win.layout.browser_open = true;
         self.browser.query.clear();
         self.browser.kind = browser_ui::Kind::All;
-        self.browser.open_folder = true;
+        let mut keys = vec![browser_ui::tree_key("doc")];
+        let data = self.cur.work.doc().data();
+        let mut at = data.component_of(root);
+        if at.is_none() {
+            keys.push(browser_ui::tree_key("ボディ"));
+        }
+        // 親をたどる(壊れた文書の輪で回り続けない)
+        for _ in 0..=data.components.len() {
+            let Some(c) = at else { break };
+            keys.push(browser_ui::tree_key(("component", c.id)));
+            at = c.parent.and_then(|p| data.component(p));
+        }
+        for k in keys {
+            self.cur.tree_open.insert(k, true);
+        }
     }
 
     /// 探した物 `which` を今光らせる強さ(0〜1)。光らせていなければ `None`。

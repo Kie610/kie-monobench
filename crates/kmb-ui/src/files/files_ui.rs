@@ -350,6 +350,7 @@ impl Workspace {
         self.cur.scene_fresh = true;
         self.cur.held.clear();
         self.recompute();
+        self.restore_doc_view();
         self.cur.selected = self.last_of_space();
         old
     }
@@ -464,6 +465,7 @@ impl Workspace {
                 self.cur.scene_fresh = false;
                 self.cur.held.clear();
                 self.recompute();
+                self.restore_doc_view();
                 self.win.message = Some(format!("{} を開くのをやめ、前の文書に戻しました", o.name));
                 // 新しいタブに開いていたなら、空のタブは閉じて前のタブへ戻る(候補 20)
                 if self.tab_count() > 1 && self.is_blank() {

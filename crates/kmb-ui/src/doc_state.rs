@@ -156,6 +156,10 @@ pub(crate) struct DocState {
     /// `hidden_now` を決め直した時に直していた機能(直す機能が替われば、直す間に一時的に見せる物を
     /// 決め直す)
     pub(crate) shown_for_edit: Option<FeatureId>,
+    /// ブラウザの木の枝の開け閉め(枝の鍵 → 開いているか。押した枝だけ。無ければ枝の既定)
+    pub(crate) tree_open: std::collections::BTreeMap<String, bool>,
+    /// 最後にデータフォルダへ書いた・から読んだ見え方(変わったら書き直す。開き直しても戻す。10-25 u1)
+    pub(crate) view_saved: kmb_session::doc_view::DocView,
     /// 3D のビューで実際に隠している機能(文書の目・一時の見せ・選択表示を合わせた物)
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
@@ -286,6 +290,8 @@ impl DocState {
             planar_hover: None,
             visibility: Default::default(),
             shown_for_edit: None,
+            tree_open: Default::default(),
+            view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,
             section: None,
