@@ -8,7 +8,7 @@
 click "STEP を読み込む…"
 click "このまま"
 click "全体表示"
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 22806.8" 60s
 shot 読み込んだ後
 # 計測を閉じる(開いている間に面を押すと、計測する面になる)
@@ -18,6 +18,6 @@ key Escape
 pick step0:f16
 expect ~"選んだ面:" exists
 run cad.hole_on_face point=[20,30,10] diameter=4 depth=3
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 22769.1" 60s
 shot 穴を空けた後

@@ -5,10 +5,10 @@
 #! size 1280x800
 
 shot 入る前
-dclick "板の輪郭"
+dclick "板の輪郭#1"
 wait
 shot スケッチ
-click ~スケッチを終了
+click "button:~スケッチを終了#1"
 wait
 shot 終えた後
 expect "押し出し"

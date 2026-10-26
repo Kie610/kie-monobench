@@ -4,7 +4,7 @@
 # 軽くなる(22806.9 → 22544.4)。ポケットの底を上の面に置き換えると、ポケットの 720 が埋まる(23264.4)。
 #! sample part
 
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 22806.8" 60s
 shot 前
 
@@ -13,8 +13,8 @@ click "勾配"
 pick f8:side:e5
 type "角度" 5
 shot 勾配-作っている途中
-click ~OK
-click "体積を計測"
+click "button:~OK"
+click "体積を計測#1"
 until ~"体積 22544.4" 60s
 shot 勾配の後
 
@@ -22,7 +22,7 @@ click "修正 ▾"
 click "面を置換"
 pick f10:start
 pick f8:end
-click ~OK
-click "体積を計測"
+click "button:~OK"
+click "体積を計測#1"
 until ~"体積 23264.4" 60s
 shot 面を置換の後

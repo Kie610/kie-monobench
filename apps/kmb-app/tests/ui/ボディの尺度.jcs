@@ -3,7 +3,7 @@
 # 外形は 60 × 40 × 15 から 120 × 80 × 30 になる(体積 22806.9 → 182455.0 mm³)。
 #! sample part
 
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 22806.8" 60s
 shot 前
 
@@ -12,6 +12,6 @@ click "尺度"
 pick f8:end
 type "尺度係数" 2
 click ~OK
-click "体積を計測"
+click "体積を計測#1"
 until ~"体積 182455.0" 60s
 shot 2 倍にした後

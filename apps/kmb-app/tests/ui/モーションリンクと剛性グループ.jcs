@@ -20,7 +20,7 @@ pick 候補:つまみの回転(回転)
 wait
 
 # つまみの回転の編集: 値の決め方が連動になり、角度の欄の代わりに連動の欄が出る。蓋 90° でつまみ 180°
-dclick "つまみの回転"
+dclick "button:つまみの回転"
 expect "値の決め方" ~ "ほかのジョイントに連動"
 expect "角度" missing
 type "連動元の動き" "90 deg"
@@ -39,7 +39,7 @@ wait
 
 # 蓋を閉じた位置に戻す
 dclick "蝶番"
-type "角度" "0 deg"
+type "角度#1" "0 deg"
 click ~OK
 wait
 

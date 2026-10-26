@@ -24,7 +24,7 @@ shot 面だけ赤アルマイト
 select "適用先" "ボディ/コンポーネント"
 pick f4:end
 type "探す" "ウォル"
-click "ウォルナット"
+click "ウォルナット#1"
 wait
 shot 蓋をウォルナットに
 

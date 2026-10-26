@@ -239,6 +239,21 @@ fn expect_with_a_number_looks_at_that_one() {
     }
 }
 
+/// 同じ名前の部品が幾つもある時、番号の無い `click` は黙って最初の物を押さずに落ち、候補を挙げる。
+/// 番号を付ければ押せる。
+#[test]
+fn a_name_that_matches_several_parts_fails_instead_of_pressing_the_first() {
+    let open = "click ~作業空間:\nclick \"解析\"\nclick \"熱\"\n";
+    let mut h = part();
+    let r = run(&mut h, &format!("{open}click \"+\"\n"));
+    assert!(!r.ok, "{}", r.report());
+    assert!(r.report().contains("3 個あります"), "{}", r.report());
+    assert!(r.report().contains("#2:"), "{}", r.report());
+    let mut h = part();
+    let r = run(&mut h, &format!("{open}click \"+\"#2\n"));
+    assert!(r.ok, "{}", r.report());
+}
+
 /// 動いている画面へ AI が送った台本は、途中で失敗すると頼む前の形へ戻す(AI の道のまとめて実行と
 /// 同じ)。keep_on_error なら途中までの変更を残す。
 #[test]

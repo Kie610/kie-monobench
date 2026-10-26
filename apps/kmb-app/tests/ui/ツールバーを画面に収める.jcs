@@ -18,7 +18,7 @@ click "検査 ▾"
 expect "断面解析"
 key Escape
 click "パターン ▾"
-click "ミラー"
+click "ミラー#1"
 key Escape
 
 # 加工: 右端の「管理」まで画面の中にある
@@ -32,11 +32,11 @@ expect "管理 ▾"
 # スケッチ: 「スケッチを終了」と「選択」が画面の中にあり、押せる
 click ~作業空間:
 click "設計"
-dclick "板の輪郭"
+dclick "板の輪郭#1"
 shot スケッチ
 expect "選択 ▾"
 expect ~スケッチを終了
-click ~スケッチを終了
+click "button:~スケッチを終了#1"
 
 # ボタンの名前を出さない設定: アイコンだけになり、帯が低くなる。名前で探して押せる
 click "設定"

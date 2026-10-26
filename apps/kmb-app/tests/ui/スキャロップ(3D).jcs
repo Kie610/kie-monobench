@@ -9,7 +9,7 @@ shot 前
 click "3D ▾"
 expect "スキャロップ(3D)"
 shot 3Dの一覧
-click "スキャロップ(3D)"
+click "スキャロップ(3D)#1"
 wait
 expect "送り幅"
 expect "内から外へ"

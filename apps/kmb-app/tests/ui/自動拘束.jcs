@@ -3,7 +3,7 @@
 # 寸法を外すと候補が減り、Esc でやめると何も付かない。
 #! sample sketch
 
-dclick "作図の見本"
+dclick "作図の見本#1"
 shot 前
 click "拘束 ▾"
 click "自動拘束"

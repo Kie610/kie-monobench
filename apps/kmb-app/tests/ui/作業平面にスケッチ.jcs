@@ -6,7 +6,7 @@
 shot 前
 pick f8:end
 click "構築 ▾"
-click "作業平面"
+click "作業平面#1"
 wait
 expect "作業平面1" exists
 shot 作業平面を作った
