@@ -969,14 +969,13 @@ fn the_browser_tree_and_eyes_come_back_on_reopen_and_find_opens_folded_rows() {
     ws.wait();
     assert_eq!(ws.doc_view(), Default::default(), "覚えていなければ既定");
     let box_sketch = named(&ws, "箱のスケッチ");
-    assert!(
-        ws.cur.hidden.contains(&box_sketch),
-        "使ったスケッチは自動で隠す"
-    );
+    assert!(ws.is_own_hidden(box_sketch), "使ったスケッチは隠れている");
+    // 目は文書の区画に入る(文書を保存すれば開き直しても戻る)
     ws.set_hidden(box_sketch, false);
     ws.set_origin_shown(true);
     ws.set_folder_hidden(Kind::Sketch, true);
     ws.set_body_hidden(lid, true);
+    kmb_session::save(&path, ws.document()).unwrap();
     ws.cur.collapsed.insert(g);
     ws.cur
         .tree_open
@@ -993,10 +992,10 @@ fn the_browser_tree_and_eyes_come_back_on_reopen_and_find_opens_folded_rows() {
     assert!(again.is_origin_shown() && again.is_folder_hidden(Kind::Sketch));
     assert!(again.cur.collapsed.contains(&g));
     assert!(
-        !again.cur.hidden.contains(&box_sketch),
+        !again.is_own_hidden(box_sketch),
         "目を開けたスケッチは出したまま"
     );
-    assert!(again.cur.hidden.contains(&named(&again, "蓋のスケッチ")));
+    assert!(again.is_own_hidden(named(&again, "蓋のスケッチ")));
     assert!(
         again.cur.hidden_now.contains(&again.body_roots()[1].0),
         "隠したボディ"

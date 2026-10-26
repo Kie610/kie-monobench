@@ -203,17 +203,15 @@ pub fn references(cx: &Context<'_>, id: FeatureId) -> Vec<FeatureId> {
 
 /// 足すか直した機能 `touched` が初めて使うスケッチと作業平面などを隠した目(使った時に 1 回隠す)。
 /// `before` は変更の前に `touched` が使っていた物([`references`])。隠す物が無ければ `None`。
-/// ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。区画の無い文書は、
-/// 使われている物を [`of`] がいつも隠すので `None`。作業平面などは前の計算の結果で見分けるので、
-/// 同じ変更で足した作業平面は入らない。
+/// ほかの機能がもう使っている物は、利用者が目を開けたかもしれないので隠さない。区画の無い文書
+/// (新しい文書と目を保存する前の文書)は、この時に [`of`] の見え方(使われている物を隠す)で区画を
+/// 書き始める(区画が無いままだと、使われなくなった物が出し直されてしまう)。作業平面などは前の計算の
+/// 結果で見分けるので、同じ変更で足した作業平面は入らない。
 pub fn hide_first_used(
     cx: &Context<'_>,
     touched: &[FeatureId],
     before: &BTreeSet<FeatureId>,
 ) -> Option<Visibility> {
-    if !cx.data.sections.contains_key(Visibility::KEY) {
-        return None;
-    }
     let fresh: BTreeSet<FeatureId> = touched
         .iter()
         .flat_map(|id| references(cx, *id))
@@ -221,6 +219,9 @@ pub fn hide_first_used(
         .collect();
     if fresh.is_empty() {
         return None;
+    }
+    if !cx.data.sections.contains_key(Visibility::KEY) {
+        return Some(of(cx));
     }
     let used_by_others: BTreeSet<FeatureId> = cx
         .data

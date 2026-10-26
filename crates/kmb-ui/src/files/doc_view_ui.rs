@@ -1,20 +1,9 @@
-//! 文書ごとの見え方(ブラウザの木の開け閉め・原点とまとまりの目・行とボディの目・畳んだグループ)を
-//! 覚え、文書を開き直した時に戻す(10-25 u1)。置き場所はデータフォルダ(`kmb_session::doc_view`)。
-//! 安全モードとデータフォルダの無い時は読みも書きもしない。
+//! 文書ごとの見え方(ブラウザの木の開け閉め・畳んだグループ)を覚え、文書を開き直した時に戻す
+//! (10-25 u1)。置き場所はデータフォルダ(`kmb_session::doc_view`)。目の開け閉めは文書の区画に
+//! 保存するので、ここでは扱わない。安全モードとデータフォルダの無い時は読みも書きもしない。
 
-use crate::{Workspace, browser_ui};
-use kmb_core::FeatureId;
+use crate::Workspace;
 use kmb_session::doc_view::{DocView, DocViews};
-use std::collections::HashSet;
-
-/// 覚えるまとまりの目
-const FOLDERS: [browser_ui::Kind; 2] = [browser_ui::Kind::Sketch, browser_ui::Kind::Body];
-
-fn sorted<'a>(ids: impl Iterator<Item = &'a FeatureId>) -> Vec<FeatureId> {
-    let mut v: Vec<FeatureId> = ids.copied().collect();
-    v.sort();
-    v
-}
 
 impl Workspace {
     /// 今の文書の見え方。
@@ -27,19 +16,7 @@ impl Workspace {
         for k in &c.tree_auto {
             open.insert(k.clone(), false);
         }
-        DocView {
-            open,
-            origin: c.origin_shown,
-            hidden_folders: FOLDERS
-                .iter()
-                .filter(|k| c.hidden_folders.contains(k))
-                .map(|k| format!("{k:?}"))
-                .collect(),
-            hidden: sorted(c.hidden.difference(&c.auto_hidden)),
-            shown: sorted(c.used_sketches.difference(&c.hidden)),
-            hidden_bodies: sorted(c.hidden_bodies.iter()),
-            collapsed,
-        }
+        DocView { open, collapsed }
     }
 
     /// 文書を入れ替えた後に、その文書の前の見え方に戻す(覚えていなければ既定)。
@@ -53,21 +30,8 @@ impl Workspace {
         };
         self.cur.tree_open = v.open.clone();
         self.cur.tree_auto.clear();
-        self.cur.origin_shown = v.origin;
-        self.cur.hidden_folders = FOLDERS
-            .into_iter()
-            .filter(|k| v.hidden_folders.contains(&format!("{k:?}")))
-            .collect();
-        self.cur.hidden_bodies = v.hidden_bodies.iter().copied().collect();
         self.cur.collapsed = v.collapsed.iter().copied().collect();
-        // 使われたスケッチを先に自動で隠し、目を開けていた物だけ出し直す
-        self.hide_used_sketches();
-        let shown: HashSet<FeatureId> = v.shown.iter().copied().collect();
-        self.cur.auto_hidden.retain(|id| !shown.contains(id));
-        let mut hidden = self.cur.hidden.clone();
-        hidden.extend(v.hidden.iter().copied());
-        hidden.retain(|id| !shown.contains(id));
-        self.set_all_hidden(hidden);
+        self.refresh_hidden();
         self.cur.view_saved = self.doc_view();
     }
 

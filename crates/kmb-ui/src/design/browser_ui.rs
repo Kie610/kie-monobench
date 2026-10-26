@@ -492,7 +492,7 @@ impl Workspace {
         let dot = self.status_dot(f.id, cam && meta.starts_with('T'));
         // 目は行の目(ボディは最初に作った機能で覚える)、薄くするのはまとまりの目で隠れた時も
         let own_hidden = match body {
-            Some(root) => self.is_body_hidden(root, f.id),
+            Some(root) => self.is_body_hidden(root),
             None => self.is_own_hidden(f.id),
         };
         let hidden = self.is_hidden(f.id);
