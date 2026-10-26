@@ -12,7 +12,6 @@ layer = "core"
 [dependencies]
 miniz_oxide.workspace = true
 crc32fast.workspace = true
-kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [lints]
 workspace = true

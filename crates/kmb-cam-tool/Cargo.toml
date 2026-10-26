@@ -17,7 +17,6 @@ serde_json.workspace = true
 miniz_oxide.workspace = true
 crc32fast.workspace = true
 kmb-format.workspace = true
-kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
 

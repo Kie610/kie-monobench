@@ -271,3 +271,31 @@ fn the_example_plugin_lock_follows_the_workspace() {
     }
     assert!(checked >= 2, "kmb-post・kmb-toolpath を見ている: {plugin:?}");
 }
+
+/// 見本のプラグインは画面の部品を組まない。揃えた依存(kmb-workspace-hack)は画面の部品を抱えるので、
+/// プラグイン作りに使う crate は `.config/hakari.toml` の `final-excludes` で揃えた依存から外してある。
+/// 外し忘れた crate が依存に入ると、プラグインが WASM でも egui などを組むようになる。
+#[test]
+fn the_example_plugin_builds_without_screen_parts() {
+    let lock = include_str!("../../../plugins/post-example/Cargo.lock");
+    let names: Vec<&str> = lock
+        .lines()
+        .filter_map(|l| l.strip_prefix("name = "))
+        .map(|n| n.trim_matches('"'))
+        .collect();
+    assert!(names.contains(&"kmb-post"), "Cargo.lock を読めている: {names:?}");
+    let bad: Vec<&&str> = names
+        .iter()
+        .filter(|n| {
+            **n == "kmb-workspace-hack"
+                || ["egui", "eframe", "epaint", "winit", "wgpu"]
+                    .iter()
+                    .any(|p| n.starts_with(p))
+        })
+        .collect();
+    assert!(
+        bad.is_empty(),
+        "plugins/post-example/Cargo.lock に {bad:?} がある(プラグインの依存の crate を \
+         .config/hakari.toml の final-excludes に足す)"
+    );
+}
