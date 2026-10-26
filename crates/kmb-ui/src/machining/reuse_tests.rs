@@ -225,10 +225,10 @@ fn the_right_click_menu_of_an_operation_has_the_reuse_items() {
     h.run();
     for item in [
         "名前変更",
-        "複製(Ctrl+D)",
-        "切り取り(Ctrl+X)",
-        "コピー(Ctrl+C)",
-        "貼り付け(Ctrl+V)",
+        "複製",
+        "切り取り",
+        "コピー",
+        "貼り付け",
         "テンプレートとして保存…",
         "パラメータを既定として保存",
     ] {

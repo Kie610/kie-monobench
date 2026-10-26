@@ -1186,6 +1186,74 @@ impl RightMenu for Response {
     }
 }
 
+/// 右クリックのメニューの 1 行(左にアイコン、名前、右に同じ操作のキー)。`ui.button` の代わりに
+/// 使う(10-19 M17: アイコンが無く、何が起こるか分かりにくかった)。`icon` が空でも名前の頭を
+/// ほかの行とそろえ、`keys` が空ならキーを出さない。名前は読み上げと画面の要素の操作に残す。
+/// 行の幅はメニューの幅いっぱいに広げ、まとまりの間は `ui.separator()` で区切る。
+pub fn menu_row(ui: &mut Ui, icon: &str, label: &str, keys: &str, enabled: bool) -> Response {
+    let l = look(ui.ctx());
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let tc = if enabled { l.pal.ink } else { l.pal.ink3 };
+    let name = ui
+        .painter()
+        .layout_no_wrap(label.to_string(), prop(12.5), tc);
+    let key = ui
+        .painter()
+        .layout_no_wrap(keys.to_string(), prop(12.0), l.pal.ink3);
+    let iw = icon_px(16.0);
+    let gap = if keys.is_empty() { 0.0 } else { 28.0 };
+    let w = 6.0 + iw + 8.0 + name.size().x + gap + key.size().x + 8.0;
+    let (rect, r) = ui.allocate_at_least(Vec2::new(w, 22.0 * band()), sense);
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    if ui.is_rect_visible(rect) {
+        let p = ui.painter();
+        if enabled && r.hovered() {
+            p.rect_filled(rect, corner(3.0), l.pal.chrome2);
+        }
+        if !icon.is_empty() {
+            icons::paint_exact_inks(
+                p,
+                Rect::from_center_size(
+                    egui::pos2(rect.left() + 6.0 + iw / 2.0, rect.center().y),
+                    Vec2::splat(iw),
+                ),
+                icon,
+                &tool_inks(&l, enabled, false),
+                1.5,
+            );
+        }
+        let y = rect.center().y;
+        p.galley(
+            egui::pos2(rect.left() + 14.0 + iw, y - name.size().y / 2.0),
+            name,
+            tc,
+        );
+        if !keys.is_empty() {
+            let x = rect.right() - 8.0 - key.size().x;
+            p.galley(egui::pos2(x, y - key.size().y / 2.0), key, l.pal.ink3);
+        }
+    }
+    r
+}
+
+/// 右クリックのメニューの、横に一覧を開く 1 行([`menu_row`] と同じ見た目で、右に矢印)。
+/// `ui.menu_button` の代わりに使う。
+pub fn menu_sub<R>(
+    ui: &mut Ui,
+    icon: &str,
+    label: &str,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let r = menu_row(ui, icon, label, "⏵", true);
+    egui::containers::menu::SubMenu::new()
+        .show(ui, &r, add)
+        .map(|i| i.inner)
+}
+
 /// ツールバーの ▾ の一覧の 1 行(アイコンと名前)。`on` は使っている道具。
 pub fn menu_item(ui: &mut Ui, icon: &str, label: &str, enabled: bool, on: bool) -> Response {
     let l = look(ui.ctx());

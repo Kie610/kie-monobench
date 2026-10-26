@@ -85,3 +85,30 @@ fn right_clicking_a_picked_edge_keeps_all_picked_edges() {
     assert_eq!(ws.picked_edges().len(), 2, "辺の選びが減った");
     assert!(ws.picked().is_none(), "下の面が選びに入った");
 }
+
+/// 右クリックのメニューの行はアイコンの分だけ字の頭をそろえ、メニューの幅いっぱいに並ぶ。横に開く
+/// 一覧も同じ行で出し、行を押せば今までどおり働く(10-19 M17)。
+#[test]
+fn right_menu_rows_line_up_and_open_their_lists() {
+    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    ws.wait();
+    let mut h = harness(ws);
+    h.get_by_label("ボディ1").click_secondary();
+    h.run();
+    let rect = |h: &Harness<'_, Workspace>, l: &str| h.get_by_label(l).rect();
+    let short = rect(&h, "名前変更");
+    let long = rect(&h, "このボディのパラメータの表を作る");
+    assert_eq!(short.left(), long.left(), "行の頭がそろわない");
+    assert_eq!(short.width(), long.width(), "行がメニューの幅いっぱいでない");
+    // 横に開く一覧(物理材料)は、行に載せると開く
+    h.get_by_label("物理材料").hover();
+    h.run();
+    assert!(
+        h.query_all_by_label_contains("g/cm³").next().is_some(),
+        "物理材料の一覧が開かない"
+    );
+    // 行を押すと働き、メニューは閉じる
+    h.get_by_label("名前変更").click();
+    h.run();
+    assert!(h.query_by_label("このボディのパラメータの表を作る").is_none());
+}

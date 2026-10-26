@@ -427,24 +427,21 @@ impl Workspace {
         let mut done = false;
         let sel = self.selection();
         let ids = if sel.contains(&id) { sel } else { vec![id] };
-        if ui
-            .button("複製(Ctrl+D)")
+        if crate::theme::menu_row(ui, "duplicate", "複製", "Ctrl+D", true)
             .on_hover_text("すぐ後ろに同じ値の写しを作る(セットアップなら中の加工も)")
             .clicked()
         {
             self.duplicate_features(&ids);
             done = true;
         }
-        if ui
-            .button("切り取り(Ctrl+X)")
+        if crate::theme::menu_row(ui, "cut", "切り取り", "Ctrl+X", true)
             .on_hover_text("加工を写してから消す。別のセットアップに貼ると移る")
             .clicked()
         {
             self.cut_operations(Some(ui.ctx()), &ids);
             done = true;
         }
-        if ui
-            .button("コピー(Ctrl+C)")
+        if crate::theme::menu_row(ui, "copy", "コピー", "Ctrl+C", true)
             .on_hover_text("加工を写す(セットアップなら中の加工すべて)")
             .clicked()
         {
@@ -456,7 +453,7 @@ impl Workspace {
         } else {
             "この加工の後ろに、同じセットアップの加工として貼る"
         };
-        let r = ui.add_enabled(self.has_op_clip(), egui::Button::new("貼り付け(Ctrl+V)"));
+        let r = crate::theme::menu_row(ui, "paste", "貼り付け", "Ctrl+V", self.has_op_clip());
         let r = if self.has_op_clip() {
             r.on_hover_text(what)
         } else {
@@ -473,7 +470,7 @@ impl Workspace {
             .filter(|a| a.role == Some(kmb_interchange::role::action::USE_TEMPLATE))
             .map(|a| (a.role_name.clone().unwrap_or_else(|| a.label.clone()), a))
             .collect();
-        ui.menu_button("テンプレートから作成", |ui| {
+        crate::theme::menu_sub(ui, "lib", "テンプレートから作成", |ui| {
             if templates.is_empty() {
                 ui.weak("保存したテンプレートはまだありません。加工の右クリックの「テンプレートとして保存」で作る");
             }

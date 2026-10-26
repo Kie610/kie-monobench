@@ -862,6 +862,17 @@ pub(crate) fn action_button(ui: &mut egui::Ui, a: &kmb_core::Action) -> egui::Re
     }
 }
 
+/// 右クリックのメニューの操作の 1 行([`theme::menu_row`]。アイコンは操作が名乗る物、`keys` は
+/// その操作に割り当てたキー)。
+pub(crate) fn action_row(ui: &mut egui::Ui, a: &kmb_core::Action, keys: &str) -> egui::Response {
+    let r = theme::menu_row(ui, &a.icon, &a.label, keys, a.disabled.is_none());
+    match &a.disabled {
+        Some(why) => r.on_disabled_hover_text(why),
+        None if !a.hint.is_empty() => r.on_hover_text(&a.hint),
+        None => r,
+    }
+}
+
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

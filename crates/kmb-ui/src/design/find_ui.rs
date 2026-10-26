@@ -186,8 +186,7 @@ impl Workspace {
         let mut done = false;
         let hit = self.cur.context_hit.clone();
         if let Some(id) = hit.as_ref().and_then(|h| self.creator_of(h))
-            && ui
-                .button("タイムライン内を検索")
+            && crate::theme::menu_row(ui, "search", "タイムライン内を検索", "", true)
                 .on_hover_text("この面・辺を作った機能を、タイムラインで光らせる")
                 .clicked()
         {
@@ -196,8 +195,7 @@ impl Workspace {
         }
         // 面を真正面から見る。選びは変えない
         if let Some(Hit::Face(f)) = &hit
-            && ui
-                .button("正面から見る")
+            && crate::theme::menu_row(ui, "lookat", "正面から見る", "", true)
                 .on_hover_text("この面を真正面から見る。形全体を収める")
                 .clicked()
         {
@@ -211,8 +209,7 @@ impl Workspace {
             None => None,
         };
         if let Some(b) = body {
-            if ui
-                .button("ブラウザ内を検索")
+            if crate::theme::menu_row(ui, "search", "ブラウザ内を検索", "", true)
                 .on_hover_text("この形のボディを、ブラウザで光らせる")
                 .clicked()
             {
@@ -222,8 +219,7 @@ impl Workspace {
             let root = self.body_root(b);
             let roots = self.bodies_to_isolate(root);
             if self.cur.isolated != roots
-                && ui
-                    .button("選択表示")
+                && crate::theme::menu_row(ui, "isolate", "選択表示", "", true)
                     .on_hover_text(
                         "このボディ(と一緒に選んでいるボディ)だけを出す。「選択表示の解除」で戻す",
                     )
@@ -234,8 +230,7 @@ impl Workspace {
             }
         }
         if !self.cur.isolated.is_empty()
-            && ui
-                .button("選択表示の解除")
+            && crate::theme::menu_row(ui, "isolate", "選択表示の解除", "", true)
                 .on_hover_text("ほかのボディも前と同じように出す")
                 .clicked()
         {
@@ -243,8 +238,7 @@ impl Workspace {
             done = true;
         }
         if self.any_body_hidden()
-            && ui
-                .button("すべてのボディを表示")
+            && crate::theme::menu_row(ui, "eye", "すべてのボディを表示", "", true)
                 .on_hover_text("選択表示をやめ、隠したボディを全部出す")
                 .clicked()
         {
