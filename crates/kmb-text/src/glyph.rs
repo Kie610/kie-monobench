@@ -28,7 +28,9 @@ pub fn approximate(c: &Contour, tol: f64) -> Vec<(Segment, bool)> {
     for p in c {
         let shapes = match *p {
             Piece::Line(a, b) => vec![kmb_sketch::Shape::Line { a, b }],
-            Piece::Cubic(q) => kmb_sketch::approximate_tol(&kmb_sketch::Shape::Bezier { p: q }, tol),
+            Piece::Cubic(q) => {
+                kmb_sketch::approximate_tol(&kmb_sketch::Shape::Bezier { p: q }, tol)
+            }
         };
         for s in shapes {
             match s {

@@ -270,7 +270,12 @@ fn a_loft_of_sections_with_holes_stays_hollow() {
         operation: Operation::New,
         target: None,
     };
-    add(&mut doc, LOFT, "ロフト1", serde_json::to_value(&data).unwrap());
+    add(
+        &mut doc,
+        LOFT,
+        "ロフト1",
+        serde_json::to_value(&data).unwrap(),
+    );
     let m = final_mass(&mut doc, &k);
     let want = 400.0 * 30.0 - PI * 16.0 * 30.0;
     assert!(close(m.volume, want, 1e-4), "{} {want}", m.volume);

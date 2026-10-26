@@ -435,7 +435,9 @@ fn bmp(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
 fn still(ws: &mut Workspace, path: &std::path::Path) -> Vec<u8> {
     ws.run_action_with("render.still", Some(path.to_path_buf()));
     let bytes = std::fs::read(path).unwrap_or_else(|_| panic!("{:?}", ws.message()));
-    kmb_image::decode_rgba(&bytes, 4096).expect("PNG を読める").2
+    kmb_image::decode_rgba(&bytes, 4096)
+        .expect("PNG を読める")
+        .2
 }
 
 /// 絵の明るさの平均(0〜255)と、赤い画素(デカールの色)の数。
@@ -492,8 +494,10 @@ fn a_light_and_a_decal_are_placed_and_show_in_the_still() {
     let light = data.features.last().unwrap().id;
     let lamp = match ws.report().feature(light) {
         Some(kmb_core::FeatureStatus::Ok { outputs, .. }) => {
-            <kmb_look::decor::Lamp as kmb_core::Payload>::from_value(&outputs[kmb_look::decor::LAMP])
-                .expect("光源の出力")
+            <kmb_look::decor::Lamp as kmb_core::Payload>::from_value(
+                &outputs[kmb_look::decor::LAMP],
+            )
+            .expect("光源の出力")
         }
         s => panic!("光源が計算できない: {s:?}"),
     };

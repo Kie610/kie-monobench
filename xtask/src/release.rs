@@ -266,7 +266,12 @@ fn workspace_version(root: &Path) -> Result<String, String> {
         .and_then(|p| p.get("version"))
         .and_then(|v| v.as_str())
         .map(str::to_string)
-        .ok_or_else(|| format!("{} に [workspace.package] version がありません", path.display()))
+        .ok_or_else(|| {
+            format!(
+                "{} に [workspace.package] version がありません",
+                path.display()
+            )
+        })
 }
 
 /// タグが版と合うか(`v<版>`)。合わないタグで組み立てると、exe の名乗る版と配る物の名前が食い違う。

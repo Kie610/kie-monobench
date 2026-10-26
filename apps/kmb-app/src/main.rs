@@ -559,7 +559,12 @@ fn main() -> Result<(), String> {
                 if safe_mode || choice == "cpu" {
                     log::info!("3D のビューは CPU で描く");
                 } else {
-                    kmb_ui::gpu3d::install_in_background(&cc.egui_ctx, rs, choice == "gpu", samples);
+                    kmb_ui::gpu3d::install_in_background(
+                        &cc.egui_ctx,
+                        rs,
+                        choice == "gpu",
+                        samples,
+                    );
                 }
             }
             timing.mark("3D のビューを用意する");

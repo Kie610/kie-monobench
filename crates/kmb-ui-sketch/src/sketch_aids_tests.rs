@@ -236,7 +236,8 @@ fn a_sketch_on_a_face_projects_the_face_edges_as_a_profile() {
         Some(kmb_core::FeatureStatus::Ok { outputs, .. }) => outputs.clone(),
         other => panic!("{other:?}"),
     };
-    let faces = <kmb_core::ProfileFaces as kmb_core::Payload>::from_value(&outputs["faces"]).unwrap();
+    let faces =
+        <kmb_core::ProfileFaces as kmb_core::Payload>::from_value(&outputs["faces"]).unwrap();
     assert_eq!(faces.faces.len(), 3, "面 − 穴 − 円、穴、円");
     let profile = kmb_sketch::profile_value(&outputs["profile"]).unwrap();
     assert_eq!(profile.regions.len(), 1);

@@ -7,8 +7,8 @@
 //! 部品を出すか隠すかは、`Layout::browser_open` などの印で決める。隠すと並びから外し、
 //! 外す前の場所(隣の部品と分け方)を覚えて、また出す時にそこへ戻す。
 
-use crate::theme::RightMenu as _;
 use crate::layout::Space;
+use crate::theme::RightMenu as _;
 use crate::{Workspace, theme};
 use egui_dock::tab_viewer::OnCloseResponse;
 use egui_dock::{DockArea, DockState, NodeIndex, Split, SurfaceIndex, TabViewer};

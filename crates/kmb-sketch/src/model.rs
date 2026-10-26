@@ -588,7 +588,9 @@ pub enum SketchPlane {
     },
     /// 作業平面(機能 `feature` の出力 [`kmb_interchange::DATUM_OUTPUT`])の上。原点と X・Y の
     /// 向きは作業平面のまま。作業平面を作れなければ、このスケッチも誤りになる(ほかの平面へ移さない)
-    Datum { feature: kmb_core::FeatureId },
+    Datum {
+        feature: kmb_core::FeatureId,
+    },
 }
 
 impl SketchPlane {

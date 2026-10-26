@@ -4,7 +4,6 @@
 //! カードは押すと選び(Ctrl で足し引き、Shift で範囲)、二度押すと開く(フォルダは中へ)。デザインの
 //! カードは引いて、左の木の行かフォルダのカードへ離すと移す。
 
-use kmb_ui::theme::RightMenu as _;
 use crate::left::flat;
 use crate::{
     Drag, Filter, Item, Library, Place, Tidy, file_name, heading, key_button, paint_fit, plate,
@@ -13,6 +12,7 @@ use crate::{
 use kmb_session::library::{Period, Summary, ago_label};
 use kmb_session::projects::ModelInfo;
 use kmb_ui::theme;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::{HomeHost, HomeRequest, RecentAction};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};

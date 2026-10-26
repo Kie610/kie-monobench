@@ -93,7 +93,10 @@ fn a_document_is_opened_from_the_start_screen_and_autosaved_until_saved() {
     ws.win.layout.autosave_minutes = 0;
     ws.autosave_tick(now);
     ws.autosave_tick(later(90));
-    assert!(kmb_session::recoveries(&d.join("data")).is_empty(), "しない");
+    assert!(
+        kmb_session::recoveries(&d.join("data")).is_empty(),
+        "しない"
+    );
     ws.win.layout.autosave_minutes = 10;
     ws.autosave_tick(now);
     ws.autosave_tick(later(9));

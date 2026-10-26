@@ -276,10 +276,19 @@ fn large_design(np: usize, ns: usize) -> String {
 #[test]
 #[ignore = "道具: 大きな設計でパラメータの窓の重さを測る(R15)"]
 fn measure_params_window_on_a_large_design() {
-    let n = |k: &str, d: usize| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+    let n = |k: &str, d: usize| {
+        std::env::var(k)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(d)
+    };
     let doc = large_design(n("JC_PARAMS", 300), n("JC_SKETCHES", 100));
     let time = |open: bool| {
-        let mut ws = Workspace::new(kmb_core::Document::from_json(&doc).unwrap(), None, kmb_bundle::modules());
+        let mut ws = Workspace::new(
+            kmb_core::Document::from_json(&doc).unwrap(),
+            None,
+            kmb_bundle::modules(),
+        );
         ws.win.show_params = open;
         ws.wait();
         let mut h = harness(ws);

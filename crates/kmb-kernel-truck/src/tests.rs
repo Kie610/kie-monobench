@@ -10,11 +10,12 @@ fn kernel() -> TruckKernel {
 }
 
 /// truck は円を 2 つに割るので、穴の側面は 2 面。
-const QUIRKS: kmb_contract::kernel::KernelQuirks<TruckKernel> = kmb_contract::kernel::KernelQuirks {
-    shape_count: TruckKernel::shape_count,
-    hole_side_faces: &["f1:side:e9.a", "f1:side:e9.b"],
-    step_is_solid: false,
-};
+const QUIRKS: kmb_contract::kernel::KernelQuirks<TruckKernel> =
+    kmb_contract::kernel::KernelQuirks {
+        shape_count: TruckKernel::shape_count,
+        hole_side_faces: &["f1:side:e9.a", "f1:side:e9.b"],
+        step_is_solid: false,
+    };
 
 kmb_contract::kernel_contract_tests!(kernel, QUIRKS);
 

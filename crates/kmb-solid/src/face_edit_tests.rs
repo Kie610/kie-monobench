@@ -304,10 +304,7 @@ fn edited_faces_keep_their_names_so_sketches_stay_on_them() {
     let low = plate(&mut b, 80.0, 4.0);
     let mut doc = b.finish("面の名前");
     let h = result(&mut doc, &*k, p).unwrap();
-    let (top, px) = (
-        face(&*k, h, [0.0, 0.0, 1.0]),
-        face(&*k, h, [1.0, 0.0, 0.0]),
-    );
+    let (top, px) = (face(&*k, h, [0.0, 0.0, 1.0]), face(&*k, h, [1.0, 0.0, 0.0]));
     let up = |id: FeatureId, doc: &mut Document| {
         let t = result(doc, &*k, id).unwrap();
         face(&*k, t, [0.0, 0.0, 1.0])
@@ -332,7 +329,8 @@ fn edited_faces_keep_their_names_so_sketches_stay_on_them() {
         let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(s) else {
             panic!("スケッチが外れた: {:?}", report.feature(s));
         };
-        let pts = <kmb_core::Points as kmb_core::Payload>::from_value(&outputs["points"]).expect("点");
+        let pts =
+            <kmb_core::Points as kmb_core::Payload>::from_value(&outputs["points"]).expect("点");
         let q = pts.points.values().next().expect("点が 1 つ");
         pts.plane.to_world(*q)[2]
     };

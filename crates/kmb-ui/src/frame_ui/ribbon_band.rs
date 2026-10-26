@@ -1,7 +1,7 @@
 //! タブ付きツールバー: 作業空間の切替の箱、タブ、まとまりの帯(大きなボタン・2 段の小さなボタン・▾ の一覧)、選択のまとまり。
 
-use crate::theme::RightMenu as _;
 use super::*;
+use crate::theme::RightMenu as _;
 
 impl Workspace {
     /// 今の作業空間のツールバーのタブ。

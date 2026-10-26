@@ -4,7 +4,6 @@
 //! 判定は kmb-session の [`kmb_session::tidy`](画面は呼んで出すだけ)。どれも候補を並べるだけで、
 //! 移す・消すは利用者が押した時に [`HomeRequest`] で頼む。
 
-use kmb_ui::theme::RightMenu as _;
 use crate::middle::band;
 use crate::{
     Drag, GroupsKey, Item, Library, Place, Sort, Tidy, file_name, heading, key_button, place_row,
@@ -12,6 +11,7 @@ use crate::{
 use kmb_session::library::{Period, ago_label, bytes_label};
 use kmb_session::tidy::{self, Entry, Group, Kind};
 use kmb_ui::theme;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::{HomeHost, HomeRequest};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

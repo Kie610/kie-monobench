@@ -360,7 +360,8 @@ pub struct EdgeRef {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct AppArg {
-    /// 画面の道具: status(今のタブの文書の要約と選んでいる物)・screenshot・selection・
+    /// 画面の道具: status(今のタブの文書の要約と選んでいる物)・screenshot・probe(screenshot の絵の
+    /// 画素に見えている面・点・法線)・selection・
     /// set_param・add_param・set_value・undo・redo・actions(操作の一覧と引数の宣言)・run(操作を
     /// ID で実行する。画面のボタンと同じ道)。画面の部品を名前で探し、人と同じマウスと
     /// キーの入力で操作する道具: ui_tree・ui_find・ui_click・ui_type・ui_key・ui_select・ui_pick・
@@ -370,7 +371,9 @@ pub struct AppArg {
     pub tool: String,
     /// 道具の引数。set_param と add_param は {name, expr, comment?, unit?}、set_value は {feature, key, expr}、
     /// run は {id, args}(args は actions の宣言のとおり。宣言に無い鍵は誤り)、
-    /// screenshot は {width, height}(省くと 800×600)。部品の名前 target は画面の字のまま
+    /// screenshot は {width, height}(省くと 800×600)、probe は {x, y, width, height}(x, y は同じ
+    /// width・height の screenshot の絵の画素。左上から。答えは hit・ref(selection と同じ形)・point_mm・
+    /// normal。選択・視点・文書は変えない)。部品の名前 target は画面の字のまま
     /// (`~字` で含む物、`button:名前` で役割を絞る、`名前#2` で 2 番目)。ui_tree は {filter}、
     /// ui_find は {target}、ui_click は {target, button: left|right|double}、ui_type は
     /// {target(欄の名前), text, commit: tab|enter|none}、ui_key は {keys}(例 "ctrl+z")、
@@ -569,7 +572,7 @@ impl Server {
     }
 
     #[tool(
-        description = "人が見ている動いている画面(kieMonoBench)の今のタブにつなぐ。画面で設定の「AI との接続」を入れている時だけ使える。status で文書の要約と人が選んでいる面や辺、screenshot で画面の向きの絵、set_param・add_param・set_value・undo・redo で文書を変える(人の取り消しの履歴に「Claude: 」付きで入る)。人が機能を編集している間は変える要求を断る。ほかの道具は画面の無い別の文書を動かす"
+        description = "人が見ている動いている画面(kieMonoBench)の今のタブにつなぐ。画面で設定の「AI との接続」を入れている時だけ使える。status で文書の要約と人が選んでいる面や辺、screenshot で画面の向きの絵、probe でその絵の画素に見える面・点(mm)・法線、set_param・add_param・set_value・undo・redo で文書を変える(人の取り消しの履歴に「Claude: 」付きで入る)。人が機能を編集している間は変える要求を断る。ほかの道具は画面の無い別の文書を動かす"
     )]
     async fn app(&self, Parameters(a): Parameters<AppArg>) -> Result<CallToolResult, ErrorData> {
         let (dir, roots) = {

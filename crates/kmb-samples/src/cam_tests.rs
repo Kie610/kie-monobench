@@ -747,7 +747,8 @@ fn the_stage_band_shows_the_shape_after_each_operation() {
     assert_eq!(shape.label, "ポケット の後");
     assert!(shape.mesh.triangles.len() > 1000);
     // 前の段の形とは違い、ポケットの所が低い
-    let Ok(kmb_core::Outcome::Message(_)) = m.extensions.run(&band.stages[k - 1].action, &cx) else {
+    let Ok(kmb_core::Outcome::Message(_)) = m.extensions.run(&band.stages[k - 1].action, &cx)
+    else {
         panic!("走らせ直さずに出す")
     };
     let before = m.extensions.overlay(&cx).shape.unwrap();
@@ -809,7 +810,10 @@ pub(crate) fn recompute_ok(
     setups(cam.part.doc.data(), &report, reg).remove(0)
 }
 
-pub(crate) fn feature_data(cam: &crate::ReferenceCam, id: kmb_core::FeatureId) -> serde_json::Value {
+pub(crate) fn feature_data(
+    cam: &crate::ReferenceCam,
+    id: kmb_core::FeatureId,
+) -> serde_json::Value {
     cam.part.doc.data().feature(id).unwrap().data.clone()
 }
 

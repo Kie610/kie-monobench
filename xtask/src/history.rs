@@ -285,9 +285,22 @@ mod tests {
         // 最後に通ったのは 10-18(10-24 は失敗、10-25 は truck の回なし)
         assert_eq!(last_truck_pass(&text), days_of("2026-10-18"));
         assert_eq!(days_of("1970-01-01"), Some(0));
-        assert_eq!(days_of("2026-10-25").zip(days_of("2026-10-18")).map(|(a, b)| a - b), Some(7));
-        assert_eq!(days_of("2024-03-01").zip(days_of("2024-02-28")).map(|(a, b)| a - b), Some(2));
-        assert_eq!(jst_days(UNIX_EPOCH + std::time::Duration::from_secs(15 * 3600)), 1);
+        assert_eq!(
+            days_of("2026-10-25")
+                .zip(days_of("2026-10-18"))
+                .map(|(a, b)| a - b),
+            Some(7)
+        );
+        assert_eq!(
+            days_of("2024-03-01")
+                .zip(days_of("2024-02-28"))
+                .map(|(a, b)| a - b),
+            Some(2)
+        );
+        assert_eq!(
+            jst_days(UNIX_EPOCH + std::time::Duration::from_secs(15 * 3600)),
+            1
+        );
         assert_eq!(last_truck_pass(HEADER), None);
     }
 

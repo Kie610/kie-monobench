@@ -91,7 +91,11 @@ fn every_known_difference_names_a_space_on_the_board() {
 #[test]
 #[ignore = "道具: ツールバーを組む時間を測る(R17)"]
 fn measure_ribbon_tabs() {
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
     let t = std::time::Instant::now();
     for _ in 0..100 {

@@ -354,7 +354,9 @@ fn plate_and_slanted(stop: Option<HoleStop>) -> (kmb_core::Document, kmb_core::F
 #[test]
 fn a_hole_can_stop_at_a_slanted_face_or_a_vertex() {
     if TestKernel::new().is_truck() {
-        kmb_contract::skip!("truck の面取りは角の位置が 1〜3 µm ずれ、止める頂点(z = 4)が見つからない");
+        kmb_contract::skip!(
+            "truck の面取りは角の位置が 1〜3 µm ずれ、止める頂点(z = 4)が見つからない"
+        );
     }
     // レビュー 2 回目 M5a: 斜めの平らな面なら底が面に沿い、頂点ならその点の高さまで
     let k = TestKernel::new();

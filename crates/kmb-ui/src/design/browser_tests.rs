@@ -259,5 +259,9 @@ fn a_face_picked_or_pointed_in_3d_marks_its_body_row() {
     });
     let mut h = harness(ws);
     h.run();
-    assert_eq!(h.state().browser.marked, vec![root], "ブラウザを描くと印の対象を集める");
+    assert_eq!(
+        h.state().browser.marked,
+        vec![root],
+        "ブラウザを描くと印の対象を集める"
+    );
 }

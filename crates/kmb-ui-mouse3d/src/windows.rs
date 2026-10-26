@@ -151,9 +151,8 @@ fn probe(path: &[u16]) -> Option<Device> {
         return None;
     }
     let mut name = [0u16; 128];
-    let got = unsafe {
-        HidD_GetProductString(h.0, name.as_mut_ptr().cast(), size_of_val(&name) as u32)
-    };
+    let got =
+        unsafe { HidD_GetProductString(h.0, name.as_mut_ptr().cast(), size_of_val(&name) as u32) };
     let len = name.iter().position(|&c| c == 0).unwrap_or(name.len());
     let name = if got && len > 0 {
         String::from_utf16_lossy(&name[..len])

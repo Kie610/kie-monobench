@@ -1,9 +1,9 @@
 //! 面取りの 2 つの距離・距離と角度、格子のパターン、ボディのパターン・ミラー、
 //! ミラーの平面の選び方、切り取りとシェルの予告(`tool_preview`)。
 
+use super::modify_tests::set;
 use super::tests::{EdgeBench, TestKernel, close, final_mass, rect_sketch, registry};
 use super::*;
-use super::modify_tests::set;
 use kmb_core::{FeatureId, FeatureStatus, Ref, ToolPreview};
 use kmb_samples::sample::DocBuilder;
 use kmb_sketch::SketchPlane;
@@ -177,7 +177,9 @@ fn a_chamfer_takes_two_distances_or_a_distance_and_an_angle() {
 fn a_linear_pattern_makes_a_grid_with_a_second_direction() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)"
+        );
     }
     let make = |extra: serde_json::Value| {
         let mut b = DocBuilder::new();
@@ -376,7 +378,9 @@ fn a_linear_pattern_can_use_the_whole_width_and_center_on_the_original() {
 fn the_mirror_plane_can_be_an_origin_plane_or_a_flat_face() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)"
+        );
     }
     let mut b = DocBuilder::new();
     let bl = block(&mut b, 0.0, 0.0, 20.0, 20.0, 10.0);
@@ -433,7 +437,9 @@ fn the_mirror_plane_can_be_an_origin_plane_or_a_flat_face() {
 fn patterned_cuts_and_shells_preview_what_they_remove() {
     let k = TestKernel::new();
     if k.is_truck() {
-        kmb_contract::skip!("truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)。後半のシェルも truck は作れない");
+        kmb_contract::skip!(
+            "truck は同じ平面で接する形のブーリアンに失敗する(箱と柱の下の面が同じ平面)。後半のシェルも truck は作れない"
+        );
     }
     // 2×2 の貫通の切り取りを 3 つ並べる: 写しの 2 つの道具が予告に出る
     let mut b = DocBuilder::new();
@@ -571,7 +577,9 @@ fn pattern_copies_can_be_split_into_their_own_bodies() {
     let split = |doc: &mut kmb_core::Document| {
         let report = doc.recompute(&reg, &*k);
         let mut got = None;
-        cx_run(doc, &report, &mut |cx| got = MirrorCommands.run(SPLIT_COPIES, cx));
+        cx_run(doc, &report, &mut |cx| {
+            got = MirrorCommands.run(SPLIT_COPIES, cx)
+        });
         let Some(Ok(Outcome::Change { label, edits })) = got else {
             panic!("写しを分けられない");
         };
@@ -583,7 +591,11 @@ fn pattern_copies_can_be_split_into_their_own_bodies() {
             .into_iter()
             .map(|(_, h)| {
                 let m = k.mass(h).unwrap();
-                assert!(close(m.volume, 1000.0, 1e-6), "写しは 1 つずつ: {}", m.volume);
+                assert!(
+                    close(m.volume, 1000.0, 1e-6),
+                    "写しは 1 つずつ: {}",
+                    m.volume
+                );
                 m.min[0]
             })
             .collect();
@@ -593,12 +605,20 @@ fn pattern_copies_can_be_split_into_their_own_bodies() {
     // 分ける前: 元と写し 1 が見え、写し 2 は注意で知らせる
     let report = doc.recompute(&reg, &*k);
     assert_eq!(starts(&doc, &report), vec![0.0, 15.0]);
-    assert!(notes(&doc, &report).contains("写し 2 はまだ"), "{}", notes(&doc, &report));
+    assert!(
+        notes(&doc, &report).contains("写し 2 はまだ"),
+        "{}",
+        notes(&doc, &report)
+    );
     let before = doc.data().clone();
     let report = split(&mut doc);
     assert_eq!(starts(&doc, &report), vec![0.0, 15.0, 30.0]);
     assert_eq!(notes(&doc, &report), "");
-    assert_eq!(doc.data().feature(p), before.feature(p), "パターンは書き換えない");
+    assert_eq!(
+        doc.data().feature(p),
+        before.feature(p),
+        "パターンは書き換えない"
+    );
 
     // 個数を 4 にすると、増えた写し 3 は注意が出て、もう一度分けると 4 つが別々になる
     let mut data = doc.data().feature(p).unwrap().data.clone();

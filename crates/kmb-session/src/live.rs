@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 pub const APP_TOOLS: &[&str] = &[
     "status",
     "screenshot",
+    "probe",
     "selection",
     "set_param",
     "add_param",
@@ -108,6 +109,44 @@ pub fn screenshot(
         "px_per_mm": (p.px_per_mm * 1000.0).round() / 1000.0,
         "bodies": b.iter().map(|b| b.feature.0).collect::<Vec<_>>(),
     })
+}
+
+/// `screenshot` と同じ大きさ・向きで描いた絵の画素 (`x`, `y`) に見えている面を調べ、`probe` の
+/// 答えにする。面は `selection` と同じ形(`ui_pick` の名前)、点は mm、法線は外向きの長さ 1。
+/// 何も無ければ `hit: false`。
+pub fn probe(
+    bodies: &[(kmb_core::FeatureId, &kmb_core::Mesh)],
+    size: (u32, u32),
+    yaw_deg: f32,
+    pitch_deg: f32,
+    at: (u32, u32),
+) -> Value {
+    let b: Vec<kmb_render::picture::Body> = bodies
+        .iter()
+        .map(|(f, m)| kmb_render::picture::Body {
+            feature: *f,
+            mesh: m,
+        })
+        .collect();
+    let o = kmb_render::picture::Options {
+        width: size.0,
+        height: size.1,
+        yaw_deg,
+        pitch_deg,
+        ..Default::default()
+    };
+    let round = |v: [f32; 3], k: f32| v.map(|x| (x * k).round() / k);
+    match kmb_render::picture::probe(&b, &o, at.0, at.1) {
+        Some(h) => json!({
+            "hit": true,
+            "x": at.0,
+            "y": at.1,
+            "ref": kmb_core::Ref::Face { feature: h.feature, face: h.face },
+            "point_mm": round(h.point, 1000.0),
+            "normal": round(h.normal, 10000.0),
+        }),
+        None => json!({ "hit": false, "x": at.0, "y": at.1 }),
+    }
 }
 
 /// `live.json` の場所。

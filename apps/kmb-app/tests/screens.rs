@@ -639,9 +639,13 @@ fn write_screens() {
     // 5c. 作業空間の一覧を開いた所(字とアイコンが 100 % と 250 %)。
     //     `JC_SCREENS_ONLY_SPACE=1` ならこれだけ書く
     for (pct, k) in [(100, 1.0), (250, 2.5)] {
-        let mut w = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-            .with_editor(kmb_ui_sketch::SketchEditor::new())
-            .with_editor(kmb_ui_tools::ToolsEditor::new());
+        let mut w = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        )
+        .with_editor(kmb_ui_sketch::SketchEditor::new())
+        .with_editor(kmb_ui_tools::ToolsEditor::new());
         w.layout_mut().appearance.text_scale = k;
         w.layout_mut().appearance.icon_scale = k;
         let mut s = Screen::new(w);
@@ -655,9 +659,13 @@ fn write_screens() {
         ("250", 2.5, kmb_ui::themes::STANDARD),
         ("ハイコントラスト", 1.0, kmb_ui::themes::HIGH_CONTRAST),
     ] {
-        let mut w = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-            .with_editor(kmb_ui_sketch::SketchEditor::new())
-            .with_editor(kmb_ui_tools::ToolsEditor::new());
+        let mut w = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        )
+        .with_editor(kmb_ui_sketch::SketchEditor::new())
+        .with_editor(kmb_ui_tools::ToolsEditor::new());
         w.layout_mut().appearance.text_scale = k;
         w.layout_mut().appearance.icon_scale = k;
         w.layout_mut().appearance.theme = theme.into();
@@ -692,9 +700,13 @@ fn write_screens() {
         return;
     }
     // 0. 設計の作業空間(基準部品。リボン・ブラウザ・タイムラインの大きさと位置を試作と比べる)
-    let w = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-        .with_editor(kmb_ui_sketch::SketchEditor::new())
-        .with_editor(kmb_ui_tools::ToolsEditor::new());
+    let w = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    )
+    .with_editor(kmb_ui_sketch::SketchEditor::new())
+    .with_editor(kmb_ui_tools::ToolsEditor::new());
     let mut s = Screen::new(w);
     s.write(&dir, "0-設計");
     // 1. 加工の作業空間でセットアップを選んだ所(段の帯は作業空間の下)
@@ -736,18 +748,26 @@ fn write_screens() {
     let mut s = Screen::new(w);
     s.write(&dir, "5-スケッチ-作図の見本");
     // 6. 基準部品のスケッチ(パラメータの寸法「幅 = 100」の出方を試作と比べる)
-    let mut w = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-        .with_editor(kmb_ui_sketch::SketchEditor::new())
-        .with_editor(kmb_ui_tools::ToolsEditor::new());
+    let mut w = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    )
+    .with_editor(kmb_ui_sketch::SketchEditor::new())
+    .with_editor(kmb_ui_tools::ToolsEditor::new());
     let sketch = first_of(&w, "cad.sketch@1");
     w.open_edit(sketch);
     let mut s = Screen::new(w);
     s.write(&dir, "6-スケッチ-基準部品");
     // 7. 設計の 3D の表示: 透視投影、ブラウザの目で隠したスケッチ(薄い行と閉じた目)、
     //    下の帯の「表示 ▾」のメニュー。続けて「ワイヤフレーム」を選んだ所
-    let mut w = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-        .with_editor(kmb_ui_sketch::SketchEditor::new())
-        .with_editor(kmb_ui_tools::ToolsEditor::new());
+    let mut w = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    )
+    .with_editor(kmb_ui_sketch::SketchEditor::new())
+    .with_editor(kmb_ui_tools::ToolsEditor::new());
     w.layout_mut().projection = kmb_ui::Projection::Perspective;
     let sketch = first_of(&w, "cad.sketch@1");
     w.set_hidden(sketch, true);
@@ -1413,10 +1433,13 @@ fn write_toolbar_screens() {
     for (pct, k) in [(100, 1.0), (250, 2.5)] {
         for width in [1920.0, 1280.0] {
             for labels in [true, false] {
-                let mut w =
-                    Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-                        .with_editor(kmb_ui_sketch::SketchEditor::new())
-                        .with_editor(kmb_ui_tools::ToolsEditor::new());
+                let mut w = Workspace::new(
+                    kmb_samples::reference_document(),
+                    None,
+                    kmb_bundle::modules(),
+                )
+                .with_editor(kmb_ui_sketch::SketchEditor::new())
+                .with_editor(kmb_ui_tools::ToolsEditor::new());
                 w.layout_mut().appearance.text_scale = k;
                 w.layout_mut().appearance.icon_scale = k;
                 w.layout_mut().appearance.tool_labels = labels;
@@ -1644,8 +1667,12 @@ fn write_ai_mark_screens() {
     };
     std::fs::create_dir_all(&dir).unwrap();
     let data = std::env::temp_dir().join(format!("kmb-ai-mark-{}", std::process::id()));
-    let ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-        .with_data_dir(data.clone());
+    let ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    )
+    .with_data_dir(data.clone());
     let mut s = Screen::new(ws);
     s.h.state_mut().layout_mut().ai_live = true;
     s.settle();
@@ -1679,9 +1706,13 @@ fn write_render_screens() {
     };
     std::fs::create_dir_all(&dir).unwrap();
     let with = |look: &str, materials: bool| {
-        let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules())
-            .with_editor(kmb_ui_sketch::SketchEditor::new())
-            .with_editor(kmb_ui_tools::ToolsEditor::new());
+        let mut ws = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        )
+        .with_editor(kmb_ui_sketch::SketchEditor::new())
+        .with_editor(kmb_ui_tools::ToolsEditor::new());
         let (_, root) = ws.body_roots()[0];
         ws.set_body_appearance(root, look);
         ws.layout_mut().effects.materials = materials;

@@ -219,7 +219,8 @@ fn a_thinner_middle_on_a_long_top_edge_keeps_the_plate() {
         ("3 mm", "0.5 = 2 mm"),
     ] {
         let mut b = kmb_samples::sample::DocBuilder::new();
-        let s = super::tests::rect_sketch(&mut b, kmb_sketch::SketchPlane::Xy, 0.0, 0.0, 60.0, 40.0);
+        let s =
+            super::tests::rect_sketch(&mut b, kmb_sketch::SketchPlane::Xy, 0.0, 0.0, 60.0, 40.0);
         let plate = b.feature(
             EXTRUDE,
             "板",

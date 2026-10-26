@@ -14,9 +14,9 @@
 //! 部品から外す。部品の複製は、中のボディを元の形を追う写し(役割 `kmb_interchange::role::kind::COPY_BODY` の機能)にして、
 //! 同じ並びの新しい部品にまとめ、横へずらした位置(役割 `kmb_interchange::role::kind::COMPONENT_POSITION` の機能)に置く。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::browser_ui::folder_row_radio;
+use crate::theme::RightMenu as _;
 use kmb_core::{Component, FeatureEntry, FeatureId, LinkInfo, LinkStatus};
 use std::collections::BTreeSet;
 use std::time::{Duration, Instant};

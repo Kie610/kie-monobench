@@ -27,10 +27,17 @@ fn id_of(h: &Headless, name: &str) -> FeatureId {
 
 #[test]
 fn the_screen_and_the_cli_and_mcp_make_the_same_document_from_the_same_steps() {
-    let mut ws = Workspace::new(kmb_samples::reference_document(), None, kmb_bundle::modules());
+    let mut ws = Workspace::new(
+        kmb_samples::reference_document(),
+        None,
+        kmb_bundle::modules(),
+    );
     ws.wait();
-    let mut cli =
-        Headless::with_document(kmb_bundle::modules(), kmb_samples::reference_document(), None);
+    let mut cli = Headless::with_document(
+        kmb_bundle::modules(),
+        kmb_samples::reference_document(),
+        None,
+    );
     assert_eq!(snapshot(&ws.cur.work), snapshot(&cli), "始めから違う");
     let plate = id_of(&cli, "板");
     let boss = id_of(&cli, "ボス");

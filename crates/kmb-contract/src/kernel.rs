@@ -203,7 +203,12 @@ pub fn disjoint_subtract_keeps_the_target<K: Kernel>(k: &K, _: &KernelQuirks<K>)
 }
 
 /// 箱(`lo`〜`hi`)。名前は `tag`。
-fn cuboid<K: Kernel>(k: &K, lo: [f64; 3], hi: [f64; 3], tag: &str) -> kmb_core::kernel::ShapeHandle {
+fn cuboid<K: Kernel>(
+    k: &K,
+    lo: [f64; 3],
+    hi: [f64; 3],
+    tag: &str,
+) -> kmb_core::kernel::ShapeHandle {
     let p = rect_profile(lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1], 1);
     k.extrude(&p, lo[2], hi[2], tag).unwrap()
 }
@@ -705,8 +710,9 @@ pub fn step_files_from_another_cad_read_with_the_same_volume<K: Kernel>(
         ("reference.step", 22806.876, 7678.499),
         ("reference-fillet.step", 22772.540, 7637.296),
     ] {
-        let path =
-            concat!(env!("CARGO_MANIFEST_DIR"), "/../kmb-kernel-truck/testdata/").to_string() + file;
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../kmb-kernel-truck/testdata/")
+            .to_string()
+            + file;
         let step = std::fs::read_to_string(&path).unwrap();
         let h = k.import_step(&step).unwrap();
         let m = k.mass(h).unwrap();

@@ -419,7 +419,11 @@ pub fn raster_passes(p: &Planner, o: &Opts) -> Result<Vec<Vec<P3>>, EvalError> {
                 piece.reverse();
             }
         }
-        passes.extend(level.iter().map(|piece| kmb_cam_dropcutter::simplify(piece)));
+        passes.extend(
+            level
+                .iter()
+                .map(|piece| kmb_cam_dropcutter::simplify(piece)),
+        );
     }
     Ok(passes)
 }

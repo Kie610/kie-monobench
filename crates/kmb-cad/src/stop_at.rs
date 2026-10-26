@@ -57,7 +57,9 @@ pub fn has(kernel: &dyn kmb_core::Kernel, body: ShapeHandle, pick: &StopPick) ->
         StopPick::Face(face) => kernel
             .faces(body)
             .is_ok_and(|fs| fs.iter().any(|x| x.name == *face && x.planar.is_some())),
-        StopPick::Vertex(v) => kmb_core::vertices(kernel, body).iter().any(|x| x.name == *v),
+        StopPick::Vertex(v) => kmb_core::vertices(kernel, body)
+            .iter()
+            .any(|x| x.name == *v),
     }
 }
 

@@ -1,7 +1,6 @@
 //! 3D スケッチの中央のビュー。視点の操作とボディの絵は画面(kmb-ui)の 3D のビューを使い、
 //! その上にスケッチの線・点・面・拘束の印・寸法と、作図面を重ねる。
 
-use kmb_ui::theme::RightMenu as _;
 use super::ops::{DrawPlane, Sel};
 use super::{
     ProjectPick, Sketch3dEditor, Start, Tool3, sketch_of, status_text, values_of, work_frame,
@@ -19,6 +18,7 @@ use kmb_sketch_3d::{
     Solution3d, basis, geom, plane_at, solve3d_dragging, to_local, to_world,
 };
 use kmb_ui::EditorHost;
+use kmb_ui::theme::RightMenu as _;
 use kmb_ui::view3d::{self, Camera};
 use std::collections::HashMap;
 
@@ -177,9 +177,9 @@ pub(crate) fn plane_tags(
 }
 
 fn tag_rect(ui: &egui::Ui, at: Pos2, text: &str) -> Rect {
-    let g = ui
-        .painter()
-        .layout_no_wrap(text.to_string(), kmb_ui::theme::prop(11.0), Color32::WHITE);
+    let g =
+        ui.painter()
+            .layout_no_wrap(text.to_string(), kmb_ui::theme::prop(11.0), Color32::WHITE);
     Rect::from_min_size(
         at - Vec2::new(0.0, g.size().y),
         g.size() + Vec2::new(8.0, 4.0),

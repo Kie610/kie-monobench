@@ -1,7 +1,7 @@
 //! スケッチを編集している間のツールバー(編集器の道具をまとまりに並べる)と、スケッチの終わり方。
 
-use crate::theme::RightMenu as _;
 use super::*;
+use crate::theme::RightMenu as _;
 use ribbon_band::{
     group_label, group_widths, more_width, name_width, small_grid, small_width, sub_menu_row,
     tile_hint, tile_width, tool_tile,

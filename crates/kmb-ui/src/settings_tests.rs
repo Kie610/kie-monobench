@@ -248,13 +248,19 @@ fn copy_cut_and_paste_keys_with_shift_are_refused_with_a_reason() {
     h.event(egui::Event::Copy);
     h.run();
     h.get_by_label_contains("写す・切り取る・貼り付ける");
-    assert!(h.state().settings.key_capture.is_some(), "断った後も受けたまま");
+    assert!(
+        h.state().settings.key_capture.is_some(),
+        "断った後も受けたまま"
+    );
     press(
         &mut h,
         egui::Key::C,
         egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
     );
-    assert!(h.state().settings.key_capture.is_some(), "Ctrl+Shift+C は付けない");
+    assert!(
+        h.state().settings.key_capture.is_some(),
+        "Ctrl+Shift+C は付けない"
+    );
     assert!(!h.state().win.layout.keys.contains_key("recompute"));
     // ほかの Ctrl+Shift の組み合わせは付く
     press(

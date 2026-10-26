@@ -222,7 +222,11 @@ fn libraries_are_exported_and_imported_through_the_file_dialogs() {
     let mut other = ToolLibrary::starter();
     other.tools[0].name = "よその平".into();
     other.tools.truncate(1);
-    std::fs::write(&file, kmb_cam_tool::exchange::write_library(&other, "tools")).unwrap();
+    std::fs::write(
+        &file,
+        kmb_cam_tool::exchange::write_library(&other, "tools"),
+    )
+    .unwrap();
     h.get_by_label("読み込む…").click();
     h.run();
     let lib = lib_of(h.state(), tools);

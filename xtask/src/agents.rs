@@ -148,7 +148,11 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ("画板の並び", "xtask/src/board.rs", "pub fn check("),
     ("コアの API", "xtask/src/api.rs", "pub fn diff("),
     ("ライセンス", "deny.toml", "[licenses]"),
-    ("引数の宣言", "crates/kmb-core/src/args.rs", "fn check_args("),
+    (
+        "引数の宣言",
+        "crates/kmb-core/src/args.rs",
+        "fn check_args(",
+    ),
     (
         "キーの割り当て",
         "crates/kmb-ui/src/keys_tests.rs",

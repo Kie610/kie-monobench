@@ -1,8 +1,8 @@
 //! 中央のビュー: スケッチの編集器か 3D のビュー。3D のビューの出来事(クリック、範囲、長押し、
 //! 右クリック)を選びに直し、「クリックで作る」流れの値を決める。
 
-use crate::theme::RightMenu as _;
 use crate::select_ui::Hit;
+use crate::theme::RightMenu as _;
 use crate::view3d::{self, Pick};
 use crate::{MenuKind, PickFilter, Workspace, gesture};
 use egui::{Pos2, Rect};
@@ -79,7 +79,9 @@ impl Workspace {
             return;
         };
         let (center, yaw, pitch, height) = cam.snapshot(rect);
-        log::info!("スケッチで見ていた向きのまま 3D のビューへ戻る(ヨー {yaw:.1}°・ピッチ {pitch:.1}°)");
+        log::info!(
+            "スケッチで見ていた向きのまま 3D のビューへ戻る(ヨー {yaw:.1}°・ピッチ {pitch:.1}°)"
+        );
         self.cur
             .camera
             .restore_now(center, yaw, pitch, cam.tilt_deg(), height, rect);

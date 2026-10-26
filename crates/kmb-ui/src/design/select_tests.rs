@@ -309,7 +309,9 @@ fn a_fillet_gets_a_new_row_from_plus_and_the_next_click() {
         panic!("手前の上の辺");
     };
     ws.set_picked_edges(vec![e.clone()]);
-    let id = ws.start_action(kmb_cad_edge::FILLET_FACE).expect("すぐ足す");
+    let id = ws
+        .start_action(kmb_cad_edge::FILLET_FACE)
+        .expect("すぐ足す");
     let rows = |ws: &Workspace| ws.cur.work.doc().data().feature(id).unwrap().data["rows"].clone();
     assert_eq!(rows(&ws).as_array().unwrap().len(), 1);
     // 「+」は新しい行を待つ状態にするだけ(空の行は作らない)

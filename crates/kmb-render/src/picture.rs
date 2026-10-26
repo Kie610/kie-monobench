@@ -201,8 +201,8 @@ impl Canvas {
     }
 }
 
-/// ボディを描く。ボディが無ければ背景だけの絵になる。
-pub fn render(bodies: &[Body<'_>], o: &Options) -> Picture {
+/// 描く大きさ(画素)と、縦横何倍で描くか。
+fn canvas_size(o: &Options) -> (u32, u32, usize) {
     let (width, height) = (o.width.clamp(16, MAX_SIZE), o.height.clamp(16, MAX_SIZE));
     // 大きい絵は 2 倍にしない(メモリを食いすぎないように)
     let ss: usize = if width as u64 * height as u64 <= 1_048_576 {
@@ -210,6 +210,150 @@ pub fn render(bodies: &[Body<'_>], o: &Options) -> Picture {
     } else {
         1
     };
+    (width, height, ss)
+}
+
+/// 視点の向きと、全体が入る大きさ(描くのと画素を調べるのとで同じにする)。
+struct Frame {
+    right: V3,
+    up: V3,
+    eye: V3,
+    lo: V3,
+    hi: V3,
+    has: bool,
+    cx: f32,
+    cy: f32,
+    /// 描く所(縦横 `ss` 倍)の 1 mm あたりの画素数
+    scale: f32,
+    w: f32,
+    h: f32,
+}
+
+impl Frame {
+    fn new(bodies: &[Body<'_>], o: &Options, w: usize, h: usize) -> Frame {
+        let (right, up, eye) = basis(o.yaw_deg, o.pitch_deg);
+        // 全体が入る大きさ(縁に 1 割ほど余白)
+        let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+        for b in bodies {
+            for p in &b.mesh.positions {
+                let q = [dot(*p, right), dot(*p, up), dot(*p, eye)];
+                for i in 0..3 {
+                    lo[i] = lo[i].min(q[i]);
+                    hi[i] = hi[i].max(q[i]);
+                }
+            }
+        }
+        let has = lo[0] <= hi[0];
+        let (bw, bh) = if has {
+            ((hi[0] - lo[0]).max(1e-3), (hi[1] - lo[1]).max(1e-3))
+        } else {
+            (1.0, 1.0)
+        };
+        let scale = 0.85 * (w as f32 / bw).min(h as f32 / bh);
+        let (cx, cy) = if has {
+            ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0)
+        } else {
+            (0.0, 0.0)
+        };
+        Frame {
+            right,
+            up,
+            eye,
+            lo,
+            hi,
+            has,
+            cx,
+            cy,
+            scale,
+            w: w as f32,
+            h: h as f32,
+        }
+    }
+
+    /// 空間の点の、描く所の画素の位置と奥行き(大きいほど手前)。
+    fn to_px(&self, p: V3) -> (f32, f32, f32) {
+        (
+            self.w / 2.0 + (dot(p, self.right) - self.cx) * self.scale,
+            self.h / 2.0 - (dot(p, self.up) - self.cy) * self.scale,
+            dot(p, self.eye),
+        )
+    }
+}
+
+/// 画素を調べた答え: そこに描いた面と、当たった空間の点(mm)と外向きの法線。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Probe {
+    pub feature: FeatureId,
+    pub face: String,
+    pub point: V3,
+    pub normal: V3,
+}
+
+/// [`render`] と同じ指定で描いた絵の画素 (`x`, `y`)(左上から)に見えている面を調べる。
+/// 画素の真ん中を通る視線で、描くのと同じく表を向いた三角形のいちばん手前を探す。
+/// 背景や絵の外なら `None`。
+pub fn probe(bodies: &[Body<'_>], o: &Options, x: u32, y: u32) -> Option<Probe> {
+    let (width, height, ss) = canvas_size(o);
+    if x >= width || y >= height {
+        return None;
+    }
+    let f = Frame::new(bodies, o, width as usize * ss, height as usize * ss);
+    let (px, py) = ((x as f32 + 0.5) * ss as f32, (y as f32 + 0.5) * ss as f32);
+    let mut best: Option<(f32, Probe)> = None;
+    for b in bodies {
+        let m = b.mesh;
+        for (t, face) in m.triangles.iter().zip(&m.triangle_faces) {
+            let p = |i: usize| m.positions[t[i] as usize];
+            if dot(cross(sub(p(1), p(0)), sub(p(2), p(0))), f.eye) <= 0.0 {
+                continue;
+            }
+            let v = [0, 1, 2].map(|i| f.to_px(p(i)));
+            let area =
+                (v[1].0 - v[0].0) * (v[2].1 - v[0].1) - (v[1].1 - v[0].1) * (v[2].0 - v[0].0);
+            if area.abs() < 1e-9 {
+                continue;
+            }
+            let edge = |a: (f32, f32, f32), b: (f32, f32, f32)| {
+                (b.0 - a.0) * (py - a.1) - (b.1 - a.1) * (px - a.0)
+            };
+            let w0 = edge(v[1], v[2]) / area;
+            let w1 = edge(v[2], v[0]) / area;
+            let w2 = 1.0 - w0 - w1;
+            if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
+                continue;
+            }
+            let z = w0 * v[0].2 + w1 * v[1].2 + w2 * v[2].2;
+            if best.as_ref().is_some_and(|(d, _)| *d >= z) {
+                continue;
+            }
+            let Some(name) = m.face_names.get(*face as usize) else {
+                continue;
+            };
+            let w = [w0, w1, w2];
+            let mix3 = |q: [V3; 3]| [0, 1, 2].map(|k| (0..3).map(|i| w[i] * q[i][k]).sum::<f32>());
+            let point = mix3([p(0), p(1), p(2)]);
+            // 法線は網の頂点の法線を混ぜる(曲面でも滑らかに)。無ければ三角形の向き
+            let normal = match [0, 1, 2].map(|i| m.normals.get(t[i] as usize).copied()) {
+                [Some(a), Some(b), Some(c)] => normalize(mix3([a, b, c])),
+                _ => normalize(cross(sub(p(1), p(0)), sub(p(2), p(0)))),
+            };
+            best = Some((
+                z,
+                Probe {
+                    feature: b.feature,
+                    face: name.clone(),
+                    point,
+                    normal,
+                },
+            ));
+        }
+    }
+    best.map(|b| b.1)
+}
+
+/// ボディを描く。ボディが無ければ背景だけの絵になる。
+pub fn render(bodies: &[Body<'_>], o: &Options) -> Picture {
+    let (width, height, ss) = canvas_size(o);
     let (w, h) = (width as usize * ss, height as usize * ss);
     let mut c = Canvas {
         w,
@@ -217,37 +361,20 @@ pub fn render(bodies: &[Body<'_>], o: &Options) -> Picture {
         color: vec![BACKGROUND; w * h],
         depth: vec![f32::MIN; w * h],
     };
-    let (right, up, eye) = basis(o.yaw_deg, o.pitch_deg);
-    // 全体が入る大きさ(縁に 1 割ほど余白)
-    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-    for b in bodies {
-        for p in &b.mesh.positions {
-            let q = [dot(*p, right), dot(*p, up), dot(*p, eye)];
-            for i in 0..3 {
-                lo[i] = lo[i].min(q[i]);
-                hi[i] = hi[i].max(q[i]);
-            }
-        }
-    }
-    let has = lo[0] <= hi[0];
-    let (bw, bh) = if has {
-        ((hi[0] - lo[0]).max(1e-3), (hi[1] - lo[1]).max(1e-3))
-    } else {
-        (1.0, 1.0)
-    };
-    let scale = 0.85 * (w as f32 / bw).min(h as f32 / bh);
-    let (cx, cy) = if has {
-        ((lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0)
-    } else {
-        (0.0, 0.0)
-    };
-    let to_px = |p: V3| {
-        (
-            w as f32 / 2.0 + (dot(p, right) - cx) * scale,
-            h as f32 / 2.0 - (dot(p, up) - cy) * scale,
-            dot(p, eye),
-        )
-    };
+    let f = Frame::new(bodies, o, w, h);
+    let Frame {
+        right,
+        up,
+        eye,
+        lo,
+        hi,
+        has,
+        cx,
+        cy,
+        scale,
+        ..
+    } = f;
+    let to_px = |p: V3| f.to_px(p);
     let diag = if has {
         dot(sub(hi, lo), sub(hi, lo)).sqrt()
     } else {

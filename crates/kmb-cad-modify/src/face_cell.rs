@@ -313,9 +313,8 @@ fn keep_name(
         .into_iter()
         .filter(|f| !old.contains(&f.name))
         .filter(|f| {
-            f.planar.is_some_and(|p| {
-                k::dot(p.normal, q.n) > 1.0 - 1e-9 && q.dist(p.point).abs() < 1e-6
-            })
+            f.planar
+                .is_some_and(|p| k::dot(p.normal, q.n) > 1.0 - 1e-9 && q.dist(p.point).abs() < 1e-6)
         })
         .max_by(|a, b| a.area.total_cmp(&b.area))
     else {
@@ -324,7 +323,10 @@ fn keep_name(
     match kernel.rename_faces(after, &[(new.name.clone(), face.to_string())]) {
         Ok(h) => Ok(h),
         Err(KernelError::Unsupported(_)) => {
-            log::warn!("面 {} に元の名前 {face} を戻せません(カーネルが対応していません)", new.name);
+            log::warn!(
+                "面 {} に元の名前 {face} を戻せません(カーネルが対応していません)",
+                new.name
+            );
             Ok(after)
         }
         Err(e) => Err(format!("面に元の名前を戻せません({e})")),

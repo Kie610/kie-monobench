@@ -435,7 +435,8 @@ pub type Chord = (Modifiers, Key);
 
 /// 付け替えられないキー。値を打つ・欄を動く・写す・拡大するのに使い、どこでも同じ働きにしておく。
 /// 写す・切り取る・貼り付けの組み合わせを断る理由。
-pub(crate) const COPY_KEYS: &str = "写す・切り取る・貼り付けるキー(Shift・Alt を足しても PC が写す働きとして渡す)";
+pub(crate) const COPY_KEYS: &str =
+    "写す・切り取る・貼り付けるキー(Shift・Alt を足しても PC が写す働きとして渡す)";
 
 fn reserved(ch: Chord) -> Option<&'static str> {
     let (m, k) = ch;

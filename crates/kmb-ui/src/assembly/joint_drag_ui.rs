@@ -690,7 +690,11 @@ impl Workspace {
         let Some(d) = self.cur.joint_drag.as_ref() else {
             return;
         };
-        log::debug!("{}: {}(見た目だけ)", d.drag.label, value_text(d.value, &d.unit));
+        log::debug!(
+            "{}: {}(見た目だけ)",
+            d.drag.label,
+            value_text(d.value, &d.unit)
+        );
         let poses = self.preview_poses(d.drag.feature, d.value);
         self.cur.scene.set_poses(poses.clone());
         self.cur.drag_pose = Some(poses);

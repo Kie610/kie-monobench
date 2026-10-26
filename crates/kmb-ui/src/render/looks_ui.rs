@@ -5,10 +5,10 @@
 //! 選ぶ・お気に入り・割り当てを外して消す。直すのは小さな窓(名前・色・金属・粗さ)。
 //! 文書を変えるのは全部外観の操作([`kmb_interchange::role::action::APPEARANCE`]。CLI・MCP と同じ道)。窓は画面を止めない。
 
-use crate::theme::RightMenu as _;
 use crate::Workspace;
 use crate::layout::Space;
 use crate::theme;
+use crate::theme::RightMenu as _;
 use kmb_core::FeatureId;
 use kmb_look::material::{CATEGORIES, LIBRARY};
 use serde_json::{Value, json};

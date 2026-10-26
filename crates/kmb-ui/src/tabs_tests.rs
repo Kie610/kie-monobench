@@ -425,6 +425,31 @@ fn claude_reads_and_changes_the_open_document_through_the_live_link() {
         "PNG の頭"
     );
     assert_eq!(shot["width"], 200);
+    // 絵の画素の位置から、そこの面・点(mm)・法線を読む(m4)。選んでいる物は変えない
+    let picked = ws.picked_refs();
+    let hit = ask(
+        &mut ws,
+        &data,
+        "probe",
+        serde_json::json!({"x": 100, "y": 75, "width": 200, "height": 150}),
+    )
+    .unwrap();
+    assert_eq!(hit["hit"], true, "{hit}");
+    assert_eq!(hit["ref"]["kind"], "face", "{hit}");
+    let n: f64 = (0..3)
+        .map(|i| hit["normal"][i].as_f64().unwrap().powi(2))
+        .sum();
+    assert!((n - 1.0).abs() < 1e-3, "{hit}");
+    assert_eq!(hit["point_mm"].as_array().map(Vec::len), Some(3), "{hit}");
+    assert_eq!(ws.picked_refs(), picked);
+    let miss = ask(
+        &mut ws,
+        &data,
+        "probe",
+        serde_json::json!({"x": 1, "y": 1, "width": 200, "height": 150}),
+    )
+    .unwrap();
+    assert_eq!(miss["hit"], false, "{miss}");
     // 変える: 人と同じ取り消しの履歴に「Claude: 」付きで入り、再計算の後の要約で答える
     let s = ask(
         &mut ws,
