@@ -190,100 +190,108 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         );
     }
     // 同じ軸を含む別の平面の2面も、それぞれ回して合わせる。
-    let original_many = if !k.is_truck() {
-        let report = doc.recompute(&reg, &*k);
-        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f) else {
-            panic!()
-        };
-        let Value::Shape(source) = outputs["body"] else {
-            panic!()
-        };
-        let mut original = None;
-        for group in kmb_cad::face_profiles(&*k, source, &e.faces).unwrap() {
-            let profile = group.profile.profile;
-            for region in profile.regions {
-                let part = k
-                    .revolve(
-                        &kmb_core::Profile {
-                            plane: profile.plane,
-                            regions: vec![region],
-                        },
-                        [0.0; 3],
-                        [1.0, 0.0, 0.0],
-                        std::f64::consts::TAU,
-                        &format!("f{}", r.0),
-                    )
-                    .unwrap();
-                original = Some(match original {
-                    None => part,
-                    Some(body) => k.boolean(kmb_core::BooleanOp::Union, body, part).unwrap(),
-                });
-            }
-        }
-        original
-    } else {
-        None
-    };
-    let data = serde_json::to_value(Revolve {
-        source: Source::Faces,
-        faces: e
-            .faces
-            .iter()
-            .map(|name| Ref::Face {
-                feature: f,
-                face: name.clone(),
-            })
-            .collect(),
-        axis: Axis::OriginX,
-        ..Default::default()
-    })
-    .unwrap();
-    doc.apply(kmb_core::Transaction::new(
-        "2面",
-        vec![kmb_core::Op::SetFeatureData { id: r, data }],
-    ))
-    .unwrap();
-    let expected = std::f64::consts::PI * 16.0 * 15.0;
-    assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
-    if let Some(original) = original_many {
-        let report = doc.recompute(&reg, &*k);
-        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(r) else {
-            panic!()
-        };
-        let Value::Shape(organized) = outputs["body"] else {
-            panic!()
-        };
-        let mut old = k.faces(original).unwrap();
-        let mut new = k.faces(organized).unwrap();
-        old.sort_by(|a, b| a.name.cmp(&b.name));
-        new.sort_by(|a, b| a.name.cmp(&b.name));
-        assert_eq!(
-            old.iter().map(|f| &f.name).collect::<Vec<_>>(),
-            new.iter().map(|f| &f.name).collect::<Vec<_>>()
-        );
-        for (old, new) in old.iter().zip(&new) {
-            assert!(
-                (old.area - new.area).abs() < 1e-5 * old.area.max(1.0),
-                "{}: {} / {}",
-                old.name,
-                old.area,
-                new.area
-            );
-            match (old.planar, new.planar) {
-                (Some(a), Some(b)) => {
-                    let n = kmb_core::kernel::normalize(a.normal);
-                    assert!(
-                        (kmb_core::kernel::dot(n, kmb_core::kernel::normalize(b.normal)) - 1.0)
-                            .abs()
-                            < 1e-8
-                    );
-                    assert!(
-                        kmb_core::kernel::dot(kmb_core::kernel::sub(a.point, b.point), n).abs()
-                            < 1e-7
-                    );
+    let mut reversed = e.faces.clone();
+    reversed.reverse();
+    for selected_faces in [e.faces.clone(), reversed] {
+        let original_many = if !k.is_truck() {
+            let report = doc.recompute(&reg, &*k);
+            let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f) else {
+                panic!()
+            };
+            let Value::Shape(source) = outputs["body"] else {
+                panic!()
+            };
+            let mut original = None;
+            for group in kmb_cad::face_profiles(&*k, source, &selected_faces).unwrap() {
+                let profile = group.profile.profile;
+                for region in profile.regions {
+                    let part = k
+                        .revolve(
+                            &kmb_core::Profile {
+                                plane: profile.plane,
+                                regions: vec![region],
+                            },
+                            [0.0; 3],
+                            [1.0, 0.0, 0.0],
+                            std::f64::consts::TAU,
+                            &format!("f{}", r.0),
+                        )
+                        .unwrap();
+                    original = Some(match original {
+                        None => part,
+                        Some(body) => k.boolean(kmb_core::BooleanOp::Union, body, part).unwrap(),
+                    });
                 }
-                (None, None) => {}
-                _ => panic!("{} の面の対応が変わる", old.name),
+            }
+            original
+        } else {
+            None
+        };
+        let data = serde_json::to_value(Revolve {
+            source: Source::Faces,
+            faces: selected_faces
+                .iter()
+                .map(|name| Ref::Face {
+                    feature: f,
+                    face: name.clone(),
+                })
+                .collect(),
+            axis: Axis::OriginX,
+            ..Default::default()
+        })
+        .unwrap();
+        doc.apply(kmb_core::Transaction::new(
+            "2面",
+            vec![kmb_core::Op::SetFeatureData { id: r, data }],
+        ))
+        .unwrap();
+        let expected = std::f64::consts::PI * 16.0 * 15.0;
+        assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
+        if let Some(original) = original_many {
+            let report = doc.recompute(&reg, &*k);
+            let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(r) else {
+                panic!()
+            };
+            let Value::Shape(organized) = outputs["body"] else {
+                panic!()
+            };
+            let mut old = k.faces(original).unwrap();
+            let mut new = k.faces(organized).unwrap();
+            old.sort_by(|a, b| a.name.cmp(&b.name));
+            new.sort_by(|a, b| a.name.cmp(&b.name));
+            eprintln!(
+                "Many faces order={selected_faces:?}: old={:?} organized={:?}",
+                old.iter().map(|f| &f.name).collect::<Vec<_>>(),
+                new.iter().map(|f| &f.name).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                old.iter().map(|f| &f.name).collect::<Vec<_>>(),
+                new.iter().map(|f| &f.name).collect::<Vec<_>>()
+            );
+            for (old, new) in old.iter().zip(&new) {
+                assert!(
+                    (old.area - new.area).abs() < 1e-5 * old.area.max(1.0),
+                    "{}: {} / {}",
+                    old.name,
+                    old.area,
+                    new.area
+                );
+                match (old.planar, new.planar) {
+                    (Some(a), Some(b)) => {
+                        let n = kmb_core::kernel::normalize(a.normal);
+                        assert!(
+                            (kmb_core::kernel::dot(n, kmb_core::kernel::normalize(b.normal)) - 1.0)
+                                .abs()
+                                < 1e-8
+                        );
+                        assert!(
+                            kmb_core::kernel::dot(kmb_core::kernel::sub(a.point, b.point), n).abs()
+                                < 1e-7
+                        );
+                    }
+                    (None, None) => {}
+                    _ => panic!("{} の面の対応が変わる", old.name),
+                }
             }
         }
     }
@@ -629,12 +637,14 @@ fn a_finer_approximated_revolve_outline_does_not_reuse_old_face_names() {
         )
         .unwrap();
     let new_names = k.face_names(new_body).unwrap();
-    for name in k
+    let old_side_faces: Vec<_> = k
         .face_names(old_body)
         .unwrap()
         .into_iter()
         .filter(|n| n.contains(":side:"))
-    {
+        .collect();
+    assert!(!old_side_faces.is_empty());
+    for name in old_side_faces {
         assert!(!new_names.contains(&name));
         let error = kmb_cad::face_profile(&*k, new_body, &[name]).unwrap_err();
         assert!(error.contains("見つかりません"), "{error}");
