@@ -301,6 +301,28 @@ pub(crate) fn status_text(s: &crate::Solution) -> String {
 }
 
 impl Extension for SketchCommands {
+    fn status(&self, cx: &Context<'_>) -> Vec<(String, serde_json::Value)> {
+        let diagnoses: Vec<_> = cx
+            .report
+            .features
+            .iter()
+            .filter_map(|feature| {
+                let kmb_core::FeatureStatus::Ok { outputs, .. } = &feature.status else {
+                    return None;
+                };
+                let reason = outputs
+                    .values()
+                    .find_map(crate::SolveDiagnosis::from_value)?;
+                Some(serde_json::json!({"feature": feature.id.0, "reason": reason.0}))
+            })
+            .collect();
+        if diagnoses.is_empty() {
+            Vec::new()
+        } else {
+            vec![("sketch_diagnostics".into(), serde_json::json!(diagnoses))]
+        }
+    }
+
     fn describe(&self, v: &kmb_core::Value) -> Option<String> {
         if let Some(reason) = crate::SolveDiagnosis::from_value(v) {
             return Some(reason.0);
