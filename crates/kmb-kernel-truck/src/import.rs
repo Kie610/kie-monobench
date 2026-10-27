@@ -27,8 +27,10 @@ pub(crate) const IMPORT_TIMEOUT: std::time::Duration = std::time::Duration::from
 /// 網を作る時の許容差(mm)。
 pub(crate) const IMPORT_TOLERANCE: f64 = 0.01;
 
-/// STEP の文字列から、殻ごとに網を作る。
+/// STEP の文字列から、殻ごとに網を作る。長さはファイルの単位(inch・m など)から mm に直す
+/// (読めない単位はファイルの数を mm とみなす。注意は読み込みの機能が出す)。
 pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
+    let unit = kmb_format::step::length_unit(text).mm;
     let exchange = ruststep::parser::parse(text)
         .map_err(|e| KernelError::Failed(format!("STEP を読めません: {e}")))?;
     let data = exchange
@@ -51,7 +53,10 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         let cshell = table
             .to_compressed_shell(shell)
             .map_err(|e| KernelError::Failed(format!("STEP の殻 {n} を変換できません: {e}")))?;
-        let meshed = cshell.robust_triangulation(IMPORT_TOLERANCE);
+        // 網はファイルの単位で作るので、許容差もファイルの単位にする。ただし 1e-4 より細かくしない
+        // (m の STEP で 0.01 mm を求めると、40 mm の板 1 枚でも網づくりに数十秒かかる。m の物は
+        // 0.1 mm の網になる)
+        let meshed = cshell.robust_triangulation((IMPORT_TOLERANCE / unit).max(1e-4));
         // 円柱などの閉じた曲面の継ぎ目(1 つの面の境界に 2 回出る辺)は、曲面の作り方の都合で
         // できる線で、形の上に特別な所は無い。描かない(選ぶ・吸い付く対象にもしない)
         let mut seams = std::collections::HashSet::new();
@@ -71,7 +76,7 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
             let line: Vec<[f32; 3]> = e
                 .curve
                 .iter()
-                .map(|q| [q.x as f32, q.y as f32, q.z as f32])
+                .map(|q| (q * unit).map(|v| v as f32).into())
                 .collect();
             if line.len() >= 2 {
                 edges.push(line);
@@ -103,6 +108,13 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         if (signed_volume(&shell_meshes) < 0.0) != voids.contains(id) {
             for m in shell_meshes.iter_mut().flatten() {
                 m.invert();
+            }
+        }
+        if unit != 1.0 {
+            for m in shell_meshes.iter_mut().flatten() {
+                for p in m.positions_mut() {
+                    *p *= unit;
+                }
             }
         }
         for i in 0..shell_meshes.len() {
