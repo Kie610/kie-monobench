@@ -38,7 +38,7 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 pub struct SketchEditor {
     view: view::ViewState,
     editor: view::Editor,
-    /// 下の帯へ出した矛盾の理由。解けた時は自分が出した知らせだけを消す。
+    /// 下の帯へ出した失敗の理由。解けた時は自分が出した知らせだけを消す。
     diagnosis: Option<(kmb_core::FeatureId, String)>,
     /// 置いた面の輪郭(ボディと面の名前ごとに作り置く)
     outline: Option<(FaceKey, Vec<[[f64; 2]; 2]>)>,
@@ -930,10 +930,10 @@ impl FeatureEditor for SketchEditor {
     ) -> Option<serde_json::Value> {
         self.editor.fmt = kmb_sketch::dim_format(host.registry);
         let Some((sketch, solution)) = sketch_of(host, entry) else {
-            self.show_diagnosis(host, entry.id, None);
             let why = host
                 .failure(entry.id)
                 .unwrap_or_else(|| "表示できるスケッチではありません".into());
+            self.show_diagnosis(host, entry.id, Some(why.clone()));
             ui.colored_label(ui.visuals().error_fg_color, why);
             return None;
         };
