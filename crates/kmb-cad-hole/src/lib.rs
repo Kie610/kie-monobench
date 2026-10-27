@@ -51,6 +51,9 @@ pub struct Hole {
     pub countersink_diameter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub countersink_angle: Option<String>,
+    /// ザグリ・皿の省略値に、追加した呼びも含む表を使う。省略は保存された既定の読み方。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub standard_recesses: bool,
     /// 止まり穴の底(貫通では使わない)
     #[serde(default, skip_serializing_if = "is_default")]
     pub tip: Tip,
@@ -131,6 +134,7 @@ impl Hole {
             counterbore_depth: None,
             countersink_diameter: None,
             countersink_angle: None,
+            standard_recesses: true,
             tip: Tip::Flat,
             tip_angle: None,
             tap: Tap::Simple,
@@ -297,7 +301,10 @@ impl Hole {
         })?;
         let row = (size.family == thread::Family::Metric && size.coarse)
             .then(|| THREADS.iter().find(|t| (t.major - size.major).abs() < 1e-9))
-            .flatten();
+            .flatten()
+            .filter(|row| {
+                self.tap != Tap::Tapped || self.standard_recesses || shape::v1_thread_row(row)
+            });
         if row.is_none() && self.tap == Tap::Clearance {
             return Err(EvalError::InvalidData(format!(
                 "通し穴の径は表の {} だけです({name} はネジ穴にするか、径を決めた穴にしてください)",
@@ -788,9 +795,11 @@ pub fn register(reg: &mut Registry) {
     for f in hole_fields() {
         d = d.field(f);
     }
-    reg.register_described(d.template(json!({"diameter": "5 mm"})), |d| {
-        Ok(Box::new(parse::<Hole>(d)?))
-    });
+    reg.register_described(
+        d.create_defaults(json!({"standard_recesses": true}))
+            .template(json!({"diameter": "5 mm", "standard_recesses": true})),
+        |d| Ok(Box::new(parse::<Hole>(d)?)),
+    );
     thread::register(reg);
 }
 
@@ -876,6 +885,7 @@ fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         "target": pick.feature.0,
         "sketch": {"$new": 0},
         "diameter": format!("{} mm", round(dia)),
+        "standard_recesses": true,
     });
     // 深さ(省けば貫通)
     if let Some(d) = cx.arg_f64("depth")? {

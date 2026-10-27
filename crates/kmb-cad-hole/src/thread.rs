@@ -91,11 +91,11 @@ const UNIFIED: &[Unified] = &[
     Unified { nominal: "3/8", inch: 0.375, tpi: [16, 24], tap: [0.3125, 0.3320] },
     Unified { nominal: "7/16", inch: 0.4375, tpi: [14, 20], tap: [0.3680, 25.0 / 64.0] },
     Unified { nominal: "1/2", inch: 0.5, tpi: [13, 20], tap: [27.0 / 64.0, 29.0 / 64.0] },
-    Unified { nominal: "9/16", inch: 0.5625, tpi: [12, 18], tap: [31.0 / 64.0, 33.0 / 64.0] },
-    Unified { nominal: "5/8", inch: 0.625, tpi: [11, 18], tap: [17.0 / 32.0, 37.0 / 64.0] },
+    Unified { nominal: "9/16", inch: 0.5625, tpi: [12, 18], tap: [31.0 / 64.0, 13.0 / 25.4] },
+    Unified { nominal: "5/8", inch: 0.625, tpi: [11, 18], tap: [17.0 / 32.0, 14.5 / 25.4] },
     Unified { nominal: "3/4", inch: 0.75, tpi: [10, 16], tap: [21.0 / 32.0, 11.0 / 16.0] },
     Unified { nominal: "7/8", inch: 0.875, tpi: [9, 14], tap: [49.0 / 64.0, 13.0 / 16.0] },
-    Unified { nominal: "1", inch: 1.0, tpi: [8, 12], tap: [7.0 / 8.0, 15.0 / 16.0] },
+    Unified { nominal: "1", inch: 1.0, tpi: [8, 12], tap: [7.0 / 8.0, 59.0 / 64.0] },
     Unified { nominal: "1-1/8", inch: 1.125, tpi: [7, 12], tap: [63.0 / 64.0, 1.0 + 3.0 / 64.0] },
     Unified { nominal: "1-1/4", inch: 1.25, tpi: [7, 12], tap: [1.0 + 7.0 / 64.0, 1.0 + 11.0 / 64.0] },
     Unified { nominal: "1-3/8", inch: 1.375, tpi: [6, 12], tap: [1.0 + 7.0 / 32.0, 1.0 + 19.0 / 64.0] },
@@ -453,14 +453,32 @@ pub fn suggest(diameter: f64) -> Vec<Size> {
 /// 同じなら、その呼びを先にする(JC のネジ穴で開けた M6 の 5 mm は M5 でなく M6)。
 pub fn suggest_for(c: &Cylinder) -> Vec<Size> {
     let mut v = suggest(c.diameter);
+    promote_tap_match(&mut v, c, false);
+    v
+}
+
+/// 下穴と一致する呼びを先にする。省略した呼びは保存された表の範囲だけを使う。
+fn promote_tap_match(v: &mut Vec<Size>, c: &Cylinder, v1: bool) {
     if c.internal
         && let Some(i) = v.iter().position(|s| {
-            (s.family != Family::Metric || s.coarse) && (s.tap_drill() - c.diameter).abs() < 1e-3
+            (s.family != Family::Metric || s.coarse)
+                && (s.tap_drill() - c.diameter).abs() < 1e-3
+                && (!v1
+                    || crate::THREADS.iter().any(|row| {
+                        crate::shape::v1_thread_row(row) && (row.major - s.major).abs() < 1e-9
+                    }))
         })
     {
-        let s = v.remove(i);
-        v.insert(0, s);
+        let size = v.remove(i);
+        v.insert(0, size);
     }
+}
+
+/// 呼びを省いた保存データの既定。候補の追加で、保存したねじの種類を変えない。
+fn v1_suggestions(c: &Cylinder) -> Vec<Size> {
+    let mut v = suggest(c.diameter);
+    v.retain(|size| size.family == Family::Metric);
+    promote_tap_match(&mut v, c, true);
     v
 }
 
@@ -626,7 +644,11 @@ impl Exprs for Thread {
 
 /// ねじの呼びを決め、注意の文を返す。
 fn resolve(t: &Thread, c: &Cylinder) -> Result<(Size, Vec<String>), String> {
-    let near = suggest_for(c);
+    let near = if t.size.trim().is_empty() {
+        v1_suggestions(c)
+    } else {
+        suggest_for(c)
+    };
     let size = if t.size.trim().is_empty() {
         near[0]
     } else {
@@ -1121,6 +1143,33 @@ mod tests {
             }
         }
         assert!(outside.is_empty(), "{outside:?}");
+    }
+
+    #[test]
+    fn expanded_thread_new_creation_uses_the_table_but_saved_omissions_do_not() {
+        let mut reg = Registry::new();
+        crate::register(&mut reg);
+        let desc = reg.descriptor(crate::HOLE).unwrap();
+        assert_eq!(desc.template.as_ref().unwrap()["standard_recesses"], true);
+        assert!(crate::Hole::new(FeatureId(1), FeatureId(2)).standard_recesses);
+        for name in ["M14", "M16", "M20", "M24", "M30"] {
+            let old = serde_json::json!({"target":1,"sketch":2,"kind":"counterbore","tap":"tapped","size":name,"depth":"40 mm"});
+            assert_eq!(desc.upgraded(&old), old);
+            let hole: crate::Hole = serde_json::from_value(old.clone()).unwrap();
+            assert!(!hole.standard_recesses);
+            assert!(hole.thread().unwrap().unwrap().1.is_none());
+            assert_eq!(serde_json::to_value(&hole).unwrap(), old);
+            let mut current = old;
+            desc.fill_create_defaults(&mut current);
+            let hole: crate::Hole = serde_json::from_value(current).unwrap();
+            assert!(hole.standard_recesses);
+            assert_eq!(hole.thread().unwrap().unwrap().1.unwrap().name, name);
+        }
+        let mut old: crate::Hole = serde_json::from_value(serde_json::json!({"target":1,"sketch":2,"kind":"counterbore","tap":"tapped","size":"M16"})).unwrap();
+        old.size = Some("M24".into());
+        assert_eq!(old.thread().unwrap().unwrap().0.tap_drill(), 21.0);
+        assert!(old.thread().unwrap().unwrap().1.is_none());
+        assert!(old.counterbore_diameter.is_none() && old.counterbore_depth.is_none());
     }
 
     #[test]

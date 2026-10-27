@@ -204,6 +204,14 @@ pub const THREADS: &[ThreadSize] = &[
     },
 ];
 
+/// 省略したザグリ・皿と、ねじの省略した呼びに使う、保存データの既定の表。
+pub(crate) fn v1_thread_row(row: &ThreadSize) -> bool {
+    matches!(
+        row.name,
+        "M2" | "M2.5" | "M3" | "M4" | "M5" | "M6" | "M8" | "M10" | "M12"
+    )
+}
+
 /// 名前(例: `M3`)からネジのサイズを探す。
 pub fn thread(name: &str) -> Option<&'static ThreadSize> {
     THREADS

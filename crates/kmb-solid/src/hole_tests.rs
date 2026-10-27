@@ -383,7 +383,7 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
     }
 }
 
-fn legacy_thread_recess_volume(kind: &str) -> f64 {
+fn legacy_thread_recess_volume(kind: &str, name: &str) -> f64 {
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
     use kmb_sketch::SketchPlane;
     let k = TestKernel::new();
@@ -406,7 +406,7 @@ fn legacy_thread_recess_volume(kind: &str) -> f64 {
         "既定の径の穴",
         serde_json::json!({
             "target":plate.0,"sketch":sketch.0,"points":[point.0],
-            "kind":kind,"tap":"tapped","size":"M16","depth":"40 mm"
+            "kind":kind,"tap":"tapped","size":name,"depth":"40 mm"
         }),
     );
     let mut doc = kmb_core::Document::from_json(&b.finish("保存した穴").to_json()).unwrap();
@@ -420,14 +420,84 @@ fn legacy_thread_recess_volume(kind: &str) -> f64 {
 
 #[test]
 fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
-    let removed = cyl(7.0, 40.0) + cyl(12.6, 14.0) - cyl(7.0, 14.0);
-    let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("counterbore");
-    assert!((actual - removed).abs() < 0.01, "{actual} vs {removed}");
+    for (name, diameter) in [
+        ("M14", 12.0),
+        ("M16", 14.0),
+        ("M20", 17.5),
+        ("M24", 21.0),
+        ("M30", 26.5),
+    ] {
+        let r = diameter / 2.0;
+        let removed = cyl(r, 40.0) + cyl(diameter * 0.9, diameter) - cyl(r, diameter);
+        let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("counterbore", name);
+        assert!(
+            (actual - removed).abs() < 0.01,
+            "{name}: {actual} vs {removed}"
+        );
+    }
 }
 
 #[test]
 fn legacy_thread_countersink_keeps_the_omitted_diameter() {
-    let removed = cyl(7.0, 33.0) + cone(14.0, 7.0, 7.0);
-    let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("countersink");
-    assert!((actual - removed).abs() < 0.01, "{actual} vs {removed}");
+    for (name, diameter) in [
+        ("M14", 12.0),
+        ("M16", 14.0),
+        ("M20", 17.5),
+        ("M24", 21.0),
+        ("M30", 26.5),
+    ] {
+        let r = diameter / 2.0;
+        let removed = cyl(r, 40.0 - r) + cone(diameter, r, r);
+        let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("countersink", name);
+        assert!(
+            (actual - removed).abs() < 0.01,
+            "{name}: {actual} vs {removed}"
+        );
+    }
+}
+
+#[test]
+fn expanded_thread_hole_actions_create_the_new_recess_defaults() {
+    use kmb_core::{Context, Extensions, Kernel, Outcome};
+    use kmb_samples::sample::DocBuilder;
+    use kmb_sketch::SketchPlane;
+    use std::sync::Arc;
+    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let mut b = DocBuilder::new();
+    let sketch = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 100.0, 80.0);
+    let body = b.feature(
+        EXTRUDE,
+        "板",
+        Extrude {
+            profile: Some(sketch),
+            distance: "60 mm".into(),
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("表のザグリ");
+    let reg = registry();
+    let report = doc.recompute(&reg, k.as_ref());
+    assert_ok(&report);
+    let actions = Extensions(vec![Arc::new(kmb_cad_hole::HoleCommands)]);
+    let args = serde_json::json!({"feature":body.0,"face":format!("f{}:end",body.0),"point":[50.0,40.0,60.0],"kind":"counterbore","tap":"tapped","size":"M16","depth":"40 mm"});
+    let cx = Context {
+        args: &args,
+        ..Context::new(doc.data(), &report, &reg, &k)
+    };
+    let Outcome::Change { label, edits } = actions.run(kmb_cad_hole::HOLE_ON_FACE, &cx).unwrap()
+    else {
+        panic!()
+    };
+    doc.apply_edits(&label, edits).unwrap();
+    assert_eq!(
+        doc.data().features.last().unwrap().data["standard_recesses"],
+        true
+    );
+    let report = doc.recompute(&reg, k.as_ref());
+    assert_ok(&report);
+    let bodies = visible_bodies(doc.data(), &reg, &report);
+    assert_eq!(bodies.len(), 1);
+    let removed = 100.0 * 80.0 * 60.0 - k.mass(bodies[0].1).unwrap().volume;
+    let expected = cyl(7.0, 40.0) + cyl(13.0, 17.0) - cyl(7.0, 17.0);
+    assert!((removed - expected).abs() < 0.01, "{removed} vs {expected}");
 }
