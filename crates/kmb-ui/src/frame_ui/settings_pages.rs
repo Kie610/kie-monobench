@@ -68,20 +68,15 @@ impl Workspace {
     /// 設定の「3D の表示」の節。
     pub(crate) fn view3d_settings(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.label("表示スタイル");
-            for s in crate::Shading::ALL {
-                ui.radio_value(&mut self.win.layout.shading, s, s.label());
-            }
+            ui.label(self.win.t("view-style"));
+            self.shading_items(ui);
         });
         ui.horizontal(|ui| {
-            ui.label("投影");
-            for p in crate::Projection::ALL {
-                ui.radio_value(&mut self.win.layout.projection, p, p.label())
-                    .on_hover_text(p.hint());
-            }
+            ui.label(self.win.t("view-projection"));
+            self.projection_items(ui);
         });
         ui.horizontal_wrapped(|ui| {
-            ui.label("効果");
+            ui.label(self.win.t("view-effects"));
             self.effects_items(ui);
         });
         ui.weak("ビューの右上のボタンと、何もない所の右クリックでも替えられる");

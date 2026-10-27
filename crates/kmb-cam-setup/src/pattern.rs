@@ -314,11 +314,11 @@ pub fn register(reg: &mut Registry) {
                     ("mirror", "ミラー"),
                 ],
             ))
-            .field(Field::integer("count_x", "X の数(元を含む)").unitless().only("kind", "rect", "rect"))
-            .field(Field::integer("count_y", "Y の数(元を含む)").unitless().only("kind", "rect", "rect"))
+            .field(Field::integer("count_x", "X の数(元を含む)").unitless().step(1.0, 1.0).only("kind", "rect", "rect"))
+            .field(Field::integer("count_y", "Y の数(元を含む)").unitless().step(1.0, 1.0).only("kind", "rect", "rect"))
             .field(Field::expr("spacing_x", "X の間隔").length().help("負なら左へ並べる").only("kind", "rect", "rect"))
             .field(Field::expr("spacing_y", "Y の間隔").length().help("負なら手前へ並べる").only("kind", "rect", "rect"))
-            .field(Field::integer("count", "数(元を含む)").unitless().only("kind", "circle", "rect"))
+            .field(Field::integer("count", "数(元を含む)").unitless().step(1.0, 1.0).only("kind", "circle", "rect"))
             .field(
                 Field::opt_expr("center_x", "中心の X").length()
                     .help("空ならストックの中央")

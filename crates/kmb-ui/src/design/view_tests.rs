@@ -1271,3 +1271,59 @@ fn the_shape_stays_put_when_the_panel_comes_and_goes() {
     assert!((r2.right() - r0.right()).abs() < 1.0);
     assert!((p2 - p0).length() < 1.0, "原点が跳ぶ: {p0:?} → {p2:?}");
 }
+
+/// 表示の言語を English にすると、3D のビューの下の帯・等角と全画面のボタン・表示のメニュー・
+/// ブラウザのつまみ・確かめる窓が英語になる。日本語に戻すと元の字。
+#[test]
+fn the_view_and_review_follow_the_display_language() {
+    let doc = reference_document();
+    let first = doc.data().features[0].id;
+    let mut ws = Workspace::new(doc, None, reg());
+    ws.win.layout.appearance.language = "en".into();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    for name in [
+        "Orbit",
+        "Pan",
+        "Zoom",
+        "Fit",
+        "Look At",
+        "ISO",
+        "Full screen",
+    ] {
+        // ズームは上の帯の項目にもあるので、1 つ以上あればよい
+        assert!(h.get_all_by_label(name).next().is_some(), "{name}");
+    }
+    assert!(h.query_by_label("オービット").is_none());
+    h.get_by_label("Display").click();
+    h.run();
+    for name in [
+        "Data panel",
+        "Reset layout",
+        "Shaded with visible edges only",
+        "Orthographic",
+        "Grid",
+    ] {
+        h.get_by_label(name);
+    }
+    h.key_press(egui::Key::Escape);
+    h.run();
+    // 確かめる窓(注意もエラーも無い機能)
+    h.state_mut().open_review(first);
+    h.run();
+    h.get_by_label("Computing normally now");
+    h.get_by_label("This feature has no warnings or errors");
+    // ブラウザを隠した時のつまみ
+    h.state_mut().win.layout.browser_open = false;
+    h.run();
+    h.get_by_label("Show the browser");
+    // 日本語に戻す
+    h.state_mut().win.layout.appearance.language = "ja".into();
+    h.run();
+    h.get_by_label("オービット");
+    h.get_by_label("等角");
+    h.get_by_label("今は計算できています");
+    h.get_by_label("ブラウザを出す");
+}

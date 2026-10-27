@@ -58,48 +58,50 @@ impl Workspace {
                 if !self.cur.picked_edges.is_empty() || !self.cur.picked_vertices.is_empty() =>
             {
                 // 下の帯と同じく頂点・辺・面の順
+                let count = |id: &str, n: usize| self.win.t_with(id, &[("count", n.into())]);
                 let mut parts = Vec::new();
                 if !self.cur.picked_vertices.is_empty() {
-                    parts.push(format!("{} 個の頂点", self.cur.picked_vertices.len()));
+                    parts.push(count("view-hint-vertices", self.cur.picked_vertices.len()));
                 }
                 if !self.cur.picked_edges.is_empty() {
-                    parts.push(format!("{} 本の辺", self.cur.picked_edges.len()));
+                    parts.push(count("view-hint-edges", self.cur.picked_edges.len()));
                 }
                 if picked.is_some() {
-                    parts.push(format!("{} 面", self.cur.also_picked.len() + 1));
+                    parts.push(count("view-hint-faces", self.cur.also_picked.len() + 1));
                 }
+                let parts = parts.join(&self.win.t("view-hint-separator"));
                 Some((
-                    "選択".to_string(),
-                    format!(
-                        "{}を選んでいます。Shift・Ctrl+クリックで足す・外す",
-                        parts.join("・")
-                    ),
+                    self.win.t("view-hint-select"),
+                    self.win
+                        .t_with("view-hint-mixed", &[("parts", parts.into())]),
                     false,
                 ))
             }
             (None, Some(p)) => {
                 let n = self.cur.also_picked.len() + 1;
+                let face = self.face_label(&p.face);
                 let text = if n > 1 {
-                    format!(
-                        "{n} 面を選んでいます(最後: {})。Shift・Ctrl+クリックで足す・外す",
-                        self.face_label(&p.face)
+                    self.win.t_with(
+                        "view-hint-faces-many",
+                        &[("count", n.into()), ("face", face.into())],
                     )
                 } else {
-                    format!(
-                        "選んだ面: {}(Shift・Ctrl+クリックで足す)",
-                        self.face_label(&p.face)
-                    )
+                    self.win
+                        .t_with("view-hint-face-one", &[("face", face.into())])
                 };
-                Some((format!("{n} 面"), text, false))
+                let head = self.win.t_with("view-hint-faces", &[("count", n.into())]);
+                Some((head, text, false))
             }
             (None, None) => {
                 // 加工は削る途中の形、解析は結果の色分け
-                let head = if self.win.layout.space == crate::layout::Space::Simulation {
-                    "結果"
-                } else {
-                    "途中の形"
-                };
-                shape.map(|s| (head.to_string(), s, false))
+                let head = self.win.t(
+                    if self.win.layout.space == crate::layout::Space::Simulation {
+                        "view-hint-result"
+                    } else {
+                        "view-hint-stage-shape"
+                    },
+                );
+                shape.map(|s| (head, s, false))
             }
         };
         if let Some((head, text, cmd)) = hint {
@@ -153,16 +155,16 @@ impl Workspace {
             &mut |ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     let focus = self.win.focus_mode.is_some();
-                    let name = if focus {
-                        "全画面表示を終了"
+                    let name = self.win.t(if focus {
+                        "view-fullscreen-exit"
                     } else {
-                        "全画面表示"
-                    };
+                        "view-fullscreen"
+                    });
                     let fr = egui::Frame::new()
                         .fill(l.pal.panel)
                         .stroke(egui::Stroke::new(1.0, l.pal.edge))
                         .corner_radius(crate::theme::corner(5.0))
-                        .show(ui, |ui| theme::icon_button(ui, "fit", name, true, focus))
+                        .show(ui, |ui| theme::icon_button(ui, "fit", &name, true, focus))
                         .inner;
                     if fr.on_hover_text(name).clicked() {
                         view = Some(9);
@@ -171,9 +173,11 @@ impl Workspace {
                     // 上・前・右は下の軸の玉で選ぶ。等角だけボタンで残す
                     // (もう一度押すと反対側から見る。その間は名前も「等角(後)」に変わる)
                     let b = view3d::VIEW_BUTTONS[3];
+                    // 名前は表(view3d の VIEW_BUTTONS)の日本語ではなく今の言語で出す
+                    let (iso, iso_back) = (self.win.t("view-iso"), self.win.t("view-iso-back"));
                     let item = match self.cur.camera.view_side(&b) {
-                        Some(true) => (b.back, true, true),
-                        side => (b.label, side.is_some(), true),
+                        Some(true) => (iso_back.as_str(), true, true),
+                        side => (iso.as_str(), side.is_some(), true),
                     };
                     if theme::segmented(ui, &[item], l.pal.panel).is_some() {
                         view = Some(3);
@@ -247,50 +251,50 @@ impl Workspace {
                 ui.spacing_mut().item_spacing.x = 2.0;
                 ui.horizontal(|ui| {
                     use view3d::LeftDrag;
-                    for (icon, text, mode) in [
-                        ("orbit", "オービット", LeftDrag::Orbit),
-                        ("pan", "画面移動", LeftDrag::Pan),
-                        ("zoom", "ズーム", LeftDrag::Zoom),
+                    for (icon, id, mode) in [
+                        ("orbit", "view-orbit", LeftDrag::Orbit),
+                        ("pan", "view-pan", LeftDrag::Pan),
+                        ("zoom", "view-zoom", LeftDrag::Zoom),
                     ] {
                         let on = self.win.left_drag == mode;
                         let c = if on { l.ws() } else { l.pal.ink2 };
-                        let r = theme::icon_text_button_fit(ui, icon, text, c, 11.5, icon_only)
-                            .on_hover_text(if mode == LeftDrag::Orbit {
-                                format!(
-                                    "押している間、左ドラッグで{text}(もう一度押すか Esc で戻す)。今は{}。右クリックで替える",
-                                    if self.win.layout.free_orbit {
-                                        "フリーオービット"
-                                    } else {
-                                        "拘束オービット"
-                                    }
-                                )
+                        let tip = if mode == LeftDrag::Orbit {
+                            let how = self.win.t(if self.win.layout.free_orbit {
+                                "view-orbit-free"
                             } else {
-                                format!("押している間、左ドラッグで{text}(もう一度押すか Esc で戻す)")
+                                "view-orbit-constrained"
                             });
+                            self.win.t_with("view-orbit-tip", &[("how", how.into())])
+                        } else {
+                            self.win.t(&format!("{id}-tip"))
+                        };
+                        let text = self.win.t(id);
+                        let r = theme::icon_text_button_fit(ui, icon, &text, c, 11.5, icon_only)
+                            .on_hover_text(tip);
                         if r.clicked() {
                             act = Some(if on { LeftDrag::Select } else { mode });
                         }
                         // オービットの右クリックで回し方を選ぶ
                         if mode == LeftDrag::Orbit {
+                            let (constrained, free) = (
+                                self.win.t("view-orbit-constrained-item"),
+                                self.win.t("view-orbit-free"),
+                            );
                             r.right_menu(|ui| {
-                                ui.radio_value(
-                                    &mut self.win.layout.free_orbit,
-                                    false,
-                                    "拘束オービット(上下を保つ)",
-                                );
-                                ui.radio_value(&mut self.win.layout.free_orbit, true, "フリーオービット");
+                                ui.radio_value(&mut self.win.layout.free_orbit, false, constrained);
+                                ui.radio_value(&mut self.win.layout.free_orbit, true, free);
                             });
                         }
                     }
                     if theme::icon_text_button_fit(
                         ui,
                         "fit",
-                        "全体表示",
+                        &self.win.t("view-fit"),
                         l.pal.ink2,
                         11.5,
                         icon_only,
                     )
-                    .on_hover_text("全体を収め、回す中心を部品の中心にする(Home)")
+                    .on_hover_text(self.win.t("view-fit-tip"))
                     .clicked()
                     {
                         self.cur.camera.refit();
@@ -302,10 +306,19 @@ impl Workspace {
                     } else {
                         l.pal.ink3
                     };
-                    let r = theme::icon_text_button_fit(ui, "lookat", "正面", c, 11.5, icon_only);
-                    let r = match &why {
-                        None => r.on_hover_text("選んだ面・スケッチ・原点の平面を真正面から見て、形全体を収める(Look At)"),
-                        Some(w) => r.on_hover_text(format!("選んだ面・スケッチ・原点の平面を真正面から見る。{w}")),
+                    let r = theme::icon_text_button_fit(
+                        ui,
+                        "lookat",
+                        &self.win.t("view-look-at"),
+                        c,
+                        11.5,
+                        icon_only,
+                    );
+                    let r = match why {
+                        None => r.on_hover_text(self.win.t("view-look-at-tip")),
+                        Some(w) => r.on_hover_text(
+                            self.win.t_with("view-look-at-why", &[("why", w.into())]),
+                        ),
                     };
                     if r.clicked() {
                         self.look_at_selected();
@@ -314,14 +327,12 @@ impl Workspace {
                     let r = theme::icon_text_button_fit(
                         ui,
                         "display",
-                        "表示 ▾",
+                        &self.win.t("view-display"),
                         l.pal.ink2,
                         11.5,
                         icon_only,
                     )
-                    .on_hover_text(
-                        "ブラウザ・タイムライン・編集パネル、表示の形と投影、格子と原点",
-                    );
+                    .on_hover_text(self.win.t("view-display-tip"));
                     display = Some(r);
                 });
             })
@@ -339,33 +350,44 @@ impl Workspace {
         }
         if let Some(r) = display {
             egui::Popup::menu(&r).show(|ui| {
+                let t = |id: &str| self.win.t(id);
+                let (data, data_tip, browser, timeline, timeline_off) = (
+                    t("view-menu-data-panel"),
+                    t("view-menu-data-panel-tip"),
+                    t("view-menu-browser"),
+                    t("view-menu-timeline"),
+                    t("view-menu-timeline-off"),
+                );
+                let (always, always_tip, commands, commands_tip, reset, reset_tip) = (
+                    t("view-menu-panel-always"),
+                    t("view-menu-panel-always-tip"),
+                    t("view-menu-commands"),
+                    t("view-menu-commands-tip"),
+                    t("view-menu-reset-dock"),
+                    t("view-menu-reset-dock-tip"),
+                );
                 ui.label(
-                    egui::RichText::new("パネル")
+                    egui::RichText::new(t("view-menu-panels"))
                         .weak()
                         .size(crate::theme::fs(11.0)),
                 );
-                ui.checkbox(&mut self.win.layout.data_open, "データパネル")
-                    .on_hover_text("最近・プロジェクトのデザインの一覧(上の帯の左端のボタンと同じ)");
-                ui.checkbox(&mut self.win.layout.browser_open, "ブラウザ");
+                ui.checkbox(&mut self.win.layout.data_open, data)
+                    .on_hover_text(data_tip);
+                ui.checkbox(&mut self.win.layout.browser_open, browser);
                 // レンダリングと解析では下の帯を出さない(dock_ui の Pane::in_space)
                 let here = crate::dock_ui::Pane::Timeline.in_space(self.win.layout.space);
                 ui.add_enabled(
                     here,
-                    egui::Checkbox::new(&mut self.win.layout.timeline_open, "タイムライン(加工は段の帯)"),
+                    egui::Checkbox::new(&mut self.win.layout.timeline_open, timeline),
                 )
-                .on_disabled_hover_text("レンダリングと解析では出しません(設計へ戻すと出ます)");
-                ui.checkbox(&mut self.win.layout.panel_always, "選んだだけでも編集パネルを出す")
-                    .on_hover_text("切: 編集パネルは作る・直す・パラメータの間だけ出す。入: 機能を選ぶと値を見せる");
-                ui.checkbox(&mut self.win.layout.commands_open, "コマンド")
-                    .on_hover_text("コマンドを打つ欄。画面の部品を名前で押す・打つ、スクリプトを流す(help で一覧)");
+                .on_disabled_hover_text(timeline_off);
+                ui.checkbox(&mut self.win.layout.panel_always, always)
+                    .on_hover_text(always_tip);
+                ui.checkbox(&mut self.win.layout.commands_open, commands)
+                    .on_hover_text(commands_tip);
                 if ui
-                    .add_enabled(
-                        !self.dock_is_default(),
-                        egui::Button::new("並びを既定に戻す"),
-                    )
-                    .on_hover_text(
-                        "部品のタブを引いて付け替えた並びを、初めの形に戻す(隠した部品も出す)",
-                    )
+                    .add_enabled(!self.dock_is_default(), egui::Button::new(reset))
+                    .on_hover_text(reset_tip)
                     .clicked()
                 {
                     self.reset_dock();
@@ -380,10 +402,9 @@ impl Workspace {
             let r = Rect::from_min_size(egui::pos2(rect.left(), rect.top() + 10.0), grip);
             let resp = ui
                 .interact(r, ui.id().with("browser_reopen"), egui::Sense::click())
-                .on_hover_text("ブラウザを出す");
-            resp.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "ブラウザを出す")
-            });
+                .on_hover_text(self.win.t("view-grip-tip"));
+            let name = self.win.t("view-grip-tip");
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &name));
             let p = ui.painter();
             p.rect(
                 r,
@@ -398,7 +419,7 @@ impl Workspace {
                 egui::StrokeKind::Inside,
             );
             let step = Self::grip_step();
-            for (k, ch) in GRIP_TEXT.chars().enumerate() {
+            for (k, ch) in self.win.t("view-grip").chars().enumerate() {
                 p.text(
                     egui::pos2(r.center().x, r.top() + 4.0 + step * (k as f32 + 0.5)),
                     egui::Align2::CENTER_CENTER,
@@ -422,7 +443,7 @@ impl Workspace {
     /// ブラウザを隠した時の左の端のつまみの大きさ(1 倍で 20×66)。字の数と倍率から決める
     /// (固定の大きさだと、字の倍率 1.4 以上で字が重なってつまみからはみ出す)。
     pub(crate) fn browser_grip_size(&self) -> egui::Vec2 {
-        let n = GRIP_TEXT.chars().count() as f32;
+        let n = self.win.t("view-grip").chars().count() as f32;
         egui::vec2(
             20.0_f32.max(crate::theme::fs(11.0) + 8.0),
             66.0_f32.max(Self::grip_step() * n + 8.0),
@@ -432,44 +453,74 @@ impl Workspace {
     /// 表示の形(陰影と辺・陰影と隠れ線・陰影だけ・線だけ)と投影(平行・透視・自動)、格子と原点を選ぶ項目。
     /// 下の帯の「表示」、何もない所の右クリック、設定の窓で使う。
     pub(crate) fn view_style_items(&mut self, ui: &mut egui::Ui) {
-        ui.label(
-            egui::RichText::new("表示スタイル")
-                .weak()
-                .size(crate::theme::fs(11.0)),
-        );
-        for s in crate::Shading::ALL {
-            ui.radio_value(&mut self.win.layout.shading, s, s.label());
-        }
-        ui.separator();
-        ui.label(
-            egui::RichText::new("投影")
-                .weak()
-                .size(crate::theme::fs(11.0)),
-        );
-        for p in crate::Projection::ALL {
-            ui.radio_value(&mut self.win.layout.projection, p, p.label())
-                .on_hover_text(p.hint());
-        }
-        ui.separator();
-        ui.label(
-            egui::RichText::new("目安")
-                .weak()
-                .size(crate::theme::fs(11.0)),
-        );
-        ui.checkbox(&mut self.win.layout.grid, "グリッド")
-            .on_hover_text("XY 平面の格子。間隔は拡大に合わせて変わる(左下に今の間隔)");
-        ui.checkbox(&mut self.win.layout.origin, "原点と軸")
-            .on_hover_text("原点と X(赤)・Y(緑)・Z(青)の軸。空の文書では基準面も");
-        ui.checkbox(&mut self.win.layout.see_through, "全部透かす")
-            .on_hover_text(
-                "本体の奥にあるスケッチと作業平面も普通の線で見せる。切ると、隠れた所は薄い点線",
+        let head = |ui: &mut egui::Ui, text: String| {
+            ui.label(
+                egui::RichText::new(text)
+                    .weak()
+                    .size(crate::theme::fs(11.0)),
             );
+        };
+        head(ui, self.win.t("view-style"));
+        self.shading_items(ui);
         ui.separator();
-        ui.label(
-            egui::RichText::new("効果")
-                .weak()
-                .size(crate::theme::fs(11.0)),
+        head(ui, self.win.t("view-projection"));
+        self.projection_items(ui);
+        ui.separator();
+        head(ui, self.win.t("view-guides"));
+        let t = |id: &str| self.win.t(id);
+        let (grid, grid_tip, origin, origin_tip, see, see_tip) = (
+            t("view-grid"),
+            t("view-grid-tip"),
+            t("view-origin"),
+            t("view-origin-tip"),
+            t("view-see-through"),
+            t("view-see-through-tip"),
         );
+        ui.checkbox(&mut self.win.layout.grid, grid)
+            .on_hover_text(grid_tip);
+        ui.checkbox(&mut self.win.layout.origin, origin)
+            .on_hover_text(origin_tip);
+        ui.checkbox(&mut self.win.layout.see_through, see)
+            .on_hover_text(see_tip);
+        ui.separator();
+        head(ui, self.win.t("view-effects"));
         self.effects_items(ui);
+    }
+
+    /// 表示の形の選び(今の言語の名前で)。表示のメニューと設定の窓で使う。
+    pub(crate) fn shading_items(&mut self, ui: &mut egui::Ui) {
+        for s in crate::Shading::ALL {
+            let name = self.win.t(shading_id(s));
+            ui.radio_value(&mut self.win.layout.shading, s, name);
+        }
+    }
+
+    /// 投影の選び(今の言語の名前と説明で)。表示のメニューと設定の窓で使う。
+    pub(crate) fn projection_items(&mut self, ui: &mut egui::Ui) {
+        for p in crate::Projection::ALL {
+            let id = projection_id(p);
+            let (name, tip) = (self.win.t(id), self.win.t(&format!("{id}-tip")));
+            ui.radio_value(&mut self.win.layout.projection, p, name)
+                .on_hover_text(tip);
+        }
+    }
+}
+
+/// 表示の形の文言の ID(名前は view3d の `Shading::label` の日本語と同じ)。
+fn shading_id(s: crate::Shading) -> &'static str {
+    match s {
+        crate::Shading::ShadedEdges => "view-shading-shaded-edges",
+        crate::Shading::ShadedHidden => "view-shading-shaded-hidden",
+        crate::Shading::Shaded => "view-shading-shaded",
+        crate::Shading::Wireframe => "view-shading-wireframe",
+    }
+}
+
+/// 投影の文言の ID(説明は後ろに `-tip`)。
+fn projection_id(p: crate::Projection) -> &'static str {
+    match p {
+        crate::Projection::Parallel => "view-projection-parallel",
+        crate::Projection::Perspective => "view-projection-perspective",
+        crate::Projection::Auto => "view-projection-auto",
     }
 }

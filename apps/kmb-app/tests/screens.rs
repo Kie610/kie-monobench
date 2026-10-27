@@ -13,7 +13,7 @@
 //! スクリプトを、台本ごとに 1 つのテストとして人の手順どおりに画面を通して流す(部品を名前で探し、
 //! マウスとキーで押す・打つ。中身は `kmb_ui::drive`・コマンド欄)。1 本だけ流すなら
 //! `cargo test -p kmb-app --test screens ui::熱の単位`。`shot <名前>` の写真は
-//! `JC_SCREENS_OUT` がある時だけ書く。先頭の `#! sample part|cam|cam3d|box` で始める文書を選ぶ。
+//! `JC_SCREENS_OUT` がある時だけ書く(`JC_SCREENS_BRIGHTNESS=light` なら明るい画面で撮る)。先頭の `#! sample part|cam|cam3d|box` で始める文書を選ぶ。
 //! `#! size 1280x800` で画面の論理の大きさを決める(`JC_SCREENS_SIZE` があればそちら)。
 //! `#! fonts` で kmb-text の試験のフォントを文字の編集器に足す。
 //! `#! open <パス>` は、開く窓で人がそのファイル(apps/kmb-app からのパス)を選んだことにする。
@@ -545,6 +545,10 @@ fn run_ui_script(name: &str, text: &str) -> Result<String, String> {
     let reset = ws.reset_module_settings();
     if !reset.is_empty() {
         log::info!("{name}: 前の台本が変えた設定を初めの値に戻した: {reset:?}");
+    }
+    // 台本の写真を明るい画面で撮る(`JC_SCREENS_BRIGHTNESS=light`。既定は暗い画面)
+    if std::env::var("JC_SCREENS_BRIGHTNESS").is_ok_and(|v| v == "light") {
+        ws.layout_mut().brightness = kmb_ui::layout::Brightness::Light;
     }
     let mut s = Screen::sized(ws, script_size(text));
     let out = std::env::var("JC_SCREENS_OUT").ok();

@@ -11,7 +11,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 /// 版 4(2026-10-23): モジュールごとの区画(`sections`)を足し、モーション スタディ(`motion_studies`)と
 /// 接触セット(`contacts`)を区画 `asm.motion`・`asm.contacts` へ移した。
 /// 版 5(2026-10-24): 構成表・材料・外観・アニメーションの段を、それぞれのモジュールの区画へ移した。
-pub const FORMAT_VERSION: u32 = 6;
+pub const FORMAT_VERSION: u32 = 7;
 
 /// 文書のファイルの拡張子(点を付けない)。保存・開く・リンク・一覧はこれを使い、字で書かない
 /// (点検: 文書の拡張子)。製品名(kieMonoBench)から `kmb`。中身は今までどおり JSON。
@@ -70,13 +70,16 @@ pub enum ParamUnit {
     Angle,
     /// 単位なしの数(個数・比など)
     Unitless,
+    /// 文字(式の列は差し込みの文字。`M3`、`{系列}-{長さ}`。数の式には使えない)
+    Text,
 }
 
 impl ParamUnit {
-    pub const ALL: [ParamUnit; 4] = [
+    pub const ALL: [ParamUnit; 5] = [
         ParamUnit::Length,
         ParamUnit::Angle,
         ParamUnit::Unitless,
+        ParamUnit::Text,
         ParamUnit::Any,
     ];
 
@@ -100,13 +103,14 @@ impl ParamUnit {
             ParamUnit::Length => "mm",
             ParamUnit::Angle => "deg",
             ParamUnit::Unitless => "単位なし",
+            ParamUnit::Text => "文字",
         }
     }
 
     /// 式の値の次元が、この単位に合うか。合わなければ理由。
     pub fn check(self, dim: kmb_expr::Dim) -> Result<(), String> {
         let (want, what) = match self {
-            ParamUnit::Any => return Ok(()),
+            ParamUnit::Any | ParamUnit::Text => return Ok(()),
             ParamUnit::Length => (kmb_expr::Dim::LENGTH, "長さ(mm)"),
             ParamUnit::Angle => (kmb_expr::Dim::ANGLE, "角度(deg)"),
             ParamUnit::Unitless => (kmb_expr::Dim::NONE, "単位なし"),
@@ -837,7 +841,7 @@ impl Document {
     /// 変えたものは直前の変更と同じ取り消し単位に入れる(取り消すと一緒に戻る)。
     /// 再計算の前に呼ぶ([`Document::recompute`] は自分で呼ぶ)。変えたら true。
     pub fn settle_names(&mut self, registry: &Registry) -> bool {
-        use std::collections::HashMap;
+        use std::collections::{HashMap, HashSet};
         let data = &self.data;
         let mut names = crate::Names::new(data.params.iter().map(|p| p.name.as_str()));
         // 機能ごとの新しいデータ(名前を付けたもの、参照を置き換えたもの)
@@ -876,13 +880,25 @@ impl Document {
         if !gone.is_empty() {
             let mut exprs: Vec<(ParamId, String)> =
                 data.params.iter().map(|p| (p.id, p.expr.clone())).collect();
+            let texts: HashSet<ParamId> = data
+                .params
+                .iter()
+                .filter(|p| p.unit == ParamUnit::Text)
+                .map(|p| p.id)
+                .collect();
             // 置き換えた式がまた消えた名前を含むこともあるので、数回繰り返す
             for _ in 0..8 {
                 let mut any = false;
                 for (name, expr) in &gone {
                     let with = substitute_text(expr);
                     for (id, e) in &mut exprs {
-                        if let Ok(r) = kmb_expr::rename_reference(e, name, &with)
+                        // 文字のパラメータは差し込みの中だけを置き換える
+                        let r = if texts.contains(id) {
+                            kmb_expr::inline_in_template(e, name, expr, false)
+                        } else {
+                            kmb_expr::rename_reference(e, name, &with)
+                        };
+                        if let Ok(r) = r
                             && r != *e
                         {
                             *e = r.clone();
@@ -1020,11 +1036,14 @@ impl Document {
     ) -> Result<Vec<Op>, TxError> {
         let mut ops = Vec::new();
         for p in &self.data.params {
-            let expr = kmb_expr::rename_reference(&p.expr, old, new_name).map_err(|e| {
-                TxError::BadExpr {
-                    expr: p.expr.clone(),
-                    message: e.to_string(),
-                }
+            let renamed = if p.unit == ParamUnit::Text {
+                kmb_expr::rename_in_template(&p.expr, old, new_name)
+            } else {
+                kmb_expr::rename_reference(&p.expr, old, new_name)
+            };
+            let expr = renamed.map_err(|e| TxError::BadExpr {
+                expr: p.expr.clone(),
+                message: e.to_string(),
             })?;
             if expr != p.expr {
                 ops.push(Op::SetParamExpr { id: p.id, expr });
@@ -1344,6 +1363,8 @@ fn resolve_new(v: &mut serde_json::Value, added: &[FeatureId], self_id: FeatureI
 /// ([`migrate_4`])。
 /// 5 → 6: 全部の機能に、読むボディをデータの番号の形のまま読む印(`pin_bodies`)を付ける
 /// (開いた形を前と同じにする。印の要らない機能は開いた後に [`Document::release_pins`] が外す)。
+/// 6 → 7: 版の数だけ(文字のパラメータ [`ParamUnit::Text`] を足した。前の中身はそのまま読める。
+/// 前のアプリが `"unit": "text"` で分かりにくく止まらず、「新しい版の文書」と断るため)。
 fn migrate(from: u32, raw: &mut serde_json::Value) {
     if from == 5
         && let Some(list) = raw

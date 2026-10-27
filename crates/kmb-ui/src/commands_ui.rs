@@ -82,6 +82,7 @@ impl Workspace {
     /// 今使えるかどうかつきの、全部のコマンド(画面のコマンド、モジュールの操作、
     /// 記述子から足せる種類)。
     pub fn commands(&self) -> Vec<Command> {
+        let look_at = self.look_at_target().err();
         let v = [
             (
                 CommandId::New,
@@ -150,7 +151,7 @@ impl Workspace {
                 CommandId::LookAt,
                 "正面から見る",
                 "しょうめん せいたい みる look at めん",
-                self.look_at_target().err(),
+                look_at.as_deref(),
             ),
         ];
         let mut out: Vec<Command> = v
