@@ -737,8 +737,21 @@ fn broken_inputs_are_errors_not_panics() {
     // 途中で切れていても、読めたところまで
     let cut = &SVG_PATH[..SVG_PATH.find("A 10").unwrap()];
     assert!(kmb_io_svg::from_svg(cut).is_ok());
-    let imp = kmb_io_svg::from_svg(r#"<svg><path d="M 0 0 L 1e400 0 L 1 1 Q"/></svg>"#).unwrap();
-    assert!(imp.shapes.iter().all(|s| s.is_finite()));
+    for text in [
+        r#"<svg><path d="M 0 0 L 1e400 0 L 1 1 Q"/></svg>"#,
+        r#"<svg><path d="+"/></svg>"#,
+    ] {
+        match kmb_io_svg::from_svg(text) {
+            Ok(imp) => {
+                assert!(imp.shapes.iter().all(|s| s.is_finite()));
+                Sketch::default().insert_shapes(&imp.shapes, Place::default());
+            }
+            Err(reason) => assert!(
+                reason.contains("倍率") || reason.contains("形の大きさが 0"),
+                "{reason}"
+            ),
+        }
+    }
     let text = dxf(&[], &[(0, "CIRCLE"), (10, "1e400"), (40, "1")]);
     assert_eq!(from_dxf(&text).unwrap().skipped, vec![("CIRCLE".into(), 1)]);
     // 自分を入れるブロックでも止まる
@@ -786,8 +799,12 @@ proptest::proptest! {
     #[test]
     fn random_path_data(d in "[MmLlHhVvCcSsQqTtAaZz0-9 ,.eE+-]{0,80}") {
         let text = format!(r#"<svg viewBox="0 0 10 10"><path d="{d}"/></svg>"#);
-        let imp = kmb_io_svg::from_svg(&text).unwrap();
-        proptest::prop_assert!(imp.shapes.iter().all(|s| s.is_finite()));
-        Sketch::default().insert_shapes(&imp.shapes, Place::default());
+        match kmb_io_svg::from_svg(&text) {
+            Ok(imp) => {
+                proptest::prop_assert!(imp.shapes.iter().all(|s| s.is_finite()));
+                Sketch::default().insert_shapes(&imp.shapes, Place::default());
+            }
+            Err(reason) => proptest::prop_assert!(reason.contains("倍率") || reason.contains("形の大きさが 0")),
+        }
     }
 }
