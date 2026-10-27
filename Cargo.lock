@@ -2316,6 +2316,7 @@ dependencies = [
 name = "kmb-asm"
 version = "0.1.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-cad",
  "kmb-core",
  "kmb-interchange",

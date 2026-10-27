@@ -4,7 +4,8 @@ use super::*;
 use crate::joint::{Joint, Origin, moved_outputs, new_joint, transform_of};
 use crate::{JOINT, Part};
 use kmb_core::kernel::{
-    EdgeInfo, FaceInfo, MassProps, Matrix4, Profile, ProfileEdge, ProfileLoop, Region, Segment,
+    EdgeInfo, FaceInfo, MassProps, Matrix4, PlanarPath, Profile, ProfileEdge, ProfileLoop, Region,
+    Segment,
 };
 use kmb_core::{
     Descriptor, Document, EvalCtx, EvalError, Feature, FeatureEntry, InputRef, Op, Outputs,
@@ -17,6 +18,7 @@ use std::time::{Duration, Instant};
 
 const BODY: &str = "test.cylinder_body@1";
 const MATRIX: &str = "test.joint_matrix@1";
+const WAISTED: &str = "test.waisted_body@1";
 
 /// 計測は呼び出しの前後に時計を読み、終了後だけ錠を取る。内側のカーネルの錠を延ばさない。
 #[derive(Default)]
@@ -80,6 +82,14 @@ impl Kernel for MeasuredKernel {
     ) -> Result<ShapeHandle, KernelError> {
         self.timed("boolean", || self.inner.boolean(op, a, b))
     }
+    fn loft(
+        &self,
+        sections: &[Profile],
+        rails: &[PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        self.inner.loft(sections, rails, tag)
+    }
     fn bounds(&self, h: ShapeHandle) -> Result<(P3, P3), KernelError> {
         self.timed("bounds", || self.inner.bounds(h))
     }
@@ -129,12 +139,8 @@ struct Cylinder {
     to: f64,
 }
 
-impl Feature for Cylinder {
-    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        Ok(vec![])
-    }
-
-    fn evaluate(&self, cx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+impl Cylinder {
+    fn profile(&self) -> Profile {
         let circle = |radius, name: &str| ProfileLoop {
             edges: vec![ProfileEdge {
                 name: name.into(),
@@ -145,7 +151,7 @@ impl Feature for Cylinder {
                 reversed: false,
             }],
         };
-        let p = Profile {
+        Profile {
             plane: self.plane,
             regions: vec![Region {
                 outer: circle(self.outer, "outer"),
@@ -155,10 +161,55 @@ impl Feature for Cylinder {
                     vec![]
                 },
             }],
-        };
+        }
+    }
+}
+
+impl Feature for Cylinder {
+    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+        Ok(vec![])
+    }
+
+    fn evaluate(&self, cx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let h = cx
             .kernel()
-            .extrude(&p, self.from, self.to, &cx.feature_id().to_string())
+            .extrude(
+                &self.profile(),
+                self.from,
+                self.to,
+                &cx.feature_id().to_string(),
+            )
+            .map_err(kmb_cad::kernel_err)?;
+        Ok([("body".into(), Value::Shape(h))].into())
+    }
+}
+
+/// 端は同じ円でも、途中の半径が小さい滑らかな側面を持つ軸。
+struct Waisted(Cylinder);
+
+impl Feature for Waisted {
+    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+        Ok(vec![])
+    }
+
+    fn evaluate(&self, cx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+        let c = &self.0;
+        let sections: Vec<_> = (0..=8)
+            .map(|i| {
+                let t = i as f64 / 8.0;
+                let z = c.from + (c.to - c.from) * t;
+                let radius = 2.25 + 0.25 * (std::f64::consts::TAU * t).cos();
+                Cylinder {
+                    outer: radius,
+                    plane: c.plane.offset(z),
+                    ..c.clone()
+                }
+                .profile()
+            })
+            .collect();
+        let h = cx
+            .kernel()
+            .loft(&sections, &[], &cx.feature_id().to_string())
             .map_err(kmb_cad::kernel_err)?;
         Ok([("body".into(), Value::Shape(h))].into())
     }
@@ -209,6 +260,10 @@ impl Bench {
         registry.register(MATRIX, |v| {
             Ok(Box::new(MatrixProbe(kmb_cad::parse::<Joint>(v)?)))
         });
+        registry.register_described(
+            Descriptor::new(WAISTED, kmb_core::category::SOLID, "試験のくびれた軸"),
+            |v| Ok(Box::new(Waisted(kmb_cad::parse::<Cylinder>(v)?))),
+        );
         registry.provide(timings.clone());
         Self {
             doc: Document::new(),
@@ -341,6 +396,44 @@ fn a_half_inserted_shaft_marks_only_the_inserted_length() {
 }
 
 #[test]
+fn circular_end_edges_do_not_make_a_waisted_side_cylindrical() {
+    let mut b = Bench::new();
+    b.add(
+        BODY,
+        Cylinder {
+            outer: 6.0,
+            inner: 2.5,
+            plane: Plane::XY,
+            from: 0.0,
+            to: 15.0,
+        },
+    );
+    b.add(
+        WAISTED,
+        Cylinder {
+            outer: 2.5,
+            inner: 0.0,
+            plane: Plane::XY,
+            from: 2.0,
+            to: 12.0,
+        },
+    );
+    b.recompute();
+    let bodies = b.cx().visible_bodies();
+    let ends = b.kernel.arc_edges(bodies[1].1).unwrap();
+    assert_eq!(ends.len(), 2, "試験の軸は両端の円が列挙される: {ends:?}");
+    assert_eq!(ends[0].faces[1], ends[1].faces[1]);
+    for edge in &ends {
+        let arc = edge.arc.unwrap();
+        assert!((arc.radius - 2.5).abs() < 1e-6);
+        assert!((arc.sweep.abs() - std::f64::consts::TAU).abs() < 1e-6);
+    }
+    let (mark, area) = contact(b.kernel.as_ref(), bodies[0].1, bodies[1].1).unwrap();
+    assert!(area <= TOUCH_AREA, "端の円だけの接触: {area}");
+    assert!(mark.tris.is_empty(), "くびれた側面全体を塗らない");
+}
+
+#[test]
 #[ignore = "道具: 干渉の速さを手で測る"]
 fn speed_cylinder_interferences() {
     let calibration = Timings::default();
@@ -405,9 +498,21 @@ fn speed_cylinder_interferences() {
             "記録を挟まない内側への直接呼出し: {:.3}ms",
             start.elapsed().as_secs_f64() * 1000.0
         );
+        b.timings.clear();
+        let start = Instant::now();
+        let (warm, warm_unchecked) = interferences_with(&b.cx(), true);
+        eprintln!(
+            "同じキャッシュを使う記録つき呼出し: {:.3}ms | {}",
+            start.elapsed().as_secs_f64() * 1000.0,
+            b.timings.report()
+        );
         assert_eq!(
             (plain.len(), unchecked.len()),
             (clashes.len(), failed.len())
+        );
+        assert_eq!(
+            (warm.len(), warm_unchecked.len()),
+            (plain.len(), unchecked.len())
         );
         let bodies = b.cx().visible_bodies();
         let boxes: Vec<_> = bodies
@@ -469,7 +574,8 @@ fn joint_chain(n: usize, matrices_only: bool) -> (Bench, Vec<FeatureId>) {
             },
         );
         joint.follows = joints.clone();
-        joint.angle = "1 deg".into();
+        // 直角の動きで、長い列の直交誤差と再計算の時間を分けて調べる。
+        joint.angle = "90 deg".into();
         joints.push(b.add(if matrices_only { MATRIX } else { JOINT }, joint));
     }
     b.recompute();
@@ -482,7 +588,7 @@ fn speed_joint_chain_recomputation() {
     for n in [20, 50] {
         let (mut b, joints) = joint_chain(n, false);
         let (mut matrices, probes) = joint_chain(n, true);
-        for (round, angle) in [2.0, 3.0, 2.0].into_iter().enumerate() {
+        for (round, angle) in [180.0, 270.0, 180.0].into_iter().enumerate() {
             b.change_angle(joints[0], angle);
             b.timings.clear();
             let start = Instant::now();

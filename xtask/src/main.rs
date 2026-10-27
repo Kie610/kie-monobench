@@ -171,6 +171,8 @@ const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     ("kmb-solid", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
+    // 干渉の円筒の一致は、円の辺・面積・面の網を使う
+    ("kmb-asm", Some("inspect::cylinder_tests::")),
 ];
 
 /// truck の回で流す試験のうち、選んだ crate にあるもの。
