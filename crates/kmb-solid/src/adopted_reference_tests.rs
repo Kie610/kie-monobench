@@ -197,13 +197,21 @@ fn a_sketch_on_a_thin_wall_side_tracks_thickness_and_line_length() {
                 (volume - (length * thickness * 10.0 + 12.0)).abs() < 0.01,
                 "{thin:?} {length}/{thickness}: {volume}"
             );
-            let (_, hi) = k.bounds(shape).unwrap();
-            // 外形の箱は面の許容差の余白を含む。参照の位置は上の平面で別に確かめる。
+            let mesh = k.mesh(shape, 0.01).unwrap();
+            let tip = mesh
+                .positions
+                .iter()
+                .map(|p| f64::from(p[1]))
+                .reduce(f64::max)
+                .expect("薄い壁と出っ張りの網");
+            // 外形の箱には余白があるので、形の端は網の頂点で確かめる。
             assert!(
-                (hi[1] - (factor * thickness + 3.0)).abs() < 1e-4,
-                "{thin:?} 長さ{length}/厚さ{thickness}: 外形{hi:?} 期待{}",
+                (tip - (factor * thickness + 3.0)).abs() < 1e-4,
+                "{thin:?} 長さ{length}/厚さ{thickness}: 形の端{tip} 期待{}",
                 factor * thickness + 3.0
             );
+            let (lo, hi) = k.bounds(shape).unwrap();
+            assert!(lo[1] <= tip && tip <= hi[1], "{lo:?} {tip} {hi:?}");
             let data = &doc.data().feature(sketch).unwrap().data;
             let stored: kmb_sketch::Sketch = serde_json::from_value(data.clone()).unwrap();
             assert_eq!(stored.plane, SketchPlane::face(wall, face.clone()));
