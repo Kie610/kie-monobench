@@ -257,7 +257,12 @@ impl Augmented {
             }
             // 同じ位置の四分点も直径の候補として使い、点の当たり判定を重ねない。
             let existing = self.sketch.entities.iter().find_map(|e| match e {
-                Entity::Point { id, .. } if sol_point(&self.sol, *id).is_some_and(|r| (q[0] - r[0]).hypot(q[1] - r[1]) < SAME) => Some(*id),
+                Entity::Point { id, .. }
+                    if sol_point(&self.sol, *id)
+                        .is_some_and(|r| (q[0] - r[0]).hypot(q[1] - r[1]) < SAME) =>
+                {
+                    Some(*id)
+                }
                 _ => None,
             });
             let id = match existing {
@@ -279,11 +284,25 @@ impl Augmented {
     }
 
     /// 始点から反対側の候補へ実際に線を引いた時だけ、直径として拘束する。
-    pub(crate) fn attach_diameter(&self, s: &mut Sketch, line: EntityId, a: EntityId, b: EntityId) -> bool {
-        let Some((_, center, circle)) = self.opposites.get(&b).copied().filter(|(start, ..)| *start == a) else {
+    pub(crate) fn attach_diameter(
+        &self,
+        s: &mut Sketch,
+        line: EntityId,
+        a: EntityId,
+        b: EntityId,
+    ) -> bool {
+        let Some((_, center, circle)) = self
+            .opposites
+            .get(&b)
+            .copied()
+            .filter(|(start, ..)| *start == a)
+        else {
             return false;
         };
-        s.add_constraint(ConstraintKind::Midpoint { point: center, line });
+        s.add_constraint(ConstraintKind::Midpoint {
+            point: center,
+            line,
+        });
         if !s.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: ring } if point == b && ring == circle)) {
             s.add_constraint(ConstraintKind::PointOnCircle { point: b, circle });
         }
@@ -291,7 +310,9 @@ impl Augmented {
     }
 
     pub(crate) fn kind(&self, id: EntityId) -> Option<Kind> {
-        self.opposites.contains_key(&id).then_some(Kind::Opposite)
+        self.opposites
+            .contains_key(&id)
+            .then_some(Kind::Opposite)
             .or_else(|| self.virtuals.get(&id).copied())
     }
 
@@ -487,9 +508,15 @@ mod tests {
         let circle = s.add_circle(center, 5.0);
         let start = s.add_point(3.0, 4.0);
         s.add_constraint(ConstraintKind::Fix { point: center });
-        s.add_constraint(ConstraintKind::Radius { circle, value: "5 mm".into() });
+        s.add_constraint(ConstraintKind::Radius {
+            circle,
+            value: "5 mm".into(),
+        });
         if on {
-            s.add_constraint(ConstraintKind::PointOnCircle { point: start, circle });
+            s.add_constraint(ConstraintKind::PointOnCircle {
+                point: start,
+                circle,
+            });
         }
         (s, center, circle, start)
     }
@@ -530,9 +557,17 @@ mod tests {
     fn snapped_diameter_keeps_its_midpoint_after_the_radius_changes() {
         let (s, center, circle, start) = diameter_base(true);
         let aug = augmented_diameter(&s, start);
-        let end = aug.sketch.nearest_point(&aug.sol, -3.05, -4.03, 0.1).unwrap().entity;
+        let end = aug
+            .sketch
+            .nearest_point(&aug.sol, -3.05, -4.03, 0.1)
+            .unwrap()
+            .entity;
         assert!(aug.opposites.contains_key(&end));
-        assert!(aug.sketch.nearest_point(&aug.sol, -3.5, -4.5, 0.1).is_none());
+        assert!(
+            aug.sketch
+                .nearest_point(&aug.sol, -3.5, -4.5, 0.1)
+                .is_none()
+        );
         let mut drawn = aug.sketch.clone();
         let line = drawn.add_line(start, end);
         assert!(aug.attach_diameter(&mut drawn, line, start, end));
@@ -541,8 +576,13 @@ mod tests {
         let line = moved.get(&line).copied().unwrap_or(line);
         assert_eq!(out.constraints.iter().filter(|c| matches!(c.kind, ConstraintKind::Midpoint { point, line: l } if point == center && l == line)).count(), 1);
         assert_eq!(out.constraints.iter().filter(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == end && c == circle)).count(), 1);
+        let mut states = Vec::new();
         for r in [5.0, 8.0] {
-            let dim = out.constraints.iter_mut().find(|c| matches!(c.kind, ConstraintKind::Radius { .. })).unwrap();
+            let dim = out
+                .constraints
+                .iter_mut()
+                .find(|c| matches!(c.kind, ConstraintKind::Radius { .. }))
+                .unwrap();
             *dim.kind.value_mut().unwrap() = format!("{r} mm");
             let v = kmb_sketch::dimension_values(&out, &|_| None).unwrap();
             let sol = kmb_sketch::solve(&out, &v).unwrap();
@@ -551,9 +591,19 @@ mod tests {
                 assert!(((a[axis] + b[axis]) / 2.0 - c[axis]).abs() < 1e-6);
             }
             assert!(((b[0] - c[0]).hypot(b[1] - c[1]) - r).abs() < 1e-6);
-            assert!(matches!(sol.status, kmb_sketch::SolveStatus::UnderConstrained { dof: 1 }), "直径には回転の自由度だけが残る: {:?}", sol.status);
+            eprintln!(
+                "radius={r} midpoint=ok endpoint_on_circle=ok dof={} status={:?}",
+                sol.dof, sol.status
+            );
+            states.push(sol.status.clone());
             out.adopt_solution(&sol);
         }
+        assert!(
+            states
+                .iter()
+                .all(|s| matches!(s, kmb_sketch::SolveStatus::UnderConstrained { dof: 1 })),
+            "直径には回転の自由度だけが残る: {states:?}"
+        );
     }
 
     #[test]
@@ -570,10 +620,18 @@ mod tests {
             };
             let sol = kmb_sketch::solve(&s, &HashMap::new()).unwrap();
             let mut aug = augment(&s, &sol, &[], ALL);
-            let start = aug.sketch.nearest_point(&aug.sol, 10.0, 15.0, 0.01).unwrap().entity;
+            let start = aug
+                .sketch
+                .nearest_point(&aug.sol, 10.0, 15.0, 0.01)
+                .unwrap()
+                .entity;
             assert_eq!(aug.kind(start), Some(Kind::Quadrant));
             aug.add_opposites(start);
-            let end = aug.sketch.nearest_point(&aug.sol, 10.0, 5.0, 0.01).unwrap().entity;
+            let end = aug
+                .sketch
+                .nearest_point(&aug.sol, 10.0, 5.0, 0.01)
+                .unwrap()
+                .entity;
             assert_eq!(aug.kind(end), Some(Kind::Opposite));
             let mut drawn = aug.sketch.clone();
             let line = drawn.add_line(start, end);

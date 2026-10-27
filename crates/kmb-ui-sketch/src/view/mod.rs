@@ -256,7 +256,9 @@ pub(crate) fn sketch_view(
     let mut wants = snap_wants(editor.tool);
     wants.crossings &= !ctrl;
     let mut aug = crate::snap::augment(sketch, sol, refs, wants);
-    if editor.tool == Tool::Line && !ctrl && !editor.hud.pinned()
+    if editor.tool == Tool::Line
+        && !ctrl
+        && !editor.hud.pinned()
         && let Some(start) = editor.pending.and_then(|p| p.point)
     {
         aug.add_opposites(start);

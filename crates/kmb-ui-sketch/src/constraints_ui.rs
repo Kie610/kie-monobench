@@ -396,7 +396,12 @@ pub(crate) fn options(
 
 /// 選んでいる要素(消えたものは除く)。
 pub(crate) fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
-    editor.selection.iter().copied().filter(|id| sketch.entity(*id).is_some()).collect()
+    editor
+        .selection
+        .iter()
+        .copied()
+        .filter(|id| sketch.entity(*id).is_some())
+        .collect()
 }
 
 /// 選んでいる要素をクリックの順に並べる。まとめて選んだ要素は番号順で続く。
@@ -405,7 +410,12 @@ pub(crate) fn selected_in_order(editor: &Editor, sketch: &Sketch) -> Vec<EntityI
         .selection_order
         .iter()
         .filter(|id| editor.selection.contains(id))
-        .chain(editor.selection.iter().filter(|id| !editor.selection_order.contains(id)))
+        .chain(
+            editor
+                .selection
+                .iter()
+                .filter(|id| !editor.selection_order.contains(id)),
+        )
         .copied()
         .filter(|id| sketch.entity(*id).is_some())
         .collect()
