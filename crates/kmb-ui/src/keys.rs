@@ -239,7 +239,7 @@ pub(crate) static KEYS: &[Row] = &[
     Row {
         id: "undo",
         keys: "Ctrl+Z",
-        text: "元に戻す",
+        text: "取り消す",
         press: &[(CTRL, Key::Z)],
         scope: Scope::Always,
         does: Does::Run(Cmd::Undo),

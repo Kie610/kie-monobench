@@ -320,7 +320,14 @@ impl Workspace {
                     egui::TextEdit::singleline(&mut self.settings.query)
                         .hint_text(search_hint.as_str())
                         .desired_width(f32::INFINITY),
-                );
+                )
+                .widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::TextEdit,
+                        true,
+                        search_hint.as_str(),
+                    )
+                });
                 let query = self.settings.query.trim().to_string();
                 // 探している間は、当たった節を頁をまたいで並べる
                 let shown: Vec<(&Page, Vec<&Sec>)> = if query.is_empty() {

@@ -164,7 +164,7 @@ fn enabled_id() -> egui::Id {
     egui::Id::new("keycast_enabled")
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct CommandName {
     text: String,
     key: bool,
@@ -439,7 +439,18 @@ impl Keycast {
             KeycastPlace::LeftBottom => egui::Align2::LEFT_BOTTOM,
             KeycastPlace::CenterBottom => egui::Align2::CENTER_BOTTOM,
         };
-        let mut ticking = false;
+        let background_alpha = rows
+            .iter()
+            .map(|row| match row {
+                Row::Keys {
+                    remaining,
+                    down: false,
+                    ..
+                }
+                | Row::MouseCommand { remaining, .. } => fade_alpha(*remaining, look.scale.motion),
+                _ => 1.0,
+            })
+            .fold(0.0f32, f32::max);
         egui::Area::new(egui::Id::new("input_keycast"))
             .order(egui::Order::Foreground)
             .interactable(false)
@@ -450,7 +461,7 @@ impl Keycast {
                 ui.set_clip_rect(view_rect);
                 ui.set_max_width((view_rect.width() - 24.0).max(1.0));
                 egui::Frame::new()
-                    .fill(look.pal.chrome.gamma_multiply(0.85))
+                    .fill(look.pal.chrome.gamma_multiply(0.85 * background_alpha))
                     .corner_radius(5.0)
                     .inner_margin(8.0)
                     .show(ui, |ui| {
@@ -628,24 +639,10 @@ impl Keycast {
                                     )
                                 });
                             });
-                            ticking |= match row {
-                                Row::Keys { .. } | Row::MouseCommand { .. } => true,
-                                Row::Mouse {
-                                    down,
-                                    wheel,
-                                    drag,
-                                    double,
-                                } => down.iter().any(|v| *v) || *wheel != 0 || *drag || *double,
-                                Row::Mouse3d { axes, buttons } => {
-                                    axes.iter().any(|v| *v != 0.0) || !buttons.is_empty()
-                                }
-                            };
                         }
                     });
             });
-        if ticking {
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
-        }
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
 }
 
@@ -731,6 +728,45 @@ fn mouse(ui: &mut egui::Ui, down: [bool; 3], size: f32, look: theme::Look) {
 }
 
 impl crate::Workspace {
+    /// 登録済みの固定名との一致だけを許す。動的な操作名には利用者の名前や値が入る。
+    fn keycast_fixed_name(&self, text_id: &str, name: &str) -> Option<String> {
+        kmb_i18n::Lang::ALL
+            .into_iter()
+            .any(|lang| {
+                self.win
+                    .texts
+                    .find(lang, text_id)
+                    .is_some_and(|fixed| fixed == name)
+            })
+            .then(|| name.to_string())
+    }
+
+    pub(crate) fn keycast_item_name(&self, key: &str) -> Option<String> {
+        let item = self.item_of(key)?;
+        if let Some(id) = key.strip_prefix("a:") {
+            self.keycast_fixed_name(&kmb_i18n::action_id(id), &item.label)
+        } else if let Some(id) = key.strip_prefix("f:") {
+            self.keycast_fixed_name(&kmb_i18n::feature_id(id), &item.label)
+        } else {
+            Some(item.label)
+        }
+    }
+
+    pub(crate) fn keycast_command_name(
+        &self,
+        command: &crate::commands_ui::Command,
+    ) -> Option<String> {
+        use crate::commands_ui::CommandId;
+        match &command.id {
+            CommandId::Action(id) => {
+                self.keycast_fixed_name(&kmb_i18n::action_id(id), &command.name)
+            }
+            CommandId::Add(id) => self.keycast_fixed_name(&kmb_i18n::feature_id(id), &command.name),
+            // 基本項目と編集器の道具の名前は、固定の一覧で決まる。
+            _ => Some(command.name.clone()),
+        }
+    }
+
     pub(crate) fn take_keycast(&mut self, ctx: &egui::Context) {
         let s = &self.win.layout.keycast;
         ctx.data_mut(|d| {
@@ -767,6 +803,11 @@ impl crate::Workspace {
 mod tests {
     use super::*;
 
+    fn run_frame(ctx: &egui::Context, raw: egui::RawInput, mut frame: impl FnMut(&egui::Context)) {
+        ctx.run_ui(raw, |ui| frame(ui.ctx()))
+            .drop_without_applying_deltas();
+    }
+
     fn on() -> KeycastSettings {
         KeycastSettings {
             enabled: true,
@@ -798,7 +839,8 @@ mod tests {
         name: Option<CommandName>,
     ) {
         events.insert(0, egui::Event::ModifiersChanged(mods));
-        let _ = ctx.run(
+        run_frame(
+            ctx,
             egui::RawInput {
                 time: Some(now),
                 events,
@@ -1013,6 +1055,7 @@ mod tests {
                 egui::Event::PointerMoved(at + Vec2::new(5.0, 0.0)),
                 egui::Event::MouseWheel {
                     unit: egui::MouseWheelUnit::Point,
+                    phase: egui::TouchPhase::Move,
                     delta: Vec2::new(0.0, 1.0),
                     modifiers: Modifiers::NONE,
                 },
@@ -1060,6 +1103,7 @@ mod tests {
             5.0,
             vec![egui::Event::MouseWheel {
                 unit: egui::MouseWheelUnit::Point,
+                phase: egui::TouchPhase::Move,
                 delta: Vec2::new(0.0, -1.0),
                 modifiers: Modifiers::NONE,
             }],
@@ -1076,7 +1120,7 @@ mod tests {
         let mut k = Keycast::default();
         let name = || {
             Some(CommandName {
-                text: "元に戻す".into(),
+                text: "取り消す".into(),
                 key: true,
             })
         };
@@ -1094,7 +1138,7 @@ mod tests {
         }
         assert_eq!(k.rows(1.1).len(), 1);
         assert!(
-            matches!(&k.rows(1.1)[0], Row::Keys { chord, name: Some(n), count: 2, .. } if chord == "Ctrl+Z" && n == "元に戻す")
+            matches!(&k.rows(1.1)[0], Row::Keys { chord, name: Some(n), count: 2, .. } if chord == "Ctrl+Z" && n == "取り消す")
         );
         let s = KeycastSettings {
             names: false,
@@ -1150,7 +1194,7 @@ mod tests {
             false,
             name(),
         );
-        assert!(matches!(&k.rows(2.1)[1], Row::MouseCommand { name, .. } if name == "元に戻す"));
+        assert!(matches!(&k.rows(2.1)[1], Row::MouseCommand { name, .. } if name == "取り消す"));
     }
 
     #[test]
@@ -1158,14 +1202,14 @@ mod tests {
         let ctx = egui::Context::default();
         ctx.data_mut(|d| d.insert_temp(enabled_id(), true));
         let row = keys::KEYS.iter().find(|r| r.id == "undo").unwrap();
-        assert_eq!(keys::row_text(&ctx, row), "元に戻す");
-        command_name(&ctx, "元に戻す".into(), true);
+        assert_eq!(keys::row_text(&ctx, row), "取り消す");
+        command_name(&ctx, "取り消す".into(), true);
         command_name(&ctx, "押し出し".into(), false);
         assert_eq!(
             ctx.data_mut(|d| d.remove_temp::<CommandName>(names_id()))
                 .unwrap()
                 .text,
-            "元に戻す"
+            "取り消す"
         );
         let mut ws = crate::Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
         ws.win.layout.appearance.language = "en".into();
@@ -1189,7 +1233,8 @@ mod tests {
             ..on()
         };
         let undo = keys::KEYS.iter().find(|r| r.id == "undo").unwrap();
-        let _ = ctx.run(
+        run_frame(
+            &ctx,
             egui::RawInput {
                 time: Some(1.0),
                 events: vec![key(Key::Z, Modifiers::CTRL, true)],
@@ -1201,9 +1246,10 @@ mod tests {
                 ws.show_keycast(ctx);
             },
         );
-        assert!(ws.win.keycast.rows(1.0).iter().any(|r| matches!(r, Row::Keys { chord, name: Some(n), .. } if chord == "Ctrl+Z" && n == "元に戻す")));
+        assert!(ws.win.keycast.rows(1.0).iter().any(|r| matches!(r, Row::Keys { chord, name: Some(n), .. } if chord == "Ctrl+Z" && n == "取り消す")));
         let item = ws.item_of("u:measure").unwrap().label;
-        let _ = ctx.run(
+        run_frame(
+            &ctx,
             egui::RawInput {
                 time: Some(1.1),
                 events: vec![egui::Event::PointerButton {
@@ -1227,7 +1273,8 @@ mod tests {
                 .iter()
                 .any(|r| matches!(r, Row::MouseCommand { name, .. } if name == &item))
         );
-        let _ = ctx.run(
+        run_frame(
+            &ctx,
             egui::RawInput {
                 time: Some(1.2),
                 events: vec![key(Key::L, Modifiers::NONE, true)],
@@ -1240,6 +1287,39 @@ mod tests {
             },
         );
         assert!(ws.win.keycast.rows(1.2).iter().any(|r| matches!(r, Row::Keys { chord, name: Some(n), .. } if chord == "L" && n == "スケッチ: 線分")));
+    }
+
+    #[test]
+    fn dynamic_command_names_never_reach_the_input_overlay() {
+        use crate::commands_ui::{Command, CommandId};
+        let ws = crate::Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
+        let action = ws
+            .actions()
+            .into_iter()
+            .find(|a| {
+                ws.keycast_fixed_name(&kmb_i18n::action_id(&a.id), &a.label)
+                    .is_some()
+            })
+            .unwrap();
+        let mut command = Command {
+            id: CommandId::Action(action.id.clone()),
+            name: action.label.clone(),
+            aliases: String::new(),
+            disabled: None,
+        };
+        assert_eq!(ws.keycast_command_name(&command), Some(action.label));
+        command.name = "秘密のファイル名・部品名・式 123".into();
+        assert!(
+            ws.keycast_command_name(&command).is_none(),
+            "固定 ID に名前や値を継ぎ足しても出さない"
+        );
+        command.id = CommandId::Action(format!("{}.秘密のテンプレート", action.id));
+        assert!(
+            ws.keycast_command_name(&command).is_none(),
+            "利用者の名前を持つ動的 ID は出さない"
+        );
+        command.id = CommandId::Add("利用者の名前".into());
+        assert!(ws.keycast_command_name(&command).is_none());
     }
 
     #[test]
@@ -1287,7 +1367,7 @@ mod tests {
             ..on()
         };
         let ctx = egui::Context::default();
-        let _ = ctx.run(egui::RawInput::default(), |ctx| ws.feed_mouse3d(ctx));
+        run_frame(&ctx, egui::RawInput::default(), |ctx| ws.feed_mouse3d(ctx));
         let rows = ws.win.keycast.rows(0.0);
         assert!(
             matches!(&rows[0], Row::Mouse3d { axes, buttons } if axes[5] == -1.0 && buttons == &[1])
@@ -1306,7 +1386,7 @@ mod tests {
                 .is_empty()
         );
         ws.win.layout.mouse3d.enabled = false;
-        let _ = ctx.run(egui::RawInput::default(), |ctx| ws.feed_mouse3d(ctx));
+        run_frame(&ctx, egui::RawInput::default(), |ctx| ws.feed_mouse3d(ctx));
         assert!(ws.win.keycast.rows(0.0).is_empty());
         let s = crate::mouse3d::Mouse3dSettings::default();
         assert_eq!(crate::mouse3d::live_axes([0.04; 6], &s), [0.0; 6]);
@@ -1343,12 +1423,12 @@ mod tests {
                 },
                 0usize,
             );
-        h.run();
+        h.run_steps(2);
         h.hover_at(egui::pos2(30.0, 290.0));
         h.drag_at(egui::pos2(30.0, 290.0));
-        h.run();
+        h.run_steps(2);
         h.drop_at(egui::pos2(30.0, 290.0));
-        h.run();
+        h.run_steps(2);
         assert_eq!(*h.state(), 1);
     }
 

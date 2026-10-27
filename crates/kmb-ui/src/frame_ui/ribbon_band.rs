@@ -254,8 +254,8 @@ impl Workspace {
 
     /// ツールバーの項目を実行する(`key` は「a:操作」「f:種類」「u:窓」)。
     pub fn run_item(&mut self, key: &str) {
-        if let (Some(ctx), Some(item)) = (&self.win.repaint, self.item_of(key)) {
-            crate::keycast::command_name(ctx, item.label, false);
+        if let (Some(ctx), Some(name)) = (&self.win.repaint, self.keycast_item_name(key)) {
+            crate::keycast::command_name(ctx, name, false);
         }
         if key.starts_with("a:") || key.starts_with("f:") {
             self.win.last_item = Some(key.to_string());
