@@ -10,6 +10,9 @@ use kmb_core::{
 };
 use serde::Serialize;
 
+#[cfg(test)]
+mod cylinder_tests;
+
 /// 重なっているボディの組 1 つ(「一致した面を含める」なら、面で接するだけの組も)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Clash {
