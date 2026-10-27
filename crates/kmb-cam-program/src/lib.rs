@@ -775,7 +775,11 @@ pub fn player(
     };
     let stock = carried_start(kernel, setups, index, opt)?
         .unwrap_or_else(|| initial_stock(&target.info, cell));
-    let mesh = target.info.part_mesh(kernel).map_err(|e|e.to_string())?;
+    let mesh = if target.info.sections.is_some() {
+        target.info.part_mesh(kernel).map_err(|e|e.to_string())?
+    } else {
+        kernel.mesh(target.info.body,target.info.tolerance).map_err(|e|e.to_string())?
+    };
     let part = ZMap::from_mesh(
         &stock,
         &target.info.placed_mesh(&mesh),

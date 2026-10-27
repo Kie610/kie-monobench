@@ -117,7 +117,7 @@ fn connect<S: SectionWindow + ?Sized>(
         };
         let need=(tp.retract_z-start[2])/opts.ramp_angle.tan();
         if opts.ramp_angle>0.0 && opts.ramp_angle<std::f64::consts::FRAC_PI_2 && length>=need && length>1e-9 {
-            let p=at(start,first,(need/length).min(1.0));
+            let p=at(start,first,(need/(2.0*length)).min(0.5));
             // 往復する輪郭は切れ端の中に収まり、始点の切削深さへ戻る。
             let mut l=kmb_cam_geom::Loop::from_points(&[[start[0],start[1]],[p[0],p[1]]]);
             if let Move::Arc { center,dir,.. }=first {
@@ -258,5 +258,37 @@ mod tests {
         assert!(!warnings.is_empty());
         assert!(out.moves.iter().any(|m|matches!(m,Move::Linear { feed,.. } if *feed==50.0)));
         assert_eq!(out.moves.last().unwrap().to()[2],20.0);
+    }
+
+    #[test]
+    fn long_boundary_entries_follow_lines_and_arcs_at_the_configured_ramp_feed() {
+        let deep=1.0-std::f64::consts::TAU*10.0*10.0f64.to_radians().tan()*(1.0-5e-13);
+        let cases=[
+            tp(vec![Move::Rapid { to:[20.0,0.0,5.0] },Move::Linear { to:[20.0,0.0,-2.0],feed:50.0 },Move::Linear { to:[-100.0,0.0,-2.0],feed:300.0 }]),
+            tp(vec![Move::Rapid { to:[10.0,0.0,5.0] },Move::Linear { to:[10.0,0.0,-0.1],feed:50.0 },Move::Arc { to:[-10.0,0.0,-0.1],center:[0.0;2],dir:ArcDir::Ccw,feed:300.0 }]),
+            tp(vec![Move::Rapid { to:[10.0,0.0,5.0] },Move::Linear { to:[10.0,0.0,deep],feed:50.0 },Move::Arc { to:[10.0,0.0,deep],center:[0.0;2],dir:ArcDir::Ccw,feed:300.0 }]),
+        ];
+        let mut s=window(-100.0,10.0);s.uncut=true;
+        let mut opts=opts();opts.ramp_angle=10.0f64.to_radians();opts.ramp_feed=Some(80.0);
+        for original in cases {
+            let (out,warnings)=clip_to_section(&original,&s,&opts);
+            assert!(warnings.is_empty(),"{warnings:?}");
+            let mut ramps=0;
+            for pair in out.moves.windows(2) {
+                let a=pair[0].to();let b=pair[1].to();
+                let length=match pair[1] {
+                    Move::Linear { feed,.. } if feed==80.0=>(b[0]-a[0]).hypot(b[1]-a[1]),
+                    Move::Arc { center,dir,feed,.. } if feed==80.0=> {
+                        assert!(center[0].hypot(center[1])<1e-7);
+                        (a[0]-center[0]).hypot(a[1]-center[1])*kmb_toolpath::arc_sweep(a,b,center,dir).abs()
+                    }
+                    _=>continue,
+                };
+                ramps+=1;assert!(length>0.0);
+                assert!(a[2]-b[2]<=length*opts.ramp_angle.tan()+1e-7);
+            }
+            assert!(ramps>=2);
+            assert!(!out.moves.iter().any(|m|matches!(m,Move::Linear { feed,.. } if *feed==50.0)));
+        }
     }
 }
