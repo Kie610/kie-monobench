@@ -73,6 +73,7 @@ mod extrude_revolve_hole_tests;
 mod face_edit_tests;
 mod face_extrude_tests;
 mod face_name_tests;
+mod face_revolve_tests;
 mod fastener_tests;
 mod fillet_material_tests;
 mod fillet_rows_tests;
