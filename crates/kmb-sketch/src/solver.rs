@@ -162,21 +162,31 @@ pub fn inconsistency_reason(sketch: &Sketch, sol: &Solution) -> Option<String> {
                     .flat_map(|c| c.entities.iter().copied()),
             )
             .collect();
-        let mut points = Vec::new();
+        let mut shapes = Vec::new();
         for e in sketch.entities.iter().filter(|e| ids.contains(&e.id())) {
-            points.extend(sol.points.get(&e.id()).copied());
-            points.extend(
-                e.points()
-                    .iter()
-                    .filter_map(|id| sol.points.get(id).copied()),
-            );
-        }
-        let mut min = [f64::INFINITY; 2];
-        let mut max = [f64::NEG_INFINITY; 2];
-        for p in &points {
-            for axis in 0..2 {
-                min[axis] = min[axis].min(p[axis]);
-                max[axis] = max[axis].max(p[axis]);
+            if let Some(p) = sol.points.get(&e.id()) {
+                shapes.push(crate::Shape::Point { p: *p });
+            }
+            if let Some(shape) = sketch.solved_shape(sol, e.id()) {
+                shapes.extend(shape.segments(crate::curve::ARC_TOLERANCE).into_iter().map(
+                    |segment| match segment {
+                        kmb_core::Segment::Line { a, b } => crate::Shape::Line { a, b },
+                        kmb_core::Segment::Circle { center, radius } => {
+                            crate::Shape::Circle { center, radius }
+                        }
+                        kmb_core::Segment::Arc {
+                            center,
+                            radius,
+                            start,
+                            end,
+                        } => crate::Shape::Arc {
+                            center,
+                            radius,
+                            start,
+                            end,
+                        },
+                    },
+                ));
             }
         }
         text.push_str(&format!(
@@ -184,7 +194,7 @@ pub fn inconsistency_reason(sketch: &Sketch, sol: &Solution) -> Option<String> {
             pattern.id,
             pattern.copies.len() + 1
         ));
-        if !points.is_empty() {
+        if let Some((min, max)) = crate::shapes_bounds(&shapes) {
             text.push_str(&format!(
                 "、範囲 {:.3}×{:.3} mm",
                 max[0] - min[0],
