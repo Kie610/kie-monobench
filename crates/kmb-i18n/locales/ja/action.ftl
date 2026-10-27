@@ -332,5 +332,7 @@ action-cam-setup-origin-pick = 原点を 3D で選ぶ
 action-cam-setup-origin-pick-tip = ストックの箱の角・辺の中点・面の中心か、部品の外形の箱の点、部品の角をクリックして、作業座標系の原点にする
 action-cam-template-save = テンプレートとして保存…
 action-cam-template-save-tip = 選んだ加工(セットアップなら中の加工すべて)を名前を付けて PC に保存し、別のセットアップや文書で使う。面や線は保存せず、使う時に選び直す
+action-cad-surface-patch = 面を張る
+action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
