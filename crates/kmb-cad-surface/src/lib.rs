@@ -124,6 +124,22 @@ fn gap(a: P3, b: P3) -> f64 {
     k::dot(d, d).sqrt()
 }
 
+/// 面名はボディの中の名前なので、参照元と面の組で区間を一意にする。
+/// 向きの違いは同じ辺とし、選択文字列の区切りを含まない鍵に符号化する。
+fn edge_boundary_name(feature: FeatureId, faces: &[String; 2]) -> String {
+    let mut pair = [faces[0].as_str(), faces[1].as_str()];
+    pair.sort_unstable();
+    let encode = |name: &str| {
+        let mut key = String::with_capacity(name.len() * 2);
+        for byte in name.bytes() {
+            key.push(char::from(b"0123456789abcdef"[usize::from(byte >> 4)]));
+            key.push(char::from(b"0123456789abcdef"[usize::from(byte & 15)]));
+        }
+        key
+    };
+    format!("{feature}:edge:{}:{}", encode(pair[0]), encode(pair[1]))
+}
+
 fn same_segment(wire: &kmb_core::Wire, segment: &kmb_interchange::Segment) -> bool {
     !wire.construction
         && wire.points.len() == 2
@@ -490,7 +506,7 @@ impl SurfacePatch {
                         let point = points[points.len() / 2];
                         segments.push((
                             BoundarySegment {
-                                name: faces.join("|"),
+                                name: edge_boundary_name(*feature, faces),
                                 curve: BoundaryCurve::BodyEdge {
                                     shape,
                                     faces: faces.clone(),
@@ -1066,5 +1082,100 @@ mod tests {
             line("c", p[1], p[3]),
         ];
         assert!(ordered(fork).is_err());
+    }
+    #[test]
+    fn edge_boundary_names_preserve_owner_and_face_pair_identity_without_pick_delimiters() {
+        let pairs = [
+            ["a|b", "c"],
+            ["a", "b|c"],
+            ["a:b", "c"],
+            ["a", "b:c"],
+            ["a b", "c"],
+            ["a", "b c"],
+            ["a\"b", "c"],
+            ["面", "c"],
+        ];
+        let keys: std::collections::HashSet<_> = pairs
+            .iter()
+            .map(|pair| edge_boundary_name(FeatureId(1), &pair.map(str::to_string)))
+            .collect();
+        assert_eq!(keys.len(), pairs.len(), "異なる面の組は同じ区間名にしない");
+        assert!(keys.iter().all(|key| !key.contains('|')
+            && !key.contains('"')
+            && !key.chars().any(char::is_whitespace)));
+        let faces = ["source:end".to_string(), "source:side:e0".to_string()];
+        assert_eq!(
+            edge_boundary_name(FeatureId(1), &faces),
+            edge_boundary_name(FeatureId(1), &[faces[1].clone(), faces[0].clone()])
+        );
+        assert_ne!(
+            edge_boundary_name(FeatureId(1), &faces),
+            edge_boundary_name(FeatureId(2), &faces)
+        );
+    }
+
+    #[test]
+    fn body_edges_from_distinct_instances_keep_distinct_boundary_names() {
+        struct Instances;
+        impl kmb_core::Kernel for Instances {
+            fn name(&self) -> &str {
+                "instances"
+            }
+            fn edges(
+                &self,
+                shape: kmb_core::ShapeHandle,
+            ) -> Result<Vec<k::EdgeInfo>, k::KernelError> {
+                let edge = |index, a, b| k::EdgeInfo {
+                    faces: ["source:end".into(), format!("source:side:e{index}")],
+                    a,
+                    b,
+                    convex: false,
+                    seam: k::Seam::Unknown,
+                    arc: None,
+                    curve: vec![],
+                };
+                Ok(match shape.0 {
+                    1 => vec![
+                        edge(0, [0., 0., 0.], [10., 0., 0.]),
+                        edge(1, [10., 0., 0.], [10., 10., 0.]),
+                        edge(3, [0., 10., 0.], [0., 0., 0.]),
+                    ],
+                    2 => vec![edge(0, [10., 10., 0.], [0., 10., 0.])],
+                    _ => vec![],
+                })
+            }
+            fn arc_edges(
+                &self,
+                _: kmb_core::ShapeHandle,
+            ) -> Result<Vec<k::EdgeInfo>, k::KernelError> {
+                Ok(vec![])
+            }
+            fn curve_edges(
+                &self,
+                _: kmb_core::ShapeHandle,
+            ) -> Result<Vec<k::EdgeInfo>, k::KernelError> {
+                Ok(vec![])
+            }
+        }
+        let refs: Vec<_> = [(1,0),(1,1),(2,0),(1,3)].into_iter().map(|(feature,edge)| json!({
+            "source":"edge", "edge":{"kind":"edge", "feature":feature, "faces":["source:end",format!("source:side:e{edge}")]}
+        })).collect();
+        let patch: SurfacePatch = serde_json::from_value(json!({"boundary":refs})).unwrap();
+        let Resolved::Boundary(boundary) = patch
+            .resolve(&Instances, |feature, slot| {
+                assert_eq!(slot, "body");
+                Ok(Value::Shape(kmb_core::ShapeHandle(feature.0)))
+            })
+            .unwrap()
+        else {
+            panic!("ボディの辺から作る縁");
+        };
+        let names: std::collections::HashSet<_> =
+            boundary.iter().map(|segment| &segment.name).collect();
+        assert_eq!(
+            names.len(),
+            4,
+            "異なるボディの同じ名前の辺も、後の参照で区別できる: {boundary:?}"
+        );
     }
 }
