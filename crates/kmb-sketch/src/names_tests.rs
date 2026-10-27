@@ -100,6 +100,7 @@ fn parameters_and_other_features_can_use_dimension_names() {
                 name: "スケッチ2".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -226,6 +227,7 @@ fn a_copied_sketch_gets_its_own_names() {
                 name: "スケッチ2".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

@@ -72,6 +72,7 @@ fn add(doc: &mut Document, type_id: &str, name: &str, data: serde_json::Value) -
                 name: name.into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

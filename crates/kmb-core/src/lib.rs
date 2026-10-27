@@ -5,9 +5,11 @@
 //! 変更を戻すだけで済む。CAD の操作も CAM の操作も同じ [`Feature`] として扱う。
 
 pub mod args;
+mod bodies;
 mod descriptor;
 mod document;
 mod extension;
+mod face_names;
 mod feature;
 mod ids;
 pub mod kernel;
@@ -21,6 +23,7 @@ pub mod section;
 mod transaction;
 
 pub use args::{Arg, ArgKind};
+pub use bodies::{BodyId, BodyLine, BodyState, BodyTable};
 pub use descriptor::{
     CHOICES_TYPE, Choice, Descriptor, Field, FieldKind, FieldUnit, Fix, PickOn, Retarget, Slider,
     Suggest, When, category, choices_of, choices_value, row_name,
@@ -39,6 +42,7 @@ pub use extension::{
     TableMark, TableOption, sibling_path,
 };
 pub use extension::{JobControl, JobProgress};
+pub use face_names::{FaceAliases, SPLIT_BY};
 pub use feature::{
     CONCURRENT, EvalCtx, EvalError, Factory, Feature, InputRef, ModelParam, Names, Outputs,
     Registry, Value, WARNINGS, add_warnings, expr_inputs, warnings_of,
@@ -77,5 +81,7 @@ pub use kmb_expr::{
 /// コア API の版。変える時は全モジュールの契約テストを通す。
 pub const CORE_API_VERSION: &str = "0.39.0";
 
+#[cfg(test)]
+mod bodies_tests;
 #[cfg(test)]
 mod tests;

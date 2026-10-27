@@ -109,6 +109,7 @@ impl Headless {
             hold: Hold::Off,
             creating: None,
             just_hidden: Default::default(),
+            old_names: true,
         }
     }
 
@@ -277,6 +278,11 @@ impl Headless {
         bg.dirty = run.stale;
         self.doc.put_cache(f.cache, &report);
         let previous = std::mem::replace(&mut self.report, report);
+        if self.rename_old_faces()
+            && let Some(bg) = &mut self.background
+        {
+            bg.dirty = true;
+        }
         Polled::Done(Recomputed {
             previous,
             bodies: f.bodies,
