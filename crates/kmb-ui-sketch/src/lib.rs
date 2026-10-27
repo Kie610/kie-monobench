@@ -38,6 +38,8 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 pub struct SketchEditor {
     view: view::ViewState,
     editor: view::Editor,
+    /// 下の帯へ出した失敗の理由。解けた時は自分が出した知らせだけを消す。
+    diagnosis: Option<(kmb_core::FeatureId, String)>,
     /// 置いた面の輪郭(ボディと面の名前ごとに作り置く)
     outline: Option<(FaceKey, Vec<[[f64; 2]; 2]>)>,
     /// 既存の形をスケッチの平面へ写したもの(平面と、元のボディ・前のスケッチごとに作り置く)
@@ -76,6 +78,23 @@ type RefsKey = (
 impl SketchEditor {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn show_diagnosis(
+        &mut self,
+        host: &mut EditorHost<'_>,
+        id: kmb_core::FeatureId,
+        reason: Option<String>,
+    ) {
+        let diagnosis = reason.map(|reason| (id, reason));
+        if diagnosis != self.diagnosis {
+            let previous = self.diagnosis.as_ref().map(|(_, reason)| reason);
+            let next = diagnosis.as_ref().map(|(_, reason)| reason);
+            if next.is_some() || host.message.as_ref() == previous {
+                *host.message = next.cloned();
+            }
+            self.diagnosis = diagnosis;
+        }
     }
 
     /// 面の上のスケッチなら、原点にできる所(作り置く)。
@@ -916,9 +935,15 @@ impl FeatureEditor for SketchEditor {
             let why = host
                 .failure(entry.id)
                 .unwrap_or_else(|| "表示できるスケッチではありません".into());
+            self.show_diagnosis(host, entry.id, Some(why.clone()));
             ui.colored_label(ui.visuals().error_fg_color, why);
             return None;
         };
+        self.show_diagnosis(
+            host,
+            entry.id,
+            kmb_sketch::inconsistency_reason(&sketch, &solution),
+        );
         let values = dimension_values(host, &sketch);
         // 原点を選ぶ道具: 面の角(円の中心)を、今のスケッチの平面の座標で
         let origins: Vec<([f64; 2], kmb_sketch::FaceOrigin)> =
@@ -1138,7 +1163,7 @@ impl FeatureEditor for SketchEditor {
         let title = format!(
             "{} ・ {place} ・ {}",
             entry.name,
-            view::status_text(&solution)
+            view::status_text(&sketch, &solution)
         );
         self.editor.feature = Some(entry.id);
         // 前にできたボディを描く。3D の視点でも平らな図(正面の図)でも描く(ブラウザの目で隠した物は
