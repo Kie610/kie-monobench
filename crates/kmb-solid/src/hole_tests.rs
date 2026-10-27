@@ -382,3 +382,54 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
         );
     }
 }
+
+fn legacy_thread_recess_volume(kind: &str) -> f64 {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    use kmb_sketch::SketchPlane;
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let sketch = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 100.0, 80.0);
+    let plate = b.feature(
+        EXTRUDE,
+        "板",
+        Extrude {
+            profile: Some(sketch),
+            distance: "60 mm".into(),
+            ..Default::default()
+        },
+    );
+    let mut points = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
+    let point = points.fixed_point(50.0, 40.0);
+    let sketch = b.feature(kmb_sketch::SKETCH, "穴の位置", points.build());
+    b.feature(
+        "solid.hole@1",
+        "既定の径の穴",
+        serde_json::json!({
+            "target":plate.0,"sketch":sketch.0,"points":[point.0],
+            "kind":kind,"tap":"tapped","size":"M16","depth":"40 mm"
+        }),
+    );
+    let mut doc = kmb_core::Document::from_json(&b.finish("保存した穴").to_json()).unwrap();
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let bodies = visible_bodies(doc.data(), &reg, &report);
+    assert_eq!(bodies.len(), 1);
+    k.mass(bodies[0].1).unwrap().volume
+}
+
+#[test]
+fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
+    let removed = cyl(7.0, 40.0) + cyl(12.6, 14.0) - cyl(7.0, 14.0);
+    let expected = 100.0 * 80.0 * 60.0 - removed;
+    let actual = legacy_thread_recess_volume("counterbore");
+    assert!(close(actual, expected, 1e-2), "{actual} vs {expected}");
+}
+
+#[test]
+fn legacy_thread_countersink_keeps_the_omitted_diameter() {
+    let removed = cyl(7.0, 33.0) + cone(14.0, 7.0, 7.0);
+    let expected = 100.0 * 80.0 * 60.0 - removed;
+    let actual = legacy_thread_recess_volume("countersink");
+    assert!(close(actual, expected, 1e-2), "{actual} vs {expected}");
+}

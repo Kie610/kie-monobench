@@ -1063,6 +1063,31 @@ mod tests {
     }
 
     #[test]
+    fn legacy_thread_without_a_size_keeps_its_metric_default() {
+        let mut actual = Vec::new();
+        for (diameter, internal) in [(7.9, false), (21.0, true), (17.5, true)] {
+            let cylinder = Cylinder {
+                diameter,
+                center: [0.0; 3],
+                axis: [0.0, 0.0, 1.0],
+                length: 10.0,
+                internal,
+            };
+            let old: Thread =
+                serde_json::from_value(serde_json::json!({"target":1,"face":"f1:side"})).unwrap();
+            actual.push(resolve(&old, &cylinder).unwrap().0.name());
+        }
+        assert_eq!(actual, ["M8x1.25", "M20x2.5", "M18x2.5"]);
+    }
+
+    #[test]
+    fn legacy_thread_tap_drill_fits_the_internal_minor_diameter_limit() {
+        // ASME B1.1 の 1-12 UNF、内ねじ 2B の谷の径の上限(mm)。
+        let size = parse_size("1-12 UNF").unwrap();
+        assert!(size.tap_drill() <= 23.5712, "{}", size.tap_drill());
+    }
+
+    #[test]
     fn names_parse_with_or_without_the_pitch() {
         let m6 = parse_size("M6").unwrap();
         assert_eq!((m6.major, m6.pitch, m6.coarse), (6.0, 1.0, true));
