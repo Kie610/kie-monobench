@@ -1884,12 +1884,12 @@ fn the_ai_moves_and_duplicates_components() {
     s.move_bodies(&[pocket], None).unwrap();
     assert!(s.document().data().component(b).unwrap().bodies.is_empty());
     s.move_bodies(&[pocket], Some(a)).unwrap();
-    // 台を中の部品ごと複製: 元のすぐ後ろに並び、写しのボディが入る
+    // 台を中の部品ごと複製: 元のすぐ後ろに並び、出現のボディが入る
     let r = s.duplicate_component(a).unwrap();
     let top = r["component"].as_u64().unwrap();
     let data = s.document().data();
     let made = data.component(top).unwrap();
-    assert_eq!(made.name, "台 (2)");
+    assert_eq!(made.name, "台:2");
     assert_eq!(made.bodies.len(), 1);
     assert_ne!(made.bodies[0].0, pocket);
     assert_eq!(data.child_components(Some(top)).len(), 1);

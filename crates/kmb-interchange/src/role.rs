@@ -123,6 +123,9 @@ pub mod kind {
     /// 面に絵を貼るだけで形を変えない(デカール)。静止画の書き出しは、この種類の誤りだけなら
     /// その分を除いて描く
     pub const DECAL: KindRole = KindRole("decal");
+    /// 同じ部品を写さずに別の位置に置く(出現)。データ `{"of": 元のボディ, "place": [行列 16 個]}`
+    /// (行の順。元の定義の座標から置き場所へ)。画面の部品の複製が、元を直すと付いて来る写しに使う
+    pub const OCCURRENCE: KindRole = KindRole("occurrence");
 
     /// 全部(名前の重なりの試験に使う)。
     pub const ALL: &[KindRole] = &[
@@ -131,6 +134,7 @@ pub mod kind {
         COPY_BODY,
         COMPONENT_POSITION,
         DECAL,
+        OCCURRENCE,
     ];
 }
 
