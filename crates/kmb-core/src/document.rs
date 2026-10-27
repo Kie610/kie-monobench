@@ -1159,6 +1159,29 @@ impl Document {
         n
     }
 
+    /// 前の版のアプリが付けた伸びた面の名前(同じ面を 2 回以上割った `a:end#1#0` など)を指す参照を、
+    /// 再計算の結果 `report` の表([`RecomputeReport::face_aliases`])で今の名前(`a:end~f12#0`)に
+    /// 書き換える。書き換えるのは記述子が宣言する選ぶ欄と付け替えの鍵だけで、1 つに決まらない名前は
+    /// 書き換えない(参照は切れたまま止まる)。結果を変えないので、取り消しの記録にしない(古い版の文書を
+    /// 開いた直後に使う)。書き換えた名前の数を返す。書き換えたら再計算し直す。
+    pub fn rename_old_faces(&mut self, registry: &Registry, report: &RecomputeReport) -> usize {
+        if report.face_aliases.is_empty() {
+            return 0;
+        }
+        let current = report.face_aliases.current();
+        let rename = |name: &str| crate::face_names::rename_old(name, &current);
+        let mut n = 0;
+        for f in &mut self.data.features {
+            if let Some(desc) = registry.descriptor(&f.type_id) {
+                n += desc.rename_faces(&mut f.data, &rename);
+            }
+        }
+        if n > 0 {
+            log::info!("前の版の面の名前を今の名前に書き換えた: {n} 個(読む形は変わらない)");
+        }
+        n
+    }
+
     /// 変わった入力の下流だけを評価し直す。入力が同じ機能はキャッシュを使う。
     /// 先に寸法の名前をそろえる([`Document::settle_names`])。
     pub fn recompute(&mut self, registry: &Registry, kernel: &dyn Kernel) -> RecomputeReport {

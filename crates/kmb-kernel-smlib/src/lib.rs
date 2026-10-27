@@ -1209,6 +1209,13 @@ impl Kernel for SmlibKernel {
         s.put(brep, names)
     }
 
+    fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
+        if let Some((k, inner)) = self.imported(shape) {
+            return k.face_names(inner);
+        }
+        Ok(self.lock().get(shape)?.names.clone())
+    }
+
     fn faces(&self, shape: ShapeHandle) -> Result<Vec<FaceInfo>, KernelError> {
         if let Some((k, inner)) = self.imported(shape) {
             return k.faces(inner);
