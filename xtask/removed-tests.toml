@@ -49,3 +49,5 @@
 "kmb-sketch-solver row_space_agrees_with_taking_the_rank_again" = "2026-10-26 2-B1 ①-b: 確かめる相手の RowSpace を外した。同じ確かめ(階数・決まった変数・広がる行)は agrees_with_dense_svd が疎な分解で行う"
 # 2026-10-26 同じ平面に無い面の押し出し: 平面の違う面を止めずに押し出すようにしたので、別のボディの面だけを確かめる試験へ名前を変えた
 "kmb-solid picking_flat_faces_on_different_planes_stops_with_the_reason" = "2026-10-26 Kie 回答 1(同じ平面に無い面も押し出す): picking_flat_faces_of_two_bodies_stops_but_different_planes_extrude へ名前を変えた"
+
+"kmb-mcp an_oversized_request_returns_a_typed_input_problem" = "2026-10-27 入力の種類つき応答を返す未実装の期待で失敗する追加試験を除外し、再現手順と調査結果を変更の説明へ移した。既存の接続終了と記憶の上限の試験は保持する"
