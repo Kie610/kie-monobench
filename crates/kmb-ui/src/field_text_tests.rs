@@ -19,7 +19,7 @@ fn every_descriptor_field_has_texts_matching_its_module() {
                 if !texts.has(Lang::Ja, &id) || texts.text(Lang::Ja, &id) != *original {
                     wrong.push(format!("{id} = {original}"));
                 }
-                assert!(texts.has(Lang::En, &id), "英語に {id} が無い");
+                if !texts.has(Lang::En, &id) { wrong.push(format!("英語に {id} が無い")); }
             }
             if let FieldKind::Rows { fields } = &f.kind {
                 check(texts, kind, fields, &key, seen, wrong);

@@ -17,6 +17,8 @@ mod doc_state;
 mod dock_ui;
 pub mod drive;
 mod editor;
+mod field_text;
+pub use field_text::translated_field;
 mod fonts;
 mod frame_ui;
 mod gesture;
