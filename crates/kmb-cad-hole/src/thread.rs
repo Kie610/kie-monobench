@@ -805,7 +805,7 @@ pub fn register(reg: &mut Registry) {
                     .help("空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)")
                     .suggest_own("sizes"),
             )
-            .field(Field::opt_expr("length", "長さ").length().help("空なら面の全長"))
+            .field(Field::opt_expr("length", "長さ").length().help("空なら面の全長。形を作る時は端の余裕を残した最大長さ(突き抜ける時は全長)"))
             .field(Field::choice(
                 "hand",
                 "方向",
@@ -901,6 +901,7 @@ fn summary(cx: &Context<'_>, id: FeatureId) -> Option<String> {
     let (s, _) = resolve(&t, &c).ok()?;
     let length = match &t.length {
         Some(l) if !l.trim().is_empty() => format!("長さ {l}"),
+        _ if t.form == Form::Modeled => "長さ 自動(端に合わせた最大)".into(),
         _ if c.length > 0.0 => format!("長さ {} mm(全長)", num(c.length)),
         _ => "全長".into(),
     };

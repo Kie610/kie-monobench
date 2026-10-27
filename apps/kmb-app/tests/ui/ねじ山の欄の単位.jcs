@@ -12,6 +12,10 @@ expect "すき間" missing
 select "ねじ山" "形を作る"
 type "すき間" 0.001
 expect "すき間" = "0.001 in"
+expect ~"長さ 自動(端に合わせた最大)" exists
+type "長さ" 0.1
+expect "長さ" = "0.1 in"
+expect ~"長さ 0.1 in" exists
 select "ねじ山" "属性のみ"
 expect "すき間" missing
 expect "奥の端" missing
