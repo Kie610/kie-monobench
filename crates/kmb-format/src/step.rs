@@ -1,5 +1,7 @@
 //! STEP(ISO 10303-21)の長さの単位を読む。形の読み手(カーネル)は座標と半径にこの倍率を掛けて
 //! mm にそろえ、読み込みの機能は読めなかった時の注意を出す。どちらも同じ読み方を使うよう、ここに置く。
+//! 実体を 1 つずつに分ける読み方([`instances_at`])と、立体と一緒に置かれた面だけの殻の数
+//! ([`open_shells_beside_solids`])も、両方の読み手と読み込みの機能が使うのでここに置く。
 //!
 //! 単位は、形の文脈(`GLOBAL_UNIT_ASSIGNED_CONTEXT`)が並べる単位のうち長さの物を見る。
 //! - `SI_UNIT` は接頭辞と `.METRE.` から(`.MILLI.` なら 1 mm、接頭辞が無ければ 1000 mm)。
@@ -70,6 +72,50 @@ pub fn length_unit(text: &str) -> LengthUnit {
         }),
         name: unit.1,
     }
+}
+
+/// データの節の実体を 1 つずつ、字の中の位置(バイト)と字(終わりの `;` を除く)で返す。
+/// 文字列と注釈の中の `;` では切らない。見出しの節の記録は `#` で始まらないので入らない。
+pub fn instances_at(text: &str) -> Vec<(usize, &str)> {
+    let base = text.as_ptr() as usize;
+    instances(text.as_bytes())
+        .into_iter()
+        // 切れ目は `;` と ASCII の空白・注釈の後なので、字の途中では切れない
+        .filter_map(|c| Some((c.as_ptr() as usize - base, std::str::from_utf8(c).ok()?)))
+        .collect()
+}
+
+/// 字の位置(バイト)が何行目か(1 から数える)。
+pub fn line_at(text: &str, at: usize) -> usize {
+    text.as_bytes()[..at.min(text.len())]
+        .iter()
+        .filter(|&&c| c == b'\n')
+        .count()
+        + 1
+}
+
+/// 実体 `#id = 名前(…)` の名前(複合の実体は空)。
+pub fn keyword(instance: &str) -> &str {
+    let rest = instance.split_once('=').map_or("", |(_, r)| r.trim_start());
+    let end = rest
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+/// 閉じた殻(`CLOSED_SHELL`、立体の外側と空洞)と一緒に置かれた、閉じていない殻(`OPEN_SHELL`、
+/// 面だけのボディ)の数。公差の補助の面などがこの形で入る。立体を読む時、これらは立体に入れない。
+/// 閉じた殻が無い(面だけのファイル)時は 0。
+pub fn open_shells_beside_solids(text: &str) -> usize {
+    let (mut open, mut closed) = (0, 0);
+    for (_, i) in instances_at(text) {
+        match keyword(i) {
+            "OPEN_SHELL" => open += 1,
+            "CLOSED_SHELL" => closed += 1,
+            _ => {}
+        }
+    }
+    if closed > 0 { open } else { 0 }
 }
 
 fn assumed_mm(warning: &str) -> LengthUnit {
@@ -498,5 +544,25 @@ mod tests {
                      #11=PRODUCT('it''s;',';','',(#1));";
         let u = length_unit(&step(units, "#10"));
         assert_eq!((u.mm, u.warning), (1.0, None));
+    }
+
+    #[test]
+    fn instances_keep_their_place_and_line() {
+        let text = "ISO-10303-21;\nHEADER;\nFILE_NAME('a;b');\nENDSEC;\nDATA;\n\
+                    #1=CLOSED_SHELL('',(#5));\n/* ; */ #2 = OPEN_SHELL('x;y',(#6));\n\
+                    #3=(A() B());\nENDSEC;\n";
+        let got = instances_at(text);
+        let ids: Vec<&str> = got.iter().map(|(_, i)| &i[..2]).collect();
+        assert_eq!(ids, ["#1", "#2", "#3"]);
+        let lines: Vec<usize> = got.iter().map(|(at, _)| line_at(text, *at)).collect();
+        assert_eq!(lines, [6, 7, 8]);
+        let names: Vec<&str> = got.iter().map(|(_, i)| keyword(i)).collect();
+        assert_eq!(names, ["CLOSED_SHELL", "OPEN_SHELL", ""]);
+        assert_eq!(open_shells_beside_solids(text), 1);
+        // 面だけのファイルは数えない(読み手は面のボディとして読む)
+        assert_eq!(
+            open_shells_beside_solids("DATA;#2=OPEN_SHELL('',(#6));ENDSEC;"),
+            0
+        );
     }
 }
