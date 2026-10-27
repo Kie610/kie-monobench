@@ -349,6 +349,7 @@ fn chamfering_a_pin_in_a_hole_leaves_the_hole_wall() {
                 name: "面取り".into(),
                 data: data.unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

@@ -346,6 +346,7 @@ mod tests {
                         name: "穴".into(),
                         data: serde_json::json!({}),
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 },
             ],

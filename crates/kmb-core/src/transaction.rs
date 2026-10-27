@@ -55,6 +55,11 @@ pub enum Op {
         id: FeatureId,
         suppressed: bool,
     },
+    /// 読むボディをデータの番号の形のまま読むかを変える([`FeatureEntry::pin_bodies`])
+    SetPinBodies {
+        id: FeatureId,
+        pin: bool,
+    },
     SetRollback {
         rollback: Option<usize>,
     },
@@ -652,6 +657,11 @@ fn apply_op(data: &mut DocumentData, op: Op) -> Result<Vec<Op>, TxError> {
                 id,
                 suppressed: old,
             }])
+        }
+        Op::SetPinBodies { id, pin } => {
+            let idx = feature_index(data, id)?;
+            let old = std::mem::replace(&mut data.features[idx].pin_bodies, pin);
+            Ok(vec![Op::SetPinBodies { id, pin: old }])
         }
         Op::SetRollback { rollback } => {
             if let Some(n) = rollback

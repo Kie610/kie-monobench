@@ -948,6 +948,7 @@ fn a_cut_by_a_part_moved_by_a_joint_removes_where_it_is_shown() {
                     name: "柱で切る".into(),
                     data: serde_json::to_value(cut).unwrap(),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
