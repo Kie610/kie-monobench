@@ -2341,6 +2341,7 @@ dependencies = [
  "kmb-cad-modify",
  "kmb-cad-pattern",
  "kmb-cad-revolve",
+ "kmb-cad-surface",
  "kmb-cad-sweep",
  "kmb-cam-commands",
  "kmb-cam-setup",
@@ -2503,6 +2504,18 @@ version = "0.1.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-surface"
+version = "0.1.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
  "kmb-workspace-hack",
  "serde",
  "serde_json",
@@ -3116,6 +3129,7 @@ dependencies = [
  "kmb-cad-modify",
  "kmb-cad-pattern",
  "kmb-cad-revolve",
+ "kmb-cad-surface",
  "kmb-cad-sweep",
  "kmb-contract",
  "kmb-core",

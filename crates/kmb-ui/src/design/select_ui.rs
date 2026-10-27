@@ -827,7 +827,7 @@ impl Workspace {
         }
         field.set_refs(&mut data, &now);
         if let Some(d) = &desc
-            && d.prune_rows(&mut data)
+            && crate::feature_ui::prune_panel_rows(d, &mut data)
         {
             // 空になった行は消える。番号がずれるので、受けるのをやめる
             self.leave_rows_pick();

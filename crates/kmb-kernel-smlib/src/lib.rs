@@ -21,6 +21,7 @@ mod ffi;
 mod names;
 mod skin;
 mod step_in;
+mod surface;
 
 // SMLib 本体の静的ライブラリをリンクさせる(Rust から直接は使わない)
 extern crate smlib_sys;
@@ -47,6 +48,8 @@ struct Shape {
     brep: Brep,
     /// 面ごとの名前。`brep.faces(..)` の順。
     names: Vec<String>,
+    /// 片側だけの縁の名前(all_edges の順)。
+    rims: Vec<Option<String>>,
 }
 
 #[derive(Default)]
@@ -89,7 +92,14 @@ impl Store {
         brep.set_tags(&tags).map_err(failed("面の名前付け"))?;
         self.next += 1;
         let id = self.next;
-        self.shapes.insert(id, Shape { brep, names });
+        self.shapes.insert(
+            id,
+            Shape {
+                brep,
+                names,
+                rims: Vec::new(),
+            },
+        );
         Ok(ShapeHandle(id))
     }
 }
@@ -543,6 +553,38 @@ impl Kernel for SmlibKernel {
         "smlib"
     }
 
+    fn body_kind(&self, shape: ShapeHandle) -> Result<k::BodyKind, KernelError> {
+        if let Some((k, inner)) = self.imported(shape) {
+            return k.body_kind(inner);
+        }
+        let _g = ffi::lock();
+        Ok(
+            if self
+                .lock()
+                .get(shape)?
+                .brep
+                .is_sheet()
+                .map_err(failed("ボディの種類"))?
+            {
+                k::BodyKind::Sheet
+            } else {
+                k::BodyKind::Solid
+            },
+        )
+    }
+
+    fn planar_sheet(&self, profile: &Profile, tag: &str) -> Result<ShapeHandle, KernelError> {
+        surface::planar(self, profile, tag)
+    }
+
+    fn patch_sheet(
+        &self,
+        boundary: &[k::BoundarySegment],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        surface::patch(self, boundary, tag)
+    }
+
     fn extrude(
         &self,
         profile: &Profile,
@@ -829,6 +871,8 @@ impl Kernel for SmlibKernel {
         target: ShapeHandle,
         tool: ShapeHandle,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(target, "足し引き")?;
+        self.require_solid(tool, "足し引き")?;
         match (self.imported(target), self.imported(tool)) {
             (None, None) => {}
             (Some((k, a)), Some((_, b))) => {
@@ -925,7 +969,15 @@ impl Kernel for SmlibKernel {
         if count != names.len() {
             return Err(KernelError::Failed("移動で面の数が変わりました".into()));
         }
-        s.put(brep, names)
+        let rims = s
+            .get(shape)?
+            .rims
+            .iter()
+            .map(|n| n.as_ref().map(|n| format!("{n}{suffix}")))
+            .collect();
+        let h = s.put(brep, names)?;
+        s.shapes.get_mut(&h.0).expect("しまった形").rims = rims;
+        Ok(h)
     }
 
     fn extrude_faces(
@@ -1004,6 +1056,7 @@ impl Kernel for SmlibKernel {
         thickness: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "シェル")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
                 "STEP から読み込んだ形はシェルにできません".into(),
@@ -1041,6 +1094,7 @@ impl Kernel for SmlibKernel {
         distance: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "面のオフセット")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
                 "STEP から読み込んだ形は面をオフセットできません".into(),
@@ -1329,6 +1383,9 @@ impl Kernel for SmlibKernel {
         let _g = ffi::lock();
         let s = self.lock();
         let sh = s.get(shape)?;
+        if !sh.rims.is_empty() {
+            return surface::sheet_edges(sh);
+        }
         let all = sh.brep.all_edges().map_err(failed("辺の列挙"))?;
         let straight = sh.brep.edges().map_err(failed("辺の列挙"))?;
         let arcs = sh.brep.arc_edges().map_err(failed("円の辺の列挙"))?;
@@ -1385,6 +1442,7 @@ impl Kernel for SmlibKernel {
         blends: &[EdgeBlend],
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "辺の丸め")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
                 "STEP から読み込んだ形の辺は丸められません".into(),
@@ -1506,6 +1564,7 @@ impl Kernel for SmlibKernel {
     }
 
     fn mass(&self, shape: ShapeHandle) -> Result<MassProps, KernelError> {
+        self.require_solid(shape, "体積")?;
         if let Some((k, inner)) = self.imported(shape) {
             return k.mass(inner);
         }
@@ -1532,6 +1591,7 @@ impl Kernel for SmlibKernel {
     }
 
     fn volume(&self, shape: ShapeHandle) -> Result<f64, KernelError> {
+        self.require_solid(shape, "体積")?;
         if let Some((k, inner)) = self.imported(shape) {
             return k.volume(inner);
         }

@@ -1,0 +1,14 @@
+# スケッチの領域をクリックで選び、面のボディを作る。
+# 元のスケッチを保存したまま、面積と外形を出し、体積や質量を 0 と出さない。
+#! sample sweep
+#! size 1280x800
+
+shot 前
+click "作成 ▾"
+click "面を張る"
+pick 候補:断面
+key Enter
+until "面を張る1" exists 60s
+click "体積を計測#1"
+until ~"面のボディ.*体積なし" 60s
+shot 面を張った後

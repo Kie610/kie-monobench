@@ -366,12 +366,68 @@ fn order_by_position(mut idx: Vec<usize>, at: &dyn Fn(usize) -> P3, axis: usize)
     out
 }
 
+/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BodyKind {
+    Solid,
+    Sheet,
+}
+
+/// 面を張る縁の 1 区間(世界座標)。並びの端と端がつながって閉じる。
+#[derive(Debug, Clone, PartialEq)]
+pub enum BoundaryCurve {
+    Line {
+        a: P3,
+        b: P3,
+    },
+    Arc {
+        from: P3,
+        arc: ArcEdge,
+    },
+    Through(Vec<P3>),
+    BodyEdge {
+        shape: ShapeHandle,
+        faces: [String; 2],
+        point: P3,
+    },
+}
+
+/// 縁の区間と、再計算しても引き継ぐ名前。
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundarySegment {
+    pub name: String,
+    pub curve: BoundaryCurve,
+}
+
 /// 形状カーネルの接続口。操作の既定の実装は「対応していない」を返すので、
 /// 形状を扱わない機能だけなら [`NullKernel`] で動く。
 ///
 /// `tag` は面の名前の接頭辞で、ふつうは機能の ID(例: `f3`)を渡す。
 pub trait Kernel: Send + Sync {
     fn name(&self) -> &str;
+
+    /// 厚みのある立体か、厚みの無い面のボディか。
+    fn body_kind(&self, shape: ShapeHandle) -> Result<BodyKind, KernelError> {
+        let _ = shape;
+        Ok(BodyKind::Solid)
+    }
+
+    /// 平面の閉じた輪郭に面を張る。
+    fn planar_sheet(&self, profile: &Profile, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let _ = (profile, tag);
+        Err(KernelError::Unsupported("平らな面を張る".into()))
+    }
+
+    /// たどる順に並んだ閉じた縁に面を張る。端の隙間は 1e-4 mm 以内。
+    fn patch_sheet(
+        &self,
+        boundary: &[BoundarySegment],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (boundary, tag);
+        Err(KernelError::Unsupported("面を張る".into()))
+    }
 
     /// 輪郭を法線方向に `from` から `to` まで押し出す(`from < to`)。
     fn extrude(

@@ -414,16 +414,47 @@ pub fn compare(a: &Geo, b: &Geo, want: Basis, xyz_rows: bool) -> Report {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BodyFacts {
     pub props: MassProps,
+    pub sheet: bool,
     /// 付けた物理材料の名前と密度(g/cm³)。あれば質量も出す
     pub material: Option<(String, f64)>,
 }
 
 impl BodyFacts {
+    /// 面のボディでは体積を聞かず、面積と外形だけを求める。
+    pub fn of(
+        kernel: &dyn kmb_core::Kernel,
+        shape: kmb_core::ShapeHandle,
+        material: Option<(String, f64)>,
+    ) -> Result<Self, kmb_core::KernelError> {
+        let sheet = kernel.body_kind(shape)? == kmb_core::kernel::BodyKind::Sheet;
+        let props = if sheet {
+            let (min, max) = kernel.bounds(shape)?;
+            MassProps {
+                volume: 0.0,
+                area: kernel.faces(shape)?.iter().map(|f| f.area).sum(),
+                min,
+                max,
+                centroid: None,
+            }
+        } else {
+            kernel.mass(shape)?
+        };
+        Ok(Self {
+            props,
+            sheet,
+            material,
+        })
+    }
+
     /// 行(体積・表面積・外形・重心、材料があれば材料と質量)。
     pub fn rows(&self) -> Vec<(String, String)> {
         let b = &self.props;
         let mut rows = vec![
-            ("ボディの体積".into(), volume(b.volume)),
+            if self.sheet {
+                ("ボディの種類".into(), "面のボディ(体積なし)".into())
+            } else {
+                ("ボディの体積".into(), volume(b.volume))
+            },
             ("ボディの表面積".into(), area(b.area)),
             ("ボディの外形".into(), {
                 let u = kmb_core::display_unit();
@@ -437,6 +468,9 @@ impl BodyFacts {
                 let c = c.map(|v| u.from_mm(v));
                 format!("({:.3}, {:.3}, {:.3}) {}", c[0], c[1], c[2], u.name())
             }));
+        }
+        if self.sheet {
+            return rows;
         }
         match &self.material {
             Some((name, density)) => {

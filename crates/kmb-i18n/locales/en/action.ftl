@@ -325,3 +325,5 @@ action-cam-setup-origin-pick = Pick Origin in 3D
 action-cam-setup-origin-pick-tip = Click a stock box corner, edge midpoint or face center, a point of the part's bounding box, or a part corner to make it the work coordinate origin
 action-cam-template-save = Save as Template…
 action-cam-template-save-tip = Save the selected operations (all operations inside, for a setup) on this PC under a name to use in another setup or document. Faces and lines are not saved; select them again when using it
+action-cad-surface-patch = Surface patch
+action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body

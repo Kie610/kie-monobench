@@ -1094,3 +1094,61 @@ fn editing_a_feature_after_the_rollback_marker_moves_the_marker_past_it() {
     ws.open_edit(first);
     assert_eq!(ws.cur.work.doc().data().active_len(), 1);
 }
+
+#[test]
+fn conditional_reference_rows_keep_other_sources_and_unfinished_edits() {
+    use kmb_core::{Descriptor, Field, RefKind};
+    let descriptor = Descriptor::new("test.mixed@1", kmb_core::category::SOLID, "複数の参照元")
+        .field(Field::rows(
+            "rows",
+            "参照元",
+            vec![
+                Field::choice("source", "種類", &[("profile", "領域"), ("edge", "辺")]),
+                Field::pick("edge", "辺", &[RefKind::Edge], 1, Some(1))
+                    .only("@source", "edge", "profile"),
+            ],
+        ));
+    let mut data = serde_json::json!({"rows":[{"source":"profile","profile":1},{"source":"profile","profile":2},{"source":"edge"}]});
+    let before = data.clone();
+    assert!(!crate::feature_ui::prune_panel_rows(&descriptor, &mut data));
+    assert_eq!(data, before, "選択元を切り替えた直後も行を残す");
+    let plain =
+        Descriptor::new("test.edges@1", kmb_core::category::SOLID, "辺").field(Field::rows(
+            "rows",
+            "辺",
+            vec![Field::pick("edge", "辺", &[RefKind::Edge], 1, Some(1))],
+        ));
+    let mut data =
+        serde_json::json!({"rows":[{"edge":{"kind":"edge","feature":1,"faces":["a","b"]}},{}]});
+    assert!(crate::feature_ui::prune_panel_rows(&plain, &mut data));
+    assert_eq!(data["rows"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn boundary_rows_keep_each_source_after_descriptor_panel_edits() {
+    let modules = reg();
+    let descriptor = modules
+        .registry
+        .descriptors()
+        .into_iter()
+        .find(|d| d.label == "面を張る")
+        .unwrap();
+    let mut data = serde_json::json!({"boundary":[{"source":"region","profile":1},{"source":"wire","sketch":2,"line":5},{"source":"edge","edge":{"kind":"edge","feature":3,"faces":["a","b"]}}]});
+    descriptor
+        .field_at("boundary.1.line")
+        .unwrap()
+        .set(&mut data, Some(serde_json::json!(2)));
+    assert!(!crate::feature_ui::prune_panel_rows(&descriptor, &mut data));
+    assert_eq!(data["boundary"].as_array().unwrap().len(), 3);
+    assert_eq!(data["boundary"][0]["profile"], 1);
+    assert_eq!(data["boundary"][1]["line"], 2);
+    assert_eq!(data["boundary"][2]["edge"]["feature"], 3);
+    let feature = modules
+        .registry
+        .instantiate(&descriptor.type_id, &data)
+        .unwrap()
+        .unwrap();
+    let inputs = feature.inputs().unwrap();
+    assert_eq!(inputs.len(), 4);
+    assert!(inputs.iter().any(|i|matches!(i,kmb_core::InputRef::Output{feature:kmb_core::FeatureId(2),slot} if slot=="lines")));
+}

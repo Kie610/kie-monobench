@@ -52,6 +52,7 @@ pub fn register(reg: &mut Registry) {
     kmb_cad_extrude::register(reg);
     kmb_cad_revolve::register(reg);
     kmb_cad_sweep::register(reg);
+    kmb_cad_surface::register(reg);
     kmb_cad_boolean::register(reg);
     kmb_cad_hole::register(reg);
     kmb_cad_pattern::register(reg);
@@ -84,6 +85,7 @@ mod origin_tests;
 mod pattern_tests;
 mod segment_tests;
 mod shell_tests;
+mod surface_tests;
 mod sweep_loft_tests;
 mod tests;
 mod text_outline_tests;

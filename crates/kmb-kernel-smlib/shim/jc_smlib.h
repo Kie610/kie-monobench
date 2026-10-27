@@ -88,6 +88,18 @@ const char* jc_last_error(void);
 
 /* 輪郭(閉じたループの集まり)を平面の上の面にし、法線方向へ from から to まで押し出す。
  * loop_lens[i] 個ずつの区間が segments に並ぶ。外周と穴の区別は SMLib が入れ子から決める。 */
+typedef struct {
+    int32_t kind; /* 0: line, 1: interpolating points, 2: arc, 3: body edge */
+    uint32_t count;
+    const double* points;
+    const JcBrep* brep;
+    uint32_t f0, f1;
+    double center[3], axis[3], sweep;
+} JcBoundary;
+int jc_planar_sheet(const JcPlane*, const JcSegment*, const uint32_t*, size_t, JcBrep**);
+int jc_patch_sheet(const JcBoundary*, size_t, int32_t, JcBrep**);
+int jc_is_sheet(const JcBrep*, int32_t*);
+
 int jc_extrude(const JcPlane* plane, const JcSegment* segments, const uint32_t* loop_lens,
                size_t loop_count, double from, double to, JcBrep** out);
 

@@ -373,6 +373,128 @@ extern "C" {
 
 const char* jc_last_error(void) { return g_error.c_str(); }
 
+int jc_planar_sheet(const JcPlane* plane, const JcSegment* segments, const uint32_t* lens, size_t loops, JcBrep** out)
+{
+    return guarded([&] { *out = J(planar_sheet(*plane, segments, lens, loops, 0).release()); });
+}
+
+int jc_is_sheet(const JcBrep* brep, int32_t* out)
+{
+    return guarded([&] { *out = B(brep)->IsSheet() ? 1 : 0; });
+}
+
+// 区間の曲線は境界専用の複製にする。ボディの辺は曲線の有効な区間を切り出す。
+static SmBSplineCurve* boundary_curve(const JcBoundary& s)
+{
+    const SmContext& ctx = *SmApiGetOrCreateContext();
+    SmBSplineCurve* curve = nullptr;
+    const SmPoint3d a(s.points[0], s.points[1], s.points[2]);
+    if (s.kind == 0)
+        check(SmBSplineCurve::CreateLineSegment(ctx, 3, a, SmPoint3d(s.points[3], s.points[4], s.points[5]), curve), "縁の直線");
+    else if (s.kind == 1)
+    {
+        SmTArray<SmPoint3d> pts;
+        SmTArray<SmVector3d> derivs;
+        for (uint32_t i = 0; i < s.count; ++i)
+            pts.Add(SmPoint3d(s.points[i*3], s.points[i*3+1], s.points[i*3+2]));
+        check(SmBSplineCurve::CreateInterpolatingCurve(ctx, SM_CP_CHORDLENGTH, 3, std::min(3u, s.count-1), pts, derivs, nullptr, TRUE, curve), "縁の補間曲線");
+    }
+    else if (s.kind == 2)
+    {
+        // 平面の円弧を作り、始まりの点と軸が決める平面へ動かす。
+        const SmPoint3d center(s.center[0], s.center[1], s.center[2]);
+        SmVector3d x = unit(SmVector3d(a.x-center.x, a.y-center.y, a.z-center.z));
+        SmVector3d n = vec(s.axis);
+        if (s.sweep < 0) n = SmVector3d(-n.x, -n.y, -n.z);
+        check(SmApiCreateArc(SmPoint3d(0,0,0), a.DistanceBetween(center), 0, std::fabs(s.sweep)*180/kPi, curve), "縁の円弧");
+        check(SmApiTransform(curve, SmAxis2Placement(center, x, cross(unit(n), x))), "縁の円弧の位置");
+    }
+    else if (s.kind == 3)
+    {
+        const SmTArray<SmFace*> fs = faces_of(B(s.brep));
+        SmTArray<SmEdge*> es;
+        B(s.brep)->GetEdges(es);
+        SmEdge* found = nullptr;
+        double best = 1e100;
+        for (ULONG i = 0; i < es.GetSize(); ++i)
+        {
+            SmTArray<SmFace*> ef;
+            es[i]->GetFaces(ef);
+            if (ef.GetSize()!=2 && ef.GetSize()!=1) continue;
+            const long f0 = face_index(fs, ef[0]);
+            const uint32_t f1 = ef.GetSize()==1 ? UINT32_MAX : uint32_t(face_index(fs, ef[1]));
+            if (!((f0==s.f0 && f1==s.f1)||(f0==s.f1 && f1==s.f0))) continue;
+            SmPoint3d q; double d=0, parameter=0;
+            const SmPoint3d pick(s.center[0], s.center[1], s.center[2]);
+            if (SmApiEdgeClosestPoint(es[i], pick, q, parameter, d)==SM_SUCCESS && d<best) { best=d; found=es[i]; }
+        }
+        if (!found || best>1e-4) throw Failure{"選んだボディの辺が見つかりません。縁を選び直してください"};
+        double lo=0, hi=0;
+        check(SmApiEdgeParameterRange(found, lo, hi), "辺の範囲");
+        SmTArray<double> breaks; breaks.Add(lo); breaks.Add(hi);
+        double gap=0;
+        check(found->GetCurve()->ApproximateCurve(ctx, breaks, 1e-7, gap, curve, FALSE, TRUE, TRUE), "辺の曲線の複製");
+        SmExtent1d interval(lo, hi);
+        check(curve->Trim(interval), "辺の曲線の区間");
+        SmPoint3d start, end;
+        check(curve->EvaluatePoint(interval.GetMin(), start), "辺の始まり");
+        check(curve->EvaluatePoint(interval.GetMax(), end), "辺の終わり");
+        if (a.DistanceBetween(end) < a.DistanceBetween(start)) { SmExtent1d reversed; check(curve->ReverseParameterization(interval, reversed), "辺の向き"); }
+    }
+    return curve;
+}
+
+int jc_patch_sheet(const JcBoundary* boundary, size_t count, int32_t is_planar, JcBrep** out)
+{
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        Curves owned;
+        SmTArray<SmBSplineCurve*> curves, derivs;
+        for (size_t i=0; i<count; ++i) {
+            SmBSplineCurve* c=boundary_curve(boundary[i]); owned.items.push_back(c); curves.Add(c);
+        }
+        SmBrep* planar=nullptr;
+        if (is_planar && SmApiCreatePlanarFaces(owned.array(), planar)==SM_SUCCESS && planar) {
+            owned.release(); *out=J(planar); return;
+        }
+        delete planar;
+        BrepPtr b(new (ctx) SmBrep());
+        b->m_bEditingEnabled=TRUE;
+        SmTemporaryChangeValue<SmBoolean> doing(SM_CONST_CAST(SmContext*, &ctx)->GetDoingBooleanRef(), TRUE);
+        if (count==4) {
+            // Coons の口は左・右・下・上の順で、向かい合う曲線を同じ向きに渡す。
+            SmExtent1d reversed;
+            check(curves[2]->ReverseParameterization(curves[2]->GetNaturalInterval(), reversed), "上の縁の向き");
+            check(curves[3]->ReverseParameterization(curves[3]->GetNaturalInterval(), reversed), "左の縁の向き");
+            SmTArray<SmBSplineCurve*> sides;
+            sides.Add(curves[3]); sides.Add(curves[1]); sides.Add(curves[0]); sides.Add(curves[2]);
+            SmBSplineSurface* surface=nullptr;
+            check(SmBSplineSurface::CreateCoonsPatch(ctx, 1e-4, TRUE, sides, derivs, surface), "縁から曲面を張る処理");
+            SmTArray<SmFace*> faces;
+            check(b->CreateFacesFromSurface(surface, surface->GetNaturalUVDomain(), SM_CT_C0, faces), "曲面から面を作る処理");
+        } else {
+            SmTArray<SmSurface*> surfaces;
+            // 接線を指定しない時も、境界と同じ数の空欄を渡す。
+            for (size_t i=0;i<count;++i) derivs.Add(nullptr);
+            const SmStatus st=SmBSplineSurface::CreateNSidedPatch(ctx, curves, derivs, 1.0, surfaces);
+            if (st!=SM_SUCCESS) {
+                for (ULONG i=0;i<surfaces.GetSize();++i) delete surfaces[i];
+                if (count>=5) throw Failure{"縁が 5 本以上の面は、まだ張れません。縁を 4 本までにしてください"};
+                check(st, "縁から曲面を張る処理");
+            }
+            for (ULONG i=0;i<surfaces.GetSize();++i) {
+                SmTArray<SmFace*> faces;
+                check(b->CreateFacesFromSurface(surfaces[i], surfaces[i]->GetNaturalUVDomain(), SM_CT_C0, faces), "曲面から面を作る処理");
+            }
+            SmBoolean wellFormed=FALSE;
+            ULONG stitched=0; double vertexGap=0, edgeGap=0;
+            check(SmApiStitchIntoShell(b.get(), wellFormed, 1e-4, stitched, vertexGap, edgeGap), "曲面の縫い合わせ");
+        }
+        if (!b->IsSheet()) throw Failure{"張った面が面のボディになりませんでした。縁を描き直してください"};
+        *out=J(b.release());
+    });
+}
+
 int jc_extrude(const JcPlane* plane, const JcSegment* segments, const uint32_t* loop_lens, size_t loop_count,
                double from, double to, JcBrep** out)
 {
@@ -1034,7 +1156,7 @@ int jc_edges(const JcBrep* brep, JcEdge** out, size_t* count)
             }
             JcEdge o;
             o.f0 = uint32_t(face_index(faces, ef[0]));
-            o.f1 = uint32_t(face_index(faces, ef[1]));
+            o.f1 = ef.GetSize() == 1 ? UINT32_MAX : uint32_t(face_index(faces, ef[1]));
             put(o.a, a);
             put(o.b, c);
             o.convex = dot(in, nb) < 0 ? 1 : 0;
@@ -1222,7 +1344,7 @@ int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** po
             SmEdge* e = edges[i];
             SmTArray<SmFace*> ef;
             e->GetFaces(ef);
-            if (ef.GetSize() != 2 || ef[0] == ef[1] || splits_one_surface(e))
+            if ((ef.GetSize() != 2 && ef.GetSize() != 1) || (ef.GetSize() == 2 && (ef[0] == ef[1] || splits_one_surface(e))))
                 continue;
             const SmCurve* c = e->GetCurve();
             double t0 = 0, t1 = 0;
@@ -1235,7 +1357,7 @@ int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** po
             const int K = c->IsLinear(1e-9) ? 1 : 32;
             JcAnyEdge o;
             o.f0 = uint32_t(face_index(faces, ef[0]));
-            o.f1 = uint32_t(face_index(faces, ef[1]));
+            o.f1 = ef.GetSize() == 1 ? UINT32_MAX : uint32_t(face_index(faces, ef[1]));
             o.first = uint32_t(pts.size() / 3);
             o.count = uint32_t(K + 1);
             bool ok = true;
@@ -1263,7 +1385,7 @@ int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** po
             o.convex = 0;
             // 法線を求められなければ分からない(-1)。黙って角と答えない
             o.smooth = -1;
-            if (c->Evaluate(tm, 1, TRUE, pd) == SM_SUCCESS)
+            if (ef.GetSize() == 2 && c->Evaluate(tm, 1, TRUE, pd) == SM_SUCCESS)
             {
                 const SmPoint3d mid(pd[0].x, pd[0].y, pd[0].z);
                 const SmVector3d t = unit(pd[1]);
