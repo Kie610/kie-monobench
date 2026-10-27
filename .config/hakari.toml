@@ -37,6 +37,7 @@ workspace-members = [
     "kmb-expr",
     "kmb-format",
     "kmb-look",
+    "kmb-view-lines",
     "kmb-post",
     "kmb-toolpath",
 ]

@@ -2347,6 +2347,7 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-config",
  "kmb-core",
+ "kmb-drawing",
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
@@ -2681,6 +2682,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-drawing"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-view-lines",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-expr"
 version = "0.1.0"
 dependencies = [
@@ -2835,6 +2849,7 @@ dependencies = [
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
+ "kmb-view-lines",
  "kmb-workspace-hack",
  "log",
  "serde_json",
@@ -2975,6 +2990,7 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-contract",
  "kmb-core",
+ "kmb-drawing",
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
@@ -3505,6 +3521,13 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kmb-view-lines"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
 ]
 
 [[package]]

@@ -7,6 +7,7 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+cylinder_named_ends_are_arcs = "truck の回(円の辺の名前付き列挙がなく、網の折れ線へ戻す)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"
 gpu_edge_ids_pick_the_same_edges_as_the_cpu = "GPU の描画装置を作れない所(クラウドなど)"

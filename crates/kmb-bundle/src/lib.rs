@@ -67,6 +67,7 @@ pub fn all() -> Vec<Module> {
         kmb_scene::module(),
         kmb_config::module(),
         kmb_asm::module(),
+        kmb_drawing::module(),
         kmb_io_stl::module(),
         kmb_io_view::module(),
         kmb_io_render::module(),
