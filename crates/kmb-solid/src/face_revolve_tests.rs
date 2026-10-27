@@ -617,52 +617,52 @@ fn a_finer_approximated_revolve_outline_does_not_reuse_old_face_names() {
     let fine = kmb_cad::face_profile_with_tolerance(&*k, body, &names, 0.001).unwrap();
     if !old.approximated {
         assert_eq!(old, fine);
-        return;
-    }
-    let old_names: Vec<_> = old
-        .profile
-        .regions
-        .iter()
-        .flat_map(|r| &r.outer.edges)
-        .map(|e| e.name.clone())
-        .collect();
-    let fine_names: Vec<_> = fine
-        .profile
-        .regions
-        .iter()
-        .flat_map(|r| &r.outer.edges)
-        .map(|e| e.name.clone())
-        .collect();
-    assert!(old_names.iter().all(|n| !fine_names.contains(n)));
-    let old_body = k
-        .revolve(
-            &old.profile,
-            [0.0; 3],
-            [1.0, 0.0, 0.0],
-            std::f64::consts::TAU,
-            "reference",
-        )
-        .unwrap();
-    let new_body = k
-        .revolve(
-            &fine.profile,
-            [0.0; 3],
-            [1.0, 0.0, 0.0],
-            std::f64::consts::TAU,
-            "reference",
-        )
-        .unwrap();
-    let new_names = k.face_names(new_body).unwrap();
-    let old_side_faces: Vec<_> = k
-        .face_names(old_body)
-        .unwrap()
-        .into_iter()
-        .filter(|n| n.contains(":side:"))
-        .collect();
-    assert!(!old_side_faces.is_empty());
-    for name in old_side_faces {
-        assert!(!new_names.contains(&name));
-        let error = kmb_cad::face_profile(&*k, new_body, &[name]).unwrap_err();
-        assert!(error.contains("見つかりません"), "{error}");
+    } else {
+        let old_names: Vec<_> = old
+            .profile
+            .regions
+            .iter()
+            .flat_map(|r| &r.outer.edges)
+            .map(|e| e.name.clone())
+            .collect();
+        let fine_names: Vec<_> = fine
+            .profile
+            .regions
+            .iter()
+            .flat_map(|r| &r.outer.edges)
+            .map(|e| e.name.clone())
+            .collect();
+        assert!(old_names.iter().all(|n| !fine_names.contains(n)));
+        let old_body = k
+            .revolve(
+                &old.profile,
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                std::f64::consts::TAU,
+                "reference",
+            )
+            .unwrap();
+        let new_body = k
+            .revolve(
+                &fine.profile,
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                std::f64::consts::TAU,
+                "reference",
+            )
+            .unwrap();
+        let new_names = k.face_names(new_body).unwrap();
+        let old_side_faces: Vec<_> = k
+            .face_names(old_body)
+            .unwrap()
+            .into_iter()
+            .filter(|n| n.contains(":side:"))
+            .collect();
+        assert!(!old_side_faces.is_empty());
+        for name in old_side_faces {
+            assert!(!new_names.contains(&name));
+            let error = kmb_cad::face_profile(&*k, new_body, &[name]).unwrap_err();
+            assert!(error.contains("見つかりません"), "{error}");
+        }
     }
 }
