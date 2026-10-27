@@ -674,7 +674,31 @@ expect "操作の表示: Ctrl+Z 取り消す" exists
             let device = kmb_ui_mouse3d::Mouse3d::fake();
             device.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
             *screen.h.state_mut() = ws.with_mouse3d(device);
+            // 実際のキー入力を最後の描画フレームへ送り、押したままの札を撮る。
+            screen
+                .h
+                .input_mut()
+                .events
+                .push(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+            screen.h.input_mut().events.push(egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::CTRL,
+            });
+            // 行が増えた後の領域の大きさが揃ってから、下端を合わせた写真を描く。
+            screen.h.step();
             screen.write(&dir, &format!("{stem}-after"));
+            assert!(
+                screen
+                    .h
+                    .query_by_label("操作の表示: Ctrl+Z 取り消す")
+                    .is_some()
+            );
+            assert!(screen.h.query_by_label("操作の表示: マウス 左").is_some());
+            assert!(screen.h.query_by_label("ドラッグ").is_some());
+            assert!(screen.h.query_by_label("ひねる").is_some());
             screen.h.drop_at(pos + egui::vec2(10.0, 0.0));
         }
     }

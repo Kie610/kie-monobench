@@ -506,7 +506,29 @@ impl Keycast {
                 _ => 1.0,
             })
             .fold(0.0f32, f32::max);
+        // 下端を固定する領域は、行の高さが変わるコマで先に測り直す。
+        // 寸法の指標だけを覚え、キーや操作名の控えは増やさない。
+        let geometry = egui::Id::new((
+            size.to_bits(),
+            view_rect.width().to_bits(),
+            rows.len(),
+            rows.iter()
+                .filter_map(|row| match row {
+                    Row::Mouse3d { axes, buttons } => {
+                        Some((axes.iter().filter(|v| **v != 0.0).count(), buttons.len()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>(),
+        ));
+        let resize = ctx.data_mut(|d| {
+            let id = egui::Id::new("input_keycast_geometry");
+            let previous = d.get_temp::<egui::Id>(id);
+            d.insert_temp(id, geometry);
+            previous.is_some_and(|previous| previous != geometry)
+        });
         egui::Area::new(egui::Id::new("input_keycast"))
+            .sizing_pass(resize)
             .order(egui::Order::Foreground)
             .interactable(false)
             .constrain_to(view_rect)
@@ -1652,6 +1674,41 @@ mod tests {
         h.drop_at(egui::pos2(30.0, 290.0));
         h.run_steps(2);
         assert_eq!(*h.state(), 1);
+    }
+
+    #[test]
+    fn a_new_key_row_stays_above_the_axis_on_its_first_frame() {
+        use egui_kittest::kittest::Queryable;
+        for scale in [1.0, 2.5] {
+            let mut ws = crate::Workspace::new(
+                kmb_samples::reference_document(),
+                None,
+                kmb_bundle::modules(),
+            );
+            ws.win.layout.keycast.enabled = true;
+            ws.win.layout.appearance.text_scale = scale;
+            let mut h = egui_kittest::Harness::builder()
+                .with_size(Vec2::new(1280.0, 1000.0))
+                .build_ui_state(|ui, ws: &mut crate::Workspace| ws.ui(ui), ws);
+            h.run_steps(4);
+            assert!(h.query_by_label("操作の表示: マウス").is_some());
+            h.input_mut()
+                .events
+                .push(key(Key::F8, Modifiers::NONE, true));
+            h.step();
+            let limit = h.state().win.view_rect.bottom() - 75.0;
+            if let Some(mouse) = h.query_by_label("操作の表示: マウス") {
+                let mouse = mouse.rect();
+                assert!(
+                    mouse.bottom() <= limit,
+                    "字の倍率 {scale}: 新しい行の最初のコマも軸の上に収める: {mouse:?}, 下端の限度 {limit}"
+                );
+            }
+            // 領域を測るコマは描かず、次のコマには新しい行を正しい位置で出す。
+            h.step();
+            assert!(h.query_by_label("操作の表示: F8").is_some());
+            assert!(h.get_by_label("操作の表示: マウス").rect().bottom() <= limit);
+        }
     }
 
     fn check_context_menu_name(item: &str) {
