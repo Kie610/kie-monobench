@@ -247,3 +247,80 @@ fn a_script_enters_pattern_expressions_using_the_document_unit() {
     }
     kmb_core::set_display_unit(kmb_core::LengthUnit::Mm);
 }
+
+fn pattern_panel() -> Harness<
+    'static,
+    (
+        crate::view::Editor,
+        kmb_sketch::Sketch,
+        kmb_sketch::Solution,
+    ),
+> {
+    let mut sketch = kmb_sketch::Sketch::default();
+    let point = sketch.add_point(10.0, 0.0);
+    sketch.add_constraint(kmb_sketch::ConstraintKind::Fix { point });
+    sketch
+        .add_circular_pattern(kmb_sketch::CircularPattern {
+            entities: vec![point],
+            center: kmb_sketch::PatternCenter::At([0.0, 0.0]),
+            count: 3,
+            spacing: kmb_sketch::AngularSpacing::Total,
+            angle: std::f64::consts::TAU,
+            suppressed: vec![],
+        })
+        .unwrap();
+    let values = kmb_sketch::dimension_values(&sketch, &|_| None).unwrap();
+    let solution = kmb_sketch::solve(&sketch, &values).unwrap();
+    let mut editor = crate::view::Editor::default();
+    editor.selection.insert(point);
+    Harness::builder()
+        .with_size(egui::vec2(600.0, 400.0))
+        .build_ui_state(
+            |ui, (editor, sketch, solution)| {
+                assert!(
+                    crate::pattern_ui::panel(ui, editor, sketch, solution, &|_| None).is_none()
+                );
+            },
+            (editor, sketch, solution),
+        )
+}
+
+#[test]
+fn escape_outside_pattern_input_preserves_errors_and_preview() {
+    let mut h = pattern_panel();
+    h.run();
+    let (editor, sketch, solution) = h.state_mut();
+    editor.dim_error = Some("寸法の入力を確かめてください".into());
+    editor.pattern_ghost = Some((
+        sketch.patterns[0].def.clone(),
+        sketch.clone(),
+        solution.clone(),
+    ));
+    assert!(editor.pattern_input.is_none());
+    h.key_press(egui::Key::Escape);
+    h.step();
+    assert_eq!(
+        h.state().0.dim_error.as_deref(),
+        Some("寸法の入力を確かめてください")
+    );
+    assert!(h.state().0.pattern_ghost.is_some());
+}
+
+#[test]
+fn escape_cancels_the_active_pattern_input_and_its_preview() {
+    let mut h = pattern_panel();
+    h.run();
+    let (editor, sketch, solution) = h.state_mut();
+    let pattern = &sketch.patterns[0];
+    editor.pattern_input = Some((
+        pattern.id,
+        kmb_sketch::PatternExpressions::from_def(&pattern.def),
+    ));
+    editor.dim_error = Some("パターンの数を確かめてください".into());
+    editor.pattern_ghost = Some((pattern.def.clone(), sketch.clone(), solution.clone()));
+    h.key_press(egui::Key::Escape);
+    h.step();
+    assert!(h.state().0.pattern_input.is_none());
+    assert!(h.state().0.pattern_ghost.is_none());
+    assert!(h.state().0.dim_error.is_none());
+}
