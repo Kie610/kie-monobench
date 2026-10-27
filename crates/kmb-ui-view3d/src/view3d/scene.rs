@@ -805,6 +805,9 @@ pub(super) fn fit_look(l: &kmb_render::Look, mesh: &Mesh) -> kmb_render::Look {
 #[derive(Default)]
 pub(super) struct PickTree {
     pub(super) tree: std::sync::OnceLock<crate::pick_bvh::Bvh>,
+    /// 網の点を囲む箱(視線が通らないボディは木を作らずに飛ばす。同じ部品を何百個置いても、
+    /// 初めて拾う時に全部の木を作らない)
+    pub(super) bounds: std::sync::OnceLock<([f32; 3], [f32; 3])>,
     pub(super) started: std::sync::atomic::AtomicBool,
 }
 
@@ -834,6 +837,20 @@ impl SceneBody {
 
     /// 視線と交わる三角形ごとに `hit` を呼ぶ(木が出来ていれば木を通し、無ければ全部調べる)。
     pub(super) fn ray(&self, o: [f32; 3], d: [f32; 3], t_min: f32, hit: impl FnMut(u32, f32)) {
+        let (min, max) = *self.bvh.bounds.get_or_init(|| {
+            self.mesh.positions.iter().fold(
+                ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]),
+                |(lo, hi), p| {
+                    (
+                        [0, 1, 2].map(|k| lo[k].min(p[k])),
+                        [0, 1, 2].map(|k| hi[k].max(p[k])),
+                    )
+                },
+            )
+        });
+        if !crate::pick_bvh::ray_hits_box(min, max, o, d, t_min) {
+            return;
+        }
         match self.bvh() {
             Some(t) => t.ray(&self.mesh, o, d, t_min, hit),
             None => crate::pick_bvh::Bvh::ray_all(&self.mesh, o, d, t_min, hit),
@@ -896,13 +913,7 @@ pub fn build_meshes_at(
     bodies: &[(FeatureId, ShapeHandle)],
     tolerance: f64,
 ) -> Vec<(FeatureId, Mesh)> {
-    if (tolerance - kmb_measure::MESH_TOLERANCE).abs() < 1e-12 {
-        return build_meshes(kernel, bodies);
-    }
-    bodies
-        .iter()
-        .filter_map(|(f, h)| Some((*f, kernel.mesh(*h, tolerance).ok()?)))
-        .collect()
+    kmb_measure::meshes_at(kernel, bodies, tolerance)
 }
 
 /// 測る計算は、表示しているボディの網で測る。
