@@ -299,6 +299,11 @@ impl Section {
             .ok_or_else(|| EvalError::InvalidData("輪郭の断面にはスケッチを選んでください".into()))
     }
     fn point(&self) -> Result<&PointRef, EvalError> {
+        if self.profile.is_some() {
+            return Err(EvalError::InvalidData(
+                "点の断面には輪郭を同時に指定できません".into(),
+            ));
+        }
         self.point
             .as_ref()
             .ok_or_else(|| EvalError::InvalidData("端の点を選んでください".into()))

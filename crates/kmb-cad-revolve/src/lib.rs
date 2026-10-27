@@ -509,7 +509,7 @@ impl Revolve {
                 "回転軸が輪郭の平面に垂直です。輪郭の平面に沿う軸を選んでください".into(),
             ));
         }
-        // 軸は輪郭と同じ平面に置く(2026-10-18 Kie。平面から外れた軸で回すと、思わぬ形になる)
+        // 軸は輪郭と同じ平面に置く。平面から外れた軸で回すと、意図しない形になる。
         if !kmb_cad::axis::on_plane(&plane, origin, dir) {
             return Err(EvalError::InvalidData(NOT_ON_PLANE.into()));
         }
@@ -880,7 +880,16 @@ fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
 
 /// 選んだ面かスケッチの領域を、作る操作と手順で同じように読む。
 fn chosen_source(cx: &Context<'_>) -> Result<(Revolve, k::Profile), String> {
-    if cx.arg("faces").is_some() || (cx.arg("regions").is_none() && !cx.picked_faces().is_empty()) {
+    if cx.arg("profile").is_some() && cx.arg("faces").is_some() {
+        return Err(
+            "輪郭と面は同時に指定できません。profile と faces のどちらかを選んでください".into(),
+        );
+    }
+    if cx.arg("faces").is_some()
+        || (cx.arg("profile").is_none()
+            && cx.arg("regions").is_none()
+            && !cx.picked_faces().is_empty())
+    {
         let faces = match cx.arg("faces") {
             Some(v) => Field::info("faces", "").refs(&json!({"faces": v})),
             None => cx

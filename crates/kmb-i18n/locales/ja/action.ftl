@@ -98,6 +98,7 @@ action-cad-import-step = STEP を読み込む…
 action-cad-import-step-tip = 他の CAD で作った部品を読み込む。穴やポケットを足し、加工と計測に使える
 action-cad-loft = ロフト
 action-cad-loft-tip = 押してから断面(別の平面に描いた輪郭)をつなぐ順にクリックし、ガイドレールの線を選ぶ(無ければ Enter)
+action-cad-loft-point = 端の点を選び直す
 action-cad-measure = 体積を計測
 action-cad-measure-tip = 選んでいるボディ(なければ最後のボディ)の体積・表面積・外形
 action-cad-mirror-on-face = この面でミラー

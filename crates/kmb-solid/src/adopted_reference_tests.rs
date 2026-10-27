@@ -127,8 +127,18 @@ fn a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized() {
                 !long_edge_at(0.0, 5.0),
                 "{kind} 幅{width}: 手前の元の縁が残る"
             );
+            let both_ends_at = |y: f64, z: f64| {
+                [0.0, width].into_iter().all(|x| {
+                    rounded_edges.iter().flat_map(|e| [e.a, e.b]).any(|p| {
+                        (p[0] - x).abs() < 1e-5
+                            && (p[1] - y).abs() < 1e-5
+                            && (p[2] - z).abs() < 1e-5
+                    })
+                })
+            };
+            // 接線でつながる縁は角の辺一覧に出ないので、両端の点で位置を確かめる。
             assert!(
-                long_edge_at(0.0, 6.0) && long_edge_at(1.0, 5.0),
+                both_ends_at(0.0, 6.0) && both_ends_at(1.0, 5.0),
                 "{kind} 幅{width}: 丸めた縁が手前にない: {rounded_edges:?}"
             );
             assert!(
