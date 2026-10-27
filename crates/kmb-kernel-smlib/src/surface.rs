@@ -284,15 +284,16 @@ pub(super) fn patch(
                 c.axis = arc.axis;
                 c.sweep = arc.sweep;
             }
-            BoundaryCurve::BodyEdge {
-                shape,
-                faces,
-                point,
-            } => {
+            BoundaryCurve::BodyEdge { shape, faces, .. } => {
                 let sh = store.get(*shape)?;
                 c.kind = 3;
                 c.brep = sh.brep.raw();
-                c.center = *point;
+                // 共有する端点では辺を区別できないため、名前で解いた現在の辺の内部点を使う。
+                c.center = if pts.len() == 2 {
+                    k::scale(k::add(pts[0], pts[1]), 0.5)
+                } else {
+                    pts[pts.len() / 2]
+                };
                 c.f0 = sh
                     .names
                     .iter()
@@ -762,6 +763,144 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("長さ 0")
+        );
+    }
+    #[test]
+    fn a_named_sheet_rim_follows_a_move_with_an_old_point_hint() {
+        let kernel = SmlibKernel::new();
+        let sheet = kernel.planar_sheet(&rectangle(), "source").unwrap();
+        let moved = kernel
+            .transform(sheet, &k::translation([0., 0., 5.]), "")
+            .unwrap();
+        let hints = [[5., 0., 0.], [10., 5., 0.], [5., 10., 0.], [0., 5., 0.]];
+        let boundary: Vec<_> = (0..4)
+            .map(|i| BoundarySegment {
+                name: format!("e{i}"),
+                curve: BoundaryCurve::BodyEdge {
+                    shape: moved,
+                    faces: ["source:face".into(), format!("source:rim:e{i}")],
+                    point: hints[i],
+                },
+            })
+            .collect();
+        let patch = kernel.patch_sheet(&boundary, "patch").unwrap();
+        let (min, max) = kernel.bounds(patch).unwrap();
+        // 箱はカーネルの許容差だけ広がるため、縁の許容差の内側で位置を確かめる。
+        assert!(
+            min.into_iter()
+                .zip([0., 0., 5.])
+                .chain(max.into_iter().zip([10., 10., 5.]))
+                .all(|(actual, expected)| (actual - expected).abs() < GAP)
+        );
+        assert!(
+            (kernel
+                .faces(patch)
+                .unwrap()
+                .iter()
+                .map(|f| f.area)
+                .sum::<f64>()
+                - 100.)
+                .abs()
+                < 1e-6
+        );
+        let names: HashSet<_> = kernel
+            .curve_edges(patch)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.faces[1].clone())
+            .collect();
+        assert_eq!(names, (0..4).map(|i| format!("patch:rim:e{i}")).collect());
+        let round_profile = Profile {
+            plane: k::Plane::XY,
+            regions: vec![k::Region {
+                outer: ProfileLoop {
+                    edges: vec![ProfileEdge {
+                        name: "circle".into(),
+                        segment: Segment::Circle {
+                            center: [0., 0.],
+                            radius: 5.,
+                        },
+                        reversed: false,
+                    }],
+                },
+                holes: vec![],
+            }],
+        };
+        let round = kernel.planar_sheet(&round_profile, "round").unwrap();
+        let round = kernel
+            .transform(round, &k::translation([3., 4., 5.]), "")
+            .unwrap();
+        let disc = kernel
+            .patch_sheet(
+                &[BoundarySegment {
+                    name: "circle".into(),
+                    curve: BoundaryCurve::BodyEdge {
+                        shape: round,
+                        faces: ["round:face".into(), "round:rim:circle".into()],
+                        point: [5., 0., 0.],
+                    },
+                }],
+                "disc",
+            )
+            .unwrap();
+        assert!(
+            (kernel
+                .faces(disc)
+                .unwrap()
+                .iter()
+                .map(|f| f.area)
+                .sum::<f64>()
+                - std::f64::consts::PI * 25.)
+                .abs()
+                < 0.01
+        );
+        for edge in kernel.curve_edges(disc).unwrap() {
+            assert_eq!(edge.faces[1], "disc:rim:circle");
+            assert!(edge.curve.iter().all(|p| (p[2] - 5.).abs() < GAP
+                && (((p[0] - 3.).powi(2) + (p[1] - 4.).powi(2)).sqrt() - 5.).abs() < GAP));
+        }
+    }
+
+    #[test]
+    fn a_named_solid_edge_follows_dimensions_with_an_old_point_hint() {
+        let kernel = SmlibKernel::new();
+        let mut profile = rectangle();
+        for edge in &mut profile.regions[0].outer.edges {
+            if let Segment::Line { a, b } = &mut edge.segment {
+                a[0] *= 2.;
+                b[0] *= 2.;
+            }
+        }
+        let resized = kernel.extrude(&profile, 0., 7., "source").unwrap();
+        let hints = [[5., 0., 2.], [10., 5., 2.], [5., 10., 2.], [0., 5., 2.]];
+        let boundary: Vec<_> = (0..4)
+            .map(|i| BoundarySegment {
+                name: format!("e{i}"),
+                curve: BoundaryCurve::BodyEdge {
+                    shape: resized,
+                    faces: ["source:end".into(), format!("source:side:e{i}")],
+                    point: hints[i],
+                },
+            })
+            .collect();
+        let patch = kernel.patch_sheet(&boundary, "patch").unwrap();
+        let (min, max) = kernel.bounds(patch).unwrap();
+        assert!(
+            min.into_iter()
+                .zip([0., 0., 7.])
+                .chain(max.into_iter().zip([20., 10., 7.]))
+                .all(|(actual, expected)| (actual - expected).abs() < GAP)
+        );
+        assert!(
+            (kernel
+                .faces(patch)
+                .unwrap()
+                .iter()
+                .map(|f| f.area)
+                .sum::<f64>()
+                - 200.)
+                .abs()
+                < 1e-6
         );
     }
 }
