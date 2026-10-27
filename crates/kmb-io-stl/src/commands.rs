@@ -24,6 +24,8 @@ pub const EXPORT_OBJ: &str = "io.export_obj";
 /// 書き出しの操作。
 pub struct ExportCommands;
 
+type NamedBody = (String, FeatureId, ShapeHandle);
+
 /// 書き出すボディと、その名前(ブラウザと同じ。同じ名前が重なれば後ろに (2) などを付ける)。
 fn named_bodies(cx: &Context<'_>) -> Result<Vec<(String, ShapeHandle)>, String> {
     Ok(named_body_ids(cx)?
@@ -33,7 +35,7 @@ fn named_bodies(cx: &Context<'_>) -> Result<Vec<(String, ShapeHandle)>, String> 
 }
 
 /// [`named_bodies`] に、ボディの機能の ID も添えて。
-fn named_body_ids(cx: &Context<'_>) -> Result<Vec<(String, FeatureId, ShapeHandle)>, String> {
+fn named_body_ids(cx: &Context<'_>) -> Result<Vec<NamedBody>, String> {
     let hs = cx.export_bodies()?;
     // 番号は隠したボディも数える(ブラウザの「ボディN」と同じにする)
     let all = cx.visible_bodies();
@@ -58,6 +60,29 @@ fn named_body_ids(cx: &Context<'_>) -> Result<Vec<(String, FeatureId, ShapeHandl
     Ok(out)
 }
 
+/// 厚みの無い面は印刷用の閉じた網へ入れず、除外した数を知らせる。
+fn printable_bodies(cx: &Context<'_>) -> Result<(Vec<NamedBody>, Vec<String>), kmb_core::Problem> {
+    let mut bodies = Vec::new();
+    let mut omitted = 0;
+    for b in named_body_ids(cx)? {
+        if cx.kernel.body_kind(b.2).map_err(|e| e.to_string())? == kmb_core::kernel::BodyKind::Sheet
+        {
+            omitted += 1;
+        } else {
+            bodies.push(b);
+        }
+    }
+    let warnings = if omitted > 0 {
+        let warning =
+            format!("面のボディ {omitted} 個は書き出しませんでした(厚みを付けると書き出せます)");
+        log::warn!("{warning}");
+        vec![warning]
+    } else {
+        Vec::new()
+    };
+    Ok((bodies, warnings))
+}
+
 /// 引数 `each` が真か(ボディごとのファイルに分ける)。
 fn each(cx: &Context<'_>, id: &str) -> bool {
     id == EXPORT_STL_EACH
@@ -80,14 +105,15 @@ fn stl_bytes(meshes: &[kmb_core::Mesh], ascii: bool) -> Result<Vec<u8>, String> 
 fn stl_each(cx: &Context<'_>, tol: f64, ascii: bool) -> Result<Outcome, kmb_core::Problem> {
     let mut files = Vec::new();
     let mut triangles = 0;
-    for (name, h) in named_bodies(cx)? {
+    let (bodies, warnings) = printable_bodies(cx)?;
+    for (name, _, h) in bodies {
         let m = cx.kernel.mesh(h, tol).map_err(|e| e.to_string())?;
         triangles += m.triangles.len();
         files.push((format!("{name}.stl"), stl_bytes(&[m], ascii)?));
     }
     log::info!("STL をボディごとに {} 個書き出す", files.len());
     Ok(Outcome::Files {
-        info: json!({"bodies": files.len(), "triangles": triangles}),
+        info: json!({"bodies": files.len(), "triangles": triangles,"warnings":warnings}),
         files,
     })
 }
@@ -118,10 +144,10 @@ fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
     if each(cx, id) {
         return stl_each(cx, tol, ascii);
     }
-    let meshes = cx
-        .export_bodies()?
+    let (bodies, warnings) = printable_bodies(cx)?;
+    let meshes = bodies
         .iter()
-        .map(|h| cx.kernel.mesh(*h, tol))
+        .map(|(_, _, h)| cx.kernel.mesh(*h, tol))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     let out = stl_bytes(&meshes, ascii)?;
@@ -129,7 +155,7 @@ fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
     Ok(Outcome::File {
         suffix: "形状.stl".into(),
         contents: out,
-        info: json!({"bodies": meshes.len(), "triangles": triangles}),
+        info: json!({"bodies": meshes.len(), "triangles": triangles,"warnings":warnings}),
     })
 }
 
@@ -200,9 +226,10 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         return Err("許容差は 0.0001〜1 mm にしてください".into());
     }
     let unit = unit_arg(cx)?;
-    let bodies = named_bodies(cx)?
+    let (bodies, warnings) = printable_bodies(cx)?;
+    let bodies = bodies
         .into_iter()
-        .map(|(name, h)| cx.kernel.mesh(h, tol).map(|mesh| (name, mesh)))
+        .map(|(name, _, h)| cx.kernel.mesh(h, tol).map(|mesh| (name, mesh)))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     let bytes = |b: &[(String, kmb_core::Mesh)]| {
@@ -210,7 +237,7 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         crate::write_obj(b, unit, &mut out).map_err(|e| e.to_string())?;
         Ok::<_, String>(out)
     };
-    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name()});
+    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name(), "warnings": warnings});
     if each(cx, EXPORT_OBJ) {
         let files = bodies
             .iter()
@@ -247,7 +274,8 @@ fn threemf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let unit = unit_arg(cx)?;
     let meta = meta_3mf(cx);
     let mut bodies = Vec::new();
-    for (name, id, h) in named_body_ids(cx)? {
+    let (printable, warnings) = printable_bodies(cx)?;
+    for (name, id, h) in printable {
         let mesh = cx.kernel.mesh(h, tol).map_err(|e| e.to_string())?;
         let (material, color) = body_color(cx, id);
         bodies.push(crate::Body3mf {
@@ -259,7 +287,7 @@ fn threemf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         });
     }
     let triangles: usize = bodies.iter().map(|b| b.mesh.triangles.len()).sum();
-    let info = json!({"bodies": bodies.len(), "triangles": triangles, "unit": unit.name()});
+    let info = json!({"bodies": bodies.len(), "triangles": triangles, "unit": unit.name(),"warnings":warnings});
     log::info!(
         "3MF を書き出す: ボディ {} 個、三角形 {triangles} 個、単位 {}",
         bodies.len(),
@@ -403,6 +431,118 @@ impl Extension for ExportCommands {
             EXPORT_OBJ => Some(obj(cx)),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod sheet_tests {
+    use super::*;
+    use kmb_core::{
+        EvalCtx, EvalError, Feature, InputRef, Kernel, KernelError, Mesh, Outputs, Value,
+    };
+    struct Body(u64);
+    impl Feature for Body {
+        fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+            Ok(vec![])
+        }
+        fn evaluate(&self, _: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+            Ok([("body".into(), Value::Shape(ShapeHandle(self.0)))].into())
+        }
+    }
+    struct Bodies;
+    impl Kernel for Bodies {
+        fn name(&self) -> &str {
+            "export-test"
+        }
+        fn body_kind(&self, h: ShapeHandle) -> Result<kmb_core::kernel::BodyKind, KernelError> {
+            Ok(if h.0 == 2 {
+                kmb_core::kernel::BodyKind::Sheet
+            } else {
+                kmb_core::kernel::BodyKind::Solid
+            })
+        }
+        fn face_names(&self, _: ShapeHandle) -> Result<Vec<String>, KernelError> {
+            Ok(vec![])
+        }
+        fn mesh(&self, h: ShapeHandle, _: f64) -> Result<Mesh, KernelError> {
+            assert_eq!(h.0, 1, "面のボディを印刷の網に入れない");
+            Ok(Mesh {
+                positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+                triangles: vec![[0, 1, 2]],
+                triangle_faces: vec![0],
+                face_names: vec!["face".into()],
+                ..Default::default()
+            })
+        }
+        fn export_step_named(
+            &self,
+            shapes: &[ShapeHandle],
+            _: &[String],
+            _: &str,
+        ) -> Result<String, KernelError> {
+            Ok(format!("bodies {}", shapes.len()))
+        }
+    }
+    #[test]
+    fn mesh_export_paths_omit_sheets_and_report_the_count_while_step_keeps_them() {
+        let mut reg = kmb_core::Registry::new();
+        reg.register_described(
+            kmb_core::Descriptor::new("test.body@1", kmb_core::category::SOLID, "ボディ"),
+            |d| Ok(Box::new(Body(d["shape"].as_u64().unwrap()))),
+        );
+        let mut doc = kmb_core::Document::new();
+        for n in 1..=2 {
+            let id = doc.alloc_feature_id();
+            doc.apply(kmb_core::Transaction::new(
+                "足す",
+                vec![kmb_core::Op::InsertFeature {
+                    index: None,
+                    entry: kmb_core::FeatureEntry {
+                        id,
+                        type_id: "test.body@1".into(),
+                        name: format!("ボディ{n}"),
+                        data: json!({"shape":n}),
+                        suppressed: false,
+                        pin_bodies: false,
+                    },
+                }],
+            ))
+            .unwrap();
+        }
+        let kernel: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(Bodies);
+        let report = doc.recompute(&reg, kernel.as_ref());
+        assert_eq!(report.error_count(), 0);
+        for each in [false, true] {
+            let args = json!({"each":each});
+            let cx = Context {
+                args: &args,
+                ..Context::new(doc.data(), &report, &reg, &kernel)
+            };
+            for outcome in [
+                stl(&cx, EXPORT_STL).unwrap(),
+                threemf(&cx).unwrap(),
+                obj(&cx).unwrap(),
+            ] {
+                let info = match outcome {
+                    Outcome::File { info, .. } => info,
+                    Outcome::Files { info, files } => {
+                        assert_eq!(files.len(), 1);
+                        info
+                    }
+                    _ => panic!("書き出しの結果"),
+                };
+                assert_eq!(info["bodies"], 1);
+                assert_eq!(
+                    info["warnings"],
+                    json!(["面のボディ 1 個は書き出しませんでした(厚みを付けると書き出せます)"])
+                );
+            }
+        }
+        let cx = Context::new(doc.data(), &report, &reg, &kernel);
+        let Outcome::File { info, .. } = step(&cx, EXPORT_STEP).unwrap() else {
+            panic!("STEP の結果");
+        };
+        assert_eq!(info["bodies"], 2);
     }
 }
 

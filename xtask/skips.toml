@@ -7,6 +7,11 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+one_curve_whole_output_is_explicit_and_refuses_an_added_second_curve = "truck の回(面のボディを作る口が未対応)"
+planar_surface_follows_dimensions_and_survives_document_round_trip = "truck の回(面のボディを作る口が未対応)"
+spatial_sketch_lines_form_a_sheet_and_invalid_wire_reference_stops = "truck の回(面のボディを作る口が未対応)"
+a_body_edge_loop_is_preserved_and_older_solid_document_is_unchanged = "truck の回(面のボディを作る口が未対応)"
+reordering_the_same_number_of_sketch_lines_keeps_the_selected_entities = "truck の回(面のボディを作る口が未対応)"
 a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized = "truck の回(平面での分割に対応していない)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"

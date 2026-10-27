@@ -315,6 +315,20 @@ public:
     // 立体ごとに MANIFOLD_SOLID_BREP か BREP_WITH_VOIDS を書き、その番号を返す
     std::vector<int> solids(const std::string& name)
     {
+        if (brep_->IsSheet())
+        {
+            std::map<const SmShell*, std::vector<int>> groups;
+            for (ULONG f=0;f<faces_.GetSize();++f)
+            {
+                const SmFaceuse* use=faces_[f]->GetUpwardFaceuse();
+                if (!use || !use->GetShell()) throw StepFailure{"面のボディの殻が見つかりません"};
+                groups[use->GetShell()].push_back(face(int(f),use));
+            }
+            std::vector<int> shells;
+            for (const auto& group:groups)
+                shells.push_back(w_.add("OPEN_SHELL(''," + refs(group.second) + ")"));
+            return {w_.add("SHELL_BASED_SURFACE_MODEL(" + text(name) + "," + refs(shells) + ")")};
+        }
         // 殻の番号は領域の順に付ける
         std::unordered_map<const SmShell*, int> sidx;
         std::vector<std::vector<int>> region_shells(regions_.GetSize());
@@ -853,8 +867,10 @@ std::string export_step(const JcBrep* const* breps, const char* const* names, si
         throw StepFailure{"STEP の書き出し: 書く立体がありません"};
     std::vector<int> rep_items{origin};
     rep_items.insert(rep_items.end(), items.begin(), items.end());
-    const int rep =
-        w.add("ADVANCED_BREP_SHAPE_REPRESENTATION(" + text(prod) + "," + refs(rep_items) + "," + ref(rctx) + ")");
+    bool sheets=false;
+    for (size_t i=0;i<count;++i) sheets=sheets || reinterpret_cast<const SmBrep*>(breps[i])->IsSheet();
+    const std::string representation=sheets ? "SHAPE_REPRESENTATION(" : "ADVANCED_BREP_SHAPE_REPRESENTATION(";
+    const int rep = w.add(representation + text(prod) + "," + refs(rep_items) + "," + ref(rctx) + ")");
     w.add("SHAPE_DEFINITION_REPRESENTATION(" + ref(pshape) + "," + ref(rep) + ")");
 
     char stamp[32] = "";
