@@ -1082,9 +1082,45 @@ mod tests {
 
     #[test]
     fn legacy_thread_tap_drill_fits_the_internal_minor_diameter_limit() {
-        // ASME B1.1 の 1-12 UNF、内ねじ 2B の谷の径の上限(mm)。
-        let size = parse_size("1-12 UNF").unwrap();
-        assert!(size.tap_drill() <= 23.5712, "{}", size.tap_drill());
+        // ASME B1.1 の内ねじ 2B の谷の径の上限(mm)。下穴をこの径より大きくしない。
+        let limits = [
+            ("#4", [2.3851, 2.4587]),
+            ("#5", [2.6975, 2.7407]),
+            ("#6", [2.8956, 3.0226]),
+            ("#8", [3.5306, 3.6068]),
+            ("#10", [3.9370, 4.1656]),
+            ("#12", [4.5974, 4.7244]),
+            ("1/4", [5.2578, 5.5880]),
+            ("5/16", [6.7310, 7.0358]),
+            ("3/8", [8.1534, 8.6360]),
+            ("7/16", [9.5504, 10.0330]),
+            ("1/2", [11.0236, 11.6078]),
+            ("9/16", [12.4460, 13.0810]),
+            ("5/8", [13.8684, 14.6812]),
+            ("3/4", [16.8402, 17.6784]),
+            ("7/8", [19.7612, 20.6502]),
+            ("1", [22.6060, 23.5712]),
+            ("1-1/8", [25.3492, 26.7462]),
+            ("1-1/4", [28.5242, 29.9212]),
+            ("1-3/8", [31.1150, 33.0962]),
+            ("1-1/2", [34.2900, 36.2712]),
+        ];
+        let mut outside = Vec::new();
+        for (nominal, maximum) in limits {
+            let row = UNIFIED.iter().find(|r| r.nominal == nominal).unwrap();
+            for (i, max) in maximum.into_iter().enumerate() {
+                let name = format!(
+                    "{nominal}-{} {}",
+                    row.tpi[i],
+                    if i == 0 { "UNC" } else { "UNF" }
+                );
+                let size = parse_size(&name).unwrap();
+                if size.tap_drill() > max {
+                    outside.push((name, size.tap_drill(), max));
+                }
+            }
+        }
+        assert!(outside.is_empty(), "{outside:?}");
     }
 
     #[test]
