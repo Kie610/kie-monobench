@@ -260,6 +260,22 @@ pub fn refresh_projections(sketch: &mut Sketch, refs: &[RefItem]) -> Vec<crate::
     lost
 }
 
+/// 投影の固定目標と寸法を替え、更新前の形から近い解へ付いて行く。
+/// 形を保って解けなければ理由を返し、渡されたスケッチを変更しない。
+pub fn refresh_projections_with_values(
+    sketch: &mut Sketch,
+    refs: &[RefItem],
+    values: &std::collections::HashMap<crate::ConstraintId, f64>,
+) -> Result<Vec<crate::EntityId>, String> {
+    let before = sketch.clone();
+    let lost = refresh_projections(sketch, refs);
+    if let Err(reason) = crate::solver::follow_projection_targets(&before, sketch, values) {
+        *sketch = before;
+        return Err(reason);
+    }
+    Ok(lost)
+}
+
 fn point_of(sketch: &Sketch, id: crate::EntityId) -> P2 {
     match sketch.entity(id) {
         Some(Entity::Point { x, y, .. }) => [*x, *y],

@@ -1136,7 +1136,7 @@ impl FeatureEditor for SketchEditor {
         let title = format!(
             "{} ・ {place} ・ {}",
             entry.name,
-            view::status_text(&solution)
+            view::status_text(&sketch, &solution)
         );
         self.editor.feature = Some(entry.id);
         // 前にできたボディを描く。3D の視点でも平らな図(正面の図)でも描く(ブラウザの目で隠した物は

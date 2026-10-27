@@ -3,7 +3,9 @@
 //! ここの [`selected_sketch`]・[`insert_file`] を使う。
 
 use crate::{Imported, SKETCH, Sketch, SketchPlane};
-use kmb_core::{Action, Context, Edit, Extension, Gesture, Handle, HandleChoice, Outcome, Place};
+use kmb_core::{
+    Action, Context, Edit, Extension, Gesture, Handle, HandleChoice, Outcome, Payload, Place,
+};
 
 pub const ADD_SKETCH: &str = "cad.add.sketch";
 pub const SKETCH_ON_FACE: &str = "cad.sketch_on_face";
@@ -300,6 +302,9 @@ pub(crate) fn status_text(s: &crate::Solution) -> String {
 
 impl Extension for SketchCommands {
     fn describe(&self, v: &kmb_core::Value) -> Option<String> {
+        if let Some(reason) = crate::SolveDiagnosis::from_value(v) {
+            return Some(reason.0);
+        }
         if let Some(s) = crate::solution_of(v) {
             return Some(format!("スケッチ({})", status_text(&s)));
         }

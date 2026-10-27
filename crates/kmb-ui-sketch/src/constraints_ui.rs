@@ -535,7 +535,7 @@ pub(crate) fn constraint_panel(
             SolveStatus::OverConstrained { .. } => l.pal.warn,
             SolveStatus::Inconsistent { .. } => l.pal.err,
         };
-        let status = view::status_text(sol);
+        let status = view::status_text(sketch, sol);
         theme::chip(ui, &status, Some(color))
             .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
         theme::chip(

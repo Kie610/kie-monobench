@@ -94,6 +94,8 @@ pub enum At {
     Start,
     End,
     Var(usize),
+    /// ほかの硬い拘束で曲線上に置いた点の、x 座標の変数の位置。
+    Point(usize),
 }
 
 impl At {
@@ -102,6 +104,13 @@ impl At {
             At::Start => shape.domain().0,
             At::End => shape.domain().1,
             At::Var(i) => x[i],
+            At::Point(i) => match shape {
+                Shape::Arc { c, .. } => (x[i + 1] - c[1]).atan2(x[i] - c[0]),
+                Shape::Ellipse { c, u, v, .. } => {
+                    crate::curve::ellipse_angle(*c, *u, *v, [x[i], x[i + 1]])
+                }
+                _ => shape.closest([x[i], x[i + 1]]).0,
+            },
         }
     }
 }
@@ -317,8 +326,10 @@ impl CurveDef {
 
 impl At {
     pub fn vars(self, out: &mut Vec<usize>) {
-        if let At::Var(i) = self {
-            out.push(i);
+        match self {
+            At::Var(i) => out.push(i),
+            At::Point(i) => out.extend([i, i + 1]),
+            At::Start | At::End => {}
         }
     }
 }
@@ -998,11 +1009,26 @@ impl Near<'_> {
 
 /// 寸法の値などで解く。まず一度に解き、形の性質が変わったら少しずつ解き直す。
 pub fn solve_values(sys: &System) -> (Vec<f64>, usize) {
+    let (x, iterations, _) = values_following(sys);
+    (x, iterations)
+}
+
+/// 初期値から形を保って追える解だけを返す。追えなければ、一度に解いた候補と歩数を返す。
+pub fn solve_values_preserving(sys: &System) -> Result<(Vec<f64>, usize), (Vec<f64>, usize)> {
+    let (x, iterations, kept) = values_following(sys);
+    if kept {
+        Ok((x, iterations))
+    } else {
+        Err((x, iterations))
+    }
+}
+
+fn values_following(sys: &System) -> (Vec<f64>, usize, bool) {
     let eqs = &sys.equations;
     let x0 = &sys.x0;
     let (x1, f1, mut iterations) = gauss_newton(eqs, x0.clone(), None, None);
     if max_abs(&f1) <= RESIDUAL_OK && shape_kept(&sys.traits, x0, &x1, 0.0) {
-        return (x1, iterations);
+        return (x1, iterations, true);
     }
     // 保存されている位置の残差 f0 を、(1 - t) f0 として t = 0 → 1 で 0 へ近づける
     let f0 = residuals(eqs, x0);
@@ -1020,11 +1046,11 @@ pub fn solve_values(sys: &System) -> (Vec<f64>, usize) {
             h /= 2.0;
             if h < MIN_STEP {
                 // 形を保って解けないので、一度に解いた形を使う
-                return (x1, iterations);
+                return (x1, iterations, false);
             }
         }
     }
-    (x, iterations)
+    (x, iterations, true)
 }
 
 /// ドラッグ: `from`(前のフレームの解)から `target` へ、引いた変数を少しずつ動かして解く。
