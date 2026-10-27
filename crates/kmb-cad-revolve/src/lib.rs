@@ -444,7 +444,11 @@ impl Feature for Revolve {
             .into_iter()
             .map(|profile| self.recipe(ctx, profile))
             .collect::<Result<Vec<_>, _>>()?;
-        let parts = redundant::remove_contained(parts);
+        let parts = if self.source == Source::Faces {
+            redundant::remove_contained(parts)
+        } else {
+            parts
+        };
         let recipe = if parts.len() == 1 {
             parts.into_iter().next().unwrap()
         } else {
@@ -520,7 +524,7 @@ impl Revolve {
                 "回転軸が輪郭の平面に垂直です。輪郭の平面に沿う軸を選んでください".into(),
             ));
         }
-        // 軸は輪郭と同じ平面に置く。平面から外れた軸で回すと、意図しない形になる。
+        // 軸は輪郭と同じ平面に置く(2026-10-18 Kie。平面から外れた軸で回すと、思わぬ形になる)
         if !kmb_cad::axis::on_plane(&plane, origin, dir) {
             return Err(EvalError::InvalidData(NOT_ON_PLANE.into()));
         }
