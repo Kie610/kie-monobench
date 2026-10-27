@@ -102,6 +102,8 @@ pub struct BodyLine {
     pub states: Vec<BodyState>,
     /// ほかのボディに足された(結合・切り取りの道具に使われた)機能と、その先のボディ
     pub merged: Option<(FeatureId, BodyId)>,
+    /// 出現([`crate::Feature::instance_of`])なら、その元のボディ
+    pub of: Option<BodyId>,
 }
 
 /// ボディの系譜の表。再計算の最初に文書と登録だけから作り、[`crate::RecomputeReport::bodies`] に残す。
@@ -116,6 +118,8 @@ pub struct BodyTable {
     stale: BTreeMap<FeatureId, Vec<(BodyState, BodyState)>>,
     /// 付け替えの無い機能に渡す空の表
     none: BTreeMap<BodyState, BodyState>,
+    /// ボディを受け継ぐ機能の、受け継いだ形(解いた後)
+    heir: HashMap<FeatureId, BodyState>,
 }
 
 /// 入力がボディの出力(`body`・`part:n`)なら、その形。
@@ -176,6 +180,7 @@ impl BodyTable {
             let keeps = f.keeps();
             let kept = |s: &BodyState| keeps.contains(&s.0);
             if let Some(from) = inherit.filter(|s| !kept(s)) {
+                t.heir.insert(e.id, resolved(&from));
                 let body = t.line_of(&resolved(&from));
                 t.push(body, (e.id, "body".into()));
                 if !e.suppressed {
@@ -188,6 +193,16 @@ impl BodyTable {
                             line.merged = Some((e.id, body));
                         }
                     }
+                }
+            }
+            // 出現は新しいボディ。元は足されない(読むだけ)
+            if !e.suppressed
+                && let Some(src) = f.instance_of().as_ref().and_then(body_input)
+            {
+                let src = t.line_of(&resolved(&src));
+                let occ = t.line_of(&(e.id, "body".into()));
+                if let Some(line) = t.lines.get_mut(&occ) {
+                    line.of = Some(src);
                 }
             }
             if !map.is_empty() {
@@ -210,6 +225,7 @@ impl BodyTable {
             id,
             states: vec![s.clone()],
             merged: None,
+            of: None,
         });
         self.of.insert(s.clone(), id);
         id
@@ -249,6 +265,42 @@ impl BodyTable {
             }
         }
         None
+    }
+
+    /// ボディ `body` の、タイムラインの位置 `index` より前での最新の形(足された先へはたどらない)と、
+    /// その前に足された機能(足されていなければ `None`)。
+    pub(crate) fn own_tip_at(
+        &self,
+        body: BodyId,
+        index: usize,
+    ) -> Option<(BodyState, Option<FeatureId>)> {
+        let line = self.lines.get(&body)?;
+        let tip = line
+            .states
+            .iter()
+            .rev()
+            .find(|(f, _)| self.pos(*f) < index)
+            .cloned()?;
+        let merged = line
+            .merged
+            .filter(|(by, _)| self.pos(*by) < index)
+            .map(|(by, _)| by);
+        Some((tip, merged))
+    }
+
+    /// 形 `s` が属するボディ。
+    pub(crate) fn body_of_state(&self, s: &BodyState) -> Option<BodyId> {
+        self.of.get(s).copied()
+    }
+
+    /// ボディを受け継ぐ機能 `feature` が受け継いだ形(読む形に解いた後)。
+    pub(crate) fn heir_of(&self, feature: FeatureId) -> Option<&BodyState> {
+        self.heir.get(&feature)
+    }
+
+    /// 出現のボディ([`BodyLine::of`] のある物)。
+    pub fn occurrences(&self) -> impl Iterator<Item = &BodyLine> {
+        self.lines.values().filter(|l| l.of.is_some())
     }
 
     /// 機能 `feature` の出力 `body` が属するボディ。

@@ -202,6 +202,8 @@ pub struct Cache {
     entries: HashMap<FeatureId, Vec<(u64, Outputs, f64, Aliases)>>,
     /// 結果のほかに、カーネルに残させる形状(画面がまだ出している前の形。M27)
     held: HashSet<ShapeHandle>,
+    /// 前の再計算が出現の最後の形として置いた形(結果に入るがキャッシュに無い)
+    placed: HashSet<ShapeHandle>,
 }
 
 impl Cache {
@@ -236,6 +238,7 @@ impl Cache {
                 _ => None,
             })
             .chain(self.held.iter().copied())
+            .chain(self.placed.iter().copied())
             .collect()
     }
 
@@ -393,6 +396,7 @@ pub(crate) fn run(
     let active = data.active_len();
     let bodies = crate::BodyTable::build(data, registry);
     let mut aliases = crate::FaceAliases::default();
+    let mut placing = crate::occurrence::Placing::new(&bodies);
 
     // 別のスレッドで計算を待つ機能(互いに依存しない、形を作らない種類)。依存する機能か、
     // 形を作る機能が来たら、先に計算し終える(結果は機能の順に並べるので、順に計算した時と同じ)
@@ -411,8 +415,10 @@ pub(crate) fn run(
         let t = Instant::now();
         // 同時に計算できる種類なら、組み立てて入力を調べる(待っている機能を使うなら、先に済ませる)
         // (組み立てや入力で誤る・panic する時は、1 つずつの計算に任せて誤りを記録する)
+        // (出現のある文書は、出現の値を渡すので 1 つずつ計算する)
         let concurrent = (i < active
             && !entry.suppressed
+            && !placing.active()
             && registry.has_mark(&entry.type_id, crate::CONCURRENT))
         .then(|| {
             catch_unwind(AssertUnwindSafe(|| {
@@ -525,6 +531,37 @@ pub(crate) fn run(
                     Ok(v) => v,
                     Err(e) => return error(e.to_string()),
                 };
+                let own = feature.instance_of();
+                let placed = match placing.inputs(
+                    kernel,
+                    data,
+                    &bodies,
+                    entry.id,
+                    i,
+                    &inputs,
+                    own.as_ref(),
+                    &outputs,
+                ) {
+                    Ok(p) => p,
+                    Err(st) => return st,
+                };
+                let source = own.and_then(|o| match bodies.resolve(entry.id, &o) {
+                    InputRef::Output { feature, slot } => Some((feature, slot)),
+                    _ => None,
+                });
+                let mut after = |out: &Outputs| {
+                    placing.after(
+                        kernel,
+                        data,
+                        registry,
+                        &bodies,
+                        entry.id,
+                        &placed,
+                        source.clone(),
+                        &outputs,
+                        out,
+                    )
+                };
                 let mut hasher = DefaultHasher::new();
                 entry.type_id.hash(&mut hasher);
                 entry.data.to_string().hash(&mut hasher);
@@ -542,11 +579,15 @@ pub(crate) fn run(
                         return st;
                     }
                 }
+                crate::occurrence::Placing::hash(kernel, &placed, &mut hasher);
                 let key = hasher.finish();
                 if let Some((out, ms, pairs)) = cache.get(entry.id, key) {
                     reused += 1;
                     times.insert(entry.id, ms);
                     aliases.extend(pairs);
+                    if let Err(m) = after(out) {
+                        return error(m);
+                    }
                     return FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -559,6 +600,7 @@ pub(crate) fn run(
                     texts: &ok_texts,
                     outputs: &outputs,
                     redirect: bodies.redirects(entry.id),
+                    placed: &placed,
                     kernel,
                     registry,
                     data,
@@ -572,6 +614,9 @@ pub(crate) fn run(
                         let pairs = shorten_names(kernel, entry.id, &mut out, &aliases);
                         aliases.extend(&pairs);
                         cache.insert(entry.id, key, out.clone(), ms, pairs);
+                        if let Err(m) = after(&out) {
+                            return error(m);
+                        }
                         FeatureStatus::Ok {
                             outputs: out,
                             reused: false,
@@ -605,6 +650,7 @@ pub(crate) fn run(
         &mut aliases,
     );
     cache.entries.retain(|id, _| position.contains_key(id));
+    cache.placed = placing.finish(kernel, data, &bodies, &mut outputs, &mut features);
     pin_warnings(data, &bodies, &mut features);
 
     let report = RecomputeReport {
@@ -825,6 +871,7 @@ fn run_jobs(
                 texts,
                 outputs: ready,
                 redirect: bodies.redirects(job.id),
+                placed: &Default::default(),
                 kernel,
                 registry,
                 data,
@@ -1365,7 +1412,12 @@ pub fn visible_bodies_before(
             && let Ok(inputs) = f.inputs()
         {
             let keeps = f.keeps();
+            // 出現は元を読むだけ(元は見えるボディに残る)
+            let own = f.instance_of();
             for i in inputs {
+                if own.as_ref() == Some(&i) {
+                    continue;
+                }
                 if let InputRef::Output { feature, slot } = report.bodies.resolve(r.id, &i)
                     && slot == "body"
                     && !keeps.contains(&feature)
@@ -1496,7 +1548,8 @@ fn reads_body(
         .unwrap_or_default()
         .into_iter()
         .find(|i| matches!(i, InputRef::Output { slot, .. } if slot == "body"))?;
-    if feature.keeps().contains(&i_feature(&raw)) {
+    // 元を残す機能の写しと、出現は新しいボディ
+    if feature.keeps().contains(&i_feature(&raw)) || feature.instance_of().is_some() {
         return None;
     }
     Some(i_feature(&bodies.resolve(f.id, &raw)))
