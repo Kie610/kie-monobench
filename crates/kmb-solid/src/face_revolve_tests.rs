@@ -49,11 +49,6 @@ fn disk(hole: bool) -> (DocBuilder, FeatureId) {
 #[test]
 fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
     let k = TestKernel::new();
-    if k.is_truck() {
-        kmb_contract::skip!(
-            "truck は円の面の輪郭を網で近似し、回転の体積も網から求めるため厳密な円板の体積と一致しません"
-        );
-    }
     for hole in [false, true] {
         let (mut b, f) = disk(hole);
         let mut line = SketchBuilder::new(SketchPlane::face(f, format!("f{}:end", f.0)));
@@ -79,7 +74,7 @@ fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
         let expected = 2.0 * std::f64::consts::PI.powi(2) * 5.0 * if hole { 3.0 } else { 4.0 };
         let actual = mass(&mut doc, &*k, r);
         assert!(
-            (actual - expected).abs() < 1e-3,
+            (actual - expected).abs() / expected < 2e-3,
             "hole={hole}, volume={actual}, expected={expected}"
         );
         let reg = registry();
@@ -90,7 +85,7 @@ fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
             .collect();
         assert_eq!(ids, vec![f, r]);
         let mut loaded = Document::from_json(&doc.to_json()).unwrap();
-        assert!((mass(&mut loaded, &*k, r) - expected).abs() < 1e-3);
+        assert!((mass(&mut loaded, &*k, r) - expected).abs() / expected < 2e-3);
     }
 }
 
@@ -120,11 +115,6 @@ fn revolving_a_face_rejects_an_axis_outside_its_plane() {
 #[test]
 fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
     let k = TestKernel::new();
-    if k.is_truck() {
-        kmb_contract::skip!(
-            "truck は回転の体積を網から求めるため、長方形を回した円柱の厳密な体積と一致しません"
-        );
-    }
     let mut b = DocBuilder::new();
     b.param("length", "10 mm");
     let mut s = SketchBuilder::new(SketchPlane::Xy);
@@ -195,7 +185,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         let actual = mass(&mut doc, &*k, r);
         let expected = std::f64::consts::PI * 16.0 * length;
         assert!(
-            (actual - expected).abs() < 1e-3,
+            (actual - expected).abs() / expected < 2e-3,
             "length={length}, volume={actual}, expected={expected}"
         );
     }
@@ -219,7 +209,8 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         vec![kmb_core::Op::SetFeatureData { id: r, data }],
     ))
     .unwrap();
-    assert!((mass(&mut doc, &*k, r) - std::f64::consts::PI * 16.0 * 15.0).abs() < 1e-3);
+    let expected = std::f64::consts::PI * 16.0 * 15.0;
+    assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
 }
 
 #[test]
@@ -413,4 +404,85 @@ fn assert_face_profile_matches_sketch(
             }
         }
     }
+}
+
+/// 確かめること: 明示したスケッチをCLI・MCPの共通操作で使い、画面の面選択を混ぜない。
+#[test]
+fn an_explicit_revolve_profile_ignores_the_screen_face_selection() {
+    let k: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let (b, f) = disk(false);
+    let mut doc = b.finish("明示した輪郭");
+    let sk = doc
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == kmb_sketch::SKETCH)
+        .unwrap()
+        .id;
+    let reg = registry();
+    let report = doc.recompute(&reg, k.as_ref());
+    let picked = kmb_core::FacePick {
+        feature: f,
+        face: format!("f{}:start", f.0),
+    };
+    let args = json!({"profile":sk.0,"axis":"x"});
+    let cx = Context {
+        args: &args,
+        picked: Some(&picked),
+        ..Context::new(doc.data(), &report, &reg, &k)
+    };
+    let Some(Ok(kmb_core::Outcome::Change { edits, .. })) =
+        RevolveCommands.run(kmb_cad_revolve::REVOLVE_SKETCH, &cx)
+    else {
+        panic!("回転を作る")
+    };
+    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
+        panic!("回転を足す")
+    };
+    let r: Revolve = serde_json::from_value(data.clone()).unwrap();
+    assert_eq!(r.source, Source::Sketch);
+    assert_eq!(r.profile, Some(sk));
+    assert!(r.faces.is_empty());
+}
+
+/// 確かめること: 面と平行でも平面からずれた軸は、理由つきで止まる。
+#[test]
+fn revolving_a_face_rejects_a_parallel_axis_offset_from_its_plane() {
+    let k = TestKernel::new();
+    let (mut b, f) = disk(false);
+    let r = b.feature(
+        REVOLVE,
+        "面を回す",
+        Revolve {
+            source: Source::Faces,
+            faces: vec![face(f, "end")],
+            axis: Axis::OriginX,
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("ずれた平行な軸");
+    let report = doc.recompute(&registry(), &*k);
+    let status = format!("{:?}", report.feature(r));
+    assert!(status.contains("輪郭の平面の上にありません"), "{status}");
+}
+
+/// 確かめること: 軸の両側にまたがる面は、自己交差した形を作らず止まる。
+#[test]
+fn revolving_a_face_rejects_a_profile_crossing_the_axis() {
+    let k = TestKernel::new();
+    let (mut b, f) = disk(false);
+    let r = b.feature(
+        REVOLVE,
+        "面を回す",
+        Revolve {
+            source: Source::Faces,
+            faces: vec![face(f, "start")],
+            axis: Axis::OriginY,
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("軸をまたぐ面");
+    let report = doc.recompute(&registry(), &*k);
+    let status = format!("{:?}", report.feature(r));
+    assert!(status.contains("輪郭が回転軸をまたいでいます"), "{status}");
 }

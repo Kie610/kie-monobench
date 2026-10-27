@@ -1222,6 +1222,22 @@ pub fn module() -> kmb_core::Module {
 mod face_source_tests {
     use super::*;
 
+    /// 確かめること: 輪郭と面を同時に指定しても、片方を黙って捨てない。
+    #[test]
+    fn revolve_profile_and_faces_cannot_be_given_together() {
+        let mut doc = kmb_core::Document::new();
+        let reg = Registry::new();
+        let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(k::NullKernel);
+        let report = doc.recompute(&reg, kernel.as_ref());
+        let args = json!({"profile":2,"faces":{"kind":"face","feature":1,"face":"top"}});
+        let cx = Context {
+            args: &args,
+            ..Context::new(doc.data(), &report, &reg, &kernel)
+        };
+        let error = chosen_source(&cx).unwrap_err();
+        assert!(error.contains("同時"), "{error}");
+    }
+
     #[test]
     fn face_arguments_enable_revolve_without_a_sketch() {
         let mut doc = kmb_core::Document::new();

@@ -113,6 +113,28 @@ fn a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized() {
                     .iter()
                     .all(|p| p[1].abs() < 1e-6 && (p[2] - 5.0).abs() < 1e-6)
             );
+            let rounded_edges = k.edges(h).unwrap();
+            let long_edge_at = |y: f64, z: f64| {
+                rounded_edges.iter().any(|e| {
+                    (e.a[0] - e.b[0]).abs() > width - 1e-5
+                        && [e.a, e.b]
+                            .iter()
+                            .all(|p| (p[1] - y).abs() < 1e-5 && (p[2] - z).abs() < 1e-5)
+                })
+            };
+            // 手前の縁だけが半径・距離の分だけずれ、奥の縁は元の位置を保つ。
+            assert!(
+                !long_edge_at(0.0, 5.0),
+                "{kind} 幅{width}: 手前の元の縁が残る"
+            );
+            assert!(
+                long_edge_at(0.0, 6.0) && long_edge_at(1.0, 5.0),
+                "{kind} 幅{width}: 丸めた縁が手前にない: {rounded_edges:?}"
+            );
+            assert!(
+                long_edge_at(20.0, 5.0),
+                "{kind} 幅{width}: 奥の縁が移っている"
+            );
             let (lo, hi) = k.bounds(h).unwrap();
             assert!(lo[2] > 4.999 && hi[2] < 10.001, "{lo:?} {hi:?}");
         }

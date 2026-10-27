@@ -70,6 +70,3 @@ a_loft_joins_a_square_to_a_circle_and_refuses_sections_on_one_plane = "truck の
 a_loft_of_sections_with_holes_stays_hollow = "truck の回(ロフト)"
 a_sweep_follows_its_path_and_its_dimensions = "truck の回(スイープ)"
 a_sweep_twists_and_narrows_by_its_fields = "truck の回(スイープ)"
-
-revolving_a_disk_face_keeps_the_hole_and_the_saved_reference = "truck の回(円の面の輪郭の網による近似と、回転の体積の網による誤差)"
-revolving_a_face_around_its_straight_edge_follows_dimensions = "truck の回(回転の体積を網から求めるため円柱の厳密な体積とずれる)"

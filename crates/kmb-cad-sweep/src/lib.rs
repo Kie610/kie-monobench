@@ -986,6 +986,32 @@ pub fn module() -> kmb_core::Module {
 mod tests {
     use super::*;
 
+    /// 確かめること: 点の断面に輪郭も指定した時は、輪郭を黙って捨てず止まる。
+    #[test]
+    fn a_point_section_rejects_a_simultaneous_profile() {
+        let loft = Loft {
+            sections: vec![
+                Section {
+                    profile: Some(FeatureId(1)),
+                    ..Default::default()
+                },
+                Section {
+                    kind: SectionKind::Point,
+                    profile: Some(FeatureId(2)),
+                    point: Some(PointRef::Datum {
+                        feature: FeatureId(3),
+                    }),
+                    ..Default::default()
+                },
+            ],
+            rails: vec![],
+            operation: Operation::New,
+            target: None,
+        };
+        let error = loft.inputs().unwrap_err().to_string();
+        assert!(error.contains("同時"), "{error}");
+    }
+
     fn line(a: [f64; 2], b: [f64; 2]) -> Segment {
         Segment::Line { a, b }
     }
