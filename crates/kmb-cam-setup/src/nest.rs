@@ -430,6 +430,11 @@ pub(crate) struct PreparedNest {
 }
 
 impl PreparedNest {
+    pub fn write_outputs(&self,out:&mut kmb_core::Outputs) {
+        for (k,h) in self.bodies.iter().enumerate() { out.insert(format!("nest.{}",k+1),kmb_core::Value::Shape(*h)); }
+        out.insert("grid".into(),kmb_core::Value::Scalar(kmb_core::Quantity::mm(self.layout.grid)));
+        out.insert("nest".into(),kmb_core::Payload::to_value(&self.layout));
+    }
     pub fn sections(&self, origin: [f64; 3]) -> crate::sections::Sections {
         use crate::sections::{Rect2, Section, SectionKind, Sections};
         Sections {
@@ -462,6 +467,9 @@ pub(crate) fn prepare(
     if !(1..=50).contains(&nest.max_sheets) || nest.parts.iter().any(|p|p.count==0)
         || nest.parts.iter().map(|p|u64::from(p.count)).sum::<u64>()>100 {
         return Err(invalid("部品は各 1 個以上で合計 100 個まで、板は 1〜50 枚にしてください"));
+    }
+    if nest.output==crate::sections::SectionOutput::Stops && setup.leveling.mode==crate::LevelingMode::Gcode {
+        return Err(invalid("G-code で板ごとに高さを測る時は、区画の書き出しを「板ごとのファイル」にしてください"));
     }
     let size=match nest.sheet {
         SheetFrom::Stock=>[length(ctx,&setup.stock.width,"板の幅")?,length(ctx,&setup.stock.depth,"板の奥行")?],
@@ -496,10 +504,6 @@ pub(crate) fn prepare(
         originals.push((h,center,rot,bounds.min));
     }
     let mut layout=pack(&input);
-    if layout.sheets.is_empty() {
-        // 入らない物も出力に残すため、加工のない板 1 を用意する。写しが無い時は誤りを返す。
-        return Err(invalid("配置できる部品がありません。板の寸法・余白・部品の向きを確かめてください"));
-    }
     let mut bodies=Vec::new();
     for sheet in &layout.sheets {
         let offset=f64::from(sheet.index-1)*(size[0]+SHEET_GAP);
@@ -528,7 +532,7 @@ pub(crate) fn prepare(
         if n>0 { warnings.push(format!("部品 {} が {n} 個、板に入りませんでした",p.body)); }
     }
     layout.warnings.extend(warnings);
-    let extent=(layout.sheets.len()-1) as f64*(size[0]+SHEET_GAP)+size[0];
+    let extent=if layout.sheets.is_empty() { 0.0 } else { (layout.sheets.len()-1) as f64*(size[0]+SHEET_GAP)+size[0] };
     Ok(PreparedNest { bodies,layout,size,thickness,extent,output:nest.output })
 }
 
@@ -617,10 +621,17 @@ mod tests {
     }
 
     fn triangles(i:&PackInput,p:&PlacedPart)->Vec<[[f64;2];3]> {
-        i.parts[p.part].triangles.iter().map(|t|t.map(|q| {
-            let q=rotate_point(q,i.parts[p.part].size,p.angle);
-            [q[0]+p.position[0],q[1]+p.position[1]]
-        })).collect()
+        let (s,c)=f64::from(p.angle).to_radians().sin_cos();
+        let mut ts:Vec<_>=i.parts[p.part].triangles.iter().map(|t|t.map(|q|[c*q[0]-s*q[1],s*q[0]+c*q[1]])).collect();
+        let min=[0,1].map(|k|ts.iter().flatten().map(|v|v[k]).fold(f64::INFINITY,f64::min));
+        for t in &mut ts { for q in t { for k in 0..2 { q[k]+=p.position[k]-min[k]; } } }
+        ts
+    }
+
+    fn inside_triangle(p:[f64;2],t:[[f64;2];3])->bool {
+        let side=|a:[f64;2],b:[f64;2]|(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
+        let signs=[side(t[0],t[1]),side(t[1],t[2]),side(t[2],t[0])];
+        signs.iter().all(|s|*s>=-1e-9) || signs.iter().all(|s|*s<=1e-9)
     }
 
     #[test]
@@ -645,6 +656,7 @@ mod tests {
                 } } }
                 for q in &sheet.parts[k+1..] {
                     for a in triangles(&i,p) { for b in triangles(&i,q) {
+                        assert!(!a.iter().any(|p|inside_triangle(*p,b)) && !b.iter().any(|p|inside_triangle(*p,a)));
                         for x in 0..3 { for y in 0..3 {
                             assert!(segment_distance(a[x],a[(x+1)%3],b[y],b[(y+1)%3])+1e-8>=i.spacing);
                         } }
@@ -663,5 +675,42 @@ mod tests {
         assert!(out.grid>i.grid);
         assert!(!out.warnings.is_empty());
         assert_eq!(out.sheets.len(),1);
+    }
+
+    #[test]
+    fn saved_nesting_expressions_rename_even_when_their_mode_does_not_use_them() {
+        use kmb_core::Feature;
+        for method in [NestMethod::Boxes,NestMethod::Shapes] { for sheet in [SheetFrom::Stock,SheetFrom::Machine] {
+            let mut setup=crate::Setup::new(FeatureId(1));
+            let mut nest=Nest::new(vec![NestPart { body:FeatureId(1),count:1,up:Up::PlusZ,rotate:NestRotate::Free }]);
+            nest.method=method;nest.sheet=sheet;
+            nest.edge="contract_p * 1".into();nest.spacing="contract_p * 1".into();nest.grid="contract_p * 1".into();
+            setup.nest=Some(nest);
+            assert!(setup.inputs().unwrap().contains(&kmb_core::InputRef::Param { name:"contract_p".into() }));
+            let renamed=setup.rename_param("contract_p","contract_q").unwrap().unwrap();
+            for key in ["edge","spacing","grid"] { assert_eq!(renamed["nest"][key],"contract_q * 1"); }
+        } }
+    }
+
+    #[test]
+    fn output_choice_defaults_to_files_and_stops_roundtrips_without_old_fields() {
+        let mut nest=Nest::new(vec![NestPart { body:FeatureId(1),count:1,up:Up::PlusZ,rotate:NestRotate::Free }]);
+        let json=serde_json::to_value(&nest).unwrap();assert!(json.get("output").is_none());
+        assert_eq!(serde_json::from_value::<Nest>(json).unwrap().output,crate::sections::SectionOutput::Files);
+        nest.output=crate::sections::SectionOutput::Stops;
+        assert_eq!(nest,serde_json::from_value::<Nest>(serde_json::to_value(&nest).unwrap()).unwrap());
+    }
+
+    #[test]
+    fn a_shadow_hole_is_reserved_instead_of_accepting_another_part() {
+        let mut ring=rectangle(1,[30.0,30.0],1);ring.rotate=NestRotate::Fixed;ring.triangles.clear();
+        for (x,y,w,h) in [(0.0,0.0,30.0,5.0),(0.0,25.0,30.0,5.0),(0.0,5.0,5.0,20.0),(25.0,5.0,5.0,20.0)] {
+            ring.triangles.extend([[[x,y],[x+w,y],[x+w,y+h]],[[x,y],[x+w,y+h],[x,y+h]]]);
+        }
+        let mut i=input(vec![ring,rectangle(2,[10.0,10.0],1)]);
+        i.sheet=[40.0,40.0];i.method=NestMethod::Shapes;i.spacing=0.0;i.max_sheets=1;
+        let out=pack(&i);
+        assert_eq!(out.sheets[0].parts.len(),1);
+        assert_eq!(out.unplaced,vec![UnplacedPart { part:1,instance:1,reason:UnplacedReason::NoSheet }]);
     }
 }

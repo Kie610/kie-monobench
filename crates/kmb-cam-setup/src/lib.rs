@@ -995,6 +995,14 @@ impl Feature for Setup {
             )));
         }
         let nested = self.nest.as_ref().map(|n| nest::prepare(ctx, self, n, tolerance, &machine)).transpose()?;
+        if let Some(n)=&nested && n.bodies.is_empty() {
+            // 配置の診断は残し、配置されていない元のボディを加工の材料として渡さない。
+            let mut out=Outputs::new();n.write_outputs(&mut out);
+            let mut warnings=n.layout.warnings.clone();
+            warnings.push("配置できる部品がありません。板の寸法・余白・部品の向きを確かめてください".into());
+            warnings.extend(wcs_warning);warnings.extend(warnings_pre);add_warnings(&mut out,warnings);
+            return Ok(out);
+        }
         let (body, more) = match &nested {
             Some(n) => (n.bodies[0], n.bodies[1..].to_vec()),
             None => (body, more),
@@ -1112,11 +1120,7 @@ impl Feature for Setup {
         let mut out = Outputs::new();
         out.insert("setup".into(), info.to_value());
         if let Some(n) = nested {
-            for (k, h) in n.bodies.iter().enumerate() {
-                out.insert(format!("nest.{}", k + 1), Value::Shape(*h));
-            }
-            out.insert("grid".into(), Value::Scalar(kmb_core::Quantity::mm(n.layout.grid)));
-            out.insert("nest".into(), kmb_core::Payload::to_value(&n.layout));
+            n.write_outputs(&mut out);
             warnings.extend(n.layout.warnings);
         }
         warnings.extend(wcs_warning);
@@ -1188,7 +1192,7 @@ fn register_with(reg: &mut Registry, lib: kmb_post::machines::MachineLibrary) {
                     .help("作業範囲・回転数・G-code の書き方・付属品(レーザー・プローブ)が機械で決まる。新しいセットアップは設定の「機械」で選んだ機械と、その時の設定の値を文書に持つ(後で設定を直しても、今あるセットアップの経路と G-code は変わらない)。ここで機械を替えると、その機械の初めの値になる"),
             )
             .field(Field::output("body", "部品", "body"))
-            .field(Field::choice("nest.method","板への配置",&[("boxes","外形の箱"),("shapes","形どおり")]).only("nest.method","boxes|shapes",""))
+            .field(Field::choice("nest.method","並べ方",&[("boxes","外形の箱"),("shapes","形どおり")]).only("nest.method","boxes|shapes",""))
             .field(Field::choice("nest.sheet","板の大きさの取り方",&[("stock","ストック"),("machine","機械の作業範囲")]).only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.edge","縁の余白").length().only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.spacing","部品の間").length().only("nest.method","boxes|shapes",""))

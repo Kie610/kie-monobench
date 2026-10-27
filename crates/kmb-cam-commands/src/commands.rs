@@ -1616,7 +1616,7 @@ impl Extension for CamCommands {
         let i = &s.info;
         if o.shape.is_none() && i.sections.is_some()
             && let Ok(mesh)=i.part_mesh(cx.kernel.as_ref()) {
-            o.shape=Some(Arc::new(kmb_core::OverlayShape { key:s.print(),label:"板への配置".into(),mesh,..Default::default() }));
+            o.shape=Some(Arc::new(kmb_core::OverlayShape { key:crate::nest::overlay_key(i,s.print()),label:"板への配置".into(),mesh,..Default::default() }));
         }
         // 最後のシミュレーションの食い込みと削り残し(経路が変わっていなければ)。
         // 印は最後の形のものなので、途中の形を出している時は出さない
@@ -1639,6 +1639,7 @@ impl Extension for CamCommands {
             return out;
         }
         out.extend(later_design(cx, id));
+        out.extend(crate::nest::unplaced_notes(cx,id));
         let Ok(s) = self.setup_paths(cx, id) else {
             return out;
         };
@@ -1651,16 +1652,6 @@ impl Extension for CamCommands {
                     "ストックの {axis} の大きさ {size:.1} mm が {} の作業範囲 {} mm を超えています",
                     m.name, m.travel[k]
                 ));
-            }
-        }
-        if let Some(layout)=&s.nest
-            && let Some(nest)=setup_of(cx,s.setup).and_then(|s|s.nest) {
-            for (part,p) in nest.parts.iter().enumerate() {
-                let count=layout.unplaced.iter().filter(|u|u.part==part).count();
-                if count>0 {
-                    let name=cx.data.feature(p.body).map(|f|f.name.clone()).unwrap_or_else(||p.body.to_string());
-                    out.push(format!("{name} が {count} 個、板に入りませんでした"));
-                }
             }
         }
         if !s.paths.is_empty() {

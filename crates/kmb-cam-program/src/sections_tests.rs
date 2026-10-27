@@ -80,3 +80,65 @@ fn section_headings_and_file_names_appear_in_both_sheets() {
         assert!(md.contains(&format!("板{n}.nc")));assert!(html.contains(&format!("板{n}.nc")));
     }
 }
+
+struct MeshKernel(kmb_core::Mesh);
+impl Kernel for MeshKernel {
+    fn name(&self)->&str { "mesh-test" }
+    fn mesh(&self,_shape:kmb_core::ShapeHandle,_tolerance:f64)->Result<kmb_core::Mesh,kmb_core::KernelError> { Ok(self.0.clone()) }
+}
+
+fn kernel_for(s:&SetupPaths)->MeshKernel {
+    let stock=initial_stock(&s.info,0.5);
+    MeshKernel(world_mesh(&s.info,stock.to_mesh(s.info.stock_min[2])))
+}
+
+#[test]
+fn physical_machine_checks_match_each_single_section_and_keep_head_collisions() {
+    let mut s=two_sheets();
+    s.info.machine_values.travel=[20.0,20.0,150.0];
+    s.info.machine_values.bed=None;
+    let frame=s.info.machine_values.frame.as_mut().expect("機械の形");
+    frame.travel_corner=[0.0,0.0];
+    frame.spindle=[20.0,30.0];
+    s.info.fixtures=vec![([0.0,4.0,0.0],[2.0,6.0,60.0])];
+    let kernel=kernel_for(&s);
+    let opt=SimOptions { cell:0.5,stage_cells:0,..Default::default() };
+    let combined=simulate(&kernel,&s,opt).unwrap();
+    let mut expected=Vec::new();let mut bed:f64=0.0;
+    for sec in &s.info.sections.as_ref().unwrap().list {
+        let single=simulate(&kernel,&s.section(sec.index),opt).unwrap();
+        bed=bed.max(single.bed_depth);
+        for mut hit in single.machine_hits {
+            hit.event.at[0]-=sec.shift[0];hit.event.at[1]-=sec.shift[1];
+            hit.event.op=format!("{} / {}",sec.label,hit.event.op);
+            expected.push(hit);
+        }
+    }
+    assert!(expected.iter().any(|h|matches!(h.kind,kmb_sim::MachineKind::HeadFixture(_))),"{expected:?}");
+    assert!(!combined.machine_hits.iter().any(|h|matches!(h.kind,kmb_sim::MachineKind::Travel { axis:0|1,.. })),"{:?}",combined.machine_hits);
+    assert_eq!(combined.machine_hits,expected);
+    assert_eq!(combined.bed_depth,bed);
+}
+
+#[test]
+fn true_section_travel_excess_survives_virtual_layout_simulation() {
+    let mut s=two_sheets();s.info.machine_values.travel=[20.0,20.0,150.0];
+    s.info.machine_values.bed=None;
+    s.info.machine_values.frame.as_mut().unwrap().travel_corner=[0.0,0.0];
+    s.info.stock_max[0]+=20.0;
+    for sec in &mut s.info.sections.as_mut().unwrap().list { sec.stock_max[0]+=20.0; }
+    s.paths[0].moves.push(Move::Linear { to:[145.0,8.0,-1.0],feed:600.0 });
+    let kernel=kernel_for(&s);
+    let report=simulate(&kernel,&s,SimOptions { cell:0.5,stage_cells:0,..Default::default() }).unwrap();
+    assert!(report.machine_hits.iter().any(|h|matches!(h.kind,kmb_sim::MachineKind::Travel { axis:0,high:true }) && h.event.op.starts_with("板 2 / ") && h.event.at[0]>130.0),"{:?}",report.machine_hits);
+}
+
+#[test]
+fn sheet_paths_discard_feed_in_empty_space_beyond_the_cutter_reach() {
+    let mut s=two_sheets();let radius=s.paths[0].tool.radius();
+    s.paths[0].moves=vec![Move::Rapid { to:[-radius,5.0,5.0] },Move::Linear { to:[-radius,5.0,-1.0],feed:200.0 },Move::Linear { to:[120.0+radius,5.0,-1.0],feed:600.0 }];
+    for k in 1..=2 {
+        let section=s.section(k);
+        assert!(section.paths.iter().flat_map(|p|&p.moves).all(|m|m.to()[0]>=-radius-1e-8 && m.to()[0]<=10.0+radius+1e-8));
+    }
+}

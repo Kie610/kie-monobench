@@ -32,7 +32,7 @@ fn rectangle_samples_have_one_and_two_sheets_and_hold_named_copies() {
             let kmb_core::Value::Shape(handle)=outputs[&format!("nest.{n}")] else { panic!("写し"); };
             let Some(FeatureStatus::Ok { outputs:source_outputs,.. })=report.feature(part.body) else { panic!("元のボディ"); };
             let kmb_core::Value::Shape(original)=source_outputs["body"] else { panic!("元の形"); };
-            assert_eq!(kernel.face_names(handle).unwrap(),kernel.face_names(original).unwrap());
+            assert_eq!(kernel.mesh(handle,0.01).unwrap().face_names,kernel.mesh(original,0.01).unwrap().face_names);
             let (min,max)=kernel.bounds(handle).unwrap();
             assert!(min[0]>=f64::from(sheet.index-1)*(sheet.size[0]+SHEET_GAP)-1e-5);
             assert!(max[0]<=f64::from(sheet.index-1)*(sheet.size[0]+SHEET_GAP)+sheet.size[0]+1e-5);
@@ -97,5 +97,97 @@ fn nesting_rejects_incompatible_setup_and_only_blocks_its_downstream() {
     doc.apply(Transaction::new("向き",vec![Op::SetFeatureData { id,data:serde_json::to_value(setup).unwrap() }])).unwrap();
     let report=doc.recompute(&reg,kernel.as_ref());
     assert!(matches!(report.feature(id),Some(FeatureStatus::Error { .. })));
+    assert!(doc.data().features.iter().filter(|f|f.type_id==kmb_cad_extrude::EXTRUDE).all(|f|matches!(report.feature(f.id),Some(FeatureStatus::Ok { .. }))));
+}
+
+#[test]
+fn selecting_an_original_face_and_edge_applies_to_every_copy_of_that_body() {
+    let mut doc=crate::nesting_boxes_document(false);let reg=kmb_bundle::registry();let kernel=kmb_bundle::kernel();
+    let entry=doc.data().features.iter().find(|f|f.type_id==SETUP).unwrap();let sid=entry.id;
+    let setup:Setup=serde_json::from_value(entry.data.clone()).unwrap();let body=setup.nest.as_ref().unwrap().parts[0].body;
+    let contour=doc.data().features.iter().find(|f|f.type_id==kmb_strategy_contour2d::CONTOUR).unwrap();
+    let cid=contour.id;let mut data=contour.data.clone();data["face"]=serde_json::json!(format!("f{}:start",body.0));
+    let tools=doc.data().features.iter().find(|f|f.type_id==kmb_cam_commands::TOOLS).unwrap().id;
+    let trace=doc.alloc_feature_id();
+    doc.apply(Transaction::new("元の面と辺",vec![Op::SetFeatureData { id:cid,data },Op::InsertFeature { index:None,entry:kmb_core::FeatureEntry {
+        id:trace,type_id:kmb_strategy_engrave::TRACE.into(),name:"元の辺".into(),suppressed:false,pin_bodies:false,
+        data:serde_json::to_value(kmb_strategy_engrave::Trace {
+            edges:vec![kmb_core::Ref::Edge { feature:body,faces:[format!("f{}:start",body.0),format!("f{}:side:e5",body.0)] }],
+            ..kmb_strategy_engrave::Trace::new(kmb_cam_commands::OpBase::new(sid,tools,1))
+        }).unwrap()
+    } }])).unwrap();
+    let report=doc.recompute(&reg,kernel.as_ref());assert_eq!(report.error_count(),0,"{:?}",report.features);
+    let layout=layout(&report,sid);let setups=kmb_cam_commands::setups(doc.data(),&report,&reg);let s=&setups[0];
+    for op in [cid,trace] {
+        let path=&s.paths[s.sources.iter().position(|p|p.id==op).unwrap()];let radius=path.tool.radius();
+        for sheet in &layout.sheets { for part in sheet.parts.iter().filter(|p|p.body==body) {
+            let [x,y]=part.position;
+            assert!(path.moves.iter().any(|m|!matches!(m,Move::Rapid { .. }) && m.to()[2]< -4.99
+                && m.to()[0]>=x-radius-1e-4 && m.to()[0]<=x+part.size[0]+radius+1e-4
+                && m.to()[1]>=y-radius-1e-4 && m.to()[1]<=y+part.size[1]+radius+1e-4),"加工 {op} / 写し {}",part.instance);
+        } }
+    }
+}
+
+fn reference_pair()->crate::ReferenceCam {
+    let mut cam=crate::reference_cam();
+    let entry=cam.part.doc.data().feature(cam.setup).unwrap();let mut setup:Setup=serde_json::from_value(entry.data.clone()).unwrap();
+    setup.stock.mode=kmb_cam_setup::StockMode::Fixed;setup.stock.width="180 mm".into();setup.stock.depth="100 mm".into();setup.stock.height="16 mm".into();
+    setup.nest=Some(kmb_cam_setup::nest::Nest::new(vec![kmb_cam_setup::nest::NestPart { body:setup.body,count:2,up:Default::default(),rotate:kmb_cam_setup::nest::NestRotate::Fixed }]));
+    cam.part.doc.apply(Transaction::new("2 個の部品",vec![Op::SetFeatureData { id:cam.setup,data:serde_json::to_value(setup).unwrap() }])).unwrap();
+    cam
+}
+
+#[test]
+fn selecting_an_original_pocket_floor_machines_both_copies() {
+    let mut cam=reference_pair();let reg=kmb_bundle::registry();let kernel=kmb_bundle::kernel();
+    let report=cam.part.doc.recompute(&reg,kernel.as_ref());assert_eq!(report.error_count(),0,"{:?}",report.features);
+    let layout=layout(&report,cam.setup);let setups=kmb_cam_commands::setups(cam.part.doc.data(),&report,&reg);let s=&setups[0];
+    let path=&s.paths[s.sources.iter().position(|p|p.id==cam.pocket).unwrap()];
+    for sheet in &layout.sheets { for part in &sheet.parts {
+        let x=part.position[0]-s.info.origin[0];let y=part.position[1]-s.info.origin[1];
+        assert!(path.moves.iter().any(|m|!matches!(m,Move::Rapid { .. }) && m.to()[2]< -1.0
+            && m.to()[0]>=x && m.to()[0]<=x+part.size[0] && m.to()[1]>=y && m.to()[1]<=y+part.size[1]),"写し {} のポケット",part.instance);
+    } }
+}
+
+#[test]
+fn an_open_floor_does_not_gouge_the_other_nested_copy() {
+    let mut cam=reference_pair();let reg=kmb_bundle::registry();let kernel=kmb_bundle::kernel();
+    let report=cam.part.doc.recompute(&reg,kernel.as_ref());assert_eq!(report.error_count(),0,"{:?}",report.features);
+    let setups=kmb_cam_commands::setups(cam.part.doc.data(),&report,&reg);
+    let s=&setups[0];
+    let sim=kmb_cam_commands::simulate(kernel.as_ref(),s,kmb_cam_commands::SimOptions { cell:0.5,rough_cell:0.5,stage_cells:0,..Default::default() }).unwrap();
+    let layout=layout(&report,cam.setup);
+    assert_eq!(layout.sheets.iter().map(|s|s.parts.len()).sum::<usize>(),2);
+    let height=|p:[f64;2]| {
+        let x=((p[0]-sim.result.origin[0])/sim.result.cell).floor() as usize;
+        let y=((p[1]-sim.result.origin[1])/sim.result.cell).floor() as usize;
+        assert!(x<sim.result.nx && y<sim.result.ny);
+        sim.result.z[y*sim.result.nx+x]
+    };
+    for sheet in &layout.sheets { for part in &sheet.parts {
+        let x=f64::from(sheet.index-1)*(sheet.size[0]+SHEET_GAP)+part.position[0]-s.info.origin[0];
+        let y=part.position[1]-s.info.origin[1];
+        // 見本のポケットの床は Z6、ボスの上面は Z15。配置の格子や経路の点は判定に使わない。
+        let pocket=height([x+15.5,y+14.0]);let boss=height([x+47.0,y+20.0]);
+        assert!((pocket-(6.0-s.info.origin[2])).abs()<=0.1,"写し {} の床 {pocket}",part.instance);
+        assert!((boss-(15.0-s.info.origin[2])).abs()<=0.1,"写し {} のボス {boss}",part.instance);
+    } }
+    assert!(sim.gouges.is_empty(),"{}",sim.summary());
+}
+
+#[test]
+fn all_too_big_parts_keep_layout_diagnostics_without_exposing_an_unplaced_body() {
+    let mut doc=crate::nesting_boxes_document(false);let reg=kmb_bundle::registry();let kernel=kmb_bundle::kernel();
+    let entry=doc.data().features.iter().find(|f|f.type_id==SETUP).unwrap();let sid=entry.id;
+    let mut setup:Setup=serde_json::from_value(entry.data.clone()).unwrap();setup.stock.width="2 mm".into();setup.stock.depth="2 mm".into();
+    doc.apply(Transaction::new("小さい板",vec![Op::SetFeatureData { id:sid,data:serde_json::to_value(setup).unwrap() }])).unwrap();
+    let report=doc.recompute(&reg,kernel.as_ref());let layout=layout(&report,sid);
+    assert!(layout.sheets.is_empty());assert_eq!(layout.unplaced.len(),12);
+    assert!(layout.unplaced.iter().all(|u|u.reason==kmb_cam_setup::nest::UnplacedReason::TooBig));
+    let Some(FeatureStatus::Ok { outputs,.. })=report.feature(sid) else { unreachable!(); };
+    assert!(!outputs.contains_key("setup"));assert!(!outputs.keys().any(|k|k.starts_with("nest.")));
+    assert!(kmb_cam_commands::setups(doc.data(),&report,&reg).is_empty());
     assert!(doc.data().features.iter().filter(|f|f.type_id==kmb_cad_extrude::EXTRUDE).all(|f|matches!(report.feature(f.id),Some(FeatureStatus::Ok { .. }))));
 }

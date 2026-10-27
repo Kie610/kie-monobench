@@ -82,6 +82,7 @@ impl SetupPaths {
         let Some(sec) = sections.list.iter().find(|s| s.index == k) else {
             let mut out = self.clone();
             out.paths.clear();
+            out.sources.clear();out.manual.clear();out.info.sections=None;
             out.failed.push((self.setup, format!("区画 {k} がありません")));
             return out;
         };
@@ -109,8 +110,8 @@ impl SetupPaths {
     }
 
     /// 模擬用の経路。区画ごとの窓で切り、世界に並べた位置へ戻して連ねる。
-    pub fn simulation_paths(&self) -> Vec<Toolpath> {
-        let Some(sections)=&self.info.sections else { return self.paths.clone(); };
+    pub fn simulation_paths(&self) -> std::borrow::Cow<'_,[Toolpath]> {
+        let Some(sections)=&self.info.sections else { return std::borrow::Cow::Borrowed(&self.paths); };
         let mut paths=self.paths.clone();
         for tp in &mut paths { tp.moves.clear();tp.dwells.clear();tp.spans.clear();tp.links=Default::default(); }
         for sec in &sections.list {
@@ -121,7 +122,7 @@ impl SetupPaths {
                 paths[i].dwells.extend(tp.dwells.into_iter().map(|mut d| { d.at=xf.point(d.at);d }));
             }
         }
-        paths
+        std::borrow::Cow::Owned(paths)
     }
 
     pub fn simulation_fixtures(&self)->Vec<([f64;3],[f64;3])> {
@@ -404,6 +405,9 @@ pub fn setups(data: &DocumentData, report: &RecomputeReport, reg: &Registry) -> 
             if let FeatureStatus::Ok { outputs, .. } = &r.status
                 && let Some(info) = outputs.get("setup").and_then(SetupInfo::from_value)
             {
+                let nest=outputs.get("nest").and_then(<kmb_cam_setup::nest::NestLayout as kmb_core::Payload>::from_value);
+                let ids:std::collections::BTreeSet<_>=nest.iter().flat_map(|n|n.sheets.iter()).flat_map(|s|s.parts.iter().map(|p|p.body)).collect();
+                let nest_names=ids.into_iter().map(|id|(id,part_label(data,reg,id))).collect();
                 out.push(SetupPaths {
                     setup: r.id,
                     name: entry.name.clone(),
@@ -414,8 +418,8 @@ pub fn setups(data: &DocumentData, report: &RecomputeReport, reg: &Registry) -> 
                     failed: vec![],
                     part: part_lines(data, reg, r.id),
                     air_start: None,
-                    nest: outputs.get("nest").and_then(<kmb_cam_setup::nest::NestLayout as kmb_core::Payload>::from_value),
-                    nest_names: data.features.iter().map(|f|(f.id,f.name.clone())).collect(),
+                    nest,
+                    nest_names,
                 });
             }
             continue;
@@ -478,6 +482,11 @@ pub fn setups(data: &DocumentData, report: &RecomputeReport, reg: &Registry) -> 
     }
     skip_air_all(&mut out);
     out
+}
+
+/// 表示と段取り表で使う、現在のボディの名前。評価の派生出力には保存しない。
+pub fn part_label(data:&DocumentData,reg:&Registry,body:FeatureId)->String {
+    kmb_core::body_labels(data,reg,&[body]).pop().unwrap_or_else(||body.to_string())
 }
 
 /// 全部のセットアップの空振りを、タイムラインの順に省く。同じボディで同じ大きさのストックの
@@ -777,7 +786,7 @@ pub fn player(
         stock,
         target.info.stock_min[2],
         part,
-        target.simulation_paths(),
+        target.simulation_paths().into_owned(),
         motion,
     ))
 }
@@ -857,7 +866,7 @@ fn simulate_from(
         &s.simulation_fixtures(),
         if s.info.sections.is_none() { machine.as_ref() } else { None },
     );
-    if let Some(sections)=&s.info.sections {
+    if let Some(sections)=&s.info.sections && machine.is_some() {
         // 材料の形は仮想配置で削り、機械の当たりは各区画を実機の座標へ戻して確かめる。
         // ここも同じ既存の検査を実行し、仮想配置の幅を機械の travel として扱わない。
         for sec in &sections.list {
@@ -865,11 +874,16 @@ fn simulate_from(
             let mut local_stock=initial_stock(&local.info,stock.cell);
             for y in 0..local_stock.ny { for x in 0..local_stock.nx {
                 let p=local_stock.center(x,y);
-                let sx=((p[0]-sec.shift[0]-stock.origin[0])/stock.cell).floor();
-                let sy=((p[1]-sec.shift[1]-stock.origin[1])/stock.cell).floor();
-                local_stock.z[y*local_stock.nx+x]=if sx>=0.0 && sy>=0.0 && sx<stock.nx as f64 && sy<stock.ny as f64 {
-                    stock.z[sy as usize*stock.nx+sx as usize]
-                } else { local.info.stock_min[2] };
+                // 移動がセルの幅の整数倍でなければ、重なるセルの高い側を採る。
+                let span=|axis:usize,n:usize| {
+                    let q=(p[axis]-sec.shift[axis]-stock.origin[axis])/stock.cell;
+                    (((q-0.5+1e-9).floor().max(0.0) as usize).min(n),
+                        ((q+0.5-1e-9).ceil().max(0.0) as usize).min(n))
+                };
+                let (x0,x1)=span(0,stock.nx);let (y0,y1)=span(1,stock.ny);
+                let mut height=local.info.stock_min[2];
+                for j in y0..y1 { for i in x0..x1 { height=height.max(stock.z[j*stock.nx+i]); } }
+                local_stock.z[y*local_stock.nx+x]=height;
             } }
             let mut local_mesh=placed.clone();
             for p in &mut local_mesh.positions { p[0]+=sec.shift[0] as f32;p[1]+=sec.shift[1] as f32; }
