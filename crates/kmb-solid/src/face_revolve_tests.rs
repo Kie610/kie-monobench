@@ -223,7 +223,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
                     });
                 }
             }
-            original
+            original.map(|body| (k.faces(body).unwrap(), k.mesh(body, 0.001).unwrap()))
         } else {
             None
         };
@@ -247,7 +247,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         .unwrap();
         let expected = std::f64::consts::PI * 16.0 * 15.0;
         assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
-        if let Some(original) = original_many {
+        if let Some((mut old, old_mesh)) = original_many {
             let report = doc.recompute(&reg, &*k);
             let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(r) else {
                 panic!()
@@ -255,29 +255,49 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
             let Value::Shape(organized) = outputs["body"] else {
                 panic!()
             };
-            let mut old = k.faces(original).unwrap();
             let mut new = k.faces(organized).unwrap();
             old.sort_by(|a, b| a.name.cmp(&b.name));
             new.sort_by(|a, b| a.name.cmp(&b.name));
-            eprintln!(
-                "Many faces order={selected_faces:?}: old={:?} organized={:?}",
-                old.iter().map(|f| &f.name).collect::<Vec<_>>(),
-                new.iter().map(|f| &f.name).collect::<Vec<_>>()
-            );
+            let new_mesh = k.mesh(organized, 0.001).unwrap();
+            let face_bounds = |mesh: &kmb_core::Mesh, name: &str| {
+                let mut lo = [f64::INFINITY; 3];
+                let mut hi = [f64::NEG_INFINITY; 3];
+                for (t, f) in mesh.triangles.iter().zip(&mesh.triangle_faces) {
+                    if mesh.face_names[*f as usize] != name {
+                        continue;
+                    }
+                    for nd in t {
+                        for a in 0..3 {
+                            lo[a] = lo[a].min(f64::from(mesh.positions[*nd as usize][a]));
+                            hi[a] = hi[a].max(f64::from(mesh.positions[*nd as usize][a]));
+                        }
+                    }
+                }
+                (lo, hi)
+            };
             assert_eq!(
                 old.iter().map(|f| &f.name).collect::<Vec<_>>(),
                 new.iter().map(|f| &f.name).collect::<Vec<_>>()
             );
             for (old, new) in old.iter().zip(&new) {
-                assert!(
-                    (old.area - new.area).abs() < 1e-5 * old.area.max(1.0),
-                    "{}: {} / {}",
-                    old.name,
-                    old.area,
-                    new.area
-                );
+                let old_bounds = face_bounds(&old_mesh, &old.name);
+                let new_bounds = face_bounds(&new_mesh, &new.name);
+                for axis in 0..3 {
+                    assert!((old_bounds.0[axis] - new_bounds.0[axis]).abs() < 1e-7);
+                    assert!((old_bounds.1[axis] - new_bounds.1[axis]).abs() < 1e-7);
+                }
                 match (old.planar, new.planar) {
                     (Some(a), Some(b)) => {
+                        // 面積の積分値どうしではなく、半径4の蓋の理論値と各々を比べる。
+                        let area = std::f64::consts::PI * 16.0;
+                        for face in [old, new] {
+                            assert!(
+                                (face.area - area).abs() / area < 2e-3,
+                                "{}: {} / {area}",
+                                face.name,
+                                face.area
+                            );
+                        }
                         let n = kmb_core::kernel::normalize(a.normal);
                         assert!(
                             (kmb_core::kernel::dot(n, kmb_core::kernel::normalize(b.normal)) - 1.0)
@@ -289,7 +309,15 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
                                 < 1e-7
                         );
                     }
-                    (None, None) => {}
+                    (None, None) => {
+                        assert!(
+                            (old.area - new.area).abs() < 1e-5 * old.area.max(1.0),
+                            "{}: {} / {}",
+                            old.name,
+                            old.area,
+                            new.area
+                        );
+                    }
                     _ => panic!("{} の面の対応が変わる", old.name),
                 }
             }
@@ -606,18 +634,6 @@ fn a_finer_approximated_revolve_outline_does_not_reuse_old_face_names() {
         .map(|e| e.name.clone())
         .collect();
     assert!(old_names.iter().all(|n| !fine_names.contains(n)));
-    for (label, p) in [("old", &old.profile), ("fine", &fine.profile)] {
-        for r in &p.regions {
-            for e in &r.outer.edges {
-                eprintln!(
-                    "{label} {} {:?} -> {:?}",
-                    e.name,
-                    p.plane.to_world(e.from_point()),
-                    p.plane.to_world(e.to_point())
-                );
-            }
-        }
-    }
     let old_body = k
         .revolve(
             &old.profile,
