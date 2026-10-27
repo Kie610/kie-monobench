@@ -4,6 +4,8 @@
 
 feature-solid-hole = 穴
 feature-solid-hole-tip = スケッチの単独の点(線や円に使っていない点)すべてに穴をあける
+feature-solid-thread = ねじ
+feature-solid-thread-tip = 円筒の面にねじを付ける。属性のみか、ねじ山の形を作るかを選べる
 feature-solid-shell = シェル
 feature-solid-shell-tip = 立体をくり抜いて殻にする。選んだ面は取り除いて開け、ボディを選ぶと中を空洞にする
 feature-solid-boolean = ブーリアン

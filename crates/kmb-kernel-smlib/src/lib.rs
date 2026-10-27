@@ -836,6 +836,16 @@ impl Kernel for SmlibKernel {
         self.skin_solid(surfaces, tag, "スイープ")
     }
 
+    fn helical_sweep(
+        &self,
+        profile: &Profile,
+        helix: &k::Helix,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let surfaces = skin::helical_sweep(profile, helix, tag).map_err(KernelError::Failed)?;
+        self.skin_solid(surfaces, tag, "らせんの掃引")
+    }
+
     fn loft(
         &self,
         sections: &[Profile],

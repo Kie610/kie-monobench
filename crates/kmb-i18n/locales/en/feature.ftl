@@ -3,6 +3,8 @@
 
 feature-solid-hole = Hole
 feature-solid-hole-tip = Drill a hole at every lone sketch point (points not used by lines or circles)
+feature-solid-thread = Thread
+feature-solid-thread-tip = Add a thread to a cylindrical face. Choose cosmetic attributes or a modeled thread
 feature-solid-shell = Shell
 feature-solid-shell-tip = Hollow out a solid into a shell. Selected faces are removed to open it; selecting a body makes a closed cavity inside
 feature-solid-boolean = Combine
