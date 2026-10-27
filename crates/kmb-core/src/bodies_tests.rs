@@ -327,11 +327,11 @@ fn a_version_5_file_opens_pinned_and_only_needed_pins_stay() {
     // 外した印は変更の記録にしない
     assert!(!doc.can_undo());
 
-    // 保存すると版 6 で、残った印だけが書かれ、開き直しても同じ形
+    // 保存すると今の版(印を足したのは版 6)で、残った印だけが書かれ、開き直しても同じ形
     let saved = doc.to_json();
     let raw: serde_json::Value = serde_json::from_str(&saved).unwrap();
     assert_eq!(raw["format_version"], json!(FORMAT_VERSION));
-    assert_eq!(FORMAT_VERSION, 6);
+    const { assert!(FORMAT_VERSION >= 6) };
     let written: Vec<bool> = raw["features"]
         .as_array()
         .unwrap()
