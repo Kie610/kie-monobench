@@ -15,6 +15,10 @@ expect "操作の表示: Ctrl+Z 取り消す" exists
 click "押し出し"
 expect "操作の表示: マウス 押し出し" exists
 key Escape
+click "表示"
+click "ワイヤフレーム"
+expect "操作の表示: マウス ワイヤフレーム" exists
+key Escape
 
 # 表示の言語も画面の部品で替え、固定の働きの名前が英語になることを確かめる。
 key Ctrl+,
@@ -29,4 +33,9 @@ key Ctrl+Z
 expect "操作の表示: Ctrl+Z Undo" exists
 click "Extrude"
 expect "操作の表示: マウス Extrude" exists
+key Escape
+
+click "Display"
+click "Orthographic"
+expect "操作の表示: マウス Orthographic" exists
 key Escape
