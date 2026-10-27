@@ -1,4 +1,4 @@
-//! 後から直せるパターン(網羅版 C15・C16)を、人の操作(クリック、キー)で確かめる。
+//! 確かめること: パターンの編集・式の見本と反映・入力中だけの取り消し。
 
 use crate::Tool;
 use crate::tests::*;
@@ -187,7 +187,7 @@ fn dragging_the_original_brings_the_copies_along() {
 
 /// 数を入力している間は見本だけを更新し、Enter で文書へ入れる。
 #[test]
-fn dragging_the_count_shows_the_result_before_release() {
+fn typing_a_count_expression_previews_then_commits_on_enter() {
     let mut h = four_circles_in_a_row();
     click_at(&mut h, [8.52, 11.15]);
     h.run();
