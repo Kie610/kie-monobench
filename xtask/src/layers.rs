@@ -397,10 +397,14 @@ impl<'a> Graph<'a> {
                 }
             }
         }
-        // ソリッドの機能(kmb-cad-*)は、共通部品(kmb-cad)とコアと受け渡しの型と材料の表(kmb-look)だけを使う
+        // ソリッドの機能(kmb-cad-*)は、共通部品(kmb-cad)とコアと受け渡しの型と材料の表(kmb-look)と
+        // ファイルの形式の小部品(kmb-format。STEP の単位など、カーネルの読み手と同じ読み方をするため)だけを使う
         for &n in self.p.keys().filter(|n| n.starts_with("kmb-cad")) {
             for d in self.deps(n, false) {
-                if !matches!(d, "kmb-core" | "kmb-cad" | "kmb-interchange" | "kmb-look") {
+                if !matches!(
+                    d,
+                    "kmb-core" | "kmb-cad" | "kmb-interchange" | "kmb-look" | "kmb-format"
+                ) {
                     out.push(format!("{n} が {d} に依存している(ソリッドの機能どうし)"));
                 }
             }

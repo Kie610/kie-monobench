@@ -1,6 +1,10 @@
 //! STEP の読み込み(`solid.import_step@1`)。STEP の中身を文書に入れて持つので、元の
 //! ファイルを動かしたり消したりしても文書は開ける。読み込んだ形は加工と計測に使え、カーネルが立体に
 //! 組めれば足し引きやフィレットにも使える(truck のカーネルと、組めない形では使えない)。
+//!
+//! 長さは、カーネルの読み手がファイルの単位(inch・m など)から mm に直す。単位を読めない・
+//! 混ざっている時は、ファイルの数を mm とみなして読み、機能に注意を出す(大きさが違って見えたら
+//! ここを見れば分かるように)。
 
 use kmb_cad::kernel_err;
 use kmb_cad::{parse, solid};
@@ -96,7 +100,19 @@ impl Feature for ImportStep {
                 .transform(body, &STAND_UP, "")
                 .map_err(kernel_err)?;
         }
-        Ok([("body".to_string(), Value::Shape(body))].into())
+        let mut out: Outputs = [("body".to_string(), Value::Shape(body))].into();
+        let unit = kmb_format::step::length_unit(&self.step);
+        match unit.warning {
+            Some(w) => {
+                log::warn!("{w}");
+                kmb_core::add_warnings(&mut out, vec![w]);
+            }
+            None if unit.mm != 1.0 => {
+                log::info!("STEP の長さの単位 {} を mm に直して読みました", unit.name);
+            }
+            None => {}
+        }
+        Ok(out)
     }
 }
 
