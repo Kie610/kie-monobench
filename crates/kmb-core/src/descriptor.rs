@@ -73,6 +73,9 @@ pub enum FieldKind {
     Bool,
     /// 自由な文字列(例: 材料の名前)。空にすると項目を消す
     Text,
+    /// 差し込みの文字([`kmb_expr::Template`]。`M3-{長さ}`)。画面・CLI・MCP は文字の欄と同じに出し、
+    /// 値は差し込みの文字として確かめる。単位は持たない
+    Template,
     /// ファイルのパス(例: ポストのプラグイン)。AI(MCP)から来た値は、許したフォルダの中に限る
     File,
     /// 決まった値から選ぶ
@@ -137,6 +140,9 @@ pub struct Field {
     /// 式の欄の横に出すスライダ([`Field::slider`])
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slider: Option<Slider>,
+    /// 欄の横に出す ▲▼(押すと値を 1 刻みずつ変え、形の変わり方を見比べる。[`Field::step`])
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<Step>,
     /// 数だけを打った時に補う既定の単位([`FieldUnit`])。式と数の欄は必ず持つ(持たない欄は
     /// 単位を補わない。試験が、組み込みの欄がみな持つことを確かめる)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -183,6 +189,33 @@ impl FieldUnit {
             FieldUnit::Plain(s) => s.clone(),
             FieldUnit::Ratio | FieldUnit::Unitless | FieldUnit::Formula => String::new(),
         }
+    }
+}
+
+/// 欄の値を ▲▼ で `by` ずつ変える刻み。`min` より下には下げない(個数なら 1)。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Step {
+    pub by: f64,
+    pub min: f64,
+}
+
+impl Step {
+    /// 欄の文字 `text` を 1 刻み上げた(`up` が偽なら下げた)値。数だけの値に限り、式(`n * 2` や
+    /// パラメータの名前)は書き換えずに `None` を返す(式を数に置き換えて黙って壊さない)。
+    /// 下げても `min` より下がらない時も `None`。
+    pub fn next(&self, text: &str, up: bool) -> Option<String> {
+        let v: f64 = text.trim().parse().ok()?;
+        let n = if up {
+            v + self.by
+        } else {
+            (v - self.by).max(self.min)
+        };
+        if n == v || !n.is_finite() {
+            return None;
+        }
+        // 刻みの足し算で出る端数(0.1 + 0.2 など)を落とす
+        let n = (n * 1e9).round() / 1e9;
+        Some(format!("{n}"))
     }
 }
 
@@ -264,6 +297,7 @@ impl Field {
             marks: None,
             hidden: Vec::new(),
             slider: None,
+            step: None,
             unit: None,
             follows: None,
             origin_planes: false,
@@ -339,6 +373,12 @@ impl Field {
             unit: unit.into(),
             rest: String::new(),
         });
+        self
+    }
+
+    /// 欄の横に ▲▼ を出し、押すと値を `by` ずつ変える(`min` より下げない)。
+    pub fn step(mut self, by: f64, min: f64) -> Self {
+        self.step = Some(Step { by, min });
         self
     }
 
@@ -478,6 +518,11 @@ impl Field {
 
     pub fn text(key: &str, label: &str) -> Self {
         Self::new(key, label, FieldKind::Text)
+    }
+
+    /// 差し込みの文字の欄([`FieldKind::Template`])。
+    pub fn template(key: &str, label: &str) -> Self {
+        Self::new(key, label, FieldKind::Template)
     }
 
     /// ファイルのパスの欄([`FieldKind::File`])。

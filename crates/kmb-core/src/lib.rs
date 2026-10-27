@@ -15,6 +15,7 @@ mod ids;
 pub mod kernel;
 mod modules;
 mod names;
+mod occurrence;
 mod payload;
 mod problem;
 mod recompute;
@@ -26,7 +27,7 @@ pub use args::{Arg, ArgKind};
 pub use bodies::{BodyId, BodyLine, BodyState, BodyTable};
 pub use descriptor::{
     CHOICES_TYPE, Choice, Descriptor, Field, FieldKind, FieldUnit, Fix, PickOn, Retarget, Slider,
-    Suggest, When, category, choices_of, choices_value, row_name,
+    Step, Suggest, When, category, choices_of, choices_value, row_name,
 };
 pub use document::{
     Component, DOCUMENT_EXTENSION, DOCUMENT_EXTENSIONS, DocEvent, Document, DocumentData,
@@ -45,7 +46,7 @@ pub use extension::{JobControl, JobProgress};
 pub use face_names::{FaceAliases, SPLIT_BY};
 pub use feature::{
     CONCURRENT, EvalCtx, EvalError, Factory, Feature, InputRef, ModelParam, Names, Outputs,
-    Registry, Value, WARNINGS, add_warnings, expr_inputs, warnings_of,
+    Registry, Value, WARNINGS, add_warnings, expr_inputs, template_inputs, warnings_of,
 };
 pub use ids::{FeatureId, ParamId};
 pub use kernel::{
@@ -74,8 +75,9 @@ pub use section::{Section, SectionError, SectionType};
 pub use transaction::{Op, Transaction, TxError};
 
 pub use kmb_expr::{
-    BUILTIN_NAMES, Dim, LengthUnit, Quantity, UNIT_NAMES, display_unit, eval_str, is_valid_name,
-    parse as parse_expr, rename_reference, set_display_unit,
+    BUILTIN_NAMES, Dim, LengthUnit, Quantity, Template, UNIT_NAMES, display_unit, escape_template,
+    eval_str, is_valid_name, parse as parse_expr, rename_in_template, rename_reference,
+    set_display_unit,
 };
 
 /// コア API の版。変える時は全モジュールの契約テストを通す。
@@ -85,3 +87,5 @@ pub const CORE_API_VERSION: &str = "0.39.0";
 mod bodies_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod text_param_tests;

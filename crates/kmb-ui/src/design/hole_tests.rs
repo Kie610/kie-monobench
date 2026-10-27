@@ -427,6 +427,29 @@ fn a_thread_on_the_boss_suggests_the_nearest_metric_size() {
     assert!(sizes.iter().any(|c| c.value == "M10x1.25"));
     // ボディはそのまま渡す(形は変えない)
     assert!(ws.visible_bodies().iter().any(|b| b.0 == id));
+    // 3D のビューは、ボスの円筒をねじ山の陰影の帯に切る(法線を軸の向きへ交互に傾ける。位置は同じ)
+    let marks = ws
+        .output(id, kmb_interchange::THREAD_MARKS_OUTPUT)
+        .and_then(<kmb_interchange::ThreadMarks as kmb_core::Payload>::from_value)
+        .expect("ねじの印");
+    let m = marks.marks[0];
+    assert!(!m.internal && (m.radius - 5.0).abs() < 1e-6 && (m.pitch - 1.5).abs() < 1e-9);
+    ws.refresh_body_colors();
+    let mesh = ws.cur.scene.mesh_of(id).expect("ボディの網");
+    let tilt = view3d::THREAD_TILT.sin() as f32;
+    let along =
+        |n: &[f32; 3]| n[0] * m.axis[0] as f32 + n[1] * m.axis[1] as f32 + n[2] * m.axis[2] as f32;
+    let up = mesh
+        .normals
+        .iter()
+        .filter(|n| (along(n) - tilt).abs() < 1e-3)
+        .count();
+    let down = mesh
+        .normals
+        .iter()
+        .filter(|n| (along(n) + tilt).abs() < 1e-3)
+        .count();
+    assert!(up > 0 && down > 0, "上向き {up}・下向き {down}");
     ws.finish_edit();
     // 穴の内側は、めねじ(穴の径を呼び径とみなす)
     let id = ws

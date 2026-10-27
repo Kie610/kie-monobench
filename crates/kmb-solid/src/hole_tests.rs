@@ -124,6 +124,62 @@ fn a_tapped_hole_takes_a_typed_size_outside_the_table() {
 }
 
 #[test]
+fn a_tapped_hole_marks_its_wall_for_the_thread_shading() {
+    // ネジ穴は、下穴の壁にねじ山の陰影を付ける印を出す(穴の口から深さまで、ピッチは呼びの物)
+    let k = TestKernel::new();
+    let mut doc = plate_with_hole(
+        &[[15.0, 10.0]],
+        |t, s, points| Hole {
+            points,
+            depth: Some("6 mm".into()),
+            tap: Tap::Tapped,
+            size: Some("M6x0.75".into()),
+            ..Hole::new(t, s)
+        },
+        false,
+    );
+    let report = doc.recompute(&registry(), &*k);
+    let last = report.features.last().unwrap();
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &last.status else {
+        panic!("{:?}", last.status);
+    };
+    let marks = <kmb_interchange::ThreadMarks as kmb_core::Payload>::from_value(
+        &outputs[kmb_interchange::THREAD_MARKS_OUTPUT],
+    )
+    .expect("ねじの印");
+    let [m] = marks.marks[..] else {
+        panic!("{marks:?}");
+    };
+    assert!(m.internal);
+    assert!((m.radius - 5.25 / 2.0).abs() < 1e-9, "{m:?}");
+    assert!((m.pitch - 0.75).abs() < 1e-9 && (m.length - 6.0).abs() < 1e-9);
+    // 板の上の面(z = 10)の (15, 10) から下へ
+    assert!(
+        m.start
+            .iter()
+            .zip([15.0, 10.0, 10.0])
+            .all(|(a, b)| (a - b).abs() < 1e-6)
+    );
+    assert!((m.axis[2] + 1.0).abs() < 1e-9, "{m:?}");
+    // ねじでない穴は印を出さない
+    let mut plain = plate_with_hole(
+        &[[15.0, 10.0]],
+        |t, s, points| Hole {
+            points,
+            diameter: "5 mm".into(),
+            ..Hole::new(t, s)
+        },
+        false,
+    );
+    let report = plain.recompute(&registry(), &*k);
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &report.features.last().unwrap().status
+    else {
+        panic!("穴が開かない");
+    };
+    assert!(!outputs.contains_key(kmb_interchange::THREAD_MARKS_OUTPUT));
+}
+
+#[test]
 fn counterbored_holes_on_several_points_can_be_patterned() {
     let k = TestKernel::new();
     let hole = |t, s, points| Hole {

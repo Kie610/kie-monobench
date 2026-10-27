@@ -1,0 +1,13 @@
+# 基準部品のボスにおねじ、中央の穴にめねじを付けると、3D のビューで円筒の面にねじ山の陰影の帯が付く
+# (形は変えず、帯は軸を回る輪。らせんの線は描かない)。
+#! sample part
+#! size 1280x800
+click "全体表示"
+shot 前
+run cad.thread face=f12:side:e3
+expect "呼び" = "M10x1.5"
+click ~OK
+run cad.thread face=f8:side:e10
+expect "呼び" = "M8x1.25"
+click ~OK
+shot 後

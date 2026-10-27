@@ -50,7 +50,7 @@ pub struct Row {
     /// 計算した値(書き出しだけ)
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub value: String,
-    /// パラメータの単位(`length`・`angle`・`unitless`・`any`)。パラメータの行だけ
+    /// パラメータの単位(`length`・`angle`・`unitless`・`text`・`any`)。パラメータの行だけ
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub unit: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -77,6 +77,7 @@ fn unit_text(u: ParamUnit) -> String {
 fn status_text(s: Option<&ParamStatus>) -> String {
     match s {
         Some(ParamStatus::Ok { value }) => value.to_string(),
+        Some(ParamStatus::Text { value }) => value.clone(),
         _ => String::new(),
     }
 }
@@ -319,10 +320,6 @@ pub fn import(
             out.skipped.push(format!("{name}: 式が空です"));
             continue;
         }
-        if let Err(e) = kmb_core::parse_expr(expr) {
-            out.skipped.push(format!("{name}: 式 `{expr}` の誤り: {e}"));
-            continue;
-        }
         let unit = match r.unit.trim() {
             "" => None,
             u => match serde_json::from_value::<ParamUnit>(serde_json::json!(u)) {
@@ -334,6 +331,18 @@ pub fn import(
             },
         };
         let data = doc.data();
+        // 文字のパラメータ(単位 `text`)の値は差し込みの文字、ほかは数の式
+        let text =
+            unit.or_else(|| data.param_by_name(name).map(|p| p.unit)) == Some(ParamUnit::Text);
+        let checked = if text {
+            kmb_core::Template::parse(expr).map(|_| ())
+        } else {
+            kmb_core::parse_expr(expr).map(|_| ())
+        };
+        if let Err(e) = checked {
+            out.skipped.push(format!("{name}: 式 `{expr}` の誤り: {e}"));
+            continue;
+        }
         let kind = r.kind.trim();
         let is_user = kind == "param"
             || (kind.is_empty()
@@ -348,21 +357,29 @@ pub fn import(
                 };
                 let unit = unit.unwrap_or(p.unit);
                 let mut same = true;
+                let mut row_ops = Vec::new();
                 if p.expr != expr {
-                    ops.push(Op::SetParamExpr {
+                    row_ops.push(Op::SetParamExpr {
                         id: p.id,
                         expr: expr.to_string(),
                     });
                     same = false;
                 }
                 if p.unit != unit || p.comment != comment {
-                    ops.push(Op::SetParamInfo {
+                    let info = Op::SetParamInfo {
                         id: p.id,
                         comment,
                         unit,
-                    });
+                    };
+                    // 文字に替える時は単位を先に(式を差し込みの文字として確かめる)
+                    if unit == ParamUnit::Text {
+                        row_ops.insert(0, info);
+                    } else {
+                        row_ops.push(info);
+                    }
                     same = false;
                 }
+                ops.extend(row_ops);
                 if same {
                     out.unchanged += 1;
                 } else {
@@ -561,5 +578,33 @@ mod tests {
         assert_eq!(d.data().param_by_name("width").unwrap().expr, "60 mm");
         assert!(d.data().param_by_name("gap").is_none());
         assert_eq!(d.data().params[1].id, ParamId(2));
+    }
+
+    #[test]
+    fn text_params_import_as_templates() {
+        let reg = Registry::default();
+        let report = RecomputeReport::default();
+        let mut d = doc();
+        // 新しい文字のパラメータと、数のパラメータを文字に替える行(単位を先に替える)
+        let text = "kind,row,expr,unit\n\
+                    param,型番,M{note}-{width},text\n\
+                    param,note,{{3}},text\n\
+                    param,bad,M{,text\n";
+        let rows = parse(text, Format::Csv).unwrap();
+        let (tx, done) = import(&mut d, &reg, &report, &rows);
+        assert_eq!((done.added, done.changed), (1, 1), "{}", done.summary());
+        assert_eq!(done.skipped.len(), 1, "{:?}", done.skipped);
+        d.apply(tx.unwrap()).unwrap();
+        let t = d.data().param_by_name("型番").unwrap();
+        assert_eq!(
+            (t.expr.as_str(), t.unit),
+            ("M{note}-{width}", ParamUnit::Text)
+        );
+        assert_eq!(
+            d.data().param_by_name("note").unwrap().unit,
+            ParamUnit::Text
+        );
+        let rows = super::rows(d.data(), &reg, &report, &[ParamKey::User { id: t.id }]);
+        assert_eq!(rows[0].unit, "text");
     }
 }

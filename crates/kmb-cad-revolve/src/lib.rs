@@ -1,7 +1,9 @@
 //! 回転(`solid.revolve@1`)。
 use kmb_cad::*;
 use kmb_core::kernel::{self as k};
-use kmb_core::{EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, Registry};
+use kmb_core::{
+    EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, RefKind, Registry,
+};
 use kmb_core::{Payload, PointId, Points};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -57,7 +59,16 @@ pub enum Axis {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Revolve {
-    pub profile: FeatureId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<FeatureId>,
+    #[serde(default, skip_serializing_if = "Source::is_sketch")]
+    pub source: Source,
+    #[serde(
+        default,
+        with = "kmb_core::one_or_many",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub faces: Vec<kmb_core::Ref>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regions: Vec<String>,
     pub axis: Axis,
@@ -77,6 +88,40 @@ pub struct Revolve {
     /// 範囲が「対象まで」の時の面(機能 `feature` の出力 `body` の、軸を含む平らな面)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to_face: Option<RevolveStop>,
+}
+
+/// 回す輪郭の元。面はその縁を、スケッチと同じ輪郭として使う。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Source {
+    #[default]
+    Sketch,
+    Faces,
+}
+
+impl Source {
+    fn is_sketch(&self) -> bool {
+        *self == Self::Sketch
+    }
+}
+
+impl Default for Revolve {
+    fn default() -> Self {
+        Self {
+            profile: None,
+            source: Source::Sketch,
+            faces: vec![],
+            regions: vec![],
+            axis: Axis::Auto,
+            angle: full_turn(),
+            operation: Operation::New,
+            target: None,
+            direction: Direction::Normal,
+            angle2: None,
+            extent: RevolveExtent::Angle,
+            to_face: None,
+        }
+    }
 }
 
 fn is_normal(d: &Direction) -> bool {
@@ -119,6 +164,80 @@ impl Exprs for Revolve {
 const TAU: f64 = std::f64::consts::TAU;
 
 impl Revolve {
+    fn sketch(&self) -> Result<FeatureId, EvalError> {
+        self.profile
+            .ok_or_else(|| EvalError::InvalidData("回すスケッチ(輪郭)を選んでください".into()))
+    }
+
+    fn sketch_source(&self) -> Option<FeatureId> {
+        self.profile.filter(|_| self.source == Source::Sketch)
+    }
+
+    fn axis_sketch(&self, given: Option<FeatureId>) -> Result<FeatureId, EvalError> {
+        given.or(self.sketch_source()).ok_or_else(|| EvalError::InvalidData(
+            "面を輪郭にする時は、軸にするスケッチの番号も指定するか、面と同じ平面にあるボディの辺・作業軸を選んでください".into()))
+    }
+
+    fn face_source(&self) -> Result<(FeatureId, Vec<String>), EvalError> {
+        let mut feature = None;
+        let mut names = Vec::new();
+        for r in &self.faces {
+            let kmb_core::Ref::Face { feature: f, face } = r else {
+                return Err(EvalError::InvalidData(
+                    "回す輪郭にはボディの平らな面を選んでください".into(),
+                ));
+            };
+            if feature.is_some_and(|id| id != *f) {
+                return Err(EvalError::InvalidData(
+                    "回す面は1つのボディから選んでください".into(),
+                ));
+            }
+            feature = Some(*f);
+            if !names.contains(face) {
+                names.push(face.clone());
+            }
+        }
+        Ok((
+            feature.ok_or_else(|| EvalError::InvalidData("回す平らな面を選んでください".into()))?,
+            names,
+        ))
+    }
+
+    fn profiles(&self, ctx: &EvalCtx<'_>) -> Result<(Vec<k::Profile>, Vec<String>), EvalError> {
+        if self.source == Source::Faces {
+            let (feature, names) = self.face_source()?;
+            let groups = kmb_cad::face_profiles(ctx.kernel(), body_of(ctx, feature)?, &names)
+                .map_err(EvalError::InvalidData)?;
+            let mut warnings = Vec::new();
+            let mut profiles = Vec::new();
+            for group in groups {
+                if group.profile.approximated && warnings.is_empty() {
+                    warnings.push("面の縁に直線と円弧でない線があるので、細かい折れ線で近い形にして回しました".into());
+                }
+                let p = group.profile.profile;
+                for region in p.regions {
+                    profiles.push(k::Profile {
+                        plane: p.plane,
+                        regions: vec![region],
+                    });
+                }
+            }
+            return Ok((profiles, warnings));
+        }
+        let sketch = self.sketch()?;
+        let p = if self.regions.is_empty() {
+            profile_from(ctx, sketch)?
+        } else {
+            kmb_core::ProfileFaces::from_value(ctx.output(sketch, "faces")?)
+                .ok_or_else(|| {
+                    EvalError::InvalidData(format!("{sketch} は領域を選べるスケッチではありません"))
+                })?
+                .profile(&self.regions)
+                .map_err(EvalError::InvalidData)?
+        };
+        Ok((vec![p], vec![]))
+    }
+
     /// 回し始める角度(輪郭の平面から、軸の右ねじの向きが正)と回す角度(0 より大きく 2π 以下)。
     fn span(
         &self,
@@ -262,12 +381,15 @@ fn face_middle(ctx: &EvalCtx<'_>, body: kmb_core::ShapeHandle, face: &str) -> Op
 
 impl Feature for Revolve {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v = vec![output(self.profile, "profile")];
-        if !self.regions.is_empty() {
-            v.push(output(self.profile, "faces"));
+        let mut v = match self.source {
+            Source::Sketch => vec![output(self.sketch()?, "profile")],
+            Source::Faces => vec![output(self.face_source()?.0, "body")],
+        };
+        if self.source == Source::Sketch && !self.regions.is_empty() {
+            v.push(output(self.sketch()?, "faces"));
         }
         if let Axis::Points { sketch, .. } = self.axis {
-            v.push(output(sketch.unwrap_or(self.profile), "points"));
+            v.push(output(self.axis_sketch(sketch)?, "points"));
         }
         if let Axis::Edge { feature, .. } = &self.axis {
             v.push(output(*feature, "body"));
@@ -298,20 +420,41 @@ impl Feature for Revolve {
         keep_target(self.operation, self.target)
     }
 
-    fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
-        let profile = if self.regions.is_empty() {
-            profile_from(ctx, self.profile)?
+    fn keeps(&self) -> Vec<FeatureId> {
+        if self.source == Source::Faces && self.operation == Operation::New {
+            self.face_source().map(|(f, _)| vec![f]).unwrap_or_default()
         } else {
-            kmb_core::ProfileFaces::from_value(ctx.output(self.profile, "faces")?)
-                .ok_or_else(|| {
-                    EvalError::InvalidData(format!(
-                        "{} は領域を選べるスケッチではありません",
-                        self.profile
-                    ))
-                })?
-                .profile(&self.regions)
-                .map_err(EvalError::InvalidData)?
+            vec![]
+        }
+    }
+
+    fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+        let (profiles, warnings) = self.profiles(ctx)?;
+        let parts = profiles
+            .into_iter()
+            .map(|profile| self.recipe(ctx, profile))
+            .collect::<Result<Vec<_>, _>>()?;
+        let recipe = if parts.len() == 1 {
+            parts.into_iter().next().unwrap()
+        } else {
+            Recipe::Many { parts }
         };
+        let mut out = finish(ctx, recipe, self.target)?;
+        let mut all = kmb_core::warnings_of(&out);
+        all.extend(warnings);
+        if !all.is_empty() {
+            kmb_core::add_warnings(&mut out, all);
+        }
+        Ok(out)
+    }
+
+    fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {
+        rename(self, old, new)
+    }
+}
+
+impl Revolve {
+    fn recipe(&self, ctx: &EvalCtx<'_>, profile: k::Profile) -> Result<Recipe, EvalError> {
         let plane = profile.plane;
         let (origin, dir) = match &self.axis {
             Axis::Auto => {
@@ -341,7 +484,7 @@ impl Feature for Revolve {
                             .into(),
                     ));
                 };
-                kmb_cad::axis::sketch_line(ctx, sketch.unwrap_or(self.profile), *a, *b)?
+                kmb_cad::axis::sketch_line(ctx, self.axis_sketch(*sketch)?, *a, *b)?
             }
             Axis::Edge { feature, faces } => kmb_cad::AxisRef::Edge {
                 feature: *feature,
@@ -376,21 +519,13 @@ impl Feature for Revolve {
             // 回し始める所まで、輪郭を軸のまわりに回しておく
             profile.plane = transform_plane(&k::rotation(origin, dir, start), &profile.plane);
         }
-        finish(
-            ctx,
-            Recipe::Revolve {
-                operation: self.operation,
-                profile,
-                origin,
-                dir,
-                angle: sweep,
-            },
-            self.target,
-        )
-    }
-
-    fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {
-        rename(self, old, new)
+        Ok(Recipe::Revolve {
+            operation: self.operation,
+            profile,
+            origin,
+            dir,
+            angle: sweep,
+        })
     }
 }
 
@@ -461,9 +596,11 @@ pub fn register(reg: &mut Registry) {
     reg.register_described(
         solid(REVOLVE, "回転")
             .icon("revolve")
-            .hint("スケッチの輪郭を軸まわりに回す。軸は輪郭と同じ平面に置き、自分で選ぶ")
+            .hint("スケッチや平らな面の輪郭を軸まわりに回す。軸は輪郭と同じ平面に置き、自分で選ぶ")
             .aliases("かいてん revolve")
-            .field(Field::output("profile", "プロファイル", "profile"))
+            .field(Field::choice("source", "回す物", &[("sketch", "スケッチのプロファイル"), ("faces", "平らな面")]))
+            .field(Field::output("profile", "プロファイル", "profile").only("source", "sketch", "sketch"))
+            .field(Field::pick("faces", "面", &[RefKind::PlanarFace], 1, None).only("source", "faces", "sketch"))
             .field(Field::choice(
                 "axis.kind",
                 "軸",
@@ -546,7 +683,12 @@ struct Selected {
 
 /// 領域を選び直せる回転(輪郭のスケッチの領域が 2 つ以上ある時だけ)。
 fn repickable(cx: &Context<'_>) -> Option<Selected> {
-    selected_revolve(cx).filter(|a| regions::can_repick(cx, a.revolve.profile))
+    selected_revolve(cx).filter(|a| {
+        a.revolve.source == Source::Sketch
+            && a.revolve
+                .profile
+                .is_some_and(|p| regions::can_repick(cx, p))
+    })
 }
 
 fn selected_revolve(cx: &Context<'_>) -> Option<Selected> {
@@ -556,7 +698,9 @@ fn selected_revolve(cx: &Context<'_>) -> Option<Selected> {
         return None;
     }
     let revolve: Revolve = serde_json::from_value(entry.data.clone()).ok()?;
-    cx.data.feature(revolve.profile)?;
+    if revolve.source == Source::Sketch {
+        cx.data.feature(revolve.profile?)?;
+    }
     Some(Selected { id, revolve })
 }
 
@@ -572,13 +716,14 @@ fn profile_plane(cx: &Context<'_>, profile: FeatureId) -> Option<k::Plane> {
 fn axis_step_choices(
     cx: &Context<'_>,
     before: FeatureId,
-    profile: FeatureId,
+    profile: Option<FeatureId>,
+    plane: Option<k::Plane>,
     bare: bool,
 ) -> Vec<HandleChoice> {
-    let plane = profile_plane(cx, profile);
     let on = |p: k::P3, d: k::P3| plane.is_some_and(|pl| kmb_cad::axis::on_plane(&pl, p, d));
-    let mut choices: Vec<HandleChoice> = kmb_cad::axis::sketch_lines(cx, profile)
+    let mut choices: Vec<HandleChoice> = profile
         .into_iter()
+        .flat_map(|p| kmb_cad::axis::sketch_lines(cx, p))
         .filter(|(_, _, _, e)| on(e[0], k::sub(e[1], e[0])))
         .map(|(n, _, _, ends)| HandleChoice {
             value: if bare { json!({"line": n}) } else { json!(n) },
@@ -587,12 +732,7 @@ fn axis_step_choices(
             ..Default::default()
         })
         .collect();
-    choices.extend(kmb_cad::axis::axis_choices_where(
-        cx,
-        before,
-        Some(profile),
-        on,
-    ));
+    choices.extend(kmb_cad::axis::axis_choices_where(cx, before, profile, on));
     choices
 }
 
@@ -617,8 +757,13 @@ fn axis_handle(choices: Vec<HandleChoice>) -> Handle {
 
 /// 手順の値・CLI の指定の軸(`"x"`・`"y"`・`"z"`、輪郭のスケッチの線 `{"line": n}` か線の番号、
 /// ほかのスケッチの線 `{"sketch": s, "line": n}`)を、回転の軸に。
-fn axis_from(v: &serde_json::Value, cx: &Context<'_>, profile: FeatureId) -> Result<Axis, String> {
+fn axis_from(
+    v: &serde_json::Value,
+    cx: &Context<'_>,
+    profile: Option<FeatureId>,
+) -> Result<Axis, String> {
     let own = |n: u64| -> Result<Axis, String> {
+        let profile = profile.ok_or("面を回す時は、軸にするスケッチの番号も指定してください")?;
         let (_, a, b, _) = kmb_cad::axis::sketch_lines(cx, profile)
             .into_iter()
             .find(|l| l.0 == n)
@@ -643,7 +788,7 @@ fn axis_from(v: &serde_json::Value, cx: &Context<'_>, profile: FeatureId) -> Res
         kmb_cad::AxisRef::OriginZ => Axis::OriginZ,
         kmb_cad::AxisRef::Line { sketch, a, b } => Axis::Points {
             // 輪郭のスケッチなら省く(輪郭を替えても、その線のまま)
-            sketch: sketch.filter(|s| *s != profile),
+            sketch: sketch.filter(|s| Some(*s) != profile),
             a,
             b,
         },
@@ -658,7 +803,7 @@ fn axis_from(v: &serde_json::Value, cx: &Context<'_>, profile: FeatureId) -> Res
 fn axis_line(
     cx: &Context<'_>,
     axis: &Axis,
-    profile: FeatureId,
+    profile: Option<FeatureId>,
     p: &k::Profile,
 ) -> Option<(k::P3, k::P3)> {
     let plane = p.plane;
@@ -675,7 +820,7 @@ fn axis_line(
         Axis::OriginZ => kmb_cad::axis::origin_axis(2),
         Axis::Points { sketch, a, b } => {
             // 計算と同じく、点 a → b の向き
-            let sol = Points::from_value(cx.output(sketch.unwrap_or(profile), "points")?)?;
+            let sol = Points::from_value(cx.output(sketch.or(profile)?, "points")?)?;
             let pa = sol.plane.to_world(*sol.points.get(&(*a)?)?);
             let pb = sol.plane.to_world(*sol.points.get(&(*b)?)?);
             (pa, k::sub(pb, pa))
@@ -733,16 +878,56 @@ fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })
 }
 
+/// 選んだ面かスケッチの領域を、作る操作と手順で同じように読む。
+fn chosen_source(cx: &Context<'_>) -> Result<(Revolve, k::Profile), String> {
+    if cx.arg("faces").is_some() || (cx.arg("regions").is_none() && !cx.picked_faces().is_empty()) {
+        let faces = match cx.arg("faces") {
+            Some(v) => Field::info("faces", "").refs(&json!({"faces": v})),
+            None => cx
+                .picked_faces()
+                .into_iter()
+                .map(|p| kmb_core::Ref::from(p.clone()))
+                .collect(),
+        };
+        let data = Revolve {
+            source: Source::Faces,
+            faces,
+            ..Default::default()
+        };
+        let (feature, names) = data.face_source().map_err(|e| e.to_string())?;
+        let Some(kmb_core::Value::Shape(h)) = cx.output(feature, "body") else {
+            return Err("回す面のボディがありません".into());
+        };
+        let groups = kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)?;
+        let p = groups
+            .into_iter()
+            .next()
+            .ok_or("回す面に輪郭がありません")?
+            .profile
+            .profile;
+        return Ok((data, p));
+    }
+    let (sketch, keys) =
+        regions::chosen_in_args(cx).ok_or("回す平らな面かスケッチの領域を選んでください")?;
+    let p = regions::chosen_profile(cx, sketch, &keys)?;
+    Ok((
+        Revolve {
+            profile: Some(sketch),
+            regions: keys,
+            ..Default::default()
+        },
+        p,
+    ))
+}
+
 /// 回転を作る(輪郭・軸・角度は手順の値か CLI・MCP の指定。角度を省くと 360 度)。
 fn add_revolve(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
-    let (sketch, keys) = regions::chosen_in_args(cx)
-        .ok_or("回す輪郭(閉じた輪郭のあるスケッチの領域)を選んでいません")?;
-    let profile = regions::chosen_profile(cx, sketch, &keys)?;
+    let (mut data, profile) = chosen_source(cx)?;
     let v = cx.arg("axis").filter(|v| !v.is_null()).ok_or(
         "回転軸を選んでいません(axis に x・y・z か、{\"line\": 輪郭のスケッチの線の番号} か、{\"sketch\": スケッチ, \"line\": 線の番号})",
     )?;
-    let axis = axis_from(v, cx, sketch)?;
-    if let Some((o, d)) = axis_line(cx, &axis, sketch, &profile)
+    let axis = axis_from(v, cx, data.profile)?;
+    if let Some((o, d)) = axis_line(cx, &axis, data.profile, &profile)
         && !kmb_cad::axis::on_plane(&profile.plane, o, d)
     {
         return Err(NOT_ON_PLANE.into());
@@ -753,18 +938,8 @@ fn add_revolve(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     }
     let s = format!("{:.2}", deg);
     let s = s.trim_end_matches('0').trim_end_matches('.');
-    let data = Revolve {
-        profile: sketch,
-        regions: keys,
-        axis,
-        angle: format!("{s} deg"),
-        operation: Operation::New,
-        target: None,
-        direction: Direction::Normal,
-        angle2: None,
-        extent: RevolveExtent::Angle,
-        to_face: None,
-    };
+    data.axis = axis;
+    data.angle = format!("{s} deg");
     Ok(Outcome::insert(
         "回転を追加",
         REVOLVE,
@@ -776,6 +951,37 @@ fn add_revolve(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
 /// 回転を作る手順: 輪郭(領域)をクリック(Ctrl で複数)→ 軸の線をクリック → 角度をマウスか数字で
 /// (Enter だけなら 360 度)。
 fn create_handles(cx: &Context<'_>) -> Vec<Handle> {
+    if let Ok((data, profile)) = chosen_source(cx)
+        && data.source == Source::Faces
+    {
+        let mut v = vec![axis_handle(axis_step_choices(
+            cx,
+            FeatureId(u64::MAX),
+            None,
+            Some(profile.plane),
+            true,
+        ))];
+        if let Some((o, d)) = cx
+            .arg("axis")
+            .and_then(|a| axis_from(a, cx, None).ok())
+            .and_then(|a| axis_line(cx, &a, None, &profile))
+        {
+            v.push(Handle {
+                outline: regions::outline(&profile),
+                optional: true,
+                ..Handle::new(
+                    "angle",
+                    ANGLE_LABEL,
+                    Gesture::Angle {
+                        origin: o,
+                        axis: d,
+                        from: regions::centroid(&profile),
+                    },
+                )
+            });
+        }
+        return v;
+    }
     let mut v = vec![Handle {
         choices: regions::region_choices(cx, &regions::region_sketches(cx)),
         ..Handle::new(
@@ -803,7 +1009,13 @@ fn create_handles(cx: &Context<'_>) -> Vec<Handle> {
         ));
         return v;
     };
-    let choices = axis_step_choices(cx, FeatureId(u64::MAX), sketch, true);
+    let choices = axis_step_choices(
+        cx,
+        FeatureId(u64::MAX),
+        Some(sketch),
+        profile_plane(cx, sketch),
+        true,
+    );
     let profile = regions::chosen_profile(cx, sketch, &keys).ok();
     // 軸は自動で選ばない(輪郭から決めた軸が意図と違うことがあるので、必ずクリックで選ぶ)
     let step = axis_handle(choices);
@@ -814,9 +1026,9 @@ fn create_handles(cx: &Context<'_>) -> Vec<Handle> {
     let Some(profile) = profile else {
         return v;
     };
-    let line = axis_from(axis, cx, sketch)
+    let line = axis_from(axis, cx, Some(sketch))
         .ok()
-        .and_then(|a| axis_line(cx, &a, sketch, &profile));
+        .and_then(|a| axis_line(cx, &a, Some(sketch), &profile));
     let Some((o, d)) = line else {
         return v;
     };
@@ -839,7 +1051,9 @@ fn create_handles(cx: &Context<'_>) -> Vec<Handle> {
 impl Extension for RevolveCommands {
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let ok = selected_revolve(cx).is_some();
-        let none = regions::candidates(cx).is_empty();
+        let none = regions::candidates(cx).is_empty()
+            && cx.picked_faces().is_empty()
+            && cx.arg("faces").is_none();
         vec![
             Action::new(REVOLVE_TO_FACE, "回転を止める面を選ぶ", "cad")
                 .before(BEFORE_HOLE)
@@ -862,6 +1076,7 @@ impl Extension for RevolveCommands {
                 // 欄で足す種類 `REVOLVE` は、クリックで作るこの操作に置き換えた(2026-10-18)
                 .replaces(REVOLVE)
                 .args(regions::args())
+                .arg(kmb_core::Arg::pick("faces", "回す平らな面", &[RefKind::PlanarFace]))
                 .arg(kmb_core::Arg::value(
                     "axis",
                     "回転軸。x・y・z か、{\"line\": 輪郭のスケッチの線の番号} か {\"sketch\": スケッチ, \"line\": 線の番号}",
@@ -870,7 +1085,7 @@ impl Extension for RevolveCommands {
                 .menu("作成")
                 .icon("revolve")
                 .aliases("かいてん revolve")
-                .hint("押してから回す領域をクリック(いくつも選ぶ時は Ctrl を押しながら)、軸にする線(輪郭と同じ平面の原点の軸・スケッチの線・ボディの辺)をクリック、角度をマウスか数字で決める(Enter だけなら一周)")
+                .hint("平らな面を先に選ぶか、押してからスケッチの領域をクリック(いくつも選ぶ時は Ctrl を押しながら)、同じ平面の軸をクリックし、角度をマウスか数字で決める(Enter だけなら一周)")
                 .at(&[Place::Toolbar])
                 .disabled_if(none.then_some("閉じた輪郭のあるスケッチがありません")),
             Action::new(REVOLVE_AXIS, "回転軸を選ぶ", "cad")
@@ -920,7 +1135,8 @@ impl Extension for RevolveCommands {
             return Some((|| {
                 let a = repickable(cx).ok_or("領域を選び直せる回転を選んでいません")?;
                 let mut r = a.revolve.clone();
-                r.regions = regions::repicked(cx, a.revolve.profile)?;
+                r.regions =
+                    regions::repicked(cx, a.revolve.profile.ok_or("回すスケッチがありません")?)?;
                 Ok(Outcome::Change {
                     label: "回す領域を選び直す".into(),
                     edits: vec![kmb_core::Edit::SetData {
@@ -934,7 +1150,7 @@ impl Extension for RevolveCommands {
             let a = selected_revolve(cx).ok_or("回転を選んでいません")?;
             let v = cx.arg("line")
                 .ok_or("line に軸(輪郭のスケッチの線の番号、x・y・z、{\"sketch\": スケッチ, \"line\": 線の番号})を指定します")?;
-            let axis = axis_from(v, cx, a.revolve.profile)?;
+            let axis = axis_from(v, cx, a.revolve.sketch_source())?;
             let mut r = a.revolve.clone();
             r.axis = axis;
             Ok(Outcome::Change {
@@ -966,7 +1182,7 @@ impl Extension for RevolveCommands {
             let a = repickable(cx)?;
             return Some(vec![regions::repick_handle(
                 cx,
-                a.revolve.profile,
+                a.revolve.profile?,
                 &a.revolve.regions,
                 "回す領域をクリック(もう一度で外す)。Enter で決める",
             )]);
@@ -977,7 +1193,19 @@ impl Extension for RevolveCommands {
         let a = selected_revolve(cx)?;
         // 輪郭のスケッチの線(隠していても出す)、原点の軸、ほかの見えているスケッチの線。
         // どれも輪郭と同じ平面にあるものだけ(垂直な軸や、平面から外れた線は選べない)
-        let choices = axis_step_choices(cx, a.id, a.revolve.profile, false);
+        let plane = if a.revolve.source == Source::Sketch {
+            profile_plane(cx, a.revolve.profile?)
+        } else {
+            let (f, names) = a.revolve.face_source().ok()?;
+            let Some(kmb_core::Value::Shape(h)) = cx.output(f, "body") else {
+                return None;
+            };
+            kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)
+                .ok()?
+                .first()
+                .map(|g| g.profile.profile.plane)
+        };
+        let choices = axis_step_choices(cx, a.id, a.revolve.sketch_source(), plane, false);
         Some(vec![Handle {
             key: "line".into(),
             ..axis_handle(choices)
@@ -988,4 +1216,57 @@ impl Extension for RevolveCommands {
 /// この crate の名乗り(登録する種類と操作)。組み立て(kmb-bundle)が 1 回だけ並べる。
 pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-revolve", register).with_extension(RevolveCommands)
+}
+
+#[cfg(test)]
+mod face_source_tests {
+    use super::*;
+
+    #[test]
+    fn face_arguments_enable_revolve_without_a_sketch() {
+        let mut doc = kmb_core::Document::new();
+        let reg = Registry::new();
+        let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(k::NullKernel);
+        let report = doc.recompute(&reg, kernel.as_ref());
+        let args = json!({"faces":{"kind":"face","feature":1,"face":"top"}});
+        let cx = Context {
+            args: &args,
+            ..Context::new(doc.data(), &report, &reg, &kernel)
+        };
+        assert!(
+            RevolveCommands
+                .actions(&cx)
+                .iter()
+                .find(|a| a.id == REVOLVE_SKETCH)
+                .unwrap()
+                .disabled
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn a_hidden_sketch_number_is_not_an_axis_source_for_faces() {
+        let r = Revolve {
+            source: Source::Faces,
+            profile: Some(FeatureId(1)),
+            ..Default::default()
+        };
+        assert!(r.axis_sketch(None).is_err());
+        assert_eq!(r.axis_sketch(Some(FeatureId(2))).unwrap(), FeatureId(2));
+    }
+
+    #[test]
+    fn old_sketch_revolves_keep_their_saved_data() {
+        let old =
+            json!({"profile":1,"axis":{"kind":"sketch_x"},"angle":"360 deg","operation":"new"});
+        let r: Revolve = serde_json::from_value(old.clone()).unwrap();
+        assert_eq!(r.source, Source::Sketch);
+        assert_eq!(serde_json::to_value(&r).unwrap(), old);
+    }
+
+    #[test]
+    fn a_face_source_does_not_require_a_sketch_profile() {
+        let value = json!({"source":"faces", "faces":{"kind":"face","feature":1,"face":"f1:end"}, "axis":{"kind":"origin_x"}});
+        assert!(serde_json::from_value::<Revolve>(value).is_ok());
+    }
 }
