@@ -32,7 +32,7 @@ impl Workspace {
             return;
         }
         let names = kmb_session::edit::names(self.cur.work.doc().data(), &self.cur.held);
-        let text = format!("{names}の計算に失敗したので、前に計算できた形を出しています");
+        let text = self.win.t_with("view-held", &[("names", names.into())]);
         let l = &self.win.look;
         let p = ui.painter_at(rect);
         let g = p.layout_no_wrap(text, crate::theme::prop(12.0), l.pal.ink);
@@ -263,7 +263,7 @@ impl Workspace {
         } else {
             self.playback_ui(ui, rect, &legend);
         }
-        marks_legend(ui, rect, &overlay.marks, &self.win.look);
+        marks_legend(ui, rect, &overlay.marks, &self.win.look, &self.win.words());
         self.draw_editing_profile(ui, rect);
         if self.cur.gesture.is_none() && !measuring {
             self.edge_value_boxes(ui, rect);
@@ -341,9 +341,6 @@ impl Workspace {
     }
 }
 
-/// ブラウザを隠した時の左の端のつまみの字(縦に 1 字ずつ)。
-const GRIP_TEXT: &str = "ブラウザ";
-
 /// シミュレーションの印(赤の点・紫の点)の凡例。印を出している時だけ、ビューの左下に出す
 /// (Z22: 凡例が無いと、「G-code で確かめる」の結果の紫の点が何の印か分からない)。
 fn marks_legend(
@@ -351,6 +348,7 @@ fn marks_legend(
     rect: Rect,
     marks: &[([f64; 3], kmb_core::MarkKind, f64)],
     l: &crate::theme::Look,
+    words: &crate::window_state::Words,
 ) {
     if marks.is_empty() {
         return;
@@ -388,14 +386,14 @@ fn marks_legend(
                     row(
                         ui,
                         l.pal.inks.gouge,
-                        format!("赤の点: 食い込み・工具の当たり {gouge} か所"),
+                        words.t_with("view-mark-gouge", &[("count", gouge.into())]),
                     );
                 }
                 if left > 0 {
                     row(
                         ui,
                         l.pal.inks.leftover,
-                        format!("紫の点: 削り残し {left} か所(大きいほど厚い)"),
+                        words.t_with("view-mark-leftover", &[("count", left.into())]),
                     );
                 }
             });

@@ -50,10 +50,10 @@ impl Workspace {
     /// F: 選んだもの(面、なければ選んでいる機能のボディ)の中心を回す中心にする。
     /// 正面から見る向き(外向きの法線)。選んだ面、選んだスケッチの平面、ブラウザで選んだ原点の
     /// 平面の順に探す。どれも無ければ理由。
-    pub(crate) fn look_at_target(&self) -> Result<[f32; 3], &'static str> {
+    pub(crate) fn look_at_target(&self) -> Result<[f32; 3], String> {
         if let Some(f) = self.picked_faces().last() {
             return view3d::face_normal(&self.cur.scene, &f.face)
-                .ok_or("この面の向きが分かりません");
+                .ok_or_else(|| self.win.t("view-look-at-no-normal"));
         }
         if let Some(p) = self
             .selection()
@@ -70,7 +70,7 @@ impl Workspace {
         {
             return Ok(p.normal().map(|v| v as f32));
         }
-        Err("先に面・スケッチ・原点の平面を選んでください")
+        Err(self.win.t("view-look-at-no-target"))
     }
 
     /// 選んだ面・スケッチ・原点の平面を真正面から見る。向きは 0.3 秒かけて替え、その間に形全体が
