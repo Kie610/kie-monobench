@@ -47,8 +47,15 @@ pub fn warnings_of(out: &Outputs) -> Vec<String> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InputRef {
-    Param { name: String },
-    Output { feature: FeatureId, slot: String },
+    Param {
+        name: String,
+    },
+    Output {
+        feature: FeatureId,
+        slot: String,
+    },
+    /// 文書の長さの単位(設計の属性の `units`)。差し込みの文字が数を文字にする時に読む
+    Units,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -341,11 +348,29 @@ pub fn expr_inputs(src: &str) -> Result<Vec<InputRef>, EvalError> {
         .collect())
 }
 
+/// 差し込みの文字([`kmb_expr::Template`])から、参照するパラメータを入力として列挙する。
+/// 差し込みがあれば文書の長さの単位([`InputRef::Units`])も数える(名前 1 つの差し込みは、
+/// 数か文字かが文書を見ないと決まらないので、数として数える)。
+pub fn template_inputs(src: &str) -> Result<Vec<InputRef>, EvalError> {
+    let t = kmb_expr::Template::parse(src)?;
+    let mut out: Vec<InputRef> = t
+        .references()
+        .into_iter()
+        .map(|name| InputRef::Param { name })
+        .collect();
+    if t.has_slots() {
+        out.push(InputRef::Units);
+    }
+    Ok(out)
+}
+
 /// 評価中の機能に渡す文脈。宣言済みの入力だけを返す。
 pub struct EvalCtx<'a> {
     pub(crate) id: FeatureId,
     pub(crate) declared: &'a [InputRef],
     pub(crate) params: &'a HashMap<String, Quantity>,
+    /// 計算できた文字のパラメータ(名前 → 文字)
+    pub(crate) texts: &'a HashMap<String, String>,
     pub(crate) outputs: &'a HashMap<FeatureId, Outputs>,
     /// 読むボディの付け替え(データの形 → 読む形。[`crate::BodyTable::redirects`])
     pub(crate) redirect: &'a BTreeMap<crate::BodyState, crate::BodyState>,
@@ -376,6 +401,11 @@ impl EvalCtx<'_> {
         if !self.is_param_declared(name) {
             return Err(EvalError::Undeclared(format!("パラメータ {name}")));
         }
+        if self.texts.contains_key(name) {
+            return Err(EvalError::Other(format!(
+                "パラメータ {name} は文字です(数の欄には使えません)"
+            )));
+        }
         // 宣言済みの入力は、再計算が評価の前に存在と成否を確かめている
         self.params
             .get(name)
@@ -391,7 +421,35 @@ impl EvalCtx<'_> {
                 return Err(EvalError::Undeclared(format!("パラメータ {name}")));
             }
         }
+        if let Some(name) = e
+            .references()
+            .into_iter()
+            .find(|n| self.texts.contains_key(n))
+        {
+            return Err(kmb_expr::ExprError::TextParam(name).into());
+        }
         Ok(e.eval(&|n| self.params.get(n).copied())?)
+    }
+
+    /// 差し込みの文字([`kmb_expr::Template`])に値を入れた文字。参照するパラメータと、数を入れる
+    /// なら文書の長さの単位([`InputRef::Units`])が宣言済みでなければならない([`template_inputs`])。
+    pub fn text(&self, template: &str) -> Result<String, EvalError> {
+        let t = kmb_expr::Template::parse(template)?;
+        for name in t.references() {
+            if !self.is_param_declared(&name) {
+                return Err(EvalError::Undeclared(format!("パラメータ {name}")));
+            }
+        }
+        if t.has_numbers(&|n| self.texts.contains_key(n))
+            && !self.declared.contains(&InputRef::Units)
+        {
+            return Err(EvalError::Undeclared("文書の長さの単位".into()));
+        }
+        let lookup = |n: &str| match self.texts.get(n) {
+            Some(s) => Some(kmb_expr::Value::Text(s.clone())),
+            None => self.params.get(n).map(|q| kmb_expr::Value::Num(*q)),
+        };
+        Ok(t.render(&lookup, self.data.properties.units)?)
     }
 
     pub fn output(&self, feature: FeatureId, slot: &str) -> Result<&Value, EvalError> {
