@@ -29,6 +29,7 @@ fn with_study(type_id: &str, data: serde_json::Value) -> (Workspace, FeatureId) 
                 name: "研究 1".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

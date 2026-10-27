@@ -985,7 +985,8 @@ pub fn register(reg: &mut Registry) {
                 )
                 .pick_on("line", PATTERN_AXIS)
                 .hide_choice("edge")
-                .hide_choice("datum"),
+                .hide_choice("datum")
+                .hide_choice("segment"),
             )
             .field(Field::vector("direction", "向き(X, Y, Z)").unitless().only(
                 "direction_ref.kind",
@@ -1005,6 +1006,7 @@ pub fn register(reg: &mut Registry) {
                 .pick_on("line", PATTERN_AXIS2)
                 .hide_choice("edge")
                 .hide_choice("datum")
+                .hide_choice("segment")
                 .help("方向 2(格子のもう 1 つの向き)。個数 2 を 2 以上にすると使う"),
             )
             .field(
@@ -1077,7 +1079,8 @@ pub fn register(reg: &mut Registry) {
                 )
                 .pick_on("line", PATTERN_AXIS)
                 .hide_choice("edge")
-                .hide_choice("datum"),
+                .hide_choice("datum")
+                .hide_choice("segment"),
             )
             .field(
                 Field::vector("origin", "軸の通る点")

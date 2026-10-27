@@ -902,6 +902,56 @@ impl PartialEq for Upgrade {
 }
 
 impl Descriptor {
+    /// データの中の面の名前(選ぶ欄と付け替えの鍵が持つ参照)を `rename` で書き換える。宣言の無い所の
+    /// 名前は書き換えない。書き換えた名前の数を返す(前の文書の伸びた面の名前を、開いた後に今の名前へ
+    /// 直すのに使う。[`crate::Document::rename_old_faces`])。
+    pub fn rename_faces(
+        &self,
+        data: &mut serde_json::Value,
+        rename: &dyn Fn(&str) -> Option<String>,
+    ) -> usize {
+        let mut keys = Vec::new();
+        for f in &self.fields {
+            match &f.kind {
+                FieldKind::Pick { .. } => keys.push(f.key.clone()),
+                FieldKind::Rows { fields } => {
+                    for row in 0..f.row_count(data) {
+                        for sub in fields {
+                            if matches!(sub.kind, FieldKind::Pick { .. }) {
+                                keys.push(f.row_field(row, sub).key);
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(
+            Retarget::Face { key }
+            | Retarget::Faces { key, .. }
+            | Retarget::Plane { key }
+            | Retarget::Pick { key },
+        ) = &self.retarget
+        {
+            keys.push(key.clone());
+        }
+        keys.sort();
+        keys.dedup();
+        let mut n = 0;
+        for key in keys {
+            let f = Field::info(&key, "");
+            let Some(mut v) = f.get(data).cloned() else {
+                continue;
+            };
+            let k = rename_names_in(&mut v, rename);
+            if k > 0 {
+                f.set(data, Some(v));
+                n += k;
+            }
+        }
+        n
+    }
+
     pub fn new(type_id: &str, category: &str, label: &str) -> Self {
         Descriptor {
             type_id: type_id.into(),
@@ -1401,4 +1451,24 @@ impl Descriptor {
 
 fn is_zero(v: &i32) -> bool {
     *v == 0
+}
+
+/// 値の中の面の名前を書き換える(文字、並び、参照の組の `face`・`faces`・`vertex`)。
+fn rename_names_in(v: &mut serde_json::Value, rename: &dyn Fn(&str) -> Option<String>) -> usize {
+    match v {
+        serde_json::Value::String(s) => match rename(s) {
+            Some(new) => {
+                *s = new;
+                1
+            }
+            None => 0,
+        },
+        serde_json::Value::Array(a) => a.iter_mut().map(|x| rename_names_in(x, rename)).sum(),
+        serde_json::Value::Object(o) => o
+            .iter_mut()
+            .filter(|(k, _)| matches!(k.as_str(), "face" | "faces" | "vertex"))
+            .map(|(_, x)| rename_names_in(x, rename))
+            .sum(),
+        _ => 0,
+    }
 }

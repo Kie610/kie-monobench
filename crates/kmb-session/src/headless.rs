@@ -111,6 +111,9 @@ pub struct Headless {
     creating: Option<(FeatureId, BTreeSet<FeatureId>)>,
     /// 最後の変更で使った時に隠した物(作る途中を始めた時に引き継ぐ)
     just_hidden: BTreeSet<FeatureId>,
+    /// 開いた文書の参照に前の版の伸びた面の名前が残っているかもしれない(次の計算の結果で今の名前に
+    /// 直す。[`Headless::rename_old_faces`])
+    old_names: bool,
 }
 
 /// 作り直しを後へ回す様子。
@@ -130,8 +133,10 @@ impl Headless {
     }
 
     pub fn with_document(modules: Modules, mut doc: Document, path: Option<PathBuf>) -> Self {
+        // 古い版の文書の、読むボディを固定する印のうち要らない物を外す(読む形は変わらない)
+        doc.release_pins(&modules.registry);
         let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
-        Headless {
+        let mut h = Headless {
             doc,
             path,
             modules,
@@ -143,7 +148,22 @@ impl Headless {
             hold: Hold::Off,
             creating: None,
             just_hidden: BTreeSet::new(),
+            old_names: true,
+        };
+        if h.rename_old_faces() {
+            h.recompute();
         }
+        h
+    }
+
+    /// 開いた後の最初の計算の結果で、前の版の伸びた面の名前の参照を今の名前に直す
+    /// ([`Document::rename_old_faces`])。直したら `true`(呼ぶ側が計算し直す)。
+    fn rename_old_faces(&mut self) -> bool {
+        std::mem::take(&mut self.old_names)
+            && self
+                .doc
+                .rename_old_faces(&self.modules.registry, &self.report)
+                > 0
     }
 
     /// ファイルを開く。
@@ -159,8 +179,10 @@ impl Headless {
             bg.forget_running();
         }
         let old = std::mem::replace(&mut self.doc, doc);
+        self.doc.release_pins(&self.modules.registry);
         self.path = path;
         self.active = Default::default();
+        self.old_names = true;
         self.recompute();
         old
     }
@@ -245,6 +267,9 @@ impl Headless {
             .doc
             .recompute(&self.modules.registry, self.modules.kernel.as_ref());
         self.settle_active();
+        if self.rename_old_faces() {
+            self.recompute();
+        }
     }
 
     /// 次の計算でも捨てずに残させる形(画面に出している形)を決める。

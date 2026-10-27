@@ -482,6 +482,7 @@ fn add_copy_of_box(ws: &mut Workspace) -> FeatureId {
                 name: "写し".into(),
                 data: serde_json::json!({"body": last.0, "copy": true, "z": "50 mm"}),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     )));

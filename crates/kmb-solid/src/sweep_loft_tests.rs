@@ -25,6 +25,7 @@ fn add(
                 name: name.into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

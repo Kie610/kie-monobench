@@ -223,7 +223,8 @@ pub fn register(reg: &mut Registry) {
                 ))
                 .pick_on("line", MOVE_AXIS)
                 .hide_choice("edge")
-                .hide_choice("datum"),
+                .hide_choice("datum")
+                .hide_choice("segment"),
             )
             .field(
                 rotate(Field::vector("origin", "軸の通る点").length())
