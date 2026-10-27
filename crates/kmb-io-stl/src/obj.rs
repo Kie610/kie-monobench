@@ -1,5 +1,6 @@
 //! ボディの名前と三角形の網を OBJ に書く。色と材料のファイルは作らない。
 
+use crate::threemf::num;
 use kmb_core::{LengthUnit, Mesh};
 use std::io::{self, Write};
 
@@ -27,7 +28,7 @@ pub fn write_obj<W: Write>(
         };
         for point in &welded.positions {
             let p = point.map(|v| f64::from(v) / unit.mm());
-            writeln!(writer, "v {} {} {}", p[0], p[1], p[2])?;
+            writeln!(writer, "v {} {} {}", num(p[0]), num(p[1]), num(p[2]))?;
         }
         for triangle in &welded.triangles {
             let n = crate::facet_normal(&welded, triangle);

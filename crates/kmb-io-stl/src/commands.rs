@@ -210,7 +210,13 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         crate::write_obj(b, unit, &mut out).map_err(|e| e.to_string())?;
         Ok::<_, String>(out)
     };
-    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name()});
+    let triangles: usize = bodies.iter().map(|(_, m)| m.triangles.len()).sum();
+    let info = json!({"bodies": bodies.len(), "triangles": triangles, "unit": unit.name()});
+    log::info!(
+        "OBJ を書き出す: ボディ {} 個、三角形 {triangles} 個、単位 {}",
+        bodies.len(),
+        unit.name()
+    );
     if each(cx, EXPORT_OBJ) {
         let files = bodies
             .iter()

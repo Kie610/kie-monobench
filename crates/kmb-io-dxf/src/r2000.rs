@@ -66,14 +66,27 @@ impl Writer {
     }
 }
 
-pub(crate) fn upgrade(text: &str) -> String {
+pub(crate) fn upgrade(text: &str) -> Result<String, String> {
     let lines: Vec<_> = text.lines().collect();
-    let pairs: Vec<(i32, &str)> = lines
-        .as_chunks::<2>()
-        .0
+    let (chunks, remaining) = lines.as_chunks::<2>();
+    if !remaining.is_empty() {
+        return Err("DXF のグループコードと値の組が途中で終わっています".into());
+    }
+    let pairs: Vec<(i32, &str)> = chunks
         .iter()
-        .map(|p| (p[0].trim().parse().expect("書き手のグループコード"), p[1]))
-        .collect();
+        .enumerate()
+        .map(|(i, p)| {
+            p[0].trim().parse().map(|code| (code, p[1])).map_err(|_| {
+                format!(
+                    "DXF の {} 行目のグループコードが数ではありません",
+                    2 * i + 1
+                )
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    if pairs.is_empty() {
+        return Err("DXF のグループコードがありません".into());
+    }
     let mut records: Vec<&[(i32, &str)]> = Vec::new();
     let mut start = 0;
     for i in 1..pairs.len() {
@@ -111,7 +124,14 @@ pub(crate) fn upgrade(text: &str) -> String {
         }
         if kind == "TABLE" {
             out.pair(0, "TABLE");
-            out.pair(2, fields.iter().find(|p| p.0 == 2).expect("表の名前").1);
+            out.pair(
+                2,
+                fields
+                    .iter()
+                    .find(|p| p.0 == 2)
+                    .ok_or("DXF の表の名前がありません")?
+                    .1,
+            );
             table = out.handle();
             out.pair(5, &table);
             out.pair(330, 0);
@@ -167,11 +187,11 @@ pub(crate) fn upgrade(text: &str) -> String {
         }
     }
     let seed = format!("{:X}", out.next);
-    out.text.replacen(
+    Ok(out.text.replacen(
         "  9\n$ACADVER\n  1\nAC1015\n",
         &format!("  9\n$ACADVER\n  1\nAC1015\n  9\n$HANDSEED\n  5\n{seed}\n"),
         1,
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -180,11 +200,20 @@ mod tests {
     #[test]
     fn invalid_group_codes_are_reported_without_panicking() {
         let result = std::panic::catch_unwind(|| upgrade("bad\nSECTION\n"));
-        assert!(result.is_ok(), "数でないグループコードをpanicにしない");
+        let error = result
+            .expect("数でないグループコードをpanicにしない")
+            .expect_err("不正なコードは誤りにする");
+        assert!(
+            error.contains("1 行目") && error.contains("グループコード"),
+            "{error}"
+        );
     }
     #[test]
     fn missing_table_names_are_reported_without_panicking() {
         let result = std::panic::catch_unwind(|| upgrade("  0\nTABLE\n 70\n1\n  0\nEOF\n"));
-        assert!(result.is_ok(), "名前のない表をpanicにしない");
+        let error = result
+            .expect("名前のない表をpanicにしない")
+            .expect_err("名前のない表は誤りにする");
+        assert!(error.contains("表の名前"), "{error}");
     }
 }

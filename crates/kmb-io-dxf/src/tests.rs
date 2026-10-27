@@ -97,7 +97,13 @@ fn layer_line_breaks_are_reported_without_panicking() {
             options.layer = "線\n不正な行".into();
         }
         let result = std::panic::catch_unwind(|| to_dxf(&sketch, &sol, &options));
-        assert!(result.is_ok(), "画層名の改行をpanicにしない");
+        let error = result
+            .expect("画層名の改行をpanicにしない")
+            .expect_err("改行を含む画層名は誤りにする");
+        assert!(
+            error.contains("画層名") && error.contains("改行"),
+            "{error}"
+        );
     }
 }
 
@@ -318,7 +324,7 @@ fn binary_dxf(text: &str, modern: bool) -> Vec<u8> {
 #[test]
 fn binary_code_widths_and_truncated_values_are_checked() {
     let sketch = sample_sketch();
-    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default()).unwrap();
     let ascii = from_dxf(&text).unwrap();
     for modern in [true, false] {
         assert_eq!(
@@ -338,7 +344,7 @@ fn binary_code_widths_and_truncated_values_are_checked() {
 #[test]
 fn dxf_upgrade_writes_r2000_handles_and_subclasses() {
     let sketch = sample_sketch();
-    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default()).unwrap();
     assert!(text.contains("AC1015"), "R2000 の版を書く");
     assert!(
         text.contains("AcDbSymbolTableRecord")
@@ -446,7 +452,7 @@ fn same_segment(a: &Segment, b: &Segment, tol: f64) -> bool {
 fn dxf_round_trip_keeps_shapes_and_closes_regions() {
     let s = sample_sketch();
     let sol = solved(&s);
-    let text = to_dxf(&s, &sol, &DxfOptions::default());
+    let text = to_dxf(&s, &sol, &DxfOptions::default()).unwrap();
     assert!(text.contains("AC1015") && text.contains("$INSUNITS"));
     assert!(
         !text.contains("CONSTRUCTION\n 10"),
@@ -496,7 +502,7 @@ fn dxf_construction_lines_on_their_own_layer() {
         points: true,
         ..Default::default()
     };
-    let text = to_dxf(&s, &sol, &opts);
+    let text = to_dxf(&s, &sol, &opts).unwrap();
     let imp = from_dxf(&text).unwrap();
     assert_eq!(imp.shapes.len(), 8);
     assert_eq!(
@@ -771,7 +777,7 @@ fn insert_into_existing_sketch_uses_new_ids() {
         layer: "0".into(),
         ..Default::default()
     };
-    let text = to_dxf(&s, &sol, &opts);
+    let text = to_dxf(&s, &sol, &opts).unwrap();
     // 表の名前 1 つと、画層 0・補助線の 2 つ
     assert_eq!(text.matches("\nLAYER\n").count(), 3);
     assert_eq!(from_dxf(&text).unwrap().shapes.len(), 7 + n);
@@ -819,7 +825,7 @@ proptest::proptest! {
     /// 見本を途中で切ったり 1 文字変えたりしてもパニックしない
     #[test]
     fn mutated_samples_never_panic(cut in 0usize..2000, at in 0usize..2000, ch in proptest::char::any()) {
-        let d = to_dxf(&sample_sketch(), &solved(&sample_sketch()), &DxfOptions::default());
+        let d = to_dxf(&sample_sketch(), &solved(&sample_sketch()), &DxfOptions::default()).unwrap();
         for base in [d.as_str(), SVG_PATH] {
             let mut chars: Vec<char> = base.chars().collect();
             if !chars.is_empty() {
