@@ -190,6 +190,40 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         );
     }
     // 同じ軸を含む別の平面の2面も、それぞれ回して合わせる。
+    let original_many = if !k.is_truck() {
+        let report = doc.recompute(&reg, &*k);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f) else {
+            panic!()
+        };
+        let Value::Shape(source) = outputs["body"] else {
+            panic!()
+        };
+        let mut original = None;
+        for group in kmb_cad::face_profiles(&*k, source, &e.faces).unwrap() {
+            let profile = group.profile.profile;
+            for region in profile.regions {
+                let part = k
+                    .revolve(
+                        &kmb_core::Profile {
+                            plane: profile.plane,
+                            regions: vec![region],
+                        },
+                        [0.0; 3],
+                        [1.0, 0.0, 0.0],
+                        std::f64::consts::TAU,
+                        &format!("f{}", r.0),
+                    )
+                    .unwrap();
+                original = Some(match original {
+                    None => part,
+                    Some(body) => k.boolean(kmb_core::BooleanOp::Union, body, part).unwrap(),
+                });
+            }
+        }
+        original
+    } else {
+        None
+    };
     let data = serde_json::to_value(Revolve {
         source: Source::Faces,
         faces: e
@@ -211,6 +245,48 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
     .unwrap();
     let expected = std::f64::consts::PI * 16.0 * 15.0;
     assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
+    if let Some(original) = original_many {
+        let report = doc.recompute(&reg, &*k);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(r) else {
+            panic!()
+        };
+        let Value::Shape(organized) = outputs["body"] else {
+            panic!()
+        };
+        let mut old = k.faces(original).unwrap();
+        let mut new = k.faces(organized).unwrap();
+        old.sort_by(|a, b| a.name.cmp(&b.name));
+        new.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(
+            old.iter().map(|f| &f.name).collect::<Vec<_>>(),
+            new.iter().map(|f| &f.name).collect::<Vec<_>>()
+        );
+        for (old, new) in old.iter().zip(&new) {
+            assert!(
+                (old.area - new.area).abs() < 1e-5 * old.area.max(1.0),
+                "{}: {} / {}",
+                old.name,
+                old.area,
+                new.area
+            );
+            match (old.planar, new.planar) {
+                (Some(a), Some(b)) => {
+                    let n = kmb_core::kernel::normalize(a.normal);
+                    assert!(
+                        (kmb_core::kernel::dot(n, kmb_core::kernel::normalize(b.normal)) - 1.0)
+                            .abs()
+                            < 1e-8
+                    );
+                    assert!(
+                        kmb_core::kernel::dot(kmb_core::kernel::sub(a.point, b.point), n).abs()
+                            < 1e-7
+                    );
+                }
+                (None, None) => {}
+                _ => panic!("{} の面の対応が変わる", old.name),
+            }
+        }
+    }
 }
 
 #[test]
@@ -485,4 +561,82 @@ fn revolving_a_face_rejects_a_profile_crossing_the_axis() {
     let report = doc.recompute(&registry(), &*k);
     let status = format!("{:?}", report.feature(r));
     assert!(status.contains("輪郭が回転軸をまたいでいます"), "{status}");
+}
+
+/// 確かめること: 近似精度が変わった区間を、古い面名の別facetへ付け替えない。
+#[test]
+fn a_finer_approximated_revolve_outline_does_not_reuse_old_face_names() {
+    let k = TestKernel::new();
+    let (b, f) = disk(false);
+    let mut doc = b.finish("近似輪郭の参照");
+    let report = doc.recompute(&registry(), &*k);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f) else {
+        panic!()
+    };
+    let Value::Shape(body) = outputs["body"] else {
+        panic!()
+    };
+    let names = [format!("f{}:start", f.0)];
+    let old = kmb_cad::face_profile(&*k, body, &names).unwrap();
+    let fine = kmb_cad::face_profile_with_tolerance(&*k, body, &names, 0.001).unwrap();
+    if !old.approximated {
+        assert_eq!(old, fine);
+        return;
+    }
+    let old_names: Vec<_> = old
+        .profile
+        .regions
+        .iter()
+        .flat_map(|r| &r.outer.edges)
+        .map(|e| e.name.clone())
+        .collect();
+    let fine_names: Vec<_> = fine
+        .profile
+        .regions
+        .iter()
+        .flat_map(|r| &r.outer.edges)
+        .map(|e| e.name.clone())
+        .collect();
+    assert!(old_names.iter().all(|n| !fine_names.contains(n)));
+    for (label, p) in [("old", &old.profile), ("fine", &fine.profile)] {
+        for r in &p.regions {
+            for e in &r.outer.edges {
+                eprintln!(
+                    "{label} {} {:?} -> {:?}",
+                    e.name,
+                    p.plane.to_world(e.from_point()),
+                    p.plane.to_world(e.to_point())
+                );
+            }
+        }
+    }
+    let old_body = k
+        .revolve(
+            &old.profile,
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            std::f64::consts::TAU,
+            "reference",
+        )
+        .unwrap();
+    let new_body = k
+        .revolve(
+            &fine.profile,
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            std::f64::consts::TAU,
+            "reference",
+        )
+        .unwrap();
+    let new_names = k.face_names(new_body).unwrap();
+    for name in k
+        .face_names(old_body)
+        .unwrap()
+        .into_iter()
+        .filter(|n| n.contains(":side:"))
+    {
+        assert!(!new_names.contains(&name));
+        let error = kmb_cad::face_profile(&*k, new_body, &[name]).unwrap_err();
+        assert!(error.contains("見つかりません"), "{error}");
+    }
 }

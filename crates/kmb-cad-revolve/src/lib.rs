@@ -10,6 +10,11 @@ use serde_json::json;
 
 pub const REVOLVE: &str = "solid.revolve@1";
 
+mod redundant;
+
+/// 回転で使う、網による輪郭の近似の許容差(mm)。
+const FACE_MESH_TOLERANCE: f64 = 0.001;
+
 /// 回転軸。スケッチの座標軸、原点の X・Y・Z 軸か、スケッチの 2 点を通る直線。`Auto` は輪郭から
 /// 決める([`auto_axis`])。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -206,8 +211,13 @@ impl Revolve {
     fn profiles(&self, ctx: &EvalCtx<'_>) -> Result<(Vec<k::Profile>, Vec<String>), EvalError> {
         if self.source == Source::Faces {
             let (feature, names) = self.face_source()?;
-            let groups = kmb_cad::face_profiles(ctx.kernel(), body_of(ctx, feature)?, &names)
-                .map_err(EvalError::InvalidData)?;
+            let groups = kmb_cad::face_profiles_with_tolerance(
+                ctx.kernel(),
+                body_of(ctx, feature)?,
+                &names,
+                FACE_MESH_TOLERANCE,
+            )
+            .map_err(EvalError::InvalidData)?;
             let mut warnings = Vec::new();
             let mut profiles = Vec::new();
             for group in groups {
@@ -434,6 +444,7 @@ impl Feature for Revolve {
             .into_iter()
             .map(|profile| self.recipe(ctx, profile))
             .collect::<Result<Vec<_>, _>>()?;
+        let parts = redundant::remove_contained(parts);
         let recipe = if parts.len() == 1 {
             parts.into_iter().next().unwrap()
         } else {
@@ -907,7 +918,12 @@ fn chosen_source(cx: &Context<'_>) -> Result<(Revolve, k::Profile), String> {
         let Some(kmb_core::Value::Shape(h)) = cx.output(feature, "body") else {
             return Err("回す面のボディがありません".into());
         };
-        let groups = kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)?;
+        let groups = kmb_cad::face_profiles_with_tolerance(
+            cx.kernel.as_ref(),
+            *h,
+            &names,
+            FACE_MESH_TOLERANCE,
+        )?;
         let p = groups
             .into_iter()
             .next()
@@ -1209,10 +1225,15 @@ impl Extension for RevolveCommands {
             let Some(kmb_core::Value::Shape(h)) = cx.output(f, "body") else {
                 return None;
             };
-            kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)
-                .ok()?
-                .first()
-                .map(|g| g.profile.profile.plane)
+            kmb_cad::face_profiles_with_tolerance(
+                cx.kernel.as_ref(),
+                *h,
+                &names,
+                FACE_MESH_TOLERANCE,
+            )
+            .ok()?
+            .first()
+            .map(|g| g.profile.profile.plane)
         };
         let choices = axis_step_choices(cx, a.id, a.revolve.sketch_source(), plane, false);
         Some(vec![Handle {
