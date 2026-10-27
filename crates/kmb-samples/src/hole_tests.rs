@@ -238,6 +238,7 @@ fn insert(doc: &mut Document, name: &str, d: &Drill) -> FeatureId {
                 name: name.into(),
                 data: serde_json::to_value(d).unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -476,6 +477,7 @@ fn sketch_points_are_drilled_with_chip_breaking_and_a_dwell() {
                     name: "点".into(),
                     data: serde_json::to_value(s.build()).unwrap(),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -554,6 +556,7 @@ fn holes_in_a_pocket_floor_start_at_the_floor_and_move_low_between_them() {
                     name: "ポケットの加工".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))

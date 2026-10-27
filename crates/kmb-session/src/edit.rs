@@ -326,6 +326,7 @@ pub fn insert_feature(
                 name: name.into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     );
@@ -759,6 +760,7 @@ pub fn paste_features(
                 name,
                 data: d,
                 suppressed: false,
+                pin_bodies: false,
             },
         );
     }

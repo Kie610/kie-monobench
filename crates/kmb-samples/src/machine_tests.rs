@@ -43,6 +43,7 @@ fn insert_op(
                     name: name.into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))

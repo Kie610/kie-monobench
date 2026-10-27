@@ -571,6 +571,85 @@ fn a_suppressed_cut_passes_its_target_body_on() {
     );
 }
 
+/// 穴の手前に、同じ板を読む別の穴を差し込むと、後ろの穴はそれを読み、ボディは 1 つのまま。
+/// 前の版の読み方(固定の印)の穴は板をそのまま読み、ボディが 2 つになる(前の動き)。
+/// 道具は板を上下に突き抜ける角柱にし、板と同じ平面の面を作らない。
+#[test]
+fn a_cut_inserted_before_a_cut_is_read_by_it() {
+    let k = TestKernel::new();
+    let reg = registry();
+    for pin in [false, true] {
+        let mut b = DocBuilder::new();
+        let s = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 40.0, 30.0);
+        let plate = extrude_with(
+            &mut b,
+            "板",
+            s,
+            "10 mm",
+            Direction::Normal,
+            None,
+            kmb_cad::Extent::Distance,
+            Operation::New,
+            None,
+        );
+        let first = rect_sketch(&mut b, SketchPlane::Xy, 8.0, 13.0, 4.0, 4.0);
+        let second = rect_sketch(&mut b, SketchPlane::Xy, 28.0, 13.0, 4.0, 4.0);
+        let hole = extrude_with(
+            &mut b,
+            "穴",
+            first,
+            "15 mm",
+            Direction::TwoSides,
+            Some("15 mm"),
+            kmb_cad::Extent::Distance,
+            Operation::Cut,
+            Some(plate),
+        );
+        let mut doc = b.finish("板");
+        let data = doc.data();
+        let at = data.index_of(hole).unwrap();
+        let mut entry = data.feature(hole).unwrap().clone();
+        entry.id = doc.alloc_feature_id();
+        entry.name = "差し込んだ穴".into();
+        entry.data["profile"] = serde_json::json!(second.0);
+        let inserted = entry.id;
+        let mut ops = vec![Op::InsertFeature {
+            index: Some(at),
+            entry,
+        }];
+        if pin {
+            ops.push(Op::SetPinBodies {
+                id: hole,
+                pin: true,
+            });
+        }
+        doc.apply(kmb_core::Transaction::new("差し込む", ops))
+            .unwrap();
+        let report = doc.recompute(&reg, &*k);
+        assert_ok(&report);
+        let bodies = visible_bodies(doc.data(), &reg, &report);
+        let ids: Vec<_> = bodies.iter().map(|b| b.0).collect();
+        let volume = |i: usize| k.mass(bodies[i].1).unwrap().volume;
+        let plate_volume = 40.0 * 30.0 * 10.0;
+        if pin {
+            assert_eq!(ids, vec![inserted, hole]);
+            assert!(
+                close(volume(1), plate_volume - 160.0, 1e-6),
+                "{}",
+                volume(1)
+            );
+        } else {
+            // 後ろの穴は差し込んだ穴の後の形を読み、穴が 2 つ開く
+            assert_eq!(ids, vec![hole]);
+            assert!(
+                close(volume(0), plate_volume - 320.0, 1e-6),
+                "{}",
+                volume(0)
+            );
+        }
+    }
+}
+
 /// 最後の機能(四隅の穴のパターン)を抑制しても、その前のボディが残る(渡す先が無いまま
 /// 元のボディを使い切ったことにして、ボディが 1 つも無くならない)。
 #[test]
@@ -619,6 +698,7 @@ pub(crate) fn with_edge_feature(
                     name: "辺".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -644,6 +724,7 @@ pub(crate) fn edge_feature_status(type_id: &str, mut data: serde_json::Value) ->
                     name: "辺".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -704,6 +785,7 @@ impl EdgeBench {
                         name: "辺".into(),
                         data,
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 };
                 let ops = match old {

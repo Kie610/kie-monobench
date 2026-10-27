@@ -67,6 +67,7 @@ fn entry(id: u64, type_id: &str, data: serde_json::Value) -> FeatureEntry {
         name: type_id.into(),
         data,
         suppressed: false,
+        pin_bodies: false,
     }
 }
 
