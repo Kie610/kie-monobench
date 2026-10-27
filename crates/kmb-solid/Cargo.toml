@@ -24,6 +24,7 @@ kmb-cad-boolean.workspace = true
 kmb-cad-datum.workspace = true
 kmb-cad-hole.workspace = true
 kmb-cad-pattern.workspace = true
+kmb-sketch-3d.workspace = true
 kmb-cad-modify.workspace = true
 kmb-asm.workspace = true
 kmb-interchange.workspace = true

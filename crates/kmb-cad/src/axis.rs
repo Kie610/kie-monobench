@@ -1,5 +1,5 @@
-//! 軸の選び方の共通部: 原点の X・Y・Z 軸と、スケッチの線と、ボディの辺(回転、円形・直線の
-//! パターン、移動が使う)。軸を選ぶ間は原点の軸と見えているスケッチの線とボディの
+//! 軸の選び方の共通部: 原点の X・Y・Z 軸と、スケッチ・3D スケッチの線と、ボディの辺(回転、円形・直線の
+//! パターン、移動が使う)。軸を選ぶ間は原点の軸と見えているスケッチ・3D スケッチの線とボディの
 //! まっすぐな辺・円の辺と作業軸をクリックで選べる(円の辺はその円の軸。穴やボスの軸のまわりに並べる)。
 use crate::output;
 use kmb_core::kernel::{self as k, P3};
@@ -38,11 +38,17 @@ pub enum AxisRef {
     Datum {
         feature: FeatureId,
     },
+    /// 3D スケッチ `sketch` の線 `line`(線の番号で指す。始めの点 → 終わりの点の向き)。
+    /// 線が無くなった時は、別の線に替えず誤りにする
+    Segment {
+        sketch: FeatureId,
+        line: u32,
+    },
 }
 
-/// 軸の欄の選択肢(`Vector` の名前は機能ごと)。`edge` と `datum` は軸を選ぶ手順でボディの辺か作業軸を
-/// クリックした時だけ入るので、欄では隠す(`Field::hide_choice`)。
-pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 7] {
+/// 軸の欄の選択肢(`Vector` の名前は機能ごと)。`edge`・`datum`・`segment` は軸を選ぶ手順でボディの辺・
+/// 作業軸・3D スケッチの線をクリックした時だけ入るので、欄では隠す(`Field::hide_choice`)。
+pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 8] {
     [
         ("vector", vector),
         ("origin_x", "原点の X 軸"),
@@ -51,6 +57,7 @@ pub fn axis_ref_choices(vector: &'static str) -> [(&'static str, &'static str); 
         ("line", "スケッチの線(クリックで選ぶ)"),
         ("edge", "ボディの辺"),
         ("datum", "作業軸"),
+        ("segment", "3D スケッチの線"),
     ]
 }
 
@@ -67,6 +74,9 @@ impl AxisRef {
             } => vec![output(*s, "points")],
             AxisRef::Edge { feature, .. } => vec![output(*feature, "body")],
             AxisRef::Datum { feature } => vec![output(*feature, kmb_interchange::DATUM_OUTPUT)],
+            AxisRef::Segment { sketch, .. } => {
+                vec![output(*sketch, kmb_interchange::SEGMENTS_OUTPUT)]
+            }
             _ => Vec::new(),
         }
     }
@@ -101,6 +111,7 @@ impl AxisRef {
                 })?
             }
             AxisRef::Datum { feature } => kmb_interchange::datum_axis(ctx, feature)?,
+            AxisRef::Segment { sketch, line } => kmb_interchange::segment_axis(ctx, sketch, line)?,
         }))
     }
 
@@ -128,6 +139,23 @@ impl AxisRef {
                 .map(FeatureId)
                 .ok_or("feature に辺を持つボディの機能を指定します")?;
             return Ok(AxisRef::Edge { feature, faces });
+        }
+        if let Some(n) = v.get("segment") {
+            let line = n
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .ok_or("segment に 3D スケッチの線の番号を指定します")?;
+            let sketch = v
+                .get("sketch")
+                .and_then(|s| s.as_u64())
+                .map(FeatureId)
+                .ok_or("sketch に線を持つ 3D スケッチの機能を指定します")?;
+            if !kmb_interchange::segments_now(cx, sketch)
+                .is_some_and(|all| all.0.iter().any(|s| s.line == line))
+            {
+                return Err(format!("3D スケッチ {} に線 {line} がありません", sketch.0));
+            }
+            return Ok(AxisRef::Segment { sketch, line });
         }
         if let Some(s) = v.as_str() {
             return match s {
@@ -228,6 +256,16 @@ pub fn datum_axis_now(cx: &Context<'_>, feature: FeatureId) -> Option<(P3, P3)> 
     Some((d.at, d.dir))
 }
 
+/// 画面の計算済みの結果から、3D スケッチ `sketch` の線 `line` の通る点と向き(まだ計算できていないか、
+/// 線が無ければ `None`)。
+pub fn segment_axis_now(cx: &Context<'_>, sketch: FeatureId, line: u32) -> Option<(P3, P3)> {
+    kmb_interchange::segments_now(cx, sketch)?
+        .0
+        .iter()
+        .find(|s| s.line == line)
+        .and_then(kmb_interchange::segment::line_of)
+}
+
 /// 原点の X・Y・Z 軸(`i` = 0・1・2)の通る点と向き。
 pub fn origin_axis(i: usize) -> (P3, P3) {
     let mut d = [0.0; 3];
@@ -282,7 +320,8 @@ pub fn sketch_lines(cx: &Context<'_>, sketch: FeatureId) -> Vec<(u64, PointId, P
 }
 
 /// 軸を選ぶ手順の候補: 原点の X・Y・Z 軸(値 `"x"` など)と、機能 `before` より前の、隠していない
-/// スケッチの線(値 `{"sketch": 番号, "line": 線の番号}`。隠したスケッチは画面が外す)と、その時に
+/// スケッチの線(値 `{"sketch": 番号, "line": 線の番号}`。隠したスケッチは画面が外す)と、3D スケッチの線
+/// (値 `{"sketch": 番号, "segment": 線の番号}`)と、その時に
 /// 見えているボディのまっすぐな辺・円の辺(値 `{"feature": 番号, "edge": [面, 面]}`)と、`before` より前の
 /// 作業軸(値 `{"datum": 番号}`)。
 /// `skip` のスケッチの線は入れない(回転の輪郭のスケッチなど、呼ぶ側が別の値で出すもの)。
@@ -345,6 +384,20 @@ pub fn axis_choices_where(
                 value: json!({"sketch": f.id.0, "line": n}),
                 label: format!("{} の線 {n}", f.name),
                 outline: vec![ends.to_vec()],
+                ..Default::default()
+            });
+        }
+        for seg in kmb_interchange::segments_now(cx, f.id).map_or_else(Vec::new, |s| s.0) {
+            let Some((p, d)) = kmb_interchange::segment::line_of(&seg) else {
+                continue;
+            };
+            if !usable(p, d) {
+                continue;
+            }
+            v.push(HandleChoice {
+                value: json!({"sketch": f.id.0, "segment": seg.line}),
+                label: format!("{} の線 {}", f.name, seg.line),
+                outline: vec![seg.ends.to_vec()],
                 ..Default::default()
             });
         }

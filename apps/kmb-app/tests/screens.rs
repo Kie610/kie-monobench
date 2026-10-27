@@ -329,7 +329,8 @@ fn document(new: bool) -> kmb_core::Document {
     doc
 }
 
-/// スクリプトの始めの文書(`#! sample part|cam|cam3d|box|laser|sketch|sweep|empty`。既定は part。box は蓋つきの箱、
+/// スクリプトの始めの文書(`#! sample part|cam|cam3d|box|laser|sketch|sweep|sketch3d-line|empty`。既定は part。
+/// box は蓋つきの箱、sketch3d-line は part に Z に立てた線 1 本の 3D スケッチを足したもの、
 /// laser は最初のスケッチの中を塗るレーザーの加工を足した加工の見本、sketch は作図の道具の見本
 /// (一部の位置が決まっていないスケッチ)、sweep はスイープとロフトの断面と経路のスケッチ、empty は空の文書)。
 fn script_document(text: &str) -> kmb_core::Document {
@@ -348,6 +349,7 @@ fn script_document(text: &str) -> kmb_core::Document {
         "laser" => laser_document(),
         "sketch" => kmb_samples::sketch_tools_document(),
         "sweep" => kmb_samples::sweep_loft_document(),
+        "sketch3d-line" => sketch3d_line_document(),
         "empty" => kmb_core::Document::new(),
         _ => kmb_samples::reference_document(),
     }
@@ -1321,6 +1323,35 @@ fn laser_document() -> kmb_core::Document {
                 name: "焼き印".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
+            },
+        }],
+    ))
+    .unwrap();
+    doc
+}
+
+/// 見本の部品に、Z に立てた線 1 本(点 (-30, 0, 0) から (-30, 0, 30)、線の番号 3)の 3D スケッチを
+/// 足した文書。
+fn sketch3d_line_document() -> kmb_core::Document {
+    let mut doc = kmb_samples::reference_document();
+    let id = doc.alloc_feature_id();
+    let data = serde_json::json!({"entities": [
+        {"type": "point", "id": 1, "p": [-30.0, 0.0, 0.0]},
+        {"type": "point", "id": 2, "p": [-30.0, 0.0, 30.0]},
+        {"type": "line", "id": 3, "a": 1, "b": 2},
+    ]});
+    doc.apply(kmb_core::Transaction::new(
+        "3D スケッチを足す",
+        vec![kmb_core::Op::InsertFeature {
+            index: None,
+            entry: kmb_core::FeatureEntry {
+                id,
+                type_id: "cad.sketch3d@1".into(),
+                name: "3D スケッチ1".into(),
+                data,
+                suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1386,6 +1417,7 @@ fn pencil_document() -> kmb_core::Document {
                 name: "内側の角".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -2113,6 +2145,7 @@ fn study_workspace(
                 name: "研究 1".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -2145,6 +2178,7 @@ fn static_workspace() -> (Workspace, kmb_core::FeatureId) {
                     "size": "2 mm",
                 }),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

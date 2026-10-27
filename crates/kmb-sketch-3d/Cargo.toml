@@ -11,6 +11,7 @@ layer = "cad"
 
 [dependencies]
 kmb-core.workspace = true
+kmb-interchange.workspace = true
 kmb-sketch.workspace = true
 kmb-sketch-solver.workspace = true
 serde.workspace = true

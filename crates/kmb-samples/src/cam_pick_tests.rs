@@ -306,6 +306,7 @@ fn a_contour_follows_a_sketch_inside_and_an_open_line_from_where_the_user_clicke
                     name: "削る線".into(),
                     data: json(&s.build()),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))

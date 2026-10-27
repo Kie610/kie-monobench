@@ -39,6 +39,11 @@ pub enum Axis {
     Datum {
         feature: FeatureId,
     },
+    /// 3D スケッチの線(kmb-sketch-3d。[`kmb_cad::AxisRef::Segment`] と同じ)
+    Segment {
+        sketch: FeatureId,
+        line: u32,
+    },
 }
 
 /// スケッチの輪郭を軸まわりに回す。例: `{"profile": 1, "axis": {"kind": "sketch_x"}}`
@@ -270,6 +275,15 @@ impl Feature for Revolve {
         if let Axis::Datum { feature } = &self.axis {
             v.extend(kmb_cad::AxisRef::Datum { feature: *feature }.inputs());
         }
+        if let Axis::Segment { sketch, line } = &self.axis {
+            v.extend(
+                kmb_cad::AxisRef::Segment {
+                    sketch: *sketch,
+                    line: *line,
+                }
+                .inputs(),
+            );
+        }
         if self.extent == RevolveExtent::ToFace
             && let Some(t) = &self.to_face
         {
@@ -338,6 +352,12 @@ impl Feature for Revolve {
             Axis::Datum { feature } => kmb_cad::AxisRef::Datum { feature: *feature }
                 .resolve(ctx)?
                 .expect("作業軸は通る点と向きを持つ"),
+            Axis::Segment { sketch, line } => kmb_cad::AxisRef::Segment {
+                sketch: *sketch,
+                line: *line,
+            }
+            .resolve(ctx)?
+            .expect("3D スケッチの線は通る点と向きを持つ"),
         };
         // 輪郭の平面に垂直な軸では回せない
         let n = plane.normal();
@@ -457,11 +477,13 @@ pub fn register(reg: &mut Registry) {
                     ("points", "スケッチの線(クリックで選ぶ)"),
                     ("edge", "ボディの辺"),
                     ("datum", "作業軸"),
+                    ("segment", "3D スケッチの線"),
                 ],
             )
             .hide_choice("auto")
             .hide_choice("edge")
             .hide_choice("datum")
+            .hide_choice("segment")
             .pick_on("points", REVOLVE_AXIS))
             .field(
                 Field::choice(
@@ -627,6 +649,7 @@ fn axis_from(v: &serde_json::Value, cx: &Context<'_>, profile: FeatureId) -> Res
         },
         kmb_cad::AxisRef::Edge { feature, faces } => Axis::Edge { feature, faces },
         kmb_cad::AxisRef::Datum { feature } => Axis::Datum { feature },
+        kmb_cad::AxisRef::Segment { sketch, line } => Axis::Segment { sketch, line },
         kmb_cad::AxisRef::Vector => return Err("軸を選んでいません".into()),
     })
 }
@@ -664,6 +687,7 @@ fn axis_line(
             kmb_cad::axis::edge_axis(cx.kernel.as_ref(), *shape, faces)?
         }
         Axis::Datum { feature } => kmb_cad::axis::datum_axis_now(cx, *feature)?,
+        Axis::Segment { sketch, line } => kmb_cad::axis::segment_axis_now(cx, *sketch, *line)?,
     })
 }
 

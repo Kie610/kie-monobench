@@ -455,6 +455,12 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("面の列挙".into()))
     }
 
+    /// 面の名前だけの一覧([`Kernel::faces`] の順)。再計算が機能の結果ごとに名前をそろえるのに使うので、
+    /// 面積などを求めずに返せるカーネルは置き換える。
+    fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
+        Ok(self.faces(shape)?.into_iter().map(|f| f.name).collect())
+    }
+
     /// 2 つの平面の境目の、まっすぐな辺の一覧。
     fn edges(&self, shape: ShapeHandle) -> Result<Vec<EdgeInfo>, KernelError> {
         let _ = shape;

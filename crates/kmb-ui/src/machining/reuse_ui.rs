@@ -180,6 +180,7 @@ impl Workspace {
                     name,
                     data,
                     suppressed: entry.suppressed,
+                    pin_bodies: false,
                 },
             );
             id
@@ -336,6 +337,7 @@ impl Workspace {
                     name,
                     data: d,
                     suppressed: e.suppressed,
+                    pin_bodies: false,
                 },
             );
             made.push(id);
