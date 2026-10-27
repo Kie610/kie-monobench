@@ -583,6 +583,14 @@ struct Job {
 }
 
 impl Job {
+    /// 解いた後に中止が届いた場合も、結果を残せるかを確かめる。
+    fn check_cancelled(&self, c: &Control, result: SimResult) -> Result<SimResult, String> {
+        if c.cancelled() && !result.partial {
+            return Err(CANCELLED.into());
+        }
+        Ok(result)
+    }
+
     /// 同じ条件・同じ形なら同じ鍵。
     fn key(&self) -> u64 {
         let mut h = Fnv::default();
@@ -707,16 +715,14 @@ impl Task for Job {
         let (p, notes) = self.prepare(c)?;
         c.step(1);
         c.progress(0.2, format!("要素 {} 個", p.mesh.tets.len()));
-        let mut r = match &self.solve {
+        let r = match &self.solve {
             Solve::Static(i) => static_result(&p, &self.mat, i)?,
             Solve::Thermal(i) => thermal_result(&p, &self.mat, i)?,
             Solve::Transient(i) => transient_result(&p, &self.mat, i, c)?,
             Solve::Modal(i) => modal_result(&p, &self.mat, i)?,
             Solve::Topology(i) => topology_result(&p, &self.mat, i, c)?,
         };
-        if c.cancelled() && !r.partial {
-            return Err(CANCELLED.into());
-        }
+        let mut r = self.check_cancelled(c, r)?;
         c.step(2);
         c.progress(0.98, "");
         let st = &p.mesh.stats;
@@ -1446,6 +1452,39 @@ pub(crate) mod tests {
             d.frames = frames.into();
             assert!(thermal_mode(&d, mat, thermal.clone(), &read).is_err());
         }
+        d.frames.clear();
+        d.heats = vec![ValueRow {
+            faces: vec![Ref::Face {
+                feature: FeatureId(1),
+                face: "x0".into(),
+            }],
+            value: "1".into(),
+            ..Default::default()
+        }];
+        let mut thermal = thermal;
+        thermal.heats = vec![(vec!["x0".into()], 1.0)];
+        let Solve::Transient(defaults) = thermal_mode(&d, mat, thermal.clone(), &read).unwrap()
+        else {
+            panic!("過渡を選ぶ")
+        };
+        assert_eq!(
+            defaults.heat_times,
+            vec![HeatTime {
+                from: 0.0,
+                until: 10.0
+            }]
+        );
+        for (from, until) in [
+            ("-1", "5"),
+            ("5", "5"),
+            ("6", "5"),
+            ("0", "11"),
+            ("NaN", "5"),
+        ] {
+            d.heats[0].from = from.into();
+            d.heats[0].until = until.into();
+            assert!(thermal_mode(&d, mat, thermal.clone(), &read).is_err());
+        }
     }
 
     /// 確かめること: 時刻 0 を含むコマ、共通の範囲、推移、途中結果の受け渡し。
@@ -1480,6 +1519,90 @@ pub(crate) mod tests {
             abrupt
                 .note
                 .contains("網の細かさでは、初めの数刻みの急な変化を表せません")
+        );
+    }
+
+    /// 確かめること: 解いた後の中止でも、完成した過渡のコマを捨てない。
+    #[test]
+    fn transient_late_cancel_keeps_completed_frames() {
+        let input = crate::validation_tests::transient_case();
+        let job = |solve| Job {
+            kind: Kind::Thermal,
+            mat: *fea_material("").unwrap(),
+            h: 1.0,
+            auto: false,
+            volume: 8.0,
+            mesh: Mesh::default(),
+            solve,
+        };
+        let transient = job(Solve::Transient(input.clone()));
+        let steady = job(Solve::Thermal(input.thermal));
+        let result = SimResult {
+            frames: vec![Frame {
+                label: "1 s".into(),
+                time: Some(1.0),
+                values: vec![Values::exact(vec![25.0])],
+            }],
+            ..Default::default()
+        };
+        let c = Control::new();
+        c.cancel();
+        let partial = transient
+            .check_cancelled(&c, result.clone())
+            .expect("完成したコマを保持する");
+        assert!(partial.partial);
+        assert_eq!(partial.frames, result.frames);
+        assert!(steady.check_cancelled(&c, result).is_err());
+    }
+
+    /// 確かめること: 過渡専用の式は入力として宣言され、時刻の列も名前変更に追従する。
+    #[test]
+    fn transient_field_expressions_declare_parameters_and_rename_time_columns() {
+        let mut study = Study { kind: Kind::Thermal, data: from(&json!({
+            "time":"transient", "end":"duration", "frames":"2 * nframes", "initial":"room + 5",
+            "heats":[{"faces":{"kind":"face","feature":1,"face":"end"},"value":"power","from":"heat_start","until":"heat_end"}]
+        })).unwrap() };
+        let inputs = study.inputs().unwrap();
+        for key in [
+            "duration",
+            "nframes",
+            "room",
+            "power",
+            "heat_start",
+            "heat_end",
+        ] {
+            assert!(
+                inputs
+                    .iter()
+                    .any(|i| matches!(i, InputRef::Param { name } if name == key)),
+                "{key}"
+            );
+        }
+        for (old, new) in [
+            ("duration", "run_time"),
+            ("heat_start", "start_at"),
+            ("heat_end", "finish_at"),
+        ] {
+            study.data = from(&study.rename_param(old, new).unwrap().unwrap()).unwrap();
+        }
+        assert_eq!(study.data.end, "run_time");
+        assert_eq!(study.data.heats[0].from, "start_at");
+        assert_eq!(study.data.heats[0].until, "finish_at");
+        study.data.time.clear();
+        let steady_inputs = study.inputs().unwrap();
+        for key in ["run_time", "nframes", "room", "start_at", "finish_at"] {
+            assert!(
+                !steady_inputs
+                    .iter()
+                    .any(|i| matches!(i, InputRef::Param { name } if name == key)),
+                "{key}"
+            );
+        }
+        assert!(
+            study
+                .rename_param("run_time", "duration")
+                .unwrap()
+                .is_none()
         );
     }
 
