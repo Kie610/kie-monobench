@@ -604,14 +604,23 @@ impl Feature for Hole {
             && let Some((size, _)) = self.thread()?
         {
             if self.form == thread::Form::Modeled {
-                let clearance = self.clearance.as_deref().map(|s| length(ctx, s, "すき間")).transpose()?.unwrap_or(0.0);
+                let clearance = self
+                    .clearance
+                    .as_deref()
+                    .map(|s| length(ctx, s, "すき間"))
+                    .transpose()?
+                    .unwrap_or(0.0);
                 let mut body = match out.get("body") {
                     Some(Value::Shape(h)) => *h,
                     _ => return Err(EvalError::InvalidData("穴のボディがありません".into())),
                 };
                 let mut warnings = Vec::new();
                 for (p, _) in &centers {
-                    let face = format!("{}:side:{}", tag(ctx), kmb_interchange::hole::edge_name(p.0, "wall"));
+                    let face = format!(
+                        "{}:side:{}",
+                        tag(ctx),
+                        kmb_interchange::hole::edge_name(p.0, "wall")
+                    );
                     let (result, warn) = thread::cut_modeled(ctx.kernel(), body, &face, size, if through { None } else { Some(depth) }, clearance, self.end, self.flip, thread::Hand::Right, &format!("{}:thread:{}", tag(ctx), p.0)).map_err(|error| match error {
                         EvalError::InvalidData(message) if message.starts_with("ねじの長さは最大") => EvalError::InvalidData(format!("{message}。穴のねじ山を属性のみにし、ねじの機能を別に追加して長さを短くしてください")),
                         other => other,
@@ -622,22 +631,22 @@ impl Feature for Hole {
                 out.insert("body".into(), Value::Shape(body));
                 kmb_core::add_warnings(&mut out, warnings);
             } else {
-            let axis = k::scale(k::normalize(plane.normal()), -1.0);
-            let marks = centers
-                .iter()
-                .map(|(_, c)| kmb_interchange::ThreadMark {
-                    start: plane.to_world(*c),
-                    axis,
-                    length: depth,
-                    radius: size.tap_drill() / 2.0,
-                    pitch: size.pitch,
-                    internal: true,
-                })
-                .collect();
-            out.insert(
-                kmb_interchange::THREAD_MARKS_OUTPUT.into(),
-                Payload::to_value(&kmb_interchange::ThreadMarks { marks }),
-            );
+                let axis = k::scale(k::normalize(plane.normal()), -1.0);
+                let marks = centers
+                    .iter()
+                    .map(|(_, c)| kmb_interchange::ThreadMark {
+                        start: plane.to_world(*c),
+                        axis,
+                        length: depth,
+                        radius: size.tap_drill() / 2.0,
+                        pitch: size.pitch,
+                        internal: true,
+                    })
+                    .collect();
+                out.insert(
+                    kmb_interchange::THREAD_MARKS_OUTPUT.into(),
+                    Payload::to_value(&kmb_interchange::ThreadMarks { marks }),
+                );
             }
         }
         // 黙った失敗を防ぐ: 何も削れなければ誤りにする(点が形の外にある時など)
@@ -799,7 +808,11 @@ pub fn hole_fields() -> Vec<Field> {
             .only("tip", "angled", "flat")
             .help("空なら 118 deg"),
     ];
-    fields.extend(thread::form_fields().into_iter().map(|f| f.and_only("tap", "tapped", "simple")));
+    fields.extend(
+        thread::form_fields()
+            .into_iter()
+            .map(|f| f.and_only("tap", "tapped", "simple")),
+    );
     fields
 }
 

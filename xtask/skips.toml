@@ -10,6 +10,7 @@
 modeled_threads_keep_large_fine_long_and_print_clearance_shafts_closed = "truck の回(らせんの掃引に対応していない)"
 modeled_thread_run_out_and_recomputed_dimensions_keep_a_closed_body = "truck の回(らせんの掃引に対応していない)"
 modeled_threads_cross_a_chamfered_tip_without_cutting_the_shaft_away = "truck の回(らせんの掃引に対応していない)"
+modeled_threads_reject_oversize_shafts_and_excessive_lengths = "truck の回(円筒を調べる円の辺を返さない)"
 modeled_tapped_holes_cut_internal_crests_and_explain_blind_depth_limits = "truck の回(らせんの掃引に対応していない)"
 a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized = "truck の回(平面での分割に対応していない)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"

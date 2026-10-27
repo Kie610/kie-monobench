@@ -364,20 +364,38 @@ pub enum End {
 /// 両方のねじの機能で同じ欄を使う。
 pub(crate) fn form_fields() -> Vec<Field> {
     vec![
-        Field::choice("form", "ねじ山", &[("cosmetic", "属性のみ"), ("modeled", "形を作る")]),
-        Field::opt_expr("clearance", "すき間").length().only("form", "modeled", "cosmetic")
+        Field::choice(
+            "form",
+            "ねじ山",
+            &[("cosmetic", "属性のみ"), ("modeled", "形を作る")],
+        ),
+        Field::opt_expr("clearance", "すき間")
+            .length()
+            .only("form", "modeled", "cosmetic")
             .help("径で指定するすき間。空なら 0 mm"),
-        Field::choice("end", "奥の端", &[("run_out", "切り上げ"), ("abrupt", "切りっぱなし")])
-            .only("form", "modeled", "cosmetic"),
+        Field::choice(
+            "end",
+            "奥の端",
+            &[("run_out", "切り上げ"), ("abrupt", "切りっぱなし")],
+        )
+        .only("form", "modeled", "cosmetic"),
         Field::bool("flip", "反対の端から始める").only("form", "modeled", "cosmetic"),
     ]
 }
 
 pub(crate) fn form_args() -> Vec<kmb_core::Arg> {
     vec![
-        kmb_core::Arg::choice("form", "ねじ山", &[("cosmetic", "属性のみ"), ("modeled", "形を作る")]),
+        kmb_core::Arg::choice(
+            "form",
+            "ねじ山",
+            &[("cosmetic", "属性のみ"), ("modeled", "形を作る")],
+        ),
         kmb_core::Arg::length("clearance", "ねじ山のすき間(径、mm)"),
-        kmb_core::Arg::choice("end", "ねじの奥の端", &[("run_out", "切り上げ"), ("abrupt", "切りっぱなし")]),
+        kmb_core::Arg::choice(
+            "end",
+            "ねじの奥の端",
+            &[("run_out", "切り上げ"), ("abrupt", "切りっぱなし")],
+        ),
         kmb_core::Arg::flag("flip", "反対の端からねじを始める"),
     ]
 }
@@ -390,15 +408,20 @@ fn modeled_ends(
     c: &Cylinder,
     flip: bool,
 ) -> Result<(P3, P3, f64, bool), EvalError> {
-    let mut ends: Vec<_> = kernel.arc_edges(body).map_err(kernel_err)?.into_iter()
+    let mut ends: Vec<_> = kernel
+        .arc_edges(body)
+        .map_err(kernel_err)?
+        .into_iter()
         .filter(|e| e.faces[1] == face)
         .filter_map(|e| Some((e.arc?.center, e.convex)))
         .collect();
     if ends.len() < 2 {
         // 面取りと円筒の境は平らな面を持たない。既知の軸と径に一致する閉じた円の辺だけを補う。
         for edge in kernel.curve_edges(body).map_err(kernel_err)? {
-            if !edge.faces.iter().any(|name| name == face) || edge.curve.len() < 4
-                || k::dot(k::sub(edge.a, edge.b), k::sub(edge.a, edge.b)) > 1e-12 {
+            if !edge.faces.iter().any(|name| name == face)
+                || edge.curve.len() < 4
+                || k::dot(k::sub(edge.a, edge.b), k::sub(edge.a, edge.b)) > 1e-12
+            {
                 continue;
             }
             let t = k::dot(k::sub(edge.a, c.center), c.axis);
@@ -408,28 +431,43 @@ fn modeled_ends(
                 k::dot(d, c.axis).abs() <= 1e-6
                     && (k::dot(d, d).sqrt() - c.diameter / 2.0).abs() <= 1e-6
             });
-            if circular { ends.push((center, edge.convex)); }
+            if circular {
+                ends.push((center, edge.convex));
+            }
         }
     }
     ends.sort_by(|a, b| k::dot(a.0, c.axis).total_cmp(&k::dot(b.0, c.axis)));
     ends.dedup_by(|a, b| k::dot(k::sub(a.0, b.0), c.axis).abs() < 1e-6);
     let (Some(lo), Some(hi)) = (ends.first(), ends.last()) else {
-        return Err(EvalError::InvalidData("ねじの両端の円を持つ円筒の面を選んでください".into()));
+        return Err(EvalError::InvalidData(
+            "ねじの両端の円を持つ円筒の面を選んでください".into(),
+        ));
     };
     let full = k::dot(k::sub(hi.0, lo.0), c.axis);
     if full <= 1e-6 {
-        return Err(EvalError::InvalidData("ねじの両端が分かりません。両端の円を持つ円筒の面を選んでください".into()));
+        return Err(EvalError::InvalidData(
+            "ねじの両端が分かりません。両端の円を持つ円筒の面を選んでください".into(),
+        ));
     }
     if !lo.1 && !hi.1 {
-        return Err(EvalError::InvalidData("ねじの両端がへこんでいます。開いた端のある円筒の面を選んでください".into()));
+        return Err(EvalError::InvalidData(
+            "ねじの両端がへこんでいます。開いた端のある円筒の面を選んでください".into(),
+        ));
     }
     let from_hi = (hi.1 || !lo.1) != flip;
-    Ok(if from_hi { (hi.0, k::scale(c.axis, -1.0), full, lo.1) }
-        else { (lo.0, c.axis, full, hi.1) })
+    Ok(if from_hi {
+        (hi.0, k::scale(c.axis, -1.0), full, lo.1)
+    } else {
+        (lo.0, c.axis, full, hi.1)
+    })
 }
 
 /// 溝の台形と、壁の径に対する作れる範囲。
-fn groove(c: &Cylinder, size: Size, clearance: f64) -> Result<([[f64; 2]; 4], f64, f64), EvalError> {
+fn groove(
+    c: &Cylinder,
+    size: Size,
+    clearance: f64,
+) -> Result<([[f64; 2]; 4], f64, f64), EvalError> {
     let bad = |s: String| EvalError::InvalidData(s);
     if !clearance.is_finite() || clearance < 0.0 {
         return Err(bad("すき間は 0 mm 以上にしてください".into()));
@@ -437,25 +475,53 @@ fn groove(c: &Cylinder, size: Size, clearance: f64) -> Result<([[f64; 2]; 4], f6
     let p = size.pitch;
     let h = 3f64.sqrt() / 2.0 * p;
     let radius = c.diameter / 2.0;
-    let root = if c.internal { size.major / 2.0 + clearance / 2.0 }
-        else { size.major / 2.0 - 5.0 * h / 8.0 - clearance / 2.0 };
+    let root = if c.internal {
+        size.major / 2.0 + clearance / 2.0
+    } else {
+        size.major / 2.0 - 5.0 * h / 8.0 - clearance / 2.0
+    };
     let rim = radius + if c.internal { -0.05 * p } else { 0.05 * p };
     let half_root = if c.internal { p / 16.0 } else { p / 8.0 };
     let depth = if c.internal { root - rim } else { rim - root };
     let half = half_root + depth / 3f64.sqrt();
     if half * 2.0 > 0.98 * p {
         return Err(bad(if c.internal {
-            format!("下穴 {} mm が小さすぎます。下穴を大きくしてください", num(c.diameter))
+            format!(
+                "下穴 {} mm が小さすぎます。下穴を大きくしてください",
+                num(c.diameter)
+            )
         } else {
-            format!("軸の径 {} mm が呼び {} に対して太すぎて山の先が無くなります。{} mm 以下にしてください", num(c.diameter), size.label(), num(size.major - clearance))
+            format!(
+                "軸の径 {} mm が呼び {} に対して太すぎて山の先が無くなります。{} mm 以下にしてください",
+                num(c.diameter),
+                size.label(),
+                num(size.major - clearance)
+            )
         }));
     }
-    if root <= 1e-6 || if c.internal { radius >= root - 0.1 * p } else { radius <= root + 0.1 * p } {
+    if root <= 1e-6
+        || if c.internal {
+            radius >= root - 0.1 * p
+        } else {
+            radius <= root + 0.1 * p
+        }
+    {
         return Err(bad(if c.internal {
             "下穴が大きすぎて山ができません。下穴の径を小さくしてください".into()
-        } else { "軸が細すぎて山ができません。軸の径を大きくしてください".into() }));
+        } else {
+            "軸が細すぎて山ができません。軸の径を大きくしてください".into()
+        }));
     }
-    Ok(([[root, -half_root], [rim, -half], [rim, half], [root, half_root]], half, depth + 0.05 * p))
+    Ok((
+        [
+            [root, -half_root],
+            [rim, -half],
+            [rim, half],
+            [root, half_root],
+        ],
+        half,
+        depth + 0.05 * p,
+    ))
 }
 
 /// 円筒の壁に共通の道具を掃引し、ボディから 1 回だけ引く。
@@ -477,28 +543,57 @@ pub(crate) fn cut_modeled(
     let (vertices, half, run_radial) = groove(&c, size, clearance)?;
     let p = size.pitch;
     let run_length = if end == End::RunOut { p / 4.0 } else { 0.0 };
-    let maximum = if through { full } else { full - run_length - half };
+    let maximum = if through {
+        full
+    } else {
+        full - run_length - half
+    };
     let length = length.unwrap_or(maximum);
     if !length.is_finite() || length <= 0.0 || (!through && length > maximum + 1e-6) {
-        return Err(EvalError::InvalidData(format!("ねじの長さは最大 {} mm です。0 より大きく、この長さ以下にしてください", num(maximum.max(0.0)))));
+        return Err(EvalError::InvalidData(format!(
+            "ねじの長さは最大 {} mm です。0 より大きく、この長さ以下にしてください",
+            num(maximum.max(0.0))
+        )));
     }
     let escape = through && length >= full - 1e-6;
     if length > full + 1e-6 {
-        return Err(EvalError::InvalidData(format!("ねじの長さは最大 {} mm です。この長さ以下にしてください", num(full))));
+        return Err(EvalError::InvalidData(format!(
+            "ねじの長さは最大 {} mm です。この長さ以下にしてください",
+            num(full)
+        )));
     }
     let distance = if escape { full + p } else { length };
     let turns = (distance + p) / p;
-    let radial = k::normalize(k::cross(axis, if axis[2].abs() < 0.9 { [0.0, 0.0, 1.0] } else { [0.0, 1.0, 0.0] }));
+    let radial = k::normalize(k::cross(
+        axis,
+        if axis[2].abs() < 0.9 {
+            [0.0, 0.0, 1.0]
+        } else {
+            [0.0, 1.0, 0.0]
+        },
+    ));
     let origin = k::add(start, k::scale(axis, -p));
     let profile = k::Profile {
-        plane: k::Plane { origin, x_axis: radial, y_axis: axis },
-        regions: vec![k::Region { outer: k::ProfileLoop {
-            edges: (0..4).map(|i| k::ProfileEdge {
-                name: format!("e{i}"),
-                segment: k::Segment::Line { a: vertices[i], b: vertices[(i + 1) % 4] },
-                reversed: false,
-            }).collect(),
-        }, holes: vec![] }],
+        plane: k::Plane {
+            origin,
+            x_axis: radial,
+            y_axis: axis,
+        },
+        regions: vec![k::Region {
+            outer: k::ProfileLoop {
+                edges: (0..4)
+                    .map(|i| k::ProfileEdge {
+                        name: format!("e{i}"),
+                        segment: k::Segment::Line {
+                            a: vertices[i],
+                            b: vertices[(i + 1) % 4],
+                        },
+                        reversed: false,
+                    })
+                    .collect(),
+            },
+            holes: vec![],
+        }],
     };
     let helix = k::Helix {
         origin,
@@ -511,10 +606,21 @@ pub(crate) fn cut_modeled(
             radial: if c.internal { -run_radial } else { run_radial },
         }),
     };
-    let tool = kernel.helical_sweep(&profile, &helix, tag).map_err(kernel_err)?;
-    let result = kernel.boolean(k::BooleanOp::Subtract, body, tool).map_err(kernel_err)?;
+    let tool = kernel
+        .helical_sweep(&profile, &helix, tag)
+        .map_err(kernel_err)?;
+    let result = kernel
+        .boolean(k::BooleanOp::Subtract, body, tool)
+        .map_err(kernel_err)?;
     let count = turns + helix.run_out.map_or(0.0, |r| r.turns);
-    let warnings = if count > 100.0 { vec![format!("ねじ山が {} 巻きあり、再計算に時間がかかります", num(count))] } else { vec![] };
+    let warnings = if count > 100.0 {
+        vec![format!(
+            "ねじ山が {} 巻きあり、再計算に時間がかかります",
+            num(count)
+        )]
+    } else {
+        vec![]
+    };
     Ok((result, warnings))
 }
 
@@ -545,14 +651,23 @@ pub struct Thread {
 
 impl Exprs for Thread {
     fn exprs_mut(&mut self) -> Vec<&mut String> {
-        self.length.iter_mut().chain(self.clearance.iter_mut()).collect()
+        self.length
+            .iter_mut()
+            .chain(self.clearance.iter_mut())
+            .collect()
     }
 }
 
 /// ねじの呼びを決め、注意の文を返す。
 fn resolve(t: &Thread, c: &Cylinder) -> Result<(Size, Vec<String>), String> {
-    if t.form == Form::Modeled && ["G", "R", "NPT", "BSP"].iter().any(|prefix| t.size.trim().to_ascii_uppercase().starts_with(prefix)) {
-        return Err("管用ねじとテーパねじの山の形はまだ作れません。属性のみを使ってください".into());
+    if t.form == Form::Modeled
+        && ["G", "R", "NPT", "BSP"]
+            .iter()
+            .any(|prefix| t.size.trim().to_ascii_uppercase().starts_with(prefix))
+    {
+        return Err(
+            "管用ねじとテーパねじの山の形はまだ作れません。属性のみを使ってください".into(),
+        );
     }
     let near = suggest_for(c);
     let size = if t.size.trim().is_empty() {
@@ -624,25 +739,45 @@ impl Feature for Thread {
             })
             .collect();
         let result = if self.form == Form::Modeled {
-            let clearance = self.clearance.as_deref().map(|s| length(ctx, s, "すき間")).transpose()?.unwrap_or(0.0);
-            let (result, warnings) = cut_modeled(ctx.kernel(), body, &self.face, size, thread_length, clearance, self.end, self.flip, self.hand, &ctx.feature_id().to_string())?;
+            let clearance = self
+                .clearance
+                .as_deref()
+                .map(|s| length(ctx, s, "すき間"))
+                .transpose()?
+                .unwrap_or(0.0);
+            let (result, warnings) = cut_modeled(
+                ctx.kernel(),
+                body,
+                &self.face,
+                size,
+                thread_length,
+                clearance,
+                self.end,
+                self.flip,
+                self.hand,
+                &tag(ctx),
+            )?;
             warn.extend(warnings);
             result
-        } else { body };
+        } else {
+            body
+        };
         let mut out: Outputs = [
             ("body".to_string(), Value::Shape(result)),
             ("sizes".to_string(), kmb_core::choices_value(choices)),
         ]
         .into();
         kmb_core::add_warnings(&mut out, warn);
-        if self.form == Form::Cosmetic && let Some(mark) = mark_of(
-            ctx.kernel(),
-            body,
-            &self.face,
-            &c,
-            size.pitch,
-            thread_length,
-        ) {
+        if self.form == Form::Cosmetic
+            && let Some(mark) = mark_of(
+                ctx.kernel(),
+                body,
+                &self.face,
+                &c,
+                size.pitch,
+                thread_length,
+            )
+        {
             out.insert(
                 kmb_interchange::THREAD_MARKS_OUTPUT.into(),
                 kmb_core::Payload::to_value(&kmb_interchange::ThreadMarks { marks: vec![mark] }),
@@ -962,7 +1097,10 @@ mod tests {
 
     #[test]
     fn cosmetic_thread_and_hole_defaults_preserve_their_saved_bytes() {
-        for bytes in [r#"{"target":1,"face":"f1:side"}"#, r#"{"target":1,"face":"f1:side","size":"M8x1.25","length":"10 mm","hand":"left"}"#] {
+        for bytes in [
+            r#"{"target":1,"face":"f1:side"}"#,
+            r#"{"target":1,"face":"f1:side","size":"M8x1.25","length":"10 mm","hand":"left"}"#,
+        ] {
             let thread: Thread = serde_json::from_str(bytes).unwrap();
             assert_eq!(thread.form, Form::Cosmetic);
             assert_eq!(serde_json::to_string(&thread).unwrap(), bytes);
@@ -975,16 +1113,42 @@ mod tests {
 
     #[test]
     fn thread_grooves_reject_missing_crests_and_accept_print_clearance() {
-        let c = Cylinder { diameter: 7.8, center: [0.0; 3], axis: [0.0, 0.0, 1.0], length: 20.0, internal: false };
+        let c = Cylinder {
+            diameter: 7.8,
+            center: [0.0; 3],
+            axis: [0.0, 0.0, 1.0],
+            length: 20.0,
+            internal: false,
+        };
         let size = parse_size("M8").unwrap();
         let (vertices, half, _) = groove(&c, size, 0.2).unwrap();
         assert!(half * 2.0 < 0.98 * size.pitch);
         assert!(vertices[0][0] < 3.9);
-        for (diameter, internal, message) in [(10.0, false, "太すぎ"), (6.0, false, "細すぎ"), (5.0, true, "小さすぎ"), (8.0, true, "大きすぎ")] {
-            let error = groove(&Cylinder { diameter, internal, ..c }, size, 0.0).unwrap_err().to_string();
+        for (diameter, internal, message) in [
+            (10.0, false, "太すぎ"),
+            (6.0, false, "細すぎ"),
+            (5.0, true, "小さすぎ"),
+            (8.0, true, "大きすぎ"),
+        ] {
+            let error = groove(
+                &Cylinder {
+                    diameter,
+                    internal,
+                    ..c
+                },
+                size,
+                0.0,
+            )
+            .unwrap_err()
+            .to_string();
             assert!(error.contains(message), "{error}");
         }
-        assert!(groove(&c, size, -0.1).unwrap_err().to_string().contains("すき間"));
+        assert!(
+            groove(&c, size, -0.1)
+                .unwrap_err()
+                .to_string()
+                .contains("すき間")
+        );
         assert!(groove(&c, size, f64::NAN).is_err());
     }
 }

@@ -1207,8 +1207,8 @@ fn helix_height(helix: &k::Helix, turn: f64) -> f64 {
         for pair in helix.spans.windows(2) {
             boundary += pair[0].turns;
             let t = turn - boundary;
-            let ramp = ((t + b / 2.0).max(0.0).powi(2)
-                - (t - b / 2.0).max(0.0).powi(2)) / (2.0 * b);
+            let ramp =
+                ((t + b / 2.0).max(0.0).powi(2) - (t - b / 2.0).max(0.0).powi(2)) / (2.0 * b);
             height += (pair[1].pitch - pair[0].pitch) * (ramp - t.max(0.0));
         }
     }
@@ -1221,7 +1221,14 @@ fn projected_range(geo: &Geo, origin: P3, dir: P3) -> (f64, f64) {
     let a = project(geo.at(0.0));
     let b = project(geo.at(1.0));
     let (mut lo, mut hi) = (a.min(b), a.max(b));
-    if let Geo::Arc { e1, e2, phi0, delta, .. } = *geo {
+    if let Geo::Arc {
+        e1,
+        e2,
+        phi0,
+        delta,
+        ..
+    } = *geo
+    {
         let angle = k::dot(e2, dir).atan2(k::dot(e1, dir));
         for phi in [angle, angle + std::f64::consts::PI] {
             let travel = ((phi - phi0) * delta.signum()).rem_euclid(TAU);
@@ -1236,28 +1243,49 @@ fn projected_range(geo: &Geo, origin: P3, dir: P3) -> (f64, f64) {
 }
 
 /// 軸を含む平面の輪郭を、向きを経路の曲がりに合わせずに回す。補間する面は 1 回りずつ分ける。
-pub fn helical_sweep(profile: &Profile, helix: &k::Helix, tag: &str) -> Result<Vec<Surface>, String> {
+pub fn helical_sweep(
+    profile: &Profile,
+    helix: &k::Helix,
+    tag: &str,
+) -> Result<Vec<Surface>, String> {
     let bad = |s: &str| Err(s.to_string());
     if profile.regions.is_empty() {
         return bad("閉じた輪郭を選んでください");
     }
-    if helix.origin.iter().chain(&helix.axis).any(|v| !v.is_finite())
+    if helix
+        .origin
+        .iter()
+        .chain(&helix.axis)
+        .any(|v| !v.is_finite())
         || (k::dot(helix.axis, helix.axis) - 1.0).abs() > 1e-6
     {
         return bad("らせんの軸は有限の座標と単位の向きにしてください");
     }
-    if helix.spans.is_empty() || helix.spans.iter().any(|s| !s.turns.is_finite() || s.turns <= 0.0) {
+    if helix.spans.is_empty()
+        || helix
+            .spans
+            .iter()
+            .any(|s| !s.turns.is_finite() || s.turns <= 0.0)
+    {
         return bad("らせんの回り数は各区間で 0 より大きくしてください");
     }
-    if helix.spans.iter().any(|s| !s.pitch.is_finite() || s.pitch <= 0.0) {
+    if helix
+        .spans
+        .iter()
+        .any(|s| !s.pitch.is_finite() || s.pitch <= 0.0)
+    {
         return bad("らせんのピッチは 0 より大きくしてください");
     }
-    if !helix.blend.is_finite() || helix.blend < 0.0
+    if !helix.blend.is_finite()
+        || helix.blend < 0.0
         || helix.spans.len() > 1 && helix.spans.iter().any(|s| helix.blend > s.turns)
     {
         return bad("ピッチのつなぎは 0 以上で、各区間の回り数以下にしてください");
     }
-    if helix.run_out.is_some_and(|r| !r.turns.is_finite() || r.turns <= 0.0 || !r.radial.is_finite()) {
+    if helix
+        .run_out
+        .is_some_and(|r| !r.turns.is_finite() || r.turns <= 0.0 || !r.radial.is_finite())
+    {
         return bad("切り上げの回り数は 0 より大きくし、移動量は有限の値にしてください");
     }
     let body_turns: f64 = helix.spans.iter().map(|s| s.turns).sum();
@@ -1266,52 +1294,87 @@ pub fn helical_sweep(profile: &Profile, helix: &k::Helix, tag: &str) -> Result<V
         return bad("らせんの回り数の合計は有限で 0 より大きくしてください");
     }
     let normal = k::normalize(profile.plane.normal());
-    if normal.iter().any(|v| !v.is_finite()) || k::dot(normal, normal) < 0.5
+    if normal.iter().any(|v| !v.is_finite())
+        || k::dot(normal, normal) < 0.5
         || k::dot(normal, helix.axis).abs() > 1e-6
         || k::dot(k::sub(helix.origin, profile.plane.origin), normal).abs() > 1e-6
     {
         return bad("輪郭の平面にらせんの軸を含めてください(離れと傾きの許しは 0.000001)");
     }
-    let loops: Vec<Loop3> = profile.regions.iter()
+    let loops: Vec<Loop3> = profile
+        .regions
+        .iter()
         .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
         .map(|l| Loop3::from_profile(&profile.plane, l))
         .collect::<Result<_, _>>()?;
     let radial = k::normalize(k::cross(helix.axis, normal));
-    let range = |dir| loops.iter().flat_map(|l| &l.edges)
-        .map(|e| projected_range(&e.geo, helix.origin, dir))
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), (a, b)| (lo.min(a), hi.max(b)));
+    let range = |dir| {
+        loops
+            .iter()
+            .flat_map(|l| &l.edges)
+            .map(|e| projected_range(&e.geo, helix.origin, dir))
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), (a, b)| {
+                (lo.min(a), hi.max(b))
+            })
+    };
     let (rlo, rhi) = range(radial);
-    let (radial, minimum_radius) = if rlo > 1e-6 { (radial, rlo) }
-        else if rhi < -1e-6 { (k::scale(radial, -1.0), -rhi) }
-        else { return bad("輪郭がらせんの軸に触れるか、軸をまたいでいます。軸から 0.000001 より離してください"); };
+    let (radial, minimum_radius) = if rlo > 1e-6 {
+        (radial, rlo)
+    } else if rhi < -1e-6 {
+        (k::scale(radial, -1.0), -rhi)
+    } else {
+        return bad(
+            "輪郭がらせんの軸に触れるか、軸をまたいでいます。軸から 0.000001 より離してください",
+        );
+    };
     if minimum_radius + helix.run_out.map_or(0.0, |r| r.radial.min(0.0)) <= 1e-6 {
         return bad("切り上げで輪郭が軸に触れます。軸へ寄せる量を小さくしてください");
     }
     let (zlo, zhi) = range(helix.axis);
-    let pitch = helix.spans.iter().map(|s| s.pitch).fold(f64::INFINITY, f64::min);
+    let pitch = helix
+        .spans
+        .iter()
+        .map(|s| s.pitch)
+        .fold(f64::INFINITY, f64::min);
     if !zlo.is_finite() || !zhi.is_finite() || zhi - zlo >= pitch {
-        return bad("輪郭の軸方向の幅を最も小さいピッチより小さくしてください(隣の回りと重なります)");
+        return bad(
+            "輪郭の軸方向の幅を最も小さいピッチより小さくしてください(隣の回りと重なります)",
+        );
     }
     let at = |q: H, turn: f64| {
-        let dr = helix.run_out.map_or(0.0, |r| r.radial * ((turn - body_turns) / r.turns).clamp(0.0, 1.0));
+        let dr = helix.run_out.map_or(0.0, |r| {
+            r.radial * ((turn - body_turns) / r.turns).clamp(0.0, 1.0)
+        });
         let p = k::add(euclid(q), k::scale(radial, dr));
         let angle = turn * TAU * if helix.left { -1.0 } else { 1.0 };
         let p = k::transform_point(&k::rotation(helix.origin, helix.axis, angle), p);
-        h(k::add(p, k::scale(helix.axis, helix_height(helix, turn))), q[3])
+        h(
+            k::add(p, k::scale(helix.axis, helix_height(helix, turn))),
+            q[3],
+        )
     };
     // ピッチの折れ・つなぎと切り上げの境は、多重ノットで同じ面の中に残す。
     let mut breaks = vec![body_turns];
     let mut boundary = 0.0;
     for pair in helix.spans.windows(2) {
         boundary += pair[0].turns;
-        breaks.extend([boundary - helix.blend / 2.0, boundary, boundary + helix.blend / 2.0]);
+        breaks.extend([
+            boundary - helix.blend / 2.0,
+            boundary,
+            boundary + helix.blend / 2.0,
+        ]);
     }
     let mut out = Vec::new();
     for revolution in 0..total.ceil() as usize {
         let from = revolution as f64;
         let to = (from + 1.0).min(total);
         let mut cuts = vec![from, to];
-        cuts.extend(breaks.iter().copied().filter(|t| *t > from + 1e-12 && *t < to - 1e-12));
+        cuts.extend(
+            breaks
+                .iter()
+                .copied()
+                .filter(|t| *t > from + 1e-12 && *t < to - 1e-12),
+        );
         cuts.sort_by(f64::total_cmp);
         cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
         for l in &loops {
@@ -1323,12 +1386,20 @@ pub fn helical_sweep(profile: &Profile, helix: &k::Helix, tag: &str) -> Result<V
                 for part in cuts.windows(2) {
                     let steps = ((part[1] - part[0]) * TAU / SHAPED_STEP).ceil().max(3.0) as usize;
                     let params: Vec<f64> = (0..=steps).map(|j| j as f64 / steps as f64).collect();
-                    let sections: Vec<Vec<H>> = params.iter().map(|t| {
-                        curve.iter().map(|q| at(*q, part[0] + (part[1] - part[0]) * t)).collect()
-                    }).collect();
+                    let sections: Vec<Vec<H>> = params
+                        .iter()
+                        .map(|t| {
+                            curve
+                                .iter()
+                                .map(|q| at(*q, part[0] + (part[1] - part[0]) * t))
+                                .collect()
+                        })
+                        .collect();
                     let (_, local_knots, local_rows) = skin_rows(&sections, &params);
-                    let mapped: Vec<f64> = local_knots.iter()
-                        .map(|u| (part[0] - from + (part[1] - part[0]) * u) / (to - from)).collect();
+                    let mapped: Vec<f64> = local_knots
+                        .iter()
+                        .map(|u| (part[0] - from + (part[1] - part[0]) * u) / (to - from))
+                        .collect();
                     if rows.is_empty() {
                         rows = local_rows;
                         knots = mapped;
@@ -1739,28 +1810,62 @@ mod tests {
     fn helix_profile() -> Profile {
         Profile {
             plane: Plane::ZX,
-            regions: vec![k::Region { outer: ProfileLoop { edges: vec![ProfileEdge {
-                name: "circle".into(),
-                segment: Segment::Circle { center: [0.0, 10.0], radius: 1.0 },
-                reversed: false,
-            }] }, holes: vec![] }],
+            regions: vec![k::Region {
+                outer: ProfileLoop {
+                    edges: vec![ProfileEdge {
+                        name: "circle".into(),
+                        segment: Segment::Circle {
+                            center: [0.0, 10.0],
+                            radius: 1.0,
+                        },
+                        reversed: false,
+                    }],
+                },
+                holes: vec![],
+            }],
         }
     }
 
     fn helix() -> k::Helix {
-        k::Helix { origin: [0.0; 3], axis: [0.0, 0.0, 1.0], left: false,
-            spans: vec![k::HelixSpan { turns: 2.25, pitch: 3.0 }], blend: 0.0, run_out: None }
+        k::Helix {
+            origin: [0.0; 3],
+            axis: [0.0, 0.0, 1.0],
+            left: false,
+            spans: vec![k::HelixSpan {
+                turns: 2.25,
+                pitch: 3.0,
+            }],
+            blend: 0.0,
+            run_out: None,
+        }
     }
 
     #[test]
     fn helical_surfaces_keep_their_profile_plane_and_mirror_the_hand() {
         let profile = helix_profile();
         let right = helical_sweep(&profile, &helix(), "h").unwrap();
-        let left = helical_sweep(&profile, &k::Helix { left: true, ..helix() }, "h").unwrap();
+        let left = helical_sweep(
+            &profile,
+            &k::Helix {
+                left: true,
+                ..helix()
+            },
+            "h",
+        )
+        .unwrap();
         assert_eq!(right.len(), 3);
         for (i, (r, l)) in right.iter().zip(&left).enumerate() {
             assert_eq!(r.name, format!("h:side:circle:{i}"));
-            assert_eq!(r.caps, if i == 0 { 1 } else if i == 2 { 2 } else { 0 });
+            assert_eq!(
+                r.caps,
+                if i == 0 {
+                    1
+                } else if i == 2 {
+                    2
+                } else {
+                    0
+                }
+            );
             for u in [0.0, 0.125, 0.25, 0.5, 1.0] {
                 let a = eval(r, u, 0.0);
                 let b = eval(l, u, 0.0);
@@ -1773,17 +1878,38 @@ mod tests {
     #[test]
     fn helical_pitch_blends_and_run_out_keep_the_exact_advance() {
         let h = k::Helix {
-            spans: vec![k::HelixSpan { turns: 1.0, pitch: 2.0 }, k::HelixSpan { turns: 1.0, pitch: 4.0 }],
+            spans: vec![
+                k::HelixSpan {
+                    turns: 1.0,
+                    pitch: 2.0,
+                },
+                k::HelixSpan {
+                    turns: 1.0,
+                    pitch: 4.0,
+                },
+            ],
             blend: 0.5,
-            run_out: Some(k::HelixRun { turns: 0.25, radial: 2.0 }),
+            run_out: Some(k::HelixRun {
+                turns: 0.25,
+                radial: 2.0,
+            }),
             ..helix()
         };
-        for (t, z) in [(0.75, 1.5), (1.0, 2.125), (1.25, 3.0), (2.0, 6.0), (2.25, 7.0)] {
+        for (t, z) in [
+            (0.75, 1.5),
+            (1.0, 2.125),
+            (1.25, 3.0),
+            (2.0, 6.0),
+            (2.25, 7.0),
+        ] {
             assert!((helix_height(&h, t) - z).abs() < 1e-12);
         }
         let mut profile = helix_profile();
         // 幅 2 はピッチ 2 と重なるので、小さな輪郭で変化するピッチと切り上げを確かめる。
-        profile.regions[0].outer.edges[0].segment = Segment::Circle { center: [0.0, 10.0], radius: 0.5 };
+        profile.regions[0].outer.edges[0].segment = Segment::Circle {
+            center: [0.0, 10.0],
+            radius: 0.5,
+        };
         let surfaces = helical_sweep(&profile, &h, "h").unwrap();
         let end = eval(surfaces.last().unwrap(), 1.0, 0.0);
         assert!(dist(end, [0.0, 12.0, 7.5]) < 1e-8, "{end:?}");
@@ -1797,19 +1923,83 @@ mod tests {
     fn helical_sweep_rejects_invalid_spans_axes_and_profiles() {
         let profile = helix_profile();
         for (h, message) in [
-            (k::Helix { spans: vec![], ..helix() }, "回り数"),
-            (k::Helix { spans: vec![k::HelixSpan { turns: 0.0, pitch: 3.0 }], ..helix() }, "回り数"),
-            (k::Helix { spans: vec![k::HelixSpan { turns: 1.0, pitch: 0.0 }], ..helix() }, "ピッチ"),
-            (k::Helix { spans: vec![k::HelixSpan { turns: 1.0, pitch: f64::NAN }], ..helix() }, "ピッチ"),
-            (k::Helix { origin: [0.0, 0.01, 0.0], ..helix() }, "平面"),
-            (k::Helix { axis: [0.0, 1.0, 0.0], ..helix() }, "平面"),
-            (k::Helix { axis: [0.0; 3], ..helix() }, "単位"),
-            (k::Helix { run_out: Some(k::HelixRun { turns: 0.25, radial: -10.0 }), ..helix() }, "軸に触れ"),
+            (
+                k::Helix {
+                    spans: vec![],
+                    ..helix()
+                },
+                "回り数",
+            ),
+            (
+                k::Helix {
+                    spans: vec![k::HelixSpan {
+                        turns: 0.0,
+                        pitch: 3.0,
+                    }],
+                    ..helix()
+                },
+                "回り数",
+            ),
+            (
+                k::Helix {
+                    spans: vec![k::HelixSpan {
+                        turns: 1.0,
+                        pitch: 0.0,
+                    }],
+                    ..helix()
+                },
+                "ピッチ",
+            ),
+            (
+                k::Helix {
+                    spans: vec![k::HelixSpan {
+                        turns: 1.0,
+                        pitch: f64::NAN,
+                    }],
+                    ..helix()
+                },
+                "ピッチ",
+            ),
+            (
+                k::Helix {
+                    origin: [0.0, 0.01, 0.0],
+                    ..helix()
+                },
+                "平面",
+            ),
+            (
+                k::Helix {
+                    axis: [0.0, 1.0, 0.0],
+                    ..helix()
+                },
+                "平面",
+            ),
+            (
+                k::Helix {
+                    axis: [0.0; 3],
+                    ..helix()
+                },
+                "単位",
+            ),
+            (
+                k::Helix {
+                    run_out: Some(k::HelixRun {
+                        turns: 0.25,
+                        radial: -10.0,
+                    }),
+                    ..helix()
+                },
+                "軸に触れ",
+            ),
         ] {
             let error = helical_sweep(&profile, &h, "h").err().expect("断る値");
             assert!(error.contains(message), "{error}");
         }
-        for (center, radius, message) in [([0.0, 0.5], 1.0, "軸に触れる"), ([0.0, 1.0], 1.0, "軸に触れる"), ([0.0, 10.0], 1.5, "幅")] {
+        for (center, radius, message) in [
+            ([0.0, 0.5], 1.0, "軸に触れる"),
+            ([0.0, 1.0], 1.0, "軸に触れる"),
+            ([0.0, 10.0], 1.5, "幅"),
+        ] {
             let mut p = profile.clone();
             p.regions[0].outer.edges[0].segment = Segment::Circle { center, radius };
             let error = helical_sweep(&p, &helix(), "h").err().expect("断る輪郭");
