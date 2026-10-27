@@ -20,6 +20,8 @@ pub struct SceneBody {
     pub(super) bvh: std::sync::Arc<PickTree>,
     /// アニメーションで動かしている時の、動かす前の網と動き([`Scene::set_poses`])
     rest: Option<(Mesh, kmb_core::kernel::Matrix4)>,
+    /// ねじの陰影の帯に切る前の網(ねじのあるボディだけ。[`Scene::set_thread_marks`])
+    plain: Option<Mesh>,
 }
 
 #[derive(Default)]
@@ -55,7 +57,12 @@ pub struct Scene {
     glow: Option<(std::collections::BTreeSet<FeatureId>, Color32, u8)>,
     /// 文書の点光源とスポットライト(写実の見た目とキャンバス内レンダリングで照らす)
     pub(super) lamps: Vec<kmb_render::lamp::Lamp>,
+    /// ねじの陰影の印(ボディの最後の機能 → 印。網を作り直しても掛け直す)
+    threads: ThreadMarks,
 }
+
+/// ボディ(最後の機能)ごとの、ねじの陰影の印。
+pub type ThreadMarks = std::collections::BTreeMap<FeatureId, Vec<kmb_interchange::ThreadMark>>;
 
 /// ボディ(最後の機能)ごとの、面の名前 → 面の外観の材質。
 pub type FaceLooks =
@@ -279,7 +286,11 @@ impl Scene {
         self.stowed.clear();
         self.bodies = meshes
             .into_iter()
-            .map(|(feature, mesh)| SceneBody {
+            .map(|(feature, mesh)| {
+                let (mesh, plain) = banded(mesh, self.threads.get(&feature));
+                (feature, mesh, plain)
+            })
+            .map(|(feature, mesh, plain)| SceneBody {
                 feature,
                 edges: feature_edges(&mesh),
                 look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
@@ -289,6 +300,7 @@ impl Scene {
                 tint: self.body_colors.get(&feature).copied(),
                 bvh: Default::default(),
                 rest: None,
+                plain,
             })
             .collect();
         self.apply_poses();
@@ -342,6 +354,43 @@ impl Scene {
             b.face_looks = fit_face_looks(self.face_looks.get(&b.feature), &b.mesh);
             b.bvh = Default::default();
         }
+    }
+
+    /// ねじの陰影の印を替える(ボディの最後の機能 → 印)。印の替わったボディだけ網を帯に切り直す。
+    /// 変わったら真。
+    pub fn set_thread_marks(&mut self, marks: ThreadMarks) -> bool {
+        if self.threads == marks {
+            return false;
+        }
+        for b in self.bodies.iter_mut().chain(self.stowed.iter_mut()) {
+            if self.threads.get(&b.feature) == marks.get(&b.feature) {
+                continue;
+            }
+            // 帯に切る前の網(動かしていれば動かす前の網)から切り直し、動きは後で掛け直す
+            let rest = b.rest.take().map(|(m, _)| m);
+            let base = match (b.plain.take(), rest) {
+                (Some(p), _) => p,
+                (None, Some(r)) => r,
+                (None, None) => std::mem::take(&mut b.mesh),
+            };
+            let (mesh, plain) = banded(base, marks.get(&b.feature));
+            b.mesh = mesh;
+            b.plain = plain;
+            b.edges = feature_edges(&b.mesh);
+            b.look = self
+                .body_looks
+                .get(&b.feature)
+                .map(|l| fit_look(l, &b.mesh));
+            b.face_looks = fit_face_looks(self.face_looks.get(&b.feature), &b.mesh);
+            b.bvh = Default::default();
+        }
+        self.threads = marks;
+        self.apply_poses();
+        for b in &self.bodies {
+            b.prepare_bvh();
+        }
+        self.sort_hidden();
+        true
     }
 
     /// アニメーションで動かしているか。
@@ -787,6 +836,14 @@ impl SceneBody {
         std::thread::spawn(move || {
             cell.tree.get_or_init(|| build_bvh(&mesh));
         });
+    }
+}
+
+/// ねじの印 `marks` の円筒を帯に切った網と、切る前の網(切った時だけ)。
+fn banded(mesh: Mesh, marks: Option<&Vec<kmb_interchange::ThreadMark>>) -> (Mesh, Option<Mesh>) {
+    match marks.and_then(|m| super::thread_bands(&mesh, m)) {
+        Some(b) => (b, Some(mesh)),
+        None => (mesh, None),
     }
 }
 
