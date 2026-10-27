@@ -28,17 +28,14 @@ pub(crate) const IMPORT_TIMEOUT: std::time::Duration = std::time::Duration::from
 pub(crate) const IMPORT_TOLERANCE: f64 = 0.01;
 
 /// STEP の文字列から、殻ごとに網を作る。長さはファイルの単位(inch・m など)から mm に直す
-/// (読めない単位はファイルの数を mm とみなす。注意は読み込みの機能が出す)。
+/// (読めない単位はファイルの数を mm とみなす。注意は読み込みの機能が出す)。閉じた殻と一緒に
+/// 置かれた OPEN_SHELL(面だけのボディ。公差の補助の面など)は網に入れない(番号は数える)。
 pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
     let unit = kmb_format::step::length_unit(text).mm;
-    let exchange = ruststep::parser::parse(text)
-        .map_err(|e| KernelError::Failed(format!("STEP を読めません: {e}")))?;
-    let data = exchange
-        .data
-        .first()
-        .ok_or_else(|| KernelError::Failed("STEP にデータの節がありません".into()))?;
+    let data = &data_section(text)?;
     let table = Table::from_data_section(data);
     let voids = void_shells(data);
+    let open = open_shells(data);
     let mut shells: Vec<_> = table.shell.iter().collect();
     shells.sort_by_key(|(i, _)| **i);
     if shells.is_empty() {
@@ -46,10 +43,14 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
             "STEP に形(殻)がありません。面だけのデータや、アセンブリの参照だけのファイルは読めません".into(),
         ));
     }
+    let solid = shells.iter().any(|(id, _)| !open.contains(id));
     let mut meshes = Vec::new();
     let mut names = Vec::new();
     let mut edges = Vec::new();
     for (n, (id, shell)) in shells.into_iter().enumerate() {
+        if solid && open.contains(id) {
+            continue;
+        }
         let cshell = table
             .to_compressed_shell(shell)
             .map_err(|e| KernelError::Failed(format!("STEP の殻 {n} を変換できません: {e}")))?;
@@ -187,6 +188,117 @@ fn void_shells(data: &ruststep::ast::DataSection) -> std::collections::HashSet<u
         }
     }
     out
+}
+
+/// truck の表が読む実体(形の実体)と、空洞を拾うのに使う実体。これらが読めない時は読み込みを止める。
+const SHAPE_ENTITIES: &[&str] = &[
+    "CARTESIAN_POINT",
+    "DIRECTION",
+    "VECTOR",
+    "PLACEMENT",
+    "AXIS1_PLACEMENT",
+    "AXIS2_PLACEMENT_2D",
+    "AXIS2_PLACEMENT_3D",
+    "LINE",
+    "POLYLINE",
+    "B_SPLINE_CURVE_WITH_KNOTS",
+    "BEZIER_CURVE",
+    "QUASI_UNIFORM_CURVE",
+    "UNIFORM_CURVE",
+    "RATIONAL_B_SPLINE_CURVE",
+    "CIRCLE",
+    "ELLIPSE",
+    "HYPERBOLA",
+    "PARABOLA",
+    "PCURVE",
+    "SURFACE_CURVE",
+    "SEAM_CURVE",
+    "PLANE",
+    "SPHERICAL_SURFACE",
+    "CYLINDRICAL_SURFACE",
+    "TOROIDAL_SURFACE",
+    "CONICAL_SURFACE",
+    "B_SPLINE_SURFACE_WITH_KNOTS",
+    "UNIFORM_SURFACE",
+    "QUASI_UNIFORM_SURFACE",
+    "BEZIER_SURFACE",
+    "RATIONAL_B_SPLINE_SURFACE",
+    "SURFACE_OF_LINEAR_EXTRUSION",
+    "SURFACE_OF_REVOLUTION",
+    "VERTEX_POINT",
+    "EDGE_CURVE",
+    "ORIENTED_EDGE",
+    "EDGE_LOOP",
+    "FACE_BOUND",
+    "FACE_OUTER_BOUND",
+    "FACE_SURFACE",
+    "ADVANCED_FACE",
+    "ORIENTED_FACE",
+    "OPEN_SHELL",
+    "CLOSED_SHELL",
+    "ORIENTED_SHELL",
+    "ORIENTED_CLOSED_SHELL",
+    "MANIFOLD_SOLID_BREP",
+    "BREP_WITH_VOIDS",
+    "DEFINITIONAL_REPRESENTATION",
+];
+
+/// データの節を読む。truck の使う字句の読み手は、空の並び `()` など決まりどおりの書き方を読めない
+/// 所があり(公差・注記の実体に多い)、1 つでも読めないと全体を読めず、誤りの場所もデータの節の頭を
+/// 指す。全体で読めない時は実体を 1 つずつ読み、形に関わらない実体は飛ばし、形の実体(複合の実体を
+/// 含む)が読めない時はその行を返す。
+fn data_section(text: &str) -> Result<ruststep::ast::DataSection, KernelError> {
+    if let Ok(mut ex) = ruststep::parser::parse(text)
+        && !ex.data.is_empty()
+    {
+        return Ok(ex.data.swap_remove(0));
+    }
+    let mut entities = Vec::new();
+    for (at, inst) in kmb_format::step::instances_at(text) {
+        let src = format!("{inst};");
+        match ruststep::parser::exchange::entity_instance(&src) {
+            Ok((rest, e)) if rest.trim().is_empty() => entities.push(e),
+            _ => {
+                let name = kmb_format::step::keyword(inst);
+                if name.is_empty() || SHAPE_ENTITIES.contains(&name) {
+                    let line = kmb_format::step::line_at(text, at);
+                    let id = inst.split('=').next().unwrap_or("").trim();
+                    let what = if name.is_empty() {
+                        "複合の実体"
+                    } else {
+                        name
+                    };
+                    return Err(KernelError::Failed(format!(
+                        "STEP の {line} 行目の {id}({what})を読めません"
+                    )));
+                }
+                // 形に関わらない実体(公差・注記・表示)は網に使わないので飛ばす
+            }
+        }
+    }
+    if entities.is_empty() {
+        return Err(KernelError::Failed("STEP にデータの節がありません".into()));
+    }
+    Ok(ruststep::ast::DataSection {
+        meta: Vec::new(),
+        entities,
+    })
+}
+
+/// OPEN_SHELL の番号。
+fn open_shells(data: &ruststep::ast::DataSection) -> std::collections::HashSet<u64> {
+    use ruststep::ast::EntityInstance;
+    data.entities
+        .iter()
+        .filter_map(|e| match e {
+            EntityInstance::Simple { id, record }
+                if record.name.eq_ignore_ascii_case("OPEN_SHELL") =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// 先が 1 点(頂点)にすぼまる円錐の面を、縁から頂点へ扇に張った網。円錐は頂点を通る直線の集まりなので、

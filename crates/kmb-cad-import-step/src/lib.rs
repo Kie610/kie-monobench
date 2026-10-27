@@ -127,6 +127,12 @@ impl Feature for ImportStep {
                 .map_err(kernel_err)?;
         }
         let mut out: Outputs = [("body".to_string(), Value::Shape(body))].into();
+        let surfaces = kmb_format::step::open_shells_beside_solids(&self.step);
+        if surfaces > 0 {
+            warnings.push(format!(
+                "STEP の面だけのボディ {surfaces} 個(公差の補助の面など)は読まず、立体だけを読みました"
+            ));
+        }
         match unit.warning {
             Some(w) => warnings.push(w),
             None if self.units && unit.mm != 1.0 => {
