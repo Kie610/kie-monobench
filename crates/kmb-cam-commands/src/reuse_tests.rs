@@ -286,7 +286,10 @@ fn a_template_of_a_setup_is_made_again_in_another_setup() {
     assert_eq!(made[1].2["tabs"], 2);
     // 面は前の文書の面を指さない(選んでいない時の外形)
     assert!(made[1].2.get("face").is_none_or(Json::is_null));
-    // 消すと一覧から消える
+    // 消すと一覧から消える。フォルダの更新時刻が変わらなくても(Windows では消した直後に
+    // 前と同じ時刻のままのことがある)覚えた一覧を返さない
+    let tdir = dir.join(TEMPLATE_DIR);
+    let before = std::fs::metadata(&tdir).unwrap().modified().unwrap();
     run(
         &cam,
         &d,
@@ -295,6 +298,13 @@ fn a_template_of_a_setup_is_made_again_in_another_setup() {
         Json::Null,
     )
     .unwrap();
+    // Linux ではフォルダの時刻を消す前に戻して、その様子を作る
+    #[cfg(unix)]
+    std::fs::File::open(&tdir)
+        .unwrap()
+        .set_modified(before)
+        .unwrap();
+    let _ = before;
     assert!(cam.reuse.templates().is_empty());
     std::fs::remove_dir_all(dir).ok();
 }
