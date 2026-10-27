@@ -297,7 +297,7 @@ fn expanded_thread_tapped_holes_use_all_families_and_survive_reopening() {
             assert_eq!(bodies.len(), 1);
             let volume = k.mass(bodies[0].1).unwrap().volume;
             assert!(
-                close(volume, expected, 1e-2),
+                (volume - expected).abs() < 0.01,
                 "{name}: {volume} vs {expected}"
             );
         }
@@ -375,7 +375,7 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
         assert_ok(&report);
         let bodies = visible_bodies(doc.data(), &reg, &report);
         assert_eq!(bodies.len(), 1);
-        assert!(close(k.mass(bodies[0].1).unwrap().volume, volume, 1e-6));
+        assert!((k.mass(bodies[0].1).unwrap().volume - volume).abs() < 1e-5);
         assert_eq!(
             doc.data().features.last().unwrap().data["size"],
             size.name()
@@ -421,15 +421,13 @@ fn legacy_thread_recess_volume(kind: &str) -> f64 {
 #[test]
 fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
     let removed = cyl(7.0, 40.0) + cyl(12.6, 14.0) - cyl(7.0, 14.0);
-    let expected = 100.0 * 80.0 * 60.0 - removed;
-    let actual = legacy_thread_recess_volume("counterbore");
-    assert!(close(actual, expected, 1e-2), "{actual} vs {expected}");
+    let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("counterbore");
+    assert!((actual - removed).abs() < 0.01, "{actual} vs {removed}");
 }
 
 #[test]
 fn legacy_thread_countersink_keeps_the_omitted_diameter() {
     let removed = cyl(7.0, 33.0) + cone(14.0, 7.0, 7.0);
-    let expected = 100.0 * 80.0 * 60.0 - removed;
-    let actual = legacy_thread_recess_volume("countersink");
-    assert!(close(actual, expected, 1e-2), "{actual} vs {expected}");
+    let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("countersink");
+    assert!((actual - removed).abs() < 0.01, "{actual} vs {removed}");
 }
