@@ -191,3 +191,28 @@ fn all_too_big_parts_keep_layout_diagnostics_without_exposing_an_unplaced_body()
     assert!(kmb_cam_commands::setups(doc.data(),&report,&reg).is_empty());
     assert!(doc.data().features.iter().filter(|f|f.type_id==kmb_cad_extrude::EXTRUDE).all(|f|matches!(report.feature(f.id),Some(FeatureStatus::Ok { .. }))));
 }
+
+#[test]
+fn an_original_chamfer_face_cuts_the_rim_of_each_copy() {
+    let mut doc=crate::nesting_boxes_document(false);let reg=kmb_bundle::registry();let kernel=kmb_bundle::kernel();
+    let entry=doc.data().features.iter().find(|f|f.type_id==SETUP).unwrap();let sid=entry.id;
+    let setup:Setup=serde_json::from_value(entry.data.clone()).unwrap();let body=setup.nest.as_ref().unwrap().parts[0].body;
+    let tools=doc.data().features.iter().find(|f|f.type_id==kmb_cam_commands::TOOLS).unwrap().id;
+    let id=doc.alloc_feature_id();
+    let data=serde_json::to_value(kmb_strategy_chamfer::Chamfer2d { base:kmb_cam_commands::OpBase::new(sid,tools,5),
+        face:Some(format!("f{}:end",body.0)),edges:kmb_strategy_chamfer::Edges::Outer,width:"0.5 mm".into(),tip_offset:"0.2 mm".into(),selected:vec![] }).unwrap();
+    doc.apply(Transaction::new("元の面の面取り",vec![Op::InsertFeature { index:None,entry:kmb_core::FeatureEntry {
+        id,type_id:kmb_strategy_chamfer::CHAMFER.into(),name:"元の面の面取り".into(),data,suppressed:false,pin_bodies:false,
+    } }])).unwrap();
+    let report=doc.recompute(&reg,kernel.as_ref());assert_eq!(report.error_count(),0,"{:?}",report.features);
+    let layout=layout(&report,sid);let setups=kmb_cam_commands::setups(doc.data(),&report,&reg);let s=&setups[0];
+    let path=&s.paths[s.sources.iter().position(|p|p.id==id).unwrap()];let r=path.tool.radius();
+    for sheet in &layout.sheets { for part in sheet.parts.iter().filter(|p|p.body==body) {
+        let [x,y]=part.position;
+        assert!(path.moves.windows(2).any(|pair| {
+            let a=pair[0].to();let b=pair[1].to();
+            !matches!(pair[1],Move::Rapid { .. }) && (b[0]-a[0]).hypot(b[1]-a[1])>1e-6 && b[2]< -0.1
+                && b[0]>=x-r && b[0]<=x+part.size[0]+r && b[1]>=y-r && b[1]<=y+part.size[1]+r
+        }),"写し {} の面取り",part.instance);
+    } }
+}
