@@ -146,6 +146,7 @@ pub fn setup_sheet(s: &SetupPaths, machine: &MachineProfile) -> String {
         i.safe_z, i.clearance_z
     );
 
+    append_sections(&mut o,s,machine,false);
     // 固定具の位置(ストックの左手前の角から)。経路はそのまわりを避けている
     if !i.fixtures.is_empty() {
         let _ = writeln!(o, "\n## 固定具\n");
@@ -692,8 +693,39 @@ tr.manual td {{ font-style: italic; }}
         }
         o.push_str("</ul>\n");
     }
+    append_sections(&mut o,s,machine,true);
     o.push_str("<p class=\"note\">kieMonoBench が書いた加工指示書。送り・切り込み・送り幅は工具の既定と加工の欄の上書きを合わせた値。</p>\n</body></html>\n");
     o
+}
+
+fn append_sections(out:&mut String,s:&SetupPaths,machine:&MachineProfile,html:bool) {
+    let Some(sections)=&s.info.sections else { return; };
+    for sec in &sections.list {
+        let size=[0,1,2].map(|k|sec.stock_max[k]-sec.stock_min[k]);
+        let name=match sections.output {
+            kmb_cam_setup::sections::SectionOutput::Files=>crate::section_file_name(&s.name,Some(&sec.label),&machine.post),
+            kmb_cam_setup::sections::SectionOutput::Stops=>crate::section_file_name(&s.name,None,&machine.post),
+        };
+        let stock=format!("幅 {:.2} × 奥行 {:.2} × 厚さ {:.2} mm",size[0],size[1],size[2]);
+        if html {
+            let _=writeln!(out,"<h2>{}</h2><p>{}</p><p>ファイル: {}</p>",esc(&sec.label),stock,esc(&name));
+        } else {
+            let _=writeln!(out,"\n## {}\n\n{stock}\n\nファイル: {name}\n",sec.label);
+        }
+        if let Some(sheet)=s.nest.as_ref().and_then(|n|n.sheets.iter().find(|n|n.index==sec.index)) {
+            let utilization=format!("使った面積: {:.1}%",sheet.utilization*100.0);
+            let mut counts:std::collections::BTreeMap<kmb_core::FeatureId,u32>=Default::default();
+            for part in &sheet.parts { *counts.entry(part.body).or_default()+=1; }
+            if html { let _=writeln!(out,"<p>{utilization}</p><table><tr><th>部品</th><th>個数</th></tr>"); }
+            else { let _=writeln!(out,"{utilization}\n\n| 部品 | 個数 |\n| --- | --- |"); }
+            for (body,count) in counts {
+                let name=s.nest_names.get(&body).cloned().unwrap_or_else(||body.to_string());
+                if html { let _=writeln!(out,"<tr><td>{}</td><td>{count}</td></tr>",esc(&name)); }
+                else { let _=writeln!(out,"| {} | {count} |",name.replace('|',"\\|")); }
+            }
+            if html { out.push_str("</table>\n"); }
+        }
+    }
 }
 
 #[cfg(test)]

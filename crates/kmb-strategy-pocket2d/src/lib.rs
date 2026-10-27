@@ -872,7 +872,9 @@ impl Feature for Pocket {
         };
         let input = p.input(ctx.feature_id(), params, Default::default());
         let out = plan(&input);
-        p.finish_plan(self.base.setup, out)
+        let mut outputs=p.finish_plan(self.base.setup,out)?;
+        kmb_cam_setup::sections::add_entry(&mut outputs,&p.info,entry_plan);
+        Ok(outputs)
     }
 
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {

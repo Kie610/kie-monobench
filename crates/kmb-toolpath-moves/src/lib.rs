@@ -9,6 +9,7 @@
 //! 動きだけを作る。kmb-cam-setup はここの名前を同じ名前で再公開する。
 
 mod entry;
+pub mod clip;
 pub mod link;
 mod moves;
 

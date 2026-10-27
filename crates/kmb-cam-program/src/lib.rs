@@ -9,6 +9,8 @@ use kmb_sim::{SimOptions, SimReport, ZMap};
 use kmb_toolpath::{Manual, Program, Toolpath};
 
 mod air;
+#[cfg(test)]
+mod sections_tests;
 pub mod sheet;
 pub use sheet::{setup_sheet, setup_sheet_html};
 
@@ -37,6 +39,9 @@ pub struct PathSource {
     pub skip_air: bool,
     /// 空振りを省く前の経路(省いた時だけ)
     pub original: Option<std::sync::Arc<Toolpath>>,
+    /// この経路は既に区画 1 の座標で作ってあり、区画ごとに切らない。
+    pub section_fixed: bool,
+    pub section_entry: Option<kmb_cam_setup::EntryPlan>,
 }
 
 /// 手動 NC の命令の 1 つ。`before` 番目の経路の前に入る(経路の数なら最後の加工の後)。
@@ -66,9 +71,65 @@ pub struct SetupPaths {
     /// 空振りを省いた時の、始めの材料の高さの上限(裏返す前に削った形を含む)。加工を選んだり
     /// 並べ替えたりした時に省き直すのに使う
     pub air_start: Option<std::sync::Arc<ZMap>>,
+    pub nest: Option<kmb_cam_setup::nest::NestLayout>,
+    pub nest_names: std::collections::BTreeMap<FeatureId,String>,
 }
 
 impl SetupPaths {
+    /// 1 から数える区画 `k` の経路を、区画 1 の座標へ動かす。
+    pub fn section(&self, k: u32) -> SetupPaths {
+        let Some(sections) = &self.info.sections else { return self.clone(); };
+        let Some(sec) = sections.list.iter().find(|s| s.index == k) else {
+            let mut out = self.clone();
+            out.paths.clear();
+            out.failed.push((self.setup, format!("区画 {k} がありません")));
+            return out;
+        };
+        let mut out = self.clone();
+        out.name = format!("{} {}", self.name, sec.label.replace(' ', ""));
+        out.info.sections = None;
+        out.info.stock_min = [sec.stock_min[0]+sec.shift[0],sec.stock_min[1]+sec.shift[1],sec.stock_min[2]];
+        out.info.stock_max = [sec.stock_max[0]+sec.shift[0],sec.stock_max[1]+sec.shift[1],sec.stock_max[2]];
+        for (i,tp) in out.paths.iter_mut().enumerate() {
+            if self.sources.get(i).is_some_and(|s|s.section_fixed) { continue; }
+            let entry=self.sources.get(i).and_then(|s|s.section_entry);
+            let opts=kmb_cam_setup::ClipOpts { clearance_z:self.info.clearance_z,
+                ramp_angle:entry.map_or(kmb_cam_setup::DEFAULT_ENTRY_DEG.to_radians(),|e|e.angle),
+                plunge:entry.map_or_else(||self.sources.get(i).and_then(|s|s.cutting.as_ref()).map_or_else(||tp.tool.cutting().plunge,|c|c.plunge),|e|e.plunge_feed),
+                ramp_feed:entry.map(|e|e.ramp_feed) };
+            let (mut clipped,warnings)=kmb_cam_setup::clip_to_section(tp,sec,&opts);
+            if kmb_cam_setup::avoid(&mut clipped,&self.info.keep_out)>0 {
+                out.part.push("区画へ移した経路が固定具を避けるため、固定具の下に材料が残ります".into());
+            }
+            *tp=clipped;
+            out.part.extend(warnings);
+        }
+        out.air_start=None;
+        out
+    }
+
+    /// 模擬用の経路。区画ごとの窓で切り、世界に並べた位置へ戻して連ねる。
+    pub fn simulation_paths(&self) -> Vec<Toolpath> {
+        let Some(sections)=&self.info.sections else { return self.paths.clone(); };
+        let mut paths=self.paths.clone();
+        for tp in &mut paths { tp.moves.clear();tp.dwells.clear();tp.spans.clear();tp.links=Default::default(); }
+        for sec in &sections.list {
+            let section=self.section(sec.index);
+            let xf=kmb_toolpath::Xform2::translate(-sec.shift[0],-sec.shift[1]);
+            for (i,tp) in section.paths.into_iter().enumerate() {
+                paths[i].moves.extend(tp.moves.iter().map(|m|xf.apply(m)));
+                paths[i].dwells.extend(tp.dwells.into_iter().map(|mut d| { d.at=xf.point(d.at);d }));
+            }
+        }
+        paths
+    }
+
+    pub fn simulation_fixtures(&self)->Vec<([f64;3],[f64;3])> {
+        let Some(sections)=&self.info.sections else { return self.info.fixtures.clone(); };
+        sections.list.iter().flat_map(|sec|self.info.fixtures.iter().map(move |(lo,hi)| {
+            ([lo[0]-sec.shift[0],lo[1]-sec.shift[1],lo[2]], [hi[0]-sec.shift[0],hi[1]-sec.shift[1],hi[2]])
+        })).collect()
+    }
     /// 空振りを省く前の経路に戻してから、今の順で省き直す(始めの形は前と同じ)。
     pub fn redo_skip_air(&mut self) {
         let Some(start) = self.air_start.clone() else {
@@ -87,6 +148,18 @@ impl SetupPaths {
     }
 
     pub fn program(&self) -> Program {
+        if let Some(sections)=&self.info.sections {
+            let mut programs=sections.list.iter().map(|s|(s,self.section(s.index).program()));
+            if let Some((_,mut combined))=programs.next() {
+                for (s,p) in programs {
+                    combined.ops.push(kmb_toolpath::Op::Message { text:format!("{}の材料を置いて原点と固定具を確かめてください",s.label) });
+                    combined.ops.push(kmb_toolpath::Op::Stop { optional:false });
+                    combined.ops.extend(p.ops);
+                }
+                combined.name=self.name.clone();
+                return combined;
+            }
+        }
         let manual: Vec<(usize, Manual)> = self
             .manual
             .iter()
@@ -341,6 +414,8 @@ pub fn setups(data: &DocumentData, report: &RecomputeReport, reg: &Registry) -> 
                     failed: vec![],
                     part: part_lines(data, reg, r.id),
                     air_start: None,
+                    nest: outputs.get("nest").and_then(<kmb_cam_setup::nest::NestLayout as kmb_core::Payload>::from_value),
+                    nest_names: data.features.iter().map(|f|(f.id,f.name.clone())).collect(),
                 });
             }
             continue;
@@ -370,6 +445,8 @@ pub fn setups(data: &DocumentData, report: &RecomputeReport, reg: &Registry) -> 
                             .has_mark(&origin(data, entry).type_id, kmb_cam_setup::CUTS_FREE),
                         skip_air: kmb_cam_setup::AirCuts::of(&entry.data).is_skip(),
                         original: None,
+                        section_fixed: outputs.contains_key(kmb_cam_setup::sections::SECTION_FIXED),
+                        section_entry: outputs.get(kmb_cam_setup::sections::SECTION_ENTRY).and_then(<kmb_cam_setup::sections::SectionEntry as kmb_core::Payload>::from_value).map(|e|e.0),
                     });
                 }
                 if let Some((_, manual)) =
@@ -496,6 +573,51 @@ pub fn gcode(s: &SetupPaths, post: &dyn Post, machine: &MachineProfile) -> Resul
     post.emit(&s.program(), machine).map_err(|e| e.to_string())
 }
 
+/// 区画のないセットアップは 1 ファイル、区画があれば指定の分け方で書く。
+pub fn gcode_files(s: &SetupPaths, post: &dyn Post, machine: &MachineProfile) -> Result<Vec<(String,String)>,String> {
+    use kmb_cam_setup::sections::SectionOutput;
+    if let Some(sections)=&s.info.sections {
+        // 機械の範囲の点検は、区画 1 へ移した経路ごとに行う。
+        for sec in &sections.list {
+            let p=s.section(sec.index).program();
+            let errors:Vec<_>=post.check(&p,machine).into_iter()
+                .filter(|d|d.severity==kmb_post::Severity::Error).map(|d|d.message).collect();
+            if !errors.is_empty() { return Err(errors.join("、")); }
+        }
+        if sections.output==SectionOutput::Files {
+            return sections.list.iter().map(|sec| {
+                let section=s.section(sec.index);
+                Ok((section_file_name(&s.name,Some(&sec.label),post.id()),gcode(&section,post,machine)?))
+            }).collect();
+        }
+    }
+    Ok(vec![(section_file_name(&s.name,None,post.id()),gcode(s,post,machine)?)])
+}
+
+/// 書き出しと段取り表で共用する、区画のファイル名。
+pub fn section_file_name(setup:&str,section:Option<&str>,post:&str)->String {
+    let clean=|s:&str| {
+        let name:String=s.chars().filter(|c|!c.is_whitespace() && !r#"\/:*?"<>|"#.contains(*c)).collect();
+        if name.is_empty() { "setup".into() } else { name }
+    };
+    let stem=match section { Some(label)=>format!("{} {}",clean(setup),clean(label)),None=>clean(setup) };
+    format!("{stem}.{}",kmb_post::file_extension(post))
+}
+
+/// 板の間の空間には材料を置かず、区画の箱の和を始めの材料にする。
+pub fn initial_stock(info: &SetupInfo, cell: f64) -> ZMap {
+    let mut stock=ZMap::stock(info.stock_min,info.stock_max,cell);
+    if let Some(sections)=&info.sections {
+        for y in 0..stock.ny { for x in 0..stock.nx {
+            let p=stock.center(x,y);
+            stock.z[y*stock.nx+x]=sections.list.iter().filter(|s| {
+                p[0]>=s.stock_min[0] && p[0]<s.stock_max[0] && p[1]>=s.stock_min[1] && p[1]<s.stock_max[1]
+            }).map(|s|s.stock_max[2]).fold(info.stock_min[2],f64::max);
+        } }
+    }
+    stock
+}
+
 /// 途中の形の粗い格子 `map`(セットアップの座標)を、3D のビューに出す網(世界座標)にする。
 pub fn stage_shape(info: &SetupInfo, map: &ZMap, name: &str, key: u64) -> kmb_core::OverlayShape {
     let mesh = world_mesh(info, map.to_mesh(info.stock_min[2]));
@@ -548,6 +670,28 @@ pub fn with_gcode_paths(s: &SetupPaths, gcode: &str) -> Result<SetupPaths, Strin
         }
     }
     Ok(SetupPaths { paths, ..s.clone() })
+}
+
+/// 区画ごとに機械へ送る座標で書いて読み直し、模擬用の仮想配置の位置へ戻す。
+pub fn with_section_gcode_paths(s:&SetupPaths,post:&dyn Post,machine:&MachineProfile)->Result<SetupPaths,String> {
+    let Some(sections)=&s.info.sections else { return with_gcode_paths(s,&gcode(s,post,machine)?); };
+    let mut out=s.clone();out.sources.clear();
+    for tp in &mut out.paths { tp.moves.clear();tp.dwells.clear();tp.spans.clear();tp.links=Default::default(); }
+    for sec in &sections.list {
+        let section=s.section(sec.index);
+        let read=with_gcode_paths(&section,&gcode(&section,post,machine)?)?;
+        let xf=kmb_toolpath::Xform2::translate(-sec.shift[0],-sec.shift[1]);
+        let same_count=read.paths.len()==s.paths.len();
+        for (k,tp) in read.paths.into_iter().enumerate() {
+            let index=if same_count { Some(k) } else { s.paths.iter().position(|p|p.name==tp.name) }
+                .ok_or("読み直した区画の経路と加工の対応が分かりません")?;
+            out.paths[index].moves.extend(tp.moves.iter().map(|m|xf.apply(m)));
+            out.paths[index].dwells.extend(tp.dwells.into_iter().map(|mut d| { d.at=xf.point(d.at);d }));
+        }
+    }
+    // 読み直すと経路の数が変わり得る。役目や元の経路で結ばず、細かい格子で確かめる。
+    out.air_start=None;
+    Ok(out)
 }
 
 /// セットアップの経路でストックを削ってみる。加工の機能に失敗したものがあれば行わない
@@ -621,10 +765,8 @@ pub fn player(
         ..SimOptions::default()
     };
     let stock = carried_start(kernel, setups, index, opt)?
-        .unwrap_or_else(|| ZMap::stock(target.info.stock_min, target.info.stock_max, cell));
-    let mesh = kernel
-        .mesh(target.info.body, target.info.tolerance)
-        .map_err(|e| e.to_string())?;
+        .unwrap_or_else(|| initial_stock(&target.info, cell));
+    let mesh = target.info.part_mesh(kernel).map_err(|e|e.to_string())?;
     let part = ZMap::from_mesh(
         &stock,
         &target.info.placed_mesh(&mesh),
@@ -635,7 +777,7 @@ pub fn player(
         stock,
         target.info.stock_min[2],
         part,
-        target.paths.clone(),
+        target.simulation_paths(),
         motion,
     ))
 }
@@ -684,10 +826,11 @@ fn simulate_from(
         return Err(format!("{id} の経路ができていません: {m}"));
     }
     let mesh = s.info.part_mesh(kernel).map_err(|e| e.to_string())?;
-    let cells = path_cells(s, &opt);
+    let paths=s.simulation_paths();
+    let cells = path_cells(s,&opt);
     // 始めの格子は最初の経路の大きさ(途中で大きさが変わる所で並べ直す)
     let first = cells.first().copied().unwrap_or(opt.cell);
-    let mut stock = ZMap::stock(s.info.stock_min, s.info.stock_max, first);
+    let mut stock = initial_stock(&s.info, first);
     // ボディをストックにしたセットアップは、そのボディの上面の形から削り始める
     if let Some(h) = s.info.stock_body {
         let m = kernel
@@ -703,16 +846,45 @@ fn simulate_from(
     let stock = start.unwrap_or(stock);
     let placed = s.info.placed_mesh(&mesh);
     let part_at = |g: &ZMap| ZMap::from_mesh(g, &placed, s.info.origin, f64::NEG_INFINITY);
-    Ok(kmb_sim::simulate_on_machine(
+    let machine=machine_shape(&s.info);
+    let mut report=kmb_sim::simulate_on_machine(
         &stock,
         s.info.stock_min[2],
         &part_at,
-        &s.paths,
+        &paths,
         &cells,
         opt,
-        &s.info.fixtures,
-        machine_shape(&s.info).as_ref(),
-    ))
+        &s.simulation_fixtures(),
+        if s.info.sections.is_none() { machine.as_ref() } else { None },
+    );
+    if let Some(sections)=&s.info.sections {
+        // 材料の形は仮想配置で削り、機械の当たりは各区画を実機の座標へ戻して確かめる。
+        // ここも同じ既存の検査を実行し、仮想配置の幅を機械の travel として扱わない。
+        for sec in &sections.list {
+            let local=s.section(sec.index);
+            let mut local_stock=initial_stock(&local.info,stock.cell);
+            for y in 0..local_stock.ny { for x in 0..local_stock.nx {
+                let p=local_stock.center(x,y);
+                let sx=((p[0]-sec.shift[0]-stock.origin[0])/stock.cell).floor();
+                let sy=((p[1]-sec.shift[1]-stock.origin[1])/stock.cell).floor();
+                local_stock.z[y*local_stock.nx+x]=if sx>=0.0 && sy>=0.0 && sx<stock.nx as f64 && sy<stock.ny as f64 {
+                    stock.z[sy as usize*stock.nx+sx as usize]
+                } else { local.info.stock_min[2] };
+            } }
+            let mut local_mesh=placed.clone();
+            for p in &mut local_mesh.positions { p[0]+=sec.shift[0] as f32;p[1]+=sec.shift[1] as f32; }
+            let local_part=|g:&ZMap|ZMap::from_mesh(g,&local_mesh,local.info.origin,f64::NEG_INFINITY);
+            let checked=kmb_sim::simulate_on_machine(&local_stock,local.info.stock_min[2],&local_part,
+                &local.paths,&path_cells(&local,&opt),SimOptions { stage_cells:0,..opt },
+                &local.info.fixtures,machine_shape(&local.info).as_ref());
+            report.bed_depth=report.bed_depth.max(checked.bed_depth);
+            report.machine_hits.extend(checked.machine_hits.into_iter().map(|mut hit| {
+                hit.event.at[0]-=sec.shift[0];hit.event.at[1]-=sec.shift[1];
+                hit.event.op=format!("{} / {}",sec.label,hit.event.op);hit
+            }));
+        }
+    }
+    Ok(report)
 }
 
 /// セットアップの機械の形(WCS)。ストックはベッドの上の、L 字の基準の角から `bed_offset` の所に
@@ -784,6 +956,7 @@ mod tests {
             machine: kmb_post_carvera_air::ID.into(),
             machine_values: kmb_post_carvera_air::profile(),
             leveling: None,
+            sections: None,
         }
     }
 
@@ -871,12 +1044,16 @@ mod tests {
                     cuts_free: *ty == CONTOUR,
                     skip_air: true,
                     original: None,
+                    section_fixed: false,
+                    section_entry: None,
                 })
                 .collect(),
             manual: vec![],
             failed: vec![],
             part: vec![],
             air_start: None,
+            nest: None,
+            nest_names: Default::default(),
         }
     }
 

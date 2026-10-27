@@ -21,12 +21,14 @@ mod chains;
 mod fixture;
 mod floor;
 mod manual;
+pub mod nest;
 mod op;
 mod pattern;
 pub mod placement;
 mod plan;
 use plan::{depth_problem, empty_toolpath, keep_bottom, keep_top, range_problem, reachable_bottom};
 mod rest;
+pub mod sections;
 mod strategy;
 pub mod testing;
 pub use chains::{
@@ -44,6 +46,7 @@ pub use kmb_toolpath_moves::{
     feed_value, finish_fields, finish_offsets, helix_moves, helix_start, lap_start,
     lead_shape_fields, leads, start_after, start_at, walk_moves, zigzag_moves,
 };
+pub use kmb_toolpath_moves::clip::{ClipOpts, clip_to_section};
 pub use kmb_toolpath_moves::{
     LeadArcs, approach, free_on_left, lead_arcs, length, lift_over_tabs, lift_over_tabs_shaped,
     loop_length, loop_moves, ramp_moves, retract, start_mid_line, start_near, tab_centers,
@@ -337,6 +340,9 @@ pub struct Setup {
     /// プローブで表面の高さを測って、彫る深さを表面に沿わせる
     #[serde(default, skip_serializing_if = "Leveling::is_none")]
     pub leveling: Leveling,
+    /// 複数の部品を板へ配置する。無い文書は通常のセットアップ。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nest: Option<nest::Nest>,
 }
 
 fn one() -> u32 {
@@ -546,6 +552,8 @@ pub struct SetupInfo {
     /// 高さの補正(しないなら `None`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub leveling: Option<LevelingInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sections: Option<sections::Sections>,
 }
 
 impl SetupInfo {
@@ -735,6 +743,7 @@ impl Setup {
             bed_x: None,
             bed_y: None,
             leveling: Leveling::default(),
+            nest: None,
             machine: LEGACY_MACHINE.into(),
             machine_values: None,
         }
@@ -797,6 +806,9 @@ impl Setup {
             .into_iter()
             .flatten(),
         );
+        if let Some(n) = &mut self.nest {
+            v.extend([&mut n.edge, &mut n.spacing, &mut n.grid]);
+        }
         v
     }
 
@@ -879,6 +891,12 @@ impl Feature for Setup {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v = vec![output(self.body, "body")];
         v.extend(self.more_bodies.iter().map(|b| output(*b, "body")));
+        if let Some(n) = &self.nest {
+            for p in &n.parts {
+                let r = output(p.body, "body");
+                if !v.contains(&r) { v.push(r); }
+            }
+        }
         if self.stock.mode == StockMode::Body
             && let Some(b) = self.stock.body
         {
@@ -976,6 +994,11 @@ impl Feature for Setup {
                 "網の許容差は {lo} mm 以上 {hi} mm 以下にしてください"
             )));
         }
+        let nested = self.nest.as_ref().map(|n| nest::prepare(ctx, self, n, tolerance, &machine)).transpose()?;
+        let (body, more) = match &nested {
+            Some(n) => (n.bodies[0], n.bodies[1..].to_vec()),
+            None => (body, more),
+        };
         // カーネルの外形の箱は余裕を持たせてあるので、網から正確な箱を求める
         let mesh = part_mesh(ctx.kernel(), body, &more, tolerance)?;
         let raw = MachiningModel::from_mesh(&mesh, [0.0; 3]);
@@ -987,7 +1010,9 @@ impl Feature for Setup {
         let (pmin, pmax) = (placed.min, placed.max);
         let mut warnings = Vec::new();
         let mut stock_body = None;
-        let (smin, smax) = if self.stock.mode == StockMode::Body {
+        let (smin, smax) = if let Some(n) = &nested {
+            ([0.0; 3], [n.extent, n.size[1], n.thickness])
+        } else if self.stock.mode == StockMode::Body {
             let id = self
                 .stock
                 .body
@@ -1015,9 +1040,10 @@ impl Feature for Setup {
         } else {
             self.stock_box(ctx, pmin, pmax)?
         };
+        let origin_max = nested.as_ref().map_or(smax, |n| [n.size[0], n.size[1], n.thickness]);
         let origin = match self.origin_at {
             Some(OriginAt::Stock { at }) => {
-                [0, 1, 2].map(|i| smin[i] + (smax[i] - smin[i]) * at[i])
+                [0, 1, 2].map(|i| smin[i] + (origin_max[i] - smin[i]) * at[i])
             }
             Some(OriginAt::Model { at }) => {
                 [0, 1, 2].map(|i| pmin[i] + (pmax[i] - pmin[i]) * at[i])
@@ -1026,10 +1052,10 @@ impl Feature for Setup {
             None => {
                 let (ox, oy) = match self.origin {
                     Origin::FrontLeft => (smin[0], smin[1]),
-                    Origin::FrontRight => (smax[0], smin[1]),
-                    Origin::BackLeft => (smin[0], smax[1]),
-                    Origin::BackRight => (smax[0], smax[1]),
-                    Origin::Center => ((smin[0] + smax[0]) / 2.0, (smin[1] + smax[1]) / 2.0),
+                    Origin::FrontRight => (origin_max[0], smin[1]),
+                    Origin::BackLeft => (smin[0], origin_max[1]),
+                    Origin::BackRight => (origin_max[0], origin_max[1]),
+                    Origin::Center => ((smin[0] + origin_max[0]) / 2.0, (smin[1] + origin_max[1]) / 2.0),
                 };
                 let oz = match self.origin_z {
                     OriginZ::Top => smax[2],
@@ -1081,9 +1107,18 @@ impl Feature for Setup {
             machine: self.machine.clone(),
             machine_values: machine.clone(),
             leveling,
+            sections: nested.as_ref().map(|n| n.sections(origin)),
         };
         let mut out = Outputs::new();
         out.insert("setup".into(), info.to_value());
+        if let Some(n) = nested {
+            for (k, h) in n.bodies.iter().enumerate() {
+                out.insert(format!("nest.{}", k + 1), Value::Shape(*h));
+            }
+            out.insert("grid".into(), Value::Scalar(kmb_core::Quantity::mm(n.layout.grid)));
+            out.insert("nest".into(), kmb_core::Payload::to_value(&n.layout));
+            warnings.extend(n.layout.warnings);
+        }
         warnings.extend(wcs_warning);
         warnings.extend(warnings_pre);
         add_warnings(&mut out, warnings);
@@ -1153,6 +1188,18 @@ fn register_with(reg: &mut Registry, lib: kmb_post::machines::MachineLibrary) {
                     .help("作業範囲・回転数・G-code の書き方・付属品(レーザー・プローブ)が機械で決まる。新しいセットアップは設定の「機械」で選んだ機械と、その時の設定の値を文書に持つ(後で設定を直しても、今あるセットアップの経路と G-code は変わらない)。ここで機械を替えると、その機械の初めの値になる"),
             )
             .field(Field::output("body", "部品", "body"))
+            .field(Field::choice("nest.method","板への配置",&[("boxes","外形の箱"),("shapes","形どおり")]).only("nest.method","boxes|shapes",""))
+            .field(Field::choice("nest.sheet","板の大きさの取り方",&[("stock","ストック"),("machine","機械の作業範囲")]).only("nest.method","boxes|shapes",""))
+            .field(Field::expr("nest.edge","縁の余白").length().only("nest.method","boxes|shapes",""))
+            .field(Field::expr("nest.spacing","部品の間").length().only("nest.method","boxes|shapes",""))
+            .field(Field::expr("nest.grid","格子の目").length().only("nest.method","shapes",""))
+            .field(Field::number("nest.max_sheets","板の枚数の上限").only("nest.method","boxes|shapes",""))
+            .field(Field::choice("nest.output","区画の書き出し",&[("files","板ごとのファイル"),("stops","止めを入れた 1 ファイル")]).only("nest.method","boxes|shapes",""))
+            .field(Field::rows("nest.parts","配置する部品",vec![
+                Field::info("body","ボディ"),Field::number("count","個数"),
+                Field::choice("rotate","回してよい向き",&[("free","自由"),("grain","木目をそろえる"),("fixed","固定")]),
+                Field::choice("up","上に向ける面",&[("plus_z","上面"),("minus_z","下面"),("plus_x","右の側面"),("minus_x","左の側面"),("plus_y","奥の側面"),("minus_y","手前の側面")]),
+            ]).only("nest.method","boxes|shapes",""))
             .field(
                 Field::text("stock.material", "材料")
                     .help("工具の切削条件のプリセットを選ぶ。一覧から選ぶか、名前を打つ")

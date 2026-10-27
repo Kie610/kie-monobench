@@ -31,6 +31,7 @@ pub use kmb_cam_setup::{
     OpBase, Origin, OriginZ, PATTERN, Pattern, PatternKind, SETUP, Setup, SetupInfo, Stock,
     StockMode, heights_of, toolpath_of,
 };
+pub use kmb_cam_setup::nest::{Nest,NestMethod,NestPart,NestRotate,SheetFrom};
 pub use kmb_cam_tool::{self as tool, TOOLS, TOOLS_V1, Tool, ToolKind, ToolLibrary};
 pub use kmb_post::{MachineProfile, Post};
 pub use kmb_sim::{HeadPart, MachineHit, MachineKind, MachineShape, SimOptions, SimReport, ZMap};
@@ -41,6 +42,7 @@ mod commands;
 mod entry;
 mod fixtures;
 mod nc_program;
+mod nest;
 mod paths_cache;
 mod picks;
 mod playback;
@@ -157,6 +159,7 @@ mod tests {
             machine: kmb_post_carvera_air::ID.into(),
             machine_values: kmb_post_carvera_air::profile(),
             leveling: None,
+            sections: None,
         }
     }
 }

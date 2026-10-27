@@ -8,6 +8,8 @@
 pub mod cam;
 mod edges;
 pub mod sample;
+mod nest;
+pub use nest::{nesting_boxes_document,nesting_shapes_document};
 mod sketch;
 mod sweep;
 
@@ -64,3 +66,5 @@ mod machine_tests;
 mod matrix_tests;
 #[cfg(test)]
 mod trace_thread_tests;
+#[cfg(test)]
+mod nest_tests;
