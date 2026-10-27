@@ -222,6 +222,7 @@ pub fn duplicate_component(
                     name: format!("写し({label})"),
                     data: serde_json::json!({"body": last.0, "copy": true}),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             );
             if let Some(name) = data.body_names.get(root) {
@@ -289,6 +290,7 @@ pub fn duplicate_component(
                     "z": "0 mm",
                 }),
                 suppressed: false,
+                pin_bodies: false,
             },
         );
     }

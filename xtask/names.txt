@@ -97,6 +97,8 @@ cad.text_at_point	kmb-text
 cad.text_on_face	kmb-text
 cad.text_on_path	kmb-text
 cad.thread	kmb-cad-hole
+cad.timeline.read_latest_bodies	kmb-cad
+cad.timeline.read_latest_body	kmb-cad
 cad.timeline.roll_back	kmb-cad
 cad.visibility	kmb-cad
 cam.adaptive2d@1	kmb-strategy-adaptive2d

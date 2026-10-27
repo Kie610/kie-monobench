@@ -1323,6 +1323,7 @@ fn laser_document() -> kmb_core::Document {
                 name: "焼き印".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1350,6 +1351,7 @@ fn sketch3d_line_document() -> kmb_core::Document {
                 name: "3D スケッチ1".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1415,6 +1417,7 @@ fn pencil_document() -> kmb_core::Document {
                 name: "内側の角".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -2142,6 +2145,7 @@ fn study_workspace(
                 name: "研究 1".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -2174,6 +2178,7 @@ fn static_workspace() -> (Workspace, kmb_core::FeatureId) {
                     "size": "2 mm",
                 }),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
