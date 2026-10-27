@@ -226,9 +226,10 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         return Err("許容差は 0.0001〜1 mm にしてください".into());
     }
     let unit = unit_arg(cx)?;
-    let bodies = named_bodies(cx)?
+    let (bodies, warnings) = printable_bodies(cx)?;
+    let bodies = bodies
         .into_iter()
-        .map(|(name, h)| cx.kernel.mesh(h, tol).map(|mesh| (name, mesh)))
+        .map(|(name, _, h)| cx.kernel.mesh(h, tol).map(|mesh| (name, mesh)))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     let bytes = |b: &[(String, kmb_core::Mesh)]| {
@@ -236,7 +237,7 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         crate::write_obj(b, unit, &mut out).map_err(|e| e.to_string())?;
         Ok::<_, String>(out)
     };
-    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name()});
+    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name(), "warnings": warnings});
     if each(cx, EXPORT_OBJ) {
         let files = bodies
             .iter()
@@ -517,7 +518,11 @@ mod sheet_tests {
                 args: &args,
                 ..Context::new(doc.data(), &report, &reg, &kernel)
             };
-            for outcome in [stl(&cx, EXPORT_STL).unwrap(), threemf(&cx).unwrap()] {
+            for outcome in [
+                stl(&cx, EXPORT_STL).unwrap(),
+                threemf(&cx).unwrap(),
+                obj(&cx).unwrap(),
+            ] {
                 let info = match outcome {
                     Outcome::File { info, .. } => info,
                     Outcome::Files { info, files } => {

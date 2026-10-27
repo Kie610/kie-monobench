@@ -255,8 +255,12 @@ impl SmlibKernel {
         if count != names.len() {
             return Err(KernelError::Failed("移動で面の数が変わりました".into()));
         }
-        let rims = s.get(shape)?.rims.iter()
-            .map(|n| n.as_ref().map(|n| format!("{n}{suffix}"))).collect();
+        let rims = s
+            .get(shape)?
+            .rims
+            .iter()
+            .map(|n| n.as_ref().map(|n| format!("{n}{suffix}")))
+            .collect();
         let h = s.put(brep, names)?;
         s.shapes.get_mut(&h.0).expect("しまった形").rims = rims;
         Ok(h)

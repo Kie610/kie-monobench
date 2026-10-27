@@ -173,14 +173,28 @@ fn ordered(
     if segments.is_empty() || segments.len() > 32 {
         return Err(invalid("縁は 1〜32 区間にしてください"));
     }
-    if segments.iter().any(|(_, p)| {
-        p.len() < 2
-            || p.iter().flatten().any(|v| !v.is_finite())
-            || p.windows(2).any(|w| gap(w[0], w[1]) <= 1e-9)
-    }) {
-        return Err(invalid(
-            "縁に長さ 0 の区間があります。重なった点を離してください",
-        ));
+    for (segment, points) in &segments {
+        if points.len() < 2 {
+            return Err(invalid(format!(
+                "縁 {} の点が足りません。2 点以上で描き直してください",
+                segment.name
+            )));
+        }
+        if let Some(index) = points.iter().position(|p| p.iter().any(|v| !v.is_finite())) {
+            return Err(invalid(format!(
+                "縁 {} の点 {} が不正です。有限の座標で描き直してください",
+                segment.name,
+                index + 1
+            )));
+        }
+        if let Some(index) = points.windows(2).position(|w| gap(w[0], w[1]) <= 1e-9) {
+            return Err(invalid(format!(
+                "縁 {} の点 {} と点 {} の間に長さ 0 の区間があります。重なった点を離してください",
+                segment.name,
+                index + 1,
+                index + 2
+            )));
+        }
     }
     let mut out = vec![segments.remove(0)];
     while !segments.is_empty() {
@@ -1001,6 +1015,27 @@ mod tests {
             vec![a, b],
         )
     }
+    #[test]
+    fn invalid_boundary_points_name_the_segment_and_location_to_repair() {
+        let error = ordered(vec![line("broken", [0.; 3], [0.; 3])])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("broken"), "{error}");
+        assert!(error.contains("1") && error.contains("2"), "{error}");
+        assert!(
+            error.contains("長さ 0") && error.contains("離してください"),
+            "{error}"
+        );
+        let error = ordered(vec![line("nonfinite", [f64::NAN, 0., 0.], [1.; 3])])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("nonfinite") && error.contains("点 1"),
+            "{error}"
+        );
+        assert!(error.contains("有限"), "{error}");
+    }
+
     #[test]
     fn shuffled_reversed_lines_form_one_loop_but_two_loops_and_forks_are_rejected() {
         let p = [[0., 0., 0.], [1., 0., 0.], [1., 1., 1.], [0., 1., 0.]];

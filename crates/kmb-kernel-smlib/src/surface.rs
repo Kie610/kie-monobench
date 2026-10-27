@@ -392,6 +392,7 @@ fn put(
         };
         if face == "patch"
             && lines.len() >= 5
+            && faces.len() == lines.len()
             && let Some(rim) = &name
         {
             names[e.faces[0]] = rim.replacen(":rim:", ":patch:", 1);
@@ -529,6 +530,35 @@ mod tests {
         }
     }
     #[test]
+    fn planar_five_sided_boundary_keeps_one_patch_name() {
+        let kernel = SmlibKernel::new();
+        let boundary: Vec<_> = (0..5)
+            .map(|i| {
+                let point = |i: usize| {
+                    let angle = std::f64::consts::TAU * i as f64 / 5.;
+                    [10. * angle.cos(), 10. * angle.sin(), 0.]
+                };
+                BoundarySegment {
+                    name: format!("e{i}"),
+                    curve: BoundaryCurve::Line {
+                        a: point(i),
+                        b: point((i + 1) % 5),
+                    },
+                }
+            })
+            .collect();
+        let h = kernel.patch_sheet(&boundary, "planar").unwrap();
+        assert_eq!(kernel.face_names(h).unwrap(), ["planar:patch"]);
+        let names: HashSet<_> = kernel
+            .curve_edges(h)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.faces[1].clone())
+            .collect();
+        assert_eq!(names, (0..5).map(|i| format!("planar:rim:e{i}")).collect());
+    }
+
+    #[test]
     fn five_sided_patch_stitches_faces_and_names_them_after_the_boundary() {
         let kernel = SmlibKernel::new();
         let h = kernel.patch_sheet(&saddle(5), "f3").unwrap();
@@ -628,6 +658,48 @@ mod tests {
                 .unwrap()
                 .iter()
                 .all(|e| e.faces[1].ends_with("@copy"))
+        );
+        let instance = kernel.instance(h, &m).unwrap();
+        assert_eq!(kernel.instance_of(instance), Some((h, m)));
+        assert_eq!(kernel.body_kind(instance).unwrap(), BodyKind::Sheet);
+        assert_eq!(
+            kernel.face_names(instance).unwrap(),
+            kernel.face_names(h).unwrap()
+        );
+        assert_eq!(
+            kernel.bounds(instance).unwrap(),
+            kernel.bounds(moved).unwrap()
+        );
+        assert_eq!(
+            kernel
+                .curve_edges(instance)
+                .unwrap()
+                .iter()
+                .map(|e| e.faces.clone())
+                .collect::<Vec<_>>(),
+            kernel
+                .curve_edges(h)
+                .unwrap()
+                .iter()
+                .map(|e| e.faces.clone())
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            kernel
+                .volume(instance)
+                .unwrap_err()
+                .to_string()
+                .contains(NO_VOLUME)
+        );
+        let transformed_instance = kernel.transform(h, &m, "").unwrap();
+        assert_eq!(
+            kernel.body_kind(transformed_instance).unwrap(),
+            BodyKind::Sheet
+        );
+        assert_eq!(kernel.instance_of(transformed_instance), Some((h, m)));
+        assert_eq!(
+            kernel.curve_edges(transformed_instance).unwrap(),
+            kernel.curve_edges(instance).unwrap()
         );
         assert!(
             kernel
