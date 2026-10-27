@@ -189,6 +189,7 @@ impl StudyData {
         v
     }
 
+    /// 保存した式は、使わないモードの欄もパラメータの名前変更に追従する。
     fn exprs_mut(&mut self) -> Vec<&mut String> {
         let mut v: Vec<&mut String> = vec![
             &mut self.rest_h,
@@ -198,18 +199,14 @@ impl StudyData {
             &mut self.size,
             &mut self.at,
         ];
-        if self.time == "transient" {
-            v.extend([&mut self.end, &mut self.frames, &mut self.initial]);
-        }
+        v.extend([&mut self.end, &mut self.frames, &mut self.initial]);
         v.extend(self.loads.iter_mut().map(|r| &mut r.value));
         for rows in [&mut self.temps, &mut self.convs] {
             v.extend(rows.iter_mut().map(|r| &mut r.value));
         }
         for r in &mut self.heats {
             v.push(&mut r.value);
-            if self.time == "transient" {
-                v.extend([&mut r.from, &mut r.until]);
-            }
+            v.extend([&mut r.from, &mut r.until]);
         }
         v
     }
@@ -1603,12 +1600,20 @@ pub(crate) mod tests {
                 "{key}"
             );
         }
-        assert!(
-            study
-                .rename_param("run_time", "duration")
-                .unwrap()
-                .is_none()
-        );
+        study.data = from(&study.rename_param("run_time", "duration").unwrap().unwrap()).unwrap();
+        assert_eq!(study.data.end, "duration");
+        study.data = from(&study.rename_param("start_at", "begin_at").unwrap().unwrap()).unwrap();
+        study.data = from(&study.rename_param("finish_at", "end_at").unwrap().unwrap()).unwrap();
+        assert_eq!(study.data.heats[0].from, "begin_at");
+        assert_eq!(study.data.heats[0].until, "end_at");
+        for key in ["duration", "begin_at", "end_at"] {
+            assert!(
+                !study
+                    .inputs()
+                    .unwrap()
+                    .contains(&InputRef::Param { name: key.into() })
+            );
+        }
     }
 
     /// 自動の大きさ: 厚さ 1 mm の板(200×200)は、体積だけで決めた大きさでは薄い所で要素が
