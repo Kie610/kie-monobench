@@ -965,6 +965,59 @@ mod tests {
         assert!(
             matches!(&k.rows(2.0)[0], Row::Keys { chord, down: true, name: None, .. } if chord == "Shift")
         );
+        input(
+            &ctx,
+            &mut k,
+            &on(),
+            2.1,
+            vec![key(Key::ShiftLeft, Modifiers::NONE, false)],
+            Modifiers::NONE,
+            false,
+            None,
+        );
+        assert!(
+            k.rows(2.2)
+                .iter()
+                .any(|row| matches!(row, Row::Keys { chord, down: false, .. } if chord == "Shift")),
+            "修飾キーだけの札も離した後に表示時間だけ残る"
+        );
+        input(
+            &ctx,
+            &mut k,
+            &on(),
+            2.3,
+            vec![
+                key(Key::F8, Modifiers::NONE, true),
+                key(Key::F8, Modifiers::NONE, false),
+            ],
+            Modifiers::NONE,
+            false,
+            None,
+        );
+        assert!(
+            k.rows(2.4)
+                .iter()
+                .any(|row| matches!(row, Row::Keys { chord, down: false, .. } if chord == "Shift")),
+            "次の組を押しても、修飾キーの表示時間を短くしない"
+        );
+        assert!(k.rows(4.4).is_empty());
+        input(
+            &ctx,
+            &mut k,
+            &on(),
+            5.0,
+            vec![
+                key(Key::ShiftLeft, Modifiers::SHIFT, true),
+                key(Key::ShiftLeft, Modifiers::NONE, false),
+            ],
+            Modifiers::NONE,
+            false,
+            None,
+        );
+        assert!(
+            matches!(&k.rows(5.1)[0], Row::Keys { chord, down: false, .. } if chord == "Shift"),
+            "一つのコマで押して離した修飾キーも出す"
+        );
     }
 
     #[test]
@@ -1011,6 +1064,63 @@ mod tests {
                 matches!(&k.rows(1.1)[0], Row::Keys { chord, .. } if chord == &keys::chord_name((mods, code)))
             );
         }
+    }
+
+    #[test]
+    fn typing_focus_started_in_the_same_frame_hides_the_first_letter() {
+        let ctx = egui::Context::default();
+        let mut ws = crate::Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
+        ws.win.layout.keycast = on();
+        let mut value = String::new();
+        let mut field = Rect::NOTHING;
+        run_frame(&ctx, egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                field = ui.text_edit_singleline(&mut value).rect;
+            });
+        });
+        assert!(!ctx.egui_wants_keyboard_input());
+        let pos = field.center();
+        run_frame(
+            &ctx,
+            egui::RawInput {
+                time: Some(1.0),
+                events: vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: PointerButton::Primary,
+                        pressed: true,
+                        modifiers: Modifiers::NONE,
+                    },
+                    egui::Event::PointerButton {
+                        pos,
+                        button: PointerButton::Primary,
+                        pressed: false,
+                        modifiers: Modifiers::NONE,
+                    },
+                    key(Key::A, Modifiers::NONE, true),
+                    egui::Event::Text("a".into()),
+                ],
+                ..Default::default()
+            },
+            |ctx| {
+                ws.take_keycast(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.text_edit_singleline(&mut value);
+                });
+                assert_eq!(value, "a", "欄を押した同じコマで文字を打つ");
+                assert!(ctx.egui_wants_keyboard_input());
+                ws.show_keycast(ctx);
+            },
+        );
+        assert!(
+            !ws.win
+                .keycast
+                .rows(1.0)
+                .iter()
+                .any(|row| matches!(row, Row::Keys { chord, .. } if chord == "A")),
+            "欄へ入った最初の文字を表示しない"
+        );
     }
 
     #[test]

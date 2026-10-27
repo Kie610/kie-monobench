@@ -9,3 +9,24 @@ expect "コマンドの名前も出す" exists
 key Ctrl+,
 key F8
 expect "操作の表示: F8" exists
+
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z 取り消す" exists
+click "押し出し"
+expect "操作の表示: マウス 押し出し" exists
+key Escape
+
+# 表示の言語も画面の部品で替え、固定の働きの名前が英語になることを確かめる。
+key Ctrl+,
+type ~"設定を探す" ""
+click "画面"
+click "表示の言語"
+click "English"
+type ~"Search settings" "Input Display"
+expect "Show keys and mouse buttons on screen (for recordings and tutorials)" exists
+key Ctrl+,
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z Undo" exists
+click "Extrude"
+expect "操作の表示: マウス Extrude" exists
+key Escape
