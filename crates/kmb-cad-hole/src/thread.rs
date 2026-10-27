@@ -150,6 +150,26 @@ impl Size {
         self.name().replace('x', "×")
     }
 
+    fn series_label(&self) -> &'static str {
+        match self.family {
+            Family::Metric => {
+                if self.coarse {
+                    "並目"
+                } else {
+                    "細目"
+                }
+            }
+            Family::Unified => {
+                if self.coarse {
+                    "UNC"
+                } else {
+                    "UNF"
+                }
+            }
+            Family::Pipe => "管用平行",
+        }
+    }
+
     /// 内ねじの代表下穴。メートル並目の表にある呼びは穴の機能と同じ値。
     pub fn tap_drill(&self) -> f64 {
         if self.family != Family::Metric {
@@ -377,7 +397,8 @@ pub fn unknown_size(name: &str) -> String {
     let d = compact
         .strip_prefix('M')
         .and_then(|r| r.split('X').next())
-        .and_then(|d| d.parse::<f64>().ok());
+        .and_then(|d| d.parse::<f64>().ok())
+        .filter(|d| d.is_finite() && *d > 0.0);
     let Some(d) = d else {
         return format!(
             "{head}。M と呼び径で書き、細目はピッチを付けます(例: M6、M6x0.75)。ほかの族は 1/4-20 UNC・G1/4・Rp1/4 のように書きます"
@@ -666,21 +687,7 @@ impl Feature for Thread {
                     s.label(),
                     num(s.major),
                     num(s.pitch),
-                    match s.family {
-                        Family::Metric =>
-                            if s.coarse {
-                                "並目"
-                            } else {
-                                "細目"
-                            },
-                        Family::Unified =>
-                            if s.coarse {
-                                "UNC"
-                            } else {
-                                "UNF"
-                            },
-                        Family::Pipe => "管用平行",
-                    },
+                    s.series_label(),
                     if i == 0 && c.internal {
                         " ← 穴の径に近い"
                     } else if i == 0 {
@@ -828,7 +835,7 @@ fn summary(cx: &Context<'_>, id: FeatureId) -> Option<String> {
         },
         num(s.major),
         num(s.pitch),
-        if s.coarse { "並目" } else { "細目" },
+        s.series_label(),
         if t.hand == Hand::Left {
             "左ねじ"
         } else {
@@ -852,7 +859,7 @@ impl Extension for ThreadCommands {
                 .args([
                     kmb_core::Arg::text("face", "ねじを付ける円筒の面の名前(省くと選んでいる面)"),
                     kmb_core::Arg::feature("feature", "面を持つ機能の番号"),
-                    kmb_core::Arg::text("size", "ねじの呼び(M6 など。省くと面の径に近いもの)"),
+                    kmb_core::Arg::text("size", "ねじの呼び(M6・1/4-20 UNC・G1/4・Rp1/4 など。省くと面の径に近いもの)"),
                 ])
                 .menu("作成")
                 .icon("thread")
@@ -1009,6 +1016,50 @@ mod tests {
         let old = serde_json::json!({"target":1,"face":"f1:side","size":"M6x1"});
         let thread: Thread = serde_json::from_value(old.clone()).unwrap();
         assert_eq!(serde_json::to_value(thread).unwrap(), old);
+    }
+
+    #[test]
+    fn expanded_thread_rp_is_only_an_internal_parallel_thread() {
+        let cylinder = Cylinder {
+            diameter: 13.157,
+            center: [0.0; 3],
+            axis: [0.0, 0.0, 1.0],
+            length: 10.0,
+            internal: false,
+        };
+        let thread = Thread {
+            target: FeatureId(1),
+            face: "f1:side".into(),
+            size: "Rp1/4".into(),
+            length: None,
+            hand: Hand::Right,
+        };
+        assert!(
+            resolve(&thread, &cylinder)
+                .unwrap_err()
+                .contains("穴の円筒")
+        );
+        assert!(
+            resolve(
+                &thread,
+                &Cylinder {
+                    internal: true,
+                    ..cylinder
+                }
+            )
+            .is_ok()
+        );
+        assert!(
+            resolve(
+                &Thread {
+                    size: "G1/4".into(),
+                    ..thread
+                },
+                &cylinder
+            )
+            .is_ok()
+        );
+        assert!(unknown_size("MNaN").contains("M6x0.75"));
     }
 
     #[test]

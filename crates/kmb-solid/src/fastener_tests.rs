@@ -506,7 +506,7 @@ fn names_follow_the_jis_thread_designation() {
     assert_eq!(size_name("M10×1.5"), "M10", "並目のピッチは省く");
     assert_eq!(size_name("m3"), "M3");
     assert!(thread("M10×1.75").is_none(), "M10 に 1.75 の細目は無い");
-    assert!(thread("M24").is_none());
+    assert!(thread("M27").is_none());
     assert!(thread("M1.6").is_some() && thread("M20×1.5").is_some());
     assert_eq!(fits(Kind::HexNut, "M10×1.25", 8.75, true), Some(true));
     assert_eq!(fits(Kind::HexNut, "M10", 8.75, true), Some(true));
