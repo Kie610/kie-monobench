@@ -154,6 +154,7 @@ fn a_drafted_cut_to_a_face_leaves_no_skin_on_that_face() {
                 feature: plate,
                 face: format!("f{}:start", plate.0),
                 vertex: None,
+                datum: false,
             }),
             operation: Operation::Cut,
             target: Some(plate),
@@ -348,6 +349,7 @@ fn chamfering_a_pin_in_a_hole_leaves_the_hole_wall() {
                 name: "面取り".into(),
                 data: data.unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

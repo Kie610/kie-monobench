@@ -329,7 +329,8 @@ fn document(new: bool) -> kmb_core::Document {
     doc
 }
 
-/// スクリプトの始めの文書(`#! sample part|cam|cam3d|box|laser|sketch|sweep|empty`。既定は part。box は蓋つきの箱、
+/// スクリプトの始めの文書(`#! sample part|cam|cam3d|box|laser|sketch|sweep|sketch3d-line|empty`。既定は part。
+/// box は蓋つきの箱、sketch3d-line は part に Z に立てた線 1 本の 3D スケッチを足したもの、
 /// laser は最初のスケッチの中を塗るレーザーの加工を足した加工の見本、sketch は作図の道具の見本
 /// (一部の位置が決まっていないスケッチ)、sweep はスイープとロフトの断面と経路のスケッチ、empty は空の文書)。
 fn script_document(text: &str) -> kmb_core::Document {
@@ -348,6 +349,7 @@ fn script_document(text: &str) -> kmb_core::Document {
         "laser" => laser_document(),
         "sketch" => kmb_samples::sketch_tools_document(),
         "sweep" => kmb_samples::sweep_loft_document(),
+        "sketch3d-line" => sketch3d_line_document(),
         "empty" => kmb_core::Document::new(),
         _ => kmb_samples::reference_document(),
     }
@@ -1321,6 +1323,35 @@ fn laser_document() -> kmb_core::Document {
                 name: "焼き印".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
+            },
+        }],
+    ))
+    .unwrap();
+    doc
+}
+
+/// 見本の部品に、Z に立てた線 1 本(点 (-30, 0, 0) から (-30, 0, 30)、線の番号 3)の 3D スケッチを
+/// 足した文書。
+fn sketch3d_line_document() -> kmb_core::Document {
+    let mut doc = kmb_samples::reference_document();
+    let id = doc.alloc_feature_id();
+    let data = serde_json::json!({"entities": [
+        {"type": "point", "id": 1, "p": [-30.0, 0.0, 0.0]},
+        {"type": "point", "id": 2, "p": [-30.0, 0.0, 30.0]},
+        {"type": "line", "id": 3, "a": 1, "b": 2},
+    ]});
+    doc.apply(kmb_core::Transaction::new(
+        "3D スケッチを足す",
+        vec![kmb_core::Op::InsertFeature {
+            index: None,
+            entry: kmb_core::FeatureEntry {
+                id,
+                type_id: "cad.sketch3d@1".into(),
+                name: "3D スケッチ1".into(),
+                data,
+                suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1386,6 +1417,7 @@ fn pencil_document() -> kmb_core::Document {
                 name: "内側の角".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1607,6 +1639,68 @@ fn split_plate() -> Workspace {
     ws.wait();
     ws.clear_selection();
     ws
+}
+
+/// 押し出しの高さを決める間に、マウスを柱の上の面に載せた所を撮る(その面まで伸ばす見本と
+/// 「〇〇まで」の字)。マウスの位置は案内の「(面まで)」が出る所を探す。`JC_SHOT_AT=x,y` で
+/// 位置を決めれば探さない(直す前の版で同じ所を撮る時)。`JC_SCREENS_OUT` に書く。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
+fn write_extrude_to_face_screens() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let mut b = DocBuilder::new();
+    let rect = |x: f64, y: f64| {
+        let mut s = SketchBuilder::xy();
+        let o = s.fixed_point(0.0, 0.0);
+        let c = s.point_from(o, &format!("{x} mm"), &format!("{y} mm"), [x, y]);
+        s.rectangle(c, "6 mm", "6 mm", [x, y, 6.0, 6.0]);
+        s
+    };
+    let post = b.sketch("柱のスケッチ", rect(20.0, 0.0));
+    b.feature(
+        "solid.extrude@1",
+        "柱",
+        serde_json::json!({"profile": post, "distance": "20 mm"}),
+    );
+    let sketch = b.sketch("伸ばすスケッチ", rect(0.0, 0.0));
+    let mut ws = Workspace::new(b.finish("柱まで伸ばす"), None, kmb_bundle::modules())
+        .with_editor(kmb_ui_sketch::SketchEditor::new())
+        .with_editor(kmb_ui_tools::ToolsEditor::new());
+    ws.wait();
+    ws.select(sketch);
+    let mut s = Screen::new(ws);
+    s.h.state_mut().set_view(-60.0, 30.0);
+    s.settle();
+    assert!(s.click_exact("押し出し"), "押し出しのボタンが無い");
+    let given = std::env::var("JC_SHOT_AT").ok().and_then(|v| {
+        let (x, y) = v.split_once(',')?;
+        Some(egui::pos2(x.parse().ok()?, y.parse().ok()?))
+    });
+    let at = given.or_else(|| {
+        (0..(s.size[1] as i32 / 8)).find_map(|j| {
+            (0..(s.size[0] as i32 / 8)).find_map(|i| {
+                let p = egui::pos2(i as f32 * 8.0, j as f32 * 8.0);
+                s.h.event(egui::Event::PointerMoved(p));
+                s.h.step();
+                s.h.query_by_label_contains("(面まで)").map(|_| p)
+            })
+        })
+    });
+    let at = at.expect("柱の上の面が見つからない");
+    // 面の縁から少し内へ
+    let at = if given.is_some() {
+        at
+    } else {
+        at + egui::vec2(6.0, 10.0)
+    };
+    println!("JC_SHOT_AT={},{}", at.x, at.y);
+    s.h.event(egui::Event::PointerMoved(at));
+    s.settle();
+    s.write(&dir, "押し出しの高さを柱の上の面に載せる");
 }
 
 /// 90〜95. 3D のビューの表示(レビュー 2 回目の本 2): 前・右から見た時の格子(M10)、
@@ -2051,6 +2145,7 @@ fn study_workspace(
                 name: "研究 1".into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -2083,6 +2178,7 @@ fn static_workspace() -> (Workspace, kmb_core::FeatureId) {
                     "size": "2 mm",
                 }),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

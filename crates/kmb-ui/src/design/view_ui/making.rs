@@ -3,6 +3,33 @@
 use super::*;
 
 impl Workspace {
+    /// 画面の点 `p` で当たる面。今の手順の候補(作業平面の四角)がその面より手前にあれば `None`
+    /// (候補を選ぶ)。
+    fn face_before_choice(&self, rect: Rect, p: egui::Pos2) -> Option<kmb_core::FacePick> {
+        let (hit, at) = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p)
+            .into_iter()
+            .next()?;
+        let front = self
+            .cur
+            .gesture
+            .as_ref()
+            .and_then(|g| g.current())
+            .is_some_and(|h| gesture::choice_in_front(h, &self.cur.camera, rect, p, at));
+        (!front).then_some(hit)
+    }
+
+    /// 面を選ぶ手順に候補(作業平面の四角)があれば、画面の点 `p` の候補の値。当たる面がその候補より
+    /// 手前にあれば `None`(面を選ぶ)。
+    fn choice_before_face(&self, rect: Rect, p: egui::Pos2) -> Option<serde_json::Value> {
+        let h = self.cur.gesture.as_ref()?.current()?;
+        let k = gesture::choice_at(h, &self.cur.camera, rect, p)?;
+        let front = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p)
+            .into_iter()
+            .next()
+            .is_none_or(|(_, at)| gesture::choice_in_front(h, &self.cur.camera, rect, p, at));
+        front.then(|| h.choices[k].value.clone())
+    }
+
     pub(crate) fn gesture_events(&mut self, ev: &view3d::ViewEvents, rect: Rect) {
         // 辺を選ぶ手順: クリックした辺(面も受ける手順は面も)を足す・外す。足したら次の手順へ進む
         // (Ctrl を押していれば進まずに続けて足す。Enter で次へ)
@@ -73,6 +100,15 @@ impl Workspace {
                 );
                 return;
             }
+            // 候補も受ける手順(押し出しの「対象まで」の作業平面): 面より手前の四角を押したら候補を選ぶ
+            if let Some(p) = ev.click
+                && let Some(v) = self.choice_before_face(rect, p)
+            {
+                self.cur.picked = None;
+                self.cur.picked_vertices.clear();
+                self.gesture_commit_step(v);
+                return;
+            }
             if let Some(p) = ev.click {
                 let mut hit = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p);
                 // 機能の計算が失敗している間は前の形を出していることがあり、押した面にはその機能の
@@ -114,14 +150,15 @@ impl Workspace {
             return;
         }
         // 候補を選ぶ手順で、ボディの平らな面も受け付けるもの(スケッチを描く平面): 平らな面をクリック
-        // したらその面を選んだ面にして決める。面がなければ候補(原点の平面など)から選ぶ
+        // したらその面を選んだ面にして決める。面がなければ候補(原点の平面など)から選ぶ。
+        // 作業平面の四角が面より手前にあれば、作業平面を選ぶ(面の上に浮かせた作業平面を選べるように)
         let face_choice = self.cur.gesture.as_ref().is_some_and(|g| {
             g.current()
                 .is_some_and(|h| h.faces && matches!(h.gesture, kmb_core::Gesture::Choice))
         });
         if face_choice
             && let Some(p) = ev.click
-            && let Some(hit) = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p)
+            && let Some(hit) = self.face_before_choice(rect, p)
         {
             let before = (
                 self.cur.picked.take(),
@@ -198,7 +235,7 @@ impl Workspace {
         let over_face = face_choice
             && ev
                 .hover
-                .and_then(|p| view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p))
+                .and_then(|p| self.face_before_choice(rect, p))
                 .is_some_and(|hit| self.is_planar(&hit));
         let Some(g) = &mut self.cur.gesture else {
             return;
@@ -210,6 +247,22 @@ impl Workspace {
                 gesture::value_at(h, &self.cur.camera, rect, p)
             };
         }
+        // 止める面を受ける距離の手順(押し出しの高さ): マウスの下が止められる平らな面なら、
+        // その面の平面までの距離にし、決めた時にその面を「対象まで」の相手にする
+        if let Some(p) = ev.hover {
+            let stop = self.distance_stop(rect, p);
+            let Some(g) = &mut self.cur.gesture else {
+                return;
+            };
+            g.stop = None;
+            if let Some((s, v)) = stop {
+                g.live = Some(serde_json::Value::from(s));
+                g.stop = Some(v);
+            }
+        }
+        let Some(g) = &mut self.cur.gesture else {
+            return;
+        };
         // 面の上の点を決める手順: 選んだ面の外(何もない所・別の面)のクリックは受け付けない。
         // 平面に写すと面の外の点にも穴ができ、形が変わらないまま確定してしまうため
         // (吸い付く点は面の縁にあるので、吸い付いていれば受け付ける)
@@ -247,6 +300,62 @@ impl Workspace {
                 None => {}
             }
         }
+    }
+
+    /// 距離の手順([`kmb_core::Handle::stop_key`] のあるもの)で、画面の点 `p` の下の平らな面で
+    /// 止められるなら、その面の平面までの距離(輪郭の重心から押し出す向きに、符号つき)と相手の値。
+    /// 輪郭と同じ平面にある面(輪郭を描いた面など)と、押し出す向きに沿う面(横の壁)は止められない
+    /// ので除く。数字を打っている間は除く(打った値が先)。
+    pub(crate) fn distance_stop(
+        &mut self,
+        rect: Rect,
+        p: Pos2,
+    ) -> Option<(f64, serde_json::Value)> {
+        let g = self.cur.gesture.as_ref()?;
+        let h = g.current()?;
+        let kmb_core::Gesture::Distance { origin, dir } = h.gesture else {
+            return None;
+        };
+        if h.stop_key.is_none() || !g.typed.trim().is_empty() {
+            return None;
+        }
+        let mut hit = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p)?;
+        // 計算が失敗している機能の面は、その面を持つ計算できた前の機能の面として読む
+        if !matches!(
+            self.output(hit.feature, "body"),
+            Some(kmb_core::Value::Shape(_))
+        ) {
+            hit.feature = self.face_owner(&hit.face)?;
+        }
+        let plane = match &g.stop_seen {
+            Some((seen, plane)) if *seen == hit => *plane,
+            _ => {
+                let plane = kmb_core::Context {
+                    picked: Some(&hit),
+                    ..self.context()
+                }
+                .picked_plane();
+                if let Some(g) = &mut self.cur.gesture {
+                    g.stop_seen = Some((hit.clone(), plane));
+                }
+                plane
+            }
+        }?;
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let len = dot(dir, dir).sqrt();
+        let along = dot(dir, plane.normal);
+        // 面の法線が押し出す向きと 84° 以上ずれる(横の壁に近い)なら止めない
+        if along.abs() < 0.1 * len {
+            return None;
+        }
+        let s = dot([0, 1, 2].map(|i| plane.point[i] - origin[i]), plane.normal) / along;
+        if (s * len).abs() < 1e-3 {
+            return None;
+        }
+        Some((
+            s,
+            serde_json::json!({"feature": hit.feature.0, "face": hit.face}),
+        ))
     }
 
     /// 押し出しを直している間、押し出す輪郭を青く塗る。
@@ -449,8 +558,19 @@ impl Workspace {
         // 閉じた候補(スケッチを描く原点の平面)は、灰色の半透明の板にして、マウスの下の板を
         // 選ぶ色で塗る(面を選んでいると分かるように)。
         // 色のある候補(原点の軸)は、その色の太い線にする
+        // 面を選ぶ手順に候補(作業平面)があれば、その四角も同じく描く(マウスの下の四角を明るく)
+        let face_with_choices = g
+            .current()
+            .is_some_and(|h| matches!(h.gesture, kmb_core::Gesture::Face) && !h.choices.is_empty());
+        let hover_choice = if face_with_choices {
+            ui.input(|i| i.pointer.hover_pos())
+                .filter(|p| rect.contains(*p))
+                .and_then(|p| self.choice_before_face(rect, p))
+        } else {
+            None
+        };
         if let Some(h) = g.current()
-            && matches!(h.gesture, kmb_core::Gesture::Choice)
+            && (matches!(h.gesture, kmb_core::Gesture::Choice) || face_with_choices)
         {
             let soft = crate::theme::mix(self.win.look.pal.panel, color, 0.55);
             let pal = &self.win.look.pal;
@@ -461,7 +581,7 @@ impl Workspace {
             }
             for c in &h.choices {
                 // マウスが候補に乗っていなければ、手順が始めから選んだ候補(回転の自動の軸)を明るく
-                let hot = match &g.live {
+                let hot = match g.live.as_ref().or(hover_choice.as_ref()) {
                     Some(v) => *v == c.value,
                     None => g.picks.contains(&c.value),
                 };
@@ -570,6 +690,12 @@ impl Workspace {
             }
             if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
                 let mut text = gesture::describe_for(h, v);
+                // 止める面に載せている間は、どの面までかを添える
+                if let Some(face) = g.stop.as_ref().filter(|_| typed.is_none())
+                    && let Some(face) = face["face"].as_str()
+                {
+                    text = format!("{}まで {text}", self.face_label(face));
+                }
                 if let Some(op) = op {
                     text = format!("{text}({})", op.label());
                 }

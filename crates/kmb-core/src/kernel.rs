@@ -455,6 +455,12 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("面の列挙".into()))
     }
 
+    /// 面の名前だけの一覧([`Kernel::faces`] の順)。再計算が機能の結果ごとに名前をそろえるのに使うので、
+    /// 面積などを求めずに返せるカーネルは置き換える。
+    fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
+        Ok(self.faces(shape)?.into_iter().map(|f| f.name).collect())
+    }
+
     /// 2 つの平面の境目の、まっすぐな辺の一覧。
     fn edges(&self, shape: ShapeHandle) -> Result<Vec<EdgeInfo>, KernelError> {
         let _ = shape;
@@ -588,6 +594,20 @@ pub trait Kernel: Send + Sync {
     ) -> Result<ShapeHandle, KernelError> {
         let _ = (sections, rails, tag);
         Err(KernelError::Unsupported("ロフト".into()))
+    }
+
+    /// 閉じた輪郭の断面を、端の点 `point` へつなぐ。`at_start` なら点を最初に置く。
+    /// 点の側には端面を作らず、側面は輪郭の区間の名前を使う。
+    fn loft_to_point(
+        &self,
+        sections: &[Profile],
+        point: P3,
+        at_start: bool,
+        rails: &[PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (sections, point, at_start, rails, tag);
+        Err(KernelError::Unsupported("点へのロフト".into()))
     }
 
     /// 丸めの面 `faces`(名前)を消し、両側の面を延ばして鋭い辺に戻す。残る面の名前はそのまま、つなぎ直した面は `{tag}:healed` と名付ける。

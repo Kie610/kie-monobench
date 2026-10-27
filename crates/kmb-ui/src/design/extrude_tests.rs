@@ -1,4 +1,5 @@
-//! 押し出しの画面の試験: 領域のクリック、重なった形の領域、作った後の領域の選び直し、止める面、線だけのスケッチの薄い押し出し。
+//! 押し出しの画面の試験: 領域のクリック、重なった形の領域、作った後の領域の選び直し、止める面、
+//! 高さを決める間に面に載せて止める、線だけのスケッチの薄い押し出し。
 
 use crate::tests::{can, on_truck, reg};
 use crate::*;
@@ -204,6 +205,7 @@ fn keyhole_document() -> kmb_core::Document {
                 name: "スケッチ1".into(),
                 data: serde_json::to_value(s).unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -565,6 +567,120 @@ fn an_extrude_is_set_to_stop_at_a_clicked_face_from_the_menu_or_the_panel() {
 }
 
 #[test]
+fn hovering_a_face_while_pulling_the_height_extrudes_up_to_that_face() {
+    // 確かめること:
+    // - 高さを決める間に別のボディの平らな面へマウスを載せると、高さがその面までになり、
+    //   クリックで範囲を「対象まで」(その面)にして作る(範囲を切り替える手間を省く)
+    // - 押し出す向きに沿う面(横の壁)は止める面にしない(マウスの所の高さのまま)
+    // - 数字を打てば打った値が先(面には止めない)
+    // - CLI・MCP で知らない面を渡すと、黙って距離にせず断る
+    use kmb_cad::{Direction, Operation};
+    use kmb_cad_extrude::{EXTRUDE, Extrude};
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    use kmb_sketch::SketchPlane;
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 700.0));
+    let mut b = DocBuilder::new();
+    let rectangle = |b: &mut DocBuilder, name: &str, [x, y, w, h]: [f64; 4]| {
+        let mut s = SketchBuilder::new(SketchPlane::Xy);
+        let o = s.fixed_point(0.0, 0.0);
+        let c = s.point_from(o, &format!("{x} mm"), &format!("{y} mm"), [x, y]);
+        s.rectangle(c, &format!("{w} mm"), &format!("{h} mm"), [x, y, w, h]);
+        b.feature(kmb_sketch::SKETCH, name, s.build())
+    };
+    // 底が z 0 の 30×10×5 の台と、高さ 20 の柱(別のボディ)。柱の上の面(z 20)まで伸ばす
+    let block = |b: &mut DocBuilder, name: &str, r: [f64; 4], z: f64| {
+        let sk = rectangle(b, &format!("{name}のスケッチ"), r);
+        b.feature(
+            EXTRUDE,
+            name,
+            Extrude {
+                profile: Some(sk),
+                distance: format!("{z} mm"),
+                direction: Direction::Normal,
+                operation: Operation::New,
+                ..Default::default()
+            },
+        )
+    };
+    block(&mut b, "台", [0.0, 0.0, 30.0, 10.0], 5.0);
+    let post = block(&mut b, "柱", [20.0, 20.0, 6.0, 6.0], 20.0);
+    let sketch = rectangle(&mut b, "伸ばすスケッチ", [0.0, 20.0, 6.0, 6.0]);
+    let mut ws = Workspace::new(b.finish("台と柱"), None, reg());
+    ws.wait();
+    ws.cur.camera.fit(&ws.cur.scene, rect);
+    let at = |ws: &Workspace, p: [f64; 3]| ws.cur.camera.project(p.map(|v| v as f32), rect).0;
+    let hover = |p: egui::Pos2| crate::view3d::ViewEvents {
+        hover: Some(p),
+        ..Default::default()
+    };
+    ws.select(sketch);
+    ws.start_action(kmb_cad_extrude::EXTRUDE_SKETCH);
+    fn g(ws: &Workspace) -> &crate::gesture::Run {
+        ws.cur.gesture.as_ref().unwrap()
+    }
+    assert!(matches!(
+        g(&ws).current().unwrap().gesture,
+        kmb_core::Gesture::Distance { .. }
+    ));
+    // 台の手前の面(向きに沿う横の壁): 止めない
+    let wall = at(&ws, [15.0, 0.0, 2.5]);
+    ws.gesture_events(&hover(wall), rect);
+    assert!(g(&ws).stop.is_none(), "{:?}", g(&ws).stop);
+    // 柱の上の面: 高さはその面まで
+    let top = at(&ws, [23.0, 23.0, 20.0]);
+    ws.gesture_events(&hover(top), rect);
+    let face = format!("f{}:end", post.0);
+    assert_eq!(
+        g(&ws).stop,
+        Some(serde_json::json!({"feature": post.0, "face": face}))
+    );
+    assert!(
+        (g(&ws).live.as_ref().unwrap().as_f64().unwrap() - 20.0).abs() < 1e-6,
+        "{:?}",
+        g(&ws).live
+    );
+    assert!(g(&ws).hint().contains("面まで"), "{}", g(&ws).hint());
+    // 数字を打っている間は面に止めない
+    ws.cur.gesture.as_mut().unwrap().typed = "7".into();
+    ws.gesture_events(&hover(top), rect);
+    assert!(g(&ws).stop.is_none());
+    ws.cur.gesture.as_mut().unwrap().typed.clear();
+    // クリックで決める: 範囲が「対象まで」(柱の上の面)の押し出しができる
+    ws.gesture_events(&hover(top), rect);
+    ws.gesture_events(
+        &crate::view3d::ViewEvents {
+            hover: Some(top),
+            click: Some(top),
+            ..Default::default()
+        },
+        rect,
+    );
+    assert!(ws.cur.gesture.is_none(), "{:?}", ws.message());
+    let made = ws.document().data().features.last().unwrap().clone();
+    assert_eq!(made.type_id, EXTRUDE);
+    assert_eq!(made.data["extent"], "to_face", "{}", made.data);
+    assert_eq!(made.data["to_face"]["feature"], post.0);
+    assert_eq!(made.data["to_face"]["face"], face);
+    assert_eq!(made.data["direction"], "normal");
+    assert_eq!(made.data["distance"], "20 mm");
+    ws.cancel_edit();
+    // CLI・MCP: 相手のボディに無い面は断る
+    ws.select(sketch);
+    let n = ws.document().data().features.len();
+    ws.run_action_args(
+        kmb_cad_extrude::EXTRUDE_SKETCH,
+        serde_json::json!({"to_face": {"feature": post.0, "face": "f999:end"}}),
+    );
+    assert_eq!(ws.document().data().features.len(), n);
+    assert!(
+        ws.message()
+            .is_some_and(|m| m.contains("ボディにありません")),
+        "{:?}",
+        ws.message()
+    );
+}
+
+#[test]
 fn a_sketch_of_open_lines_is_extruded_as_a_thin_wall() {
     // 線だけのスケッチ(閉じた輪郭が無い)も押し出せ、薄い押し出し(真ん中、2 mm)になる(M3)
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
@@ -636,4 +752,47 @@ fn the_quick_profile_check_agrees_with_reading_the_profile() {
         .collect();
     assert_eq!(quick, vec![false, true]);
     assert_eq!(quick, read);
+}
+
+/// 10-26 k15: 開始をずらした押し出しを「対象まで」にすると、結合か切り取りかを、ずらした開始の
+/// 所から面までの間で決める。板(高さ 0〜10)の底の平面に描いた輪郭を、20 浮かせた所から下へ
+/// 結合で押し出し、板の上の面までにする: 20 から 10 までは板の外なので結合のまま。
+/// 直す前は輪郭の平面(高さ 0)から測り、板の中を通ると見て切り取りに変えていた。
+#[test]
+fn stopping_an_offset_extrude_at_a_face_judges_the_operation_from_its_start() {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let square = |b: &mut DocBuilder, name: &str, x: f64, w: f64| {
+        let mut s = SketchBuilder::xy();
+        let o = s.fixed_point(0.0, 0.0);
+        let c = s.point_from(o, &format!("{x} mm"), &format!("{x} mm"), [x, x]);
+        s.rectangle(c, &format!("{w} mm"), &format!("{w} mm"), [x, x, w, w]);
+        b.sketch(name, s)
+    };
+    let mut b = DocBuilder::new();
+    let ps = square(&mut b, "板の輪郭", 0.0, 30.0);
+    let plate = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "板",
+        serde_json::json!({"profile": ps.0, "distance": "10 mm"}),
+    );
+    let bs = square(&mut b, "柱の輪郭", 10.0, 10.0);
+    let post = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "浮いた柱",
+        serde_json::json!({
+            "profile": bs.0, "distance": "5 mm", "direction": "reverse",
+            "start": "offset", "start_offset": "20 mm",
+            "operation": "join", "target": plate.0,
+        }),
+    );
+    let mut ws = Workspace::new(b.finish("浮いた柱"), None, reg());
+    ws.wait();
+    ws.select(post);
+    ws.run_action_args(
+        kmb_cad_extrude::EXTRUDE_TO_FACE,
+        serde_json::json!({"face": format!("f{}:end", plate.0)}),
+    );
+    let data = ws.document().data().feature(post).unwrap().data.clone();
+    assert_eq!(data["extent"], "to_face", "{:?}", ws.message());
+    assert_eq!(data["operation"], "join", "20 から 10 までは板の外");
 }

@@ -1,4 +1,4 @@
-//! 書き出しの操作: 最後に残ったボディを STL か STEP か 3MF にする(1 つのファイルか、ボディごとのファイル)。
+//! 書き出しの操作: 最後に残ったボディを STL・STEP・3MF・OBJ にする(1 つのファイルか、ボディごとのファイル)。
 //! 画面は保存先を選ばせ、CLI・MCP は指定の場所に書く。引数 `exclude`(機能の ID の配列)のボディは
 //! 書かない(画面で目を閉じて隠したボディ。[`Context::export_bodies`])。今の視点の線の DXF・SVG は
 //! kmb-io-view。
@@ -19,6 +19,8 @@ pub const EXPORT_STEP_EACH: &str = "io.export_step_each";
 /// 物理材料)の色と、文書の長さの単位と、設計の属性を一緒に書く。引数 `unit`(`mm`・`cm`・`m`・`in`)で
 /// 単位を替えられ、`tolerance` は三角形の許容差 mm、`each` が真ならボディごとのファイル。
 pub const EXPORT_3MF: &str = "io.export_3mf";
+/// OBJ を書き出す。単位とボディの分割は 3MF と同じ。色と材料は書かない。
+pub const EXPORT_OBJ: &str = "io.export_obj";
 /// 書き出しの操作。
 pub struct ExportCommands;
 
@@ -183,12 +185,44 @@ fn face_colors(
         .collect()
 }
 
-/// 3MF の単位: 引数 `unit`、無ければ文書の長さの単位。
+/// 3MF・OBJ の単位: 引数 `unit`、無ければ文書の長さの単位。
 fn unit_arg(cx: &Context<'_>) -> Result<kmb_core::LengthUnit, String> {
     match cx.arg("unit").and_then(|v| v.as_str()) {
         Some(u) => kmb_core::LengthUnit::parse(u)
             .ok_or_else(|| format!("単位 {u} は使えません(mm・cm・m・in・ft)")),
         None => Ok(cx.data.properties.units),
+    }
+}
+
+fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let tol = cx.arg_f64("tolerance")?.unwrap_or(MESH_TOLERANCE);
+    if !(tol > 0.0001 && tol <= 1.0) {
+        return Err("許容差は 0.0001〜1 mm にしてください".into());
+    }
+    let unit = unit_arg(cx)?;
+    let bodies = named_bodies(cx)?
+        .into_iter()
+        .map(|(name, h)| cx.kernel.mesh(h, tol).map(|mesh| (name, mesh)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let bytes = |b: &[(String, kmb_core::Mesh)]| {
+        let mut out = Vec::new();
+        crate::write_obj(b, unit, &mut out).map_err(|e| e.to_string())?;
+        Ok::<_, String>(out)
+    };
+    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name()});
+    if each(cx, EXPORT_OBJ) {
+        let files = bodies
+            .iter()
+            .map(|b| Ok((format!("{}.obj", b.0), bytes(std::slice::from_ref(b))?)))
+            .collect::<Result<_, String>>()?;
+        Ok(Outcome::Files { files, info })
+    } else {
+        Ok(Outcome::File {
+            suffix: "形状.obj".into(),
+            contents: bytes(&bodies)?,
+            info,
+        })
     }
 }
 
@@ -263,12 +297,15 @@ fn args_of(what: &str) -> Vec<Arg> {
     let mesh = Arg::length("tolerance", "三角形の網の許容差(0.0001〜1 mm)").default(MESH_TOLERANCE);
     match what {
         "stl" => vec![exclude, mesh, Arg::flag("ascii", "ASCII 形式で書く"), each],
-        "3mf" => vec![
+        "3mf" | "obj" => vec![
             exclude,
             mesh,
             Arg::choice(
                 "unit",
-                "3MF の長さの単位(省くと文書の単位)",
+                &format!(
+                    "{} の長さの単位(省くと文書の単位)",
+                    if what == "obj" { "OBJ" } else { "3MF" }
+                ),
                 &[
                     ("mm", "mm"),
                     ("cm", "cm"),
@@ -335,6 +372,16 @@ impl Extension for ExportCommands {
                 .role(kmb_interchange::role::action::EXPORT_BODIES),
             // 設計のツールバーの「書き出し」は STEP を前に出し、ほかは ▾ の一覧に入れる
             //
+            Action::new(EXPORT_OBJ, "OBJ を書き出す…", "cad")
+                .menu("書き出し")
+                .icon("stlout")
+                .aliases("obj おーびーじぇー 網 かきだし")
+                .hint("見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない")
+                .at(&[Place::Menu, Place::FileMenu])
+                .input(save("OBJ を書き出す", "OBJ", &["obj"]))
+                .args(args_of("obj"))
+                .disabled_if(why.as_deref())
+                .role(kmb_interchange::role::action::EXPORT_BODIES),
             Action::new(EXPORT_3MF, "3MF を書き出す…", "cad")
                 .menu("書き出し")
                 .icon("3mfout")
@@ -353,7 +400,93 @@ impl Extension for ExportCommands {
             EXPORT_STL | EXPORT_STL_EACH => Some(stl(cx, id)),
             EXPORT_STEP | EXPORT_STEP_EACH => Some(step(cx, id)),
             EXPORT_3MF => Some(threemf(cx)),
+            EXPORT_OBJ => Some(obj(cx)),
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kmb_core::{
+        DocumentData, Extensions, FeatureResult, FeatureStatus, Kernel, KernelError, Mesh,
+        RecomputeReport, Registry, Value,
+    };
+    use std::sync::Arc;
+
+    struct TetraKernel;
+    impl Kernel for TetraKernel {
+        fn name(&self) -> &str {
+            "test"
+        }
+        fn mesh(&self, _: ShapeHandle, _: f64) -> Result<Mesh, KernelError> {
+            Ok(crate::tests::tetra())
+        }
+    }
+
+    fn export(args: serde_json::Value) -> Result<Outcome, kmb_core::Problem> {
+        let mut data = DocumentData::default();
+        let mut report = RecomputeReport::default();
+        for n in 1..=2 {
+            let id = FeatureId(n);
+            data.body_names.insert(id, "板".into());
+            report.features.push(FeatureResult {
+                id,
+                name: format!("形{n}"),
+                status: FeatureStatus::Ok {
+                    outputs: [("body".into(), Value::Shape(ShapeHandle(n)))]
+                        .into_iter()
+                        .collect(),
+                    reused: false,
+                },
+            });
+        }
+        let registry = Registry::new();
+        let kernel: Arc<dyn Kernel> = Arc::new(TetraKernel);
+        let mut cx = Context::new(&data, &report, &registry, &kernel);
+        cx.args = &args;
+        Extensions(vec![Arc::new(ExportCommands)]).run(EXPORT_OBJ, &cx)
+    }
+
+    #[test]
+    fn each_writes_two_named_objects_and_exclude_keeps_browser_names() {
+        let Outcome::Files { files, .. } = export(json!({"each":true})).unwrap() else {
+            panic!("ボディごとのファイル")
+        };
+        assert_eq!(
+            files.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(),
+            ["板.obj", "板(2).obj"]
+        );
+        for (name, bytes) in &files {
+            let text = std::str::from_utf8(bytes).unwrap();
+            assert!(text.contains(&format!("o {}\n", name.trim_end_matches(".obj"))));
+            assert_eq!(text.lines().filter(|l| l.starts_with("f ")).count(), 4);
+        }
+        let Outcome::File { contents, .. } = export(json!({"exclude":[1], "unit":"cm"})).unwrap()
+        else {
+            panic!("単一のファイル")
+        };
+        let text = String::from_utf8(contents).unwrap();
+        assert!(text.starts_with("# kieMonoBench OBJ; unit: cm\n"));
+        assert_eq!(
+            text.lines()
+                .filter(|l| l.starts_with("o "))
+                .collect::<Vec<_>>(),
+            ["o 板"]
+        );
+        assert!(text.contains("v 0.1 0 0\n"));
+    }
+
+    #[test]
+    fn invalid_obj_arguments_do_not_fall_back_to_defaults() {
+        for args in [
+            json!({"tolerence":0.1}),
+            json!({"tolerance":0}),
+            json!({"unit":"yard"}),
+            json!({"exclude":[1,2]}),
+        ] {
+            assert!(export(args.clone()).is_err(), "{args}");
         }
     }
 }

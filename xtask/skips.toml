@@ -7,6 +7,7 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized = "truck の回(平面での分割に対応していない)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"
 gpu_edge_ids_pick_the_same_edges_as_the_cpu = "GPU の描画装置を作れない所(クラウドなど)"
@@ -14,6 +15,9 @@ the_diameter_sign_is_drawn_by_a_fallback = "日本語の字体が 1 つも入っ
 a_skip_returns_and_writes_the_test_name_and_the_reason = "kmb-contract の飛ばしの印そのものの試験(いつも)"
 holes_become_drilling_operations_that_follow_the_hole = "truck の回(皿の段のブーリアン)"
 a_tapered_extrude_narrows_toward_its_end = "truck の回(テーパーの押し出し)"
+a_drafted_cut_whose_walls_meet_stops_where_they_meet = "truck の回(テーパーの押し出し)"
+a_drafted_cut_whose_narrow_arm_closes_stops_with_a_reason = "truck の回(テーパーの押し出し)"
+joining_a_tool_that_does_not_touch_the_body_warns = "truck の回(同じ平面で接するブーリアン。離れた結合だけは確かめてから飛ばす)"
 shell_opens_the_chosen_faces_and_hollows_a_chosen_body = "truck の回(シェル)"
 shell_stops_with_a_reason_where_the_inner_faces_would_overlap = "truck の回(シェル)"
 a_sealed_void_survives_a_cut_beside_it = "truck の回(シェル)"
@@ -66,3 +70,6 @@ a_loft_joins_a_square_to_a_circle_and_refuses_sections_on_one_plane = "truck の
 a_loft_of_sections_with_holes_stays_hollow = "truck の回(ロフト)"
 a_sweep_follows_its_path_and_its_dimensions = "truck の回(スイープ)"
 a_sweep_twists_and_narrows_by_its_fields = "truck の回(スイープ)"
+
+revolving_a_disk_face_keeps_the_hole_and_the_saved_reference = "truck の回(円の面の輪郭の網による近似と、回転の体積の網による誤差)"
+revolving_a_face_around_its_straight_edge_follows_dimensions = "truck の回(回転の体積を網から求めるため円柱の厳密な体積とずれる)"

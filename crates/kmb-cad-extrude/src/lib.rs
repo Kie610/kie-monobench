@@ -193,6 +193,7 @@ fn upgrade(d: &mut serde_json::Value) {
 }
 
 /// 押し出しの範囲の「対象まで」の面(機能 `feature` の出力 `body` の面 `face`)か頂点 `vertex`。
+/// `datum` なら機能 `feature` の作業平面(面と頂点は空)。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToFace {
     pub feature: FeatureId,
@@ -200,6 +201,8 @@ pub struct ToFace {
     pub face: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vertex: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub datum: bool,
 }
 
 impl ToFace {
@@ -392,7 +395,8 @@ struct Span {
 }
 
 /// 「対象まで」の面がまだ無い間の注意。
-const NO_FACE_YET: &str = "対象の面か頂点をまだ選んでいません(選ぶまでは距離で押し出します)";
+const NO_FACE_YET: &str =
+    "対象の面か頂点か作業平面をまだ選んでいません(選ぶまでは距離で押し出します)";
 
 impl Extrude {
     /// 「対象まで」の範囲: スケッチの平面から、選んだ平らな面の平面まで(面の側へ)。
@@ -405,13 +409,18 @@ impl Extrude {
     ) -> Result<((f64, f64), Option<StopPlane>), EvalError> {
         let t = self.to_face.as_ref().ok_or_else(|| {
             EvalError::InvalidData(
-                "対象の面をまだ選んでいません。「対象の面までにする」を押して、平らな面をクリックしてください"
+                "対象の面をまだ選んでいません。「対象の面までにする」を押して、平らな面か頂点か作業平面をクリックしてください"
                     .into(),
             )
         })?;
-        let body = body_of(ctx, t.feature)?;
-        let s =
-            face_stop(ctx.kernel(), body, &t.pick(), profile).map_err(EvalError::InvalidData)?;
+        let s = if t.datum {
+            // 作業平面を作れなかった時は、その誤りで止める(別の平面に替えない)
+            let p = kmb_interchange::datum_plane(ctx, t.feature)?;
+            plane_stop(p.origin, p.normal(), profile, "作業平面")
+        } else {
+            face_stop(ctx.kernel(), body_of(ctx, t.feature)?, &t.pick(), profile)
+        }
+        .map_err(EvalError::InvalidData)?;
         let off = match &self.to_offset {
             Some(src) if !src.trim().is_empty() => length(ctx, src, "面からのオフセット")?,
             _ => 0.0,
@@ -489,22 +498,28 @@ fn face_stop(
     let plane = face
         .planar
         .ok_or("対象の面が平らではありません(平らな面か頂点だけ使えます)")?;
+    plane_stop(plane.point, plane.normal, profile, "対象の面")
+}
+
+/// スケッチの平面から、点 `point` を通り法線 `normal` の平面まで(`what` は誤りの文に出す相手の名前)。
+fn plane_stop(
+    point: [f64; 3],
+    normal: [f64; 3],
+    profile: &kmb_core::Profile,
+    what: &str,
+) -> Result<FaceStop, String> {
+    let n = profile.plane.normal();
     let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    let len = dot(plane.normal, plane.normal).sqrt().max(1e-12);
-    let m = plane.normal.map(|v| v / len);
+    let len = dot(normal, normal).sqrt().max(1e-12);
+    let m = normal.map(|v| v / len);
     let c = dot(m, n);
     let o = profile.plane.origin;
     if c.abs() > 1.0 - 1e-6 {
-        let d = dot(
-            [
-                plane.point[0] - o[0],
-                plane.point[1] - o[1],
-                plane.point[2] - o[2],
-            ],
-            n,
-        );
+        let d = dot([point[0] - o[0], point[1] - o[1], point[2] - o[2]], n);
         if d.abs() < 1e-6 {
-            return Err("対象の面がスケッチと同じ平面にあります。別の面を選んでください".into());
+            return Err(format!(
+                "{what}がスケッチと同じ平面にあります。別の物を選んでください"
+            ));
         }
         return Ok(FaceStop {
             near: d,
@@ -513,25 +528,23 @@ fn face_stop(
         });
     }
     if c.abs() < 1e-3 {
-        return Err(
-            "対象の面が押し出す向きと平行なので、そこまで届きません。押し出す向きに向かい合う面を選んでください"
-                .into(),
-        );
+        return Err(format!(
+            "{what}が押し出す向きと平行なので、そこまで届きません。押し出す向きに向かい合う物を選んでください"
+        ));
     }
     // 輪郭の点ごとに、法線の向きに進んで面に当たるまでの距離
     let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
     for l in outline(profile) {
         for p in l {
-            let t = dot([0, 1, 2].map(|i| plane.point[i] - p[i]), m) / c;
+            let t = dot([0, 1, 2].map(|i| point[i] - p[i]), m) / c;
             lo = lo.min(t);
             hi = hi.max(t);
         }
     }
     if !lo.is_finite() || lo * hi <= 1e-12 {
-        return Err(
-            "対象の面(を広げた平面)がスケッチの輪郭と交わっています。輪郭の全体が面の片側にある時だけ使えます"
-                .into(),
-        );
+        return Err(format!(
+            "{what}(を広げた平面)がスケッチの輪郭と交わっています。輪郭の全体が片側にある時だけ使えます"
+        ));
     }
     let (near, far) = if lo > 0.0 { (lo, hi) } else { (hi, lo) };
     // 捨てる側: 押し出す向きに面を越えた側
@@ -540,7 +553,7 @@ fn face_stop(
         near,
         far,
         stop: Some(StopPlane {
-            point: plane.point,
+            point,
             normal: m.map(|v| v * ahead),
         }),
     })
@@ -913,7 +926,14 @@ impl Feature for Extrude {
         if self.extent == Extent::ToFace
             && let Some(t) = &self.to_face
         {
-            v.push(output(t.feature, "body"));
+            v.push(output(
+                t.feature,
+                if t.datum {
+                    kmb_interchange::DATUM_OUTPUT
+                } else {
+                    "body"
+                },
+            ));
         }
         if self.source == Source::Sketch && !self.regions.is_empty() {
             v.push(output(self.sketch()?, "faces"));
@@ -965,6 +985,12 @@ impl Feature for Extrude {
             });
         }
         let body = body.ok_or_else(|| EvalError::InvalidData("道具がありません".into()))?;
+        if op == Operation::Join
+            && let Some(t) = self.target
+            && let Some(w) = kmb_cad::detached_join(kernel, body_of(ctx, t)?, body)
+        {
+            warnings.push(w);
+        }
         let mut preview: Option<kmb_core::ToolPreview> = None;
         let mut parts = Vec::new();
         for b in built {
@@ -1204,21 +1230,61 @@ fn chosen(cx: &Context<'_>) -> Option<(FeatureId, Vec<String>)> {
     default_sketch(cx).map(|id| (id, Vec::new()))
 }
 
-/// スケッチを押し出す。面のスケッチならその面のボディに、ほかは最後に見えるボディに結合し、ボディが無ければ新しいボディにする。
-/// 距離 `distance`(mm)を指定すればその距離で。負なら逆向きに押し出し、ボディがあれば切り取る。
-/// 閉じた輪郭が無く線だけのスケッチなら、線の真ん中に厚さ 2 mm の壁を付けた薄い押し出しにする。
 /// 押し出しの高さの既定(mm)。
 const DISTANCE: f64 = 10.0;
 
+/// 引数 `to_face`(`{"feature": 機能の番号, "face": 面の名前}` か頂点の `{"feature", "vertex"}`。
+/// 高さを決める手順で面にマウスを載せて決めた時)の「対象まで」の相手。その機能のボディに、
+/// その平らな面か頂点が無ければ誤り(黙って距離にしない)。
+fn stop_arg(cx: &Context<'_>) -> Result<Option<ToFace>, kmb_core::Problem> {
+    let Some(v) = cx.arg("to_face") else {
+        return Ok(None);
+    };
+    let t: ToFace = serde_json::from_value(v.clone()).map_err(|e| {
+        format!(
+            "to_face は {{\"feature\": 機能の番号, \"face\": 面の名前}} で指定してください({e})"
+        )
+    })?;
+    let found = matches!(cx.output(t.feature, "body"), Some(kmb_core::Value::Shape(b))
+        if kmb_cad::stop_at::has(cx.kernel.as_ref(), *b, &t.pick()));
+    if !found {
+        return Err(format!(
+            "対象の平らな面か頂点が {} のボディにありません。押し出しより前からある平らな面か頂点を選んでください",
+            t.feature
+        )
+        .into());
+    }
+    Ok(Some(t))
+}
+
+/// 輪郭 `profile` の平面から「対象まで」の相手 `t` までの距離(法線の向きが正)。押し出す向きと、
+/// 結合か切り取りかをこの符号で決める(前へ伸ばすと結合、逆へ伸ばすと切り取り。距離の手順と同じ)。
+fn stop_distance(
+    cx: &Context<'_>,
+    t: &ToFace,
+    profile: &kmb_core::Profile,
+) -> Result<f64, kmb_core::Problem> {
+    let Some(kmb_core::Value::Shape(b)) = cx.output(t.feature, "body") else {
+        return Err(format!("{} はボディではありません", t.feature).into());
+    };
+    Ok(face_stop(cx.kernel.as_ref(), *b, &t.pick(), profile)?.near)
+}
+
+/// スケッチを押し出す。面のスケッチならその面のボディに、ほかは最後に見えるボディに結合し、ボディが無ければ新しいボディにする。
+/// 距離 `distance`(mm)を指定すればその距離で。負なら逆向きに押し出し、ボディがあれば切り取る。
+/// 閉じた輪郭が無く線だけのスケッチなら、線の真ん中に厚さ 2 mm の壁を付けた薄い押し出しにする。
+/// 相手 `to_face` を指定すれば、範囲をその面までにする(向きと演算は面のある側で決め、`distance` は使わない)。
 fn add_extrude(
     cx: &Context<'_>,
     sketch: FeatureId,
     regions: Vec<String>,
 ) -> Result<Outcome, kmb_core::Problem> {
     let open = regions.is_empty() && open_lines(cx, sketch).is_some();
-    if !open {
-        chosen_profile(cx, sketch, &regions)?;
-    }
+    let profile = if open {
+        open_preview(cx, sketch)
+    } else {
+        Ok(chosen_profile(cx, sketch, &regions)?)
+    };
     // 面のスケッチなら、その面のボディ(の今の形)に結合する。原点の平面のスケッチは最後に見える
     // ボディ
     let bodies = cx.visible_bodies();
@@ -1227,7 +1293,10 @@ fn add_extrude(
         .into_iter()
         .find(|f| bodies.iter().any(|b| b.0 == *f))
         .or(bodies.last().map(|b| b.0));
-    let d = cx.arg_f64("distance")?.unwrap_or(DISTANCE);
+    let (d, to_face) = match stop_arg(cx)? {
+        Some(t) => (stop_distance(cx, &t, &profile?)?, Some(t)),
+        None => (cx.arg_f64("distance")?.unwrap_or(DISTANCE), None),
+    };
     if d.abs() < 1e-6 {
         return Err("距離が 0 です".into());
     }
@@ -1243,8 +1312,12 @@ fn add_extrude(
             Direction::Normal
         },
         distance2: None,
-        extent: Extent::Distance,
-        to_face: None,
+        extent: if to_face.is_some() {
+            Extent::ToFace
+        } else {
+            Extent::Distance
+        },
+        to_face,
         to_offset: None,
         operation: match (target.is_some(), d < 0.0) {
             (false, _) => Operation::New,
@@ -1337,12 +1410,17 @@ fn faces_profile(
 }
 
 /// 平らな面を押し出す。面のボディに結合する(距離 `distance` が負なら切り取る)。
+/// 相手 `to_face` を指定すれば、範囲をその面までにする(向きと演算は面のある側で決める)。
 fn add_face_extrude(
     cx: &Context<'_>,
     faces: Vec<kmb_core::Ref>,
+    profile: &kmb_core::Profile,
 ) -> Result<Outcome, kmb_core::Problem> {
     let target = faces.first().map(|r| r.feature());
-    let d = cx.arg_f64("distance")?.unwrap_or(DISTANCE);
+    let (d, to_face) = match stop_arg(cx)? {
+        Some(t) => (stop_distance(cx, &t, profile)?, Some(t)),
+        None => (cx.arg_f64("distance")?.unwrap_or(DISTANCE), None),
+    };
     if d.abs() < 1e-6 {
         return Err("距離が 0 です".into());
     }
@@ -1361,6 +1439,12 @@ fn add_face_extrude(
             Operation::Join
         },
         target,
+        extent: if to_face.is_some() {
+            Extent::ToFace
+        } else {
+            Extent::Distance
+        },
+        to_face,
         ..Extrude::default()
     };
     Ok(Outcome::insert(
@@ -1433,8 +1517,7 @@ fn tapered_lines(
     out
 }
 
-const DISTANCE_LABEL: &str =
-    "マウスを動かして高さを決め、クリックで確定。逆向きにするとボディを切り取る";
+const DISTANCE_LABEL: &str = "マウスを動かして高さを決め、クリックで確定。逆向きにするとボディを切り取る。別の平らな面に載せるとその面まで";
 
 /// 押し出しの高さを決める手順: 輪郭の重心から法線の向きにマウスで。
 fn distance_handle(p: &kmb_core::Profile) -> Handle {
@@ -1446,6 +1529,7 @@ fn distance_handle(p: &kmb_core::Profile) -> Handle {
     Handle {
         outline,
         shape: Some(std::sync::Arc::new(shape)),
+        stop_key: Some("to_face".into()),
         ..Handle::new(
             "distance",
             DISTANCE_LABEL,
@@ -1510,22 +1594,32 @@ fn selected_extrude(cx: &Context<'_>) -> Option<(FeatureId, Extrude)> {
     Some((id, serde_json::from_value(e.data.clone()).ok()?))
 }
 
-/// 押し出し `id` の範囲を、クリックした面(選んだ面、CLI・MCP は引数 `face` と `feature`)までにする。
-/// 面は押し出しより前の形から探す(結合した後のボディの面を選んでも、元の対象のボディの同じ面を使う)。
+/// 押し出し `id` の範囲を、クリックした面か頂点か作業平面(選んだ面、CLI・MCP は引数 `face` と
+/// `feature`、作業平面は引数 `datum` か `face` の `{"datum": 番号}`)までにする。面は押し出しより前の
+/// 形から探す(結合した後のボディの面を選んでも、元の対象のボディの同じ面を使う)。作業平面も押し出し
+/// より前の物だけ(後ろの物を指すと計算の順が回る)。
 fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut e) = selected_extrude(cx).ok_or("押し出しを選んでいません")?;
-    let (pick, given) =
-        kmb_cad::stop_at::stop_pick(cx).ok_or("対象の平らな面か頂点をクリックしてください")?;
-    let at = |f: FeatureId| cx.data.index_of(f).unwrap_or(usize::MAX);
-    let has = |f: FeatureId| {
-        matches!(cx.output(f, "body"), Some(kmb_core::Value::Shape(b))
-            if kmb_cad::stop_at::has(cx.kernel.as_ref(), *b, &pick))
+    let to = match datum_arg(cx) {
+        Some(n) => {
+            if kmb_interchange::datum_choices(cx, Some(id))
+                .iter()
+                .all(|c| c.value != serde_json::json!(n))
+            {
+                return Err(format!(
+                    "機能 {n} はこの押し出しより前の作業平面ではありません(作業平面を作れていない時は、先にその誤りを直してください)"
+                )
+                .into());
+            }
+            ToFace {
+                feature: FeatureId(n),
+                face: String::new(),
+                vertex: None,
+                datum: true,
+            }
+        }
+        None => body_stop(cx, id, &e)?,
     };
-    let feature = [given, e.target]
-        .into_iter()
-        .flatten()
-        .find(|f| at(*f) < at(id) && has(*f))
-        .ok_or("この押し出しより後で出来た面は選べません。押し出しより前からある平らな面か頂点を選んでください")?;
     // 押し出す先がボディの中を通るなら切り取り、通らないなら結合にする(矢印をボディへ
     // 引くと切り取りになる)。新しいボディ・交差はそのまま。
     // 決め直すのは、押し出す向きが反対の側へ変わる時だけ(同じ側なら始めた演算を保つ。貫いても
@@ -1533,9 +1627,8 @@ fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut label = "押し出しを対象の面までにする";
     if let (Some(t), Operation::Join | Operation::Cut, false) = (e.target, e.operation, e.op_manual)
         && let Some(kmb_core::Value::Shape(target)) = cx.output(t, "body")
-        && let Some(kmb_core::Value::Shape(fb)) = cx.output(feature, "body")
         && let Some(profile) = extrude_profile(cx, &e)
-        && let Ok(stop) = face_stop(cx.kernel.as_ref(), *fb, &pick, &profile)
+        && let Some(stop) = stop_now(cx, &to, &profile)
         && side_now(cx, &e, &profile).is_none_or(|now| now != stop.near.signum())
     {
         let into = goes_into(cx.kernel.as_ref(), *target, &profile, stop.near);
@@ -1553,13 +1646,8 @@ fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
             };
         }
     }
-    let (face, vertex) = pick.parts();
     e.extent = Extent::ToFace;
-    e.to_face = Some(ToFace {
-        feature,
-        face,
-        vertex,
-    });
+    e.to_face = Some(to);
     Ok(Outcome::Change {
         label: label.into(),
         edits: vec![kmb_core::Edit::SetData {
@@ -1569,13 +1657,56 @@ fn extrude_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })
 }
 
+/// 引数の作業平面の番号(`datum` か、`face` の `{"datum": 番号}`。画面の手順は後者で渡す)。
+fn datum_arg(cx: &Context<'_>) -> Option<u64> {
+    cx.arg("datum")
+        .or_else(|| cx.arg("face").and_then(|v| v.get("datum")))
+        .and_then(|v| v.as_u64())
+}
+
+/// 引数か選んでいる物の面・頂点(押し出し `id` より前のボディの物)。
+fn body_stop(cx: &Context<'_>, id: FeatureId, e: &Extrude) -> Result<ToFace, kmb_core::Problem> {
+    let (pick, given) = kmb_cad::stop_at::stop_pick(cx)
+        .ok_or("対象の平らな面か頂点か作業平面をクリックしてください")?;
+    let at = |f: FeatureId| cx.data.index_of(f).unwrap_or(usize::MAX);
+    let has = |f: FeatureId| {
+        matches!(cx.output(f, "body"), Some(kmb_core::Value::Shape(b))
+            if kmb_cad::stop_at::has(cx.kernel.as_ref(), *b, &pick))
+    };
+    let feature = [given, e.target]
+        .into_iter()
+        .flatten()
+        .find(|f| at(*f) < at(id) && has(*f))
+        .ok_or("この押し出しより後で出来た面は選べません。押し出しより前からある平らな面か頂点を選んでください")?;
+    let (face, vertex) = pick.parts();
+    Ok(ToFace {
+        feature,
+        face,
+        vertex,
+        datum: false,
+    })
+}
+
+/// 「対象まで」の相手 `t` までの距離(作業平面か、ボディの面・頂点)。計算できなければ `None`。
+fn stop_now(cx: &Context<'_>, t: &ToFace, profile: &kmb_core::Profile) -> Option<FaceStop> {
+    if t.datum {
+        let d = <kmb_interchange::DatumPlane as kmb_core::Payload>::from_value(
+            cx.output(t.feature, kmb_interchange::DATUM_OUTPUT)?,
+        )?;
+        return plane_stop(d.plane.origin, d.plane.normal(), profile, "作業平面").ok();
+    }
+    let Some(kmb_core::Value::Shape(b)) = cx.output(t.feature, "body") else {
+        return None;
+    };
+    face_stop(cx.kernel.as_ref(), *b, &t.pick(), profile).ok()
+}
+
 /// 押し出し `e` が今押し出している側(輪郭の平面の法線の向きなら 1、逆なら -1)。両側へ押し出して
 /// いる時は `None`(どちらの側の面でも決め直す)。
 fn side_now(cx: &Context<'_>, e: &Extrude, profile: &kmb_core::Profile) -> Option<f64> {
     if e.extent == Extent::ToFace
         && let Some(t) = &e.to_face
-        && let Some(kmb_core::Value::Shape(b)) = cx.output(t.feature, "body")
-        && let Ok(s) = face_stop(cx.kernel.as_ref(), *b, &t.pick(), profile)
+        && let Some(s) = stop_now(cx, t, profile)
     {
         return Some(s.near.signum());
     }
@@ -1586,8 +1717,29 @@ fn side_now(cx: &Context<'_>, e: &Extrude, profile: &kmb_core::Profile) -> Optio
     }
 }
 
-/// 押し出し `e` の輪郭(スケッチの輪郭か、平らな面の縁)。
+/// 押し出し `e` の輪郭(スケッチの輪郭か、平らな面の縁)を、開始のずらしの分だけ動かした物
+/// (押し出しが始まる所。面までの距離も、結合か切り取りかの判定もここから測る。10-26 k15)。
 fn extrude_profile(cx: &Context<'_>, e: &Extrude) -> Option<kmb_core::Profile> {
+    let mut p = sketch_or_face_profile(cx, e)?;
+    p.plane = p.plane.offset(start_shift(cx, e));
+    Some(p)
+}
+
+/// 開始のずらし(mm)。式は今のパラメータの値で読む。読めなければ 0(ずらしの欄の誤りは計算の方が出す)。
+fn start_shift(cx: &Context<'_>, e: &Extrude) -> f64 {
+    let (Start::Offset, Some(src)) = (e.start, e.start_offset.as_deref()) else {
+        return 0.0;
+    };
+    let values = cx.report.param_values();
+    kmb_core::parse_expr(src)
+        .ok()
+        .and_then(|x| x.eval(&|n| values.get(n).copied()).ok())
+        .filter(|q| q.dim.is_none() || q.dim == kmb_core::Dim::LENGTH)
+        .map_or(0.0, |q| q.value)
+}
+
+/// 押し出し `e` の、輪郭の平面のままの輪郭。
+fn sketch_or_face_profile(cx: &Context<'_>, e: &Extrude) -> Option<kmb_core::Profile> {
     match e.source {
         Source::Sketch => profile_of(cx, e.profile?),
         Source::Faces => {
@@ -1630,20 +1782,28 @@ impl Extension for ExtrudeCommands {
                     &[kmb_core::RefKind::PlanarFace],
                 ))
                 .args(regions::args())
+                .arg(Arg::object(
+                    "to_face",
+                    "範囲を「対象まで」にする相手 {\"feature\": 機能の番号, \"face\": 平らな面の名前}(頂点なら \"face\" の代わりに \"vertex\")。指定すると distance は使わない",
+                ))
                 .role(kmb_interchange::role::action::EXTRUDE)
                 .menu("作成")
                 .icon("extrude")
                 .aliases("おしだし extrude")
-                .hint("押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)")
+                .hint("押してから押し出す領域かボディの平らな面をクリックする(重なった形は分かれた領域ごとに選べる。いくつも選ぶ時は Ctrl を押しながら)。高さをマウスか数字で決めて Enter。高さを決める間にマウスを別の平らな面に載せると、その面まで伸ばし、クリックすると範囲を「対象まで」にして作る。ボディの平らな面を選んでから押すと、その面を押し出す。線だけのスケッチは厚さ 2 mm の壁にして押し出す(薄い押し出し)")
                 .at(&[Place::Toolbar])
                 .at(if sketch { &[Place::FeatureMenu] } else { &[] })
                 .disabled_if(why.as_deref()),
             Action::new(EXTRUDE_TO_FACE, "対象の面までにする", "cad")
                 .args(kmb_cad::stop_at::args())
+                .arg(Arg::feature(
+                    "datum",
+                    "相手の作業平面の機能の番号(押し出しより前の物)",
+                ))
                 .menu("作成")
                 .icon("extrude")
                 .aliases("おしだし たいしょう まで めん extrude to object")
-                .hint("選んでいる押し出しの範囲を、クリックした平らな面までにする(斜めの面なら、道具の終わりをその面で切る)。押し出す先がボディの中を通れば切り取りに、通らなければ結合にする")
+                .hint("選んでいる押し出しの範囲を、クリックした平らな面か頂点か作業平面までにする(斜めの面なら、道具の終わりをその面で切る)。押し出す先がボディの中を通れば切り取りに、通らなければ結合にする")
                 .keep_edit()
                 .at(match selected_extrude(cx) {
                     // 範囲が「対象まで」なら編集の欄にも出す(面の選び直し)
@@ -1693,7 +1853,7 @@ impl Extension for ExtrudeCommands {
                 })
             })(),
             EXTRUDE_SKETCH => match chosen_faces(cx) {
-                Some(Ok((faces, _))) => add_face_extrude(cx, faces),
+                Some(Ok((faces, p))) => add_face_extrude(cx, faces, &p),
                 Some(Err(why)) => Err(why.into()),
                 None => chosen(cx)
                     .ok_or_else(|| {
@@ -1719,12 +1879,21 @@ impl Extension for ExtrudeCommands {
             )]);
         }
         if id == EXTRUDE_TO_FACE {
-            selected_extrude(cx)?;
+            let (eid, _) = selected_extrude(cx)?;
+            // 押し出しより前の作業平面の四角も候補に出す(値は `{"datum": 番号}`)
+            let choices = kmb_interchange::datum_choices(cx, Some(eid))
+                .into_iter()
+                .map(|c| kmb_core::HandleChoice {
+                    value: serde_json::json!({"datum": c.value}),
+                    ..c
+                })
+                .collect();
             return Some(vec![Handle {
                 vertices: true,
+                choices,
                 ..Handle::new(
                     "face",
-                    "押し出しを止める平らな面(斜めの面でもよい)か頂点をクリック",
+                    "押し出しを止める平らな面(斜めの面でもよい)か頂点か作業平面をクリック",
                     Gesture::Face,
                 )
             }]);

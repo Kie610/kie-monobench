@@ -67,6 +67,7 @@ cad.hole_on_face	kmb-cad-hole
 cad.hole_to_face	kmb-cad-hole
 cad.import_step	kmb-cad-import-step
 cad.loft	kmb-cad-sweep
+cad.loft_point	kmb-cad-sweep
 cad.measure	kmb-cad
 cad.mirror_on_face	kmb-cad-pattern
 cad.mirror_plane	kmb-cad-pattern
@@ -97,6 +98,8 @@ cad.text_at_point	kmb-text
 cad.text_on_face	kmb-text
 cad.text_on_path	kmb-text
 cad.thread	kmb-cad-hole
+cad.timeline.read_latest_bodies	kmb-cad
+cad.timeline.read_latest_body	kmb-cad
 cad.timeline.roll_back	kmb-cad
 cad.visibility	kmb-cad
 cam.adaptive2d@1	kmb-strategy-adaptive2d
@@ -203,6 +206,7 @@ flow.section@1	kmb-flow
 flow.volume@1	kmb-flow
 flow.wing@1	kmb-flow
 io.export_3mf	kmb-io-stl
+io.export_obj	kmb-io-stl
 io.export_step	kmb-io-stl
 io.export_step_each	kmb-io-stl
 io.export_stl	kmb-io-stl

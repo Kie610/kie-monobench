@@ -35,7 +35,7 @@ fn selected(cx: &Context<'_>, type_id: &str) -> Option<(FeatureId, serde_json::V
     (entry.type_id == type_id).then(|| (id, entry.data.clone()))
 }
 
-/// 割る平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
+/// 割る平面を、手順で選んだ値(`plane` が xy・yz・zx・face か作業平面)にする。
 fn split_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, SPLIT).ok_or("ボディの分割を選んでいません")?;
     let plane = PlaneRef::from_choice(cx, id, "割る平面")?;
@@ -46,7 +46,7 @@ fn split_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })
 }
 
-/// 勾配の引き出し方向の平面を、手順で選んだ値(`plane` が xy・yz・zx か face)にする。
+/// 勾配の引き出し方向の平面を、手順で選んだ値(`plane` が xy・yz・zx・face か作業平面)にする。
 fn pull_plane(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, DRAFT).ok_or("勾配を選んでいません")?;
     let plane = PlaneRef::from_choice(cx, id, "引き出し方向の平面")?;
@@ -86,7 +86,7 @@ impl Extension for ModifyCommands {
                 .menu("修正")
                 .icon("split")
                 .aliases("ぶんかつ わる へいめん 平面 めん split plane")
-                .hint("選んでいるボディの分割の平面を、原点の XY・YZ・ZX 平面の四角か、ボディの平らな面をクリックして決める")
+                .hint("選んでいるボディの分割の平面を、原点の XY・YZ・ZX 平面の四角か作業平面か、ボディの平らな面をクリックして決める")
                 .keep_edit()
                 .at(if split {
                     &[Place::FeatureMenu, Place::Panel]
@@ -118,7 +118,7 @@ impl Extension for ModifyCommands {
                 .menu("修正")
                 .icon("draft")
                 .aliases("こうばい ひきだし 引き出し方向 へいめん 平面 draft pull plane")
-                .hint("選んでいる勾配の引き出し方向の平面を、原点の XY・YZ・ZX 平面の四角か、ボディの平らな面をクリックして決める")
+                .hint("選んでいる勾配の引き出し方向の平面を、原点の XY・YZ・ZX 平面の四角か作業平面か、ボディの平らな面をクリックして決める")
                 .keep_edit()
                 .at(if draft {
                     &[Place::FeatureMenu, Place::Panel]
@@ -141,34 +141,27 @@ impl Extension for ModifyCommands {
     fn handles(&self, id: &str, cx: &Context<'_>) -> Option<Vec<Handle>> {
         match id {
             SPLIT_PLANE => {
-                selected(cx, SPLIT)?;
-                // ミラーの対称の平面と同じく、原点の平面の四角とボディの平らな面をクリックで選べる
+                let (sid, _) = selected(cx, SPLIT)?;
+                // ミラーの対称の平面と同じく、原点の平面・作業平面の四角とボディの平らな面を
+                // クリックで選べる
                 Some(vec![Handle {
-                    choices: ["xy", "yz", "zx"]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, v)| kmb_core::HandleChoice::origin_plane(i, json!(v)))
-                        .collect(),
+                    choices: kmb_cad::plane::plane_choices(cx, sid),
                     faces: true,
                     ..Handle::new(
                         "plane",
-                        "割る平面にする原点の平面(XY・YZ・ZX の四角)か、ボディの平らな面をクリック",
+                        "割る平面にする原点の平面(XY・YZ・ZX の四角)か作業平面か、ボディの平らな面をクリック",
                         Gesture::Choice,
                     )
                 }])
             }
             DRAFT_PLANE => {
-                selected(cx, DRAFT)?;
+                let (did, _) = selected(cx, DRAFT)?;
                 Some(vec![Handle {
-                    choices: ["xy", "yz", "zx"]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, v)| kmb_core::HandleChoice::origin_plane(i, json!(v)))
-                        .collect(),
+                    choices: kmb_cad::plane::plane_choices(cx, did),
                     faces: true,
                     ..Handle::new(
                         "plane",
-                        "引き出し方向にする原点の平面(XY・YZ・ZX の四角)か、ボディの平らな面をクリック",
+                        "引き出し方向にする原点の平面(XY・YZ・ZX の四角)か作業平面か、ボディの平らな面をクリック",
                         Gesture::Choice,
                     )
                 }])

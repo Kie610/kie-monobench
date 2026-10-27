@@ -171,6 +171,8 @@ impl Workspace {
                     live: None,
                     typed: String::new(),
                     picks,
+                    stop: None,
+                    stop_seen: None,
                 });
                 true
             }
@@ -219,8 +221,17 @@ impl Workspace {
         let Some(h) = g.handles.get(g.step) else {
             return;
         };
+        // 距離の手順で止める面に載せていた(数字を打っていない)なら、その面を「対象まで」の相手にする
+        if let Some(k) = h.stop_key.clone()
+            && g.typed.trim().is_empty()
+            && let Some(stop) = g.stop.take()
+        {
+            g.args.insert(k, stop);
+        }
+        let h = &g.handles[g.step];
         g.args.insert(h.key.clone(), v);
         g.step += 1;
+        g.stop = None;
         g.live = None;
         g.typed.clear();
         g.picks.clear();

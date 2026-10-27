@@ -257,9 +257,28 @@ impl Feature for Sketch3d {
                 })
                 .collect(),
         );
+        // 線分(回転・パターン・移動の軸に選べる)
+        let segments = kmb_interchange::Segments(
+            sketch
+                .entities
+                .iter()
+                .filter_map(|e| match e {
+                    Entity3d::Line { id, a, b, .. } => Some(kmb_interchange::Segment {
+                        line: id.0,
+                        ends: [sol.points.get(a)?, sol.points.get(b)?]
+                            .map(|p| to_world(&plane, *p)),
+                    }),
+                    _ => None,
+                })
+                .collect(),
+        );
         let mut out: Outputs = [
             ("sketch".to_string(), sol.to_value()),
             ("lines".to_string(), kmb_core::Payload::to_value(&wires)),
+            (
+                kmb_interchange::SEGMENTS_OUTPUT.to_string(),
+                kmb_core::Payload::to_value(&segments),
+            ),
         ]
         .into();
         kmb_core::add_warnings(&mut out, warnings);

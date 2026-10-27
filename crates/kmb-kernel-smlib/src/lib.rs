@@ -27,8 +27,8 @@ extern crate smlib_sys;
 
 use ffi::{Brep, JcFace, JcPlane, JcSegment};
 use kmb_core::kernel::{
-    self as k, BooleanOp, EdgeBlend, EdgeInfo, FaceInfo, Kernel, KernelError, MassProps, Mesh, P3,
-    PlanarFace, Profile, ProfileLoop, Seam, Segment, ShapeHandle, dedupe_names,
+    self as k, BooleanOp, EdgeBlend, EdgeInfo, FaceInfo, Kernel, KernelError, MassProps, Mesh, P2,
+    P3, PlanarFace, Profile, ProfileEdge, ProfileLoop, Seam, Segment, ShapeHandle, dedupe_names,
 };
 use names::{
     adopt, blend_names, offset_slab_names, points, polyline_distance, prefer_target_names,
@@ -389,6 +389,52 @@ fn segments(loops: &[&ProfileLoop]) -> (Vec<JcSegment>, Vec<u32>) {
     (segs, lens)
 }
 
+/// 回転軸に辺で 2 か所以上載るループ(半円の輪を直径の軸で回す時など)を、軸から軸までの線ごとに
+/// 軸の上の線で閉じたループに分け、囲む面積の大きい順に並べる(中のものは引かれ、さらに中のものは
+/// 足される。`jc_revolve`)。分けないと SMLib は軸で切れた殻をそれぞれ別の立体にし、中空の球が
+/// 外の球と内の球の 2 つの立体になって、空洞の分が体積に足されていた(10-25 k8)。
+/// 軸に載る所が 1 か所以下なら分けない(殻は 1 つに閉じる)。
+fn split_on_axis(lp: &ProfileLoop, on_axis: &dyn Fn(P2) -> bool) -> Vec<ProfileLoop> {
+    let n = lp.edges.len();
+    let axis: Vec<bool> = lp
+        .edges
+        .iter()
+        .map(|e| matches!(e.segment, Segment::Line { a, b } if on_axis(a) && on_axis(b)))
+        .collect();
+    let Some(first) = (0..n).find(|&i| axis[(i + n - 1) % n] && !axis[i]) else {
+        return vec![lp.clone()];
+    };
+    let mut chains: Vec<Vec<ProfileEdge>> = Vec::new();
+    let mut cur = Vec::new();
+    for i in (first..first + n).map(|i| i % n) {
+        if !axis[i] {
+            cur.push(lp.edges[i].clone());
+        } else if !cur.is_empty() {
+            chains.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        chains.push(cur);
+    }
+    if chains.len() < 2 {
+        return vec![lp.clone()];
+    }
+    let mut out: Vec<ProfileLoop> = chains
+        .into_iter()
+        .map(|mut edges| {
+            let (from, to) = (edges[0].from_point(), edges[edges.len() - 1].to_point());
+            edges.push(ProfileEdge {
+                name: format!("{}:axis", edges[0].name),
+                segment: Segment::Line { a: to, b: from },
+                reversed: false,
+            });
+            ProfileLoop { edges }
+        })
+        .collect();
+    out.sort_by(|a, b| b.signed_area().abs().total_cmp(&a.signed_area().abs()));
+    out
+}
+
 fn all_loops(profile: &Profile) -> Vec<&ProfileLoop> {
     profile
         .regions
@@ -599,6 +645,14 @@ impl Kernel for SmlibKernel {
             }
             let piece = ffi::extrude_taper(&jc_plane(&plane), &segs, &lens, h, &drafts, &holes)
                 .map_err(failed("テーパーの押し出し"))?;
+            // 輪郭の細い所(幅 2 の腕など)の壁が途中で出会うと、SMLib は成功と返して閉じていない
+            // 形を出す。そのまま切り取りに使うと何も削らずに通っていた(10-25 k1)
+            let (manifold, solids, _) = piece.check().map_err(failed("立体の検査"))?;
+            if !manifold || solids < 1 {
+                return Err(KernelError::Failed(
+                    "テーパーの押し出しが閉じた立体になりません(輪郭の細い所の壁が途中で出会う時に起きます。テーパー角か距離を小さくしてください)".into(),
+                ));
+            }
             brep = Some(match brep {
                 None => piece,
                 Some(mut b) => {
@@ -692,7 +746,17 @@ impl Kernel for SmlibKernel {
             )
         };
         let loops = all_loops(profile);
-        let (segs, lens) = segments(&loops);
+        let (o2, a2) = {
+            let o = plane.to_local(axis_origin);
+            let t = plane.to_local(k::add(axis_origin, a));
+            (o, [t[0] - o[0], t[1] - o[1]])
+        };
+        let on_axis = |p: P2| ((p[0] - o2[0]) * a2[1] - (p[1] - o2[1]) * a2[0]).abs() < 1e-6;
+        let parts: Vec<ProfileLoop> = loops
+            .iter()
+            .flat_map(|l| split_on_axis(l, &on_axis))
+            .collect();
+        let (segs, lens) = segments(&parts.iter().collect::<Vec<_>>());
         let _g = ffi::lock();
         let brep = ffi::revolve(&jc_plane(&plane), &segs, &lens, axis_origin, a, angle)
             .map_err(failed("回転"))?;
@@ -757,6 +821,25 @@ impl Kernel for SmlibKernel {
             h = self.boolean(BooleanOp::Subtract, h, tool)?;
         }
         Ok(h)
+    }
+
+    fn loft_to_point(
+        &self,
+        sections: &[Profile],
+        point: P3,
+        at_start: bool,
+        rails: &[k::PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let (outer, holes) = hollow(sections).map_err(KernelError::Failed)?;
+        if !holes.is_empty() {
+            return Err(KernelError::Failed(
+                "点へのロフトには穴の無い輪郭を選んでください".into(),
+            ));
+        }
+        let surfaces = skin::loft_to_point(&outer, point, at_start, rails, tag)
+            .map_err(KernelError::Failed)?;
+        self.skin_solid(surfaces, tag, "点へのロフト")
     }
 
     fn boolean(
@@ -1143,6 +1226,13 @@ impl Kernel for SmlibKernel {
             .collect();
         let names = dedupe_names(names, &points(&f));
         s.put(brep, names)
+    }
+
+    fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
+        if let Some((k, inner)) = self.imported(shape) {
+            return k.face_names(inner);
+        }
+        Ok(self.lock().get(shape)?.names.clone())
     }
 
     fn faces(&self, shape: ShapeHandle) -> Result<Vec<FaceInfo>, KernelError> {

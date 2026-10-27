@@ -12,6 +12,7 @@ layer = "cad"
 [dependencies]
 kmb-core.workspace = true
 kmb-cad.workspace = true
+kmb-interchange.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }

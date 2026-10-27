@@ -67,6 +67,7 @@ fn build(three_d: bool) -> ReferenceCam {
                 name: name.into(),
                 data,
                 suppressed: false,
+                pin_bodies: false,
             },
         });
         id

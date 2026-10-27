@@ -128,6 +128,7 @@ fn patterns_and_mirrors_repeat_every_listed_feature() {
                     name: "写し".into(),
                     data: serde_json::to_value(mirror).unwrap(),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             },
         ],

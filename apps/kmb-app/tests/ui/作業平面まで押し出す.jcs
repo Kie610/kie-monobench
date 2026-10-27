@@ -1,0 +1,25 @@
+# 作業平面を押し出しの止め先にする: 板の上面から 10 mm 浮かせた作業平面を作り、上面を押し出して
+# 範囲を「対象まで」にすると、止める面か頂点と並んで作業平面の四角も候補に出る。四角を押すと
+# 押し出しが作業平面で止まる(形の確かめは kmb-solid の an_extrude_stops_at_a_datum_plane_…)。
+#! sample part
+#! size 1280x800
+
+pick f8:end
+click "構築 ▾"
+click "作業平面#1"
+wait
+expect "作業平面1" exists
+key Enter
+wait
+pick f8:end
+click "button:押し出し#1"
+wait
+pick f8:end
+wait
+select "範囲" "対象まで"
+wait
+shot 止め先の候補に作業平面
+pick "候補:作業平面1"
+wait
+expect "範囲" = "対象まで"
+shot 押し出しを作業平面までにした

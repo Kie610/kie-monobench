@@ -156,6 +156,15 @@ pub fn insert_file(
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("{} を読めません: {e}", path.display()))?;
     let read = read(&text)?;
+    insert_imported(cx, kind, read)
+}
+
+/// 読み込み済みの形を、ファイル挿入と同じ変更でスケッチへ入れる。
+pub fn insert_imported(
+    cx: &Context<'_>,
+    kind: &str,
+    read: Imported,
+) -> Result<Outcome, kmb_core::Problem> {
     if read.shapes.is_empty() {
         return Err(format!("{kind} に読める形がありません").into());
     }
@@ -454,7 +463,7 @@ impl Extension for SketchCommands {
                     ..Default::default()
                 }
             })
-            .chain(kmb_interchange::datum_choices(cx))
+            .chain(kmb_interchange::datum_choices(cx, None))
             .collect();
         // 原点の平面と作業平面のほかに、ボディの平らな面もそのままクリックで選べる
         Some(vec![Handle {

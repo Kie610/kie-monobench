@@ -216,7 +216,8 @@ pub fn register(reg: &mut Registry) {
                     "割る平面",
                     &kmb_cad::plane::plane_ref_choices("通る点と法線で指定"),
                 )
-                .pick_on("face", SPLIT_PLANE),
+                .pick_on("face", SPLIT_PLANE)
+                .hide_choice("datum"),
             )
             .field(
                 Field::vector("origin", "平面の通る点").length()
