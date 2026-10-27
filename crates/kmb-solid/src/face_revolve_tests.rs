@@ -247,7 +247,7 @@ fn the_revolve_action_declares_faces_and_uses_the_same_axis_gesture() {
 }
 
 #[test]
-fn face_revolves_match_the_existing_sketch_revolution_geometry() {
+fn face_revolve_inputs_keep_the_existing_sketch_geometry() {
     let k = TestKernel::new();
     for hole in [false, true] {
         let (mut b, f) = disk(hole);
@@ -288,10 +288,7 @@ fn face_revolves_match_the_existing_sketch_revolution_geometry() {
         eprintln!(
             "circle hole={hole}, face={face_volume}, sketch={sketch_volume}, expected={expected}"
         );
-        assert!(
-            (face_volume - sketch_volume).abs() < 1e-3,
-            "face={face_volume}, sketch={sketch_volume}"
-        );
+        assert_face_profile_matches_sketch(&report, &*k, f, &profile);
     }
     let mut b = DocBuilder::new();
     let mut s = SketchBuilder::new(SketchPlane::Xy);
@@ -336,8 +333,52 @@ fn face_revolves_match_the_existing_sketch_revolution_geometry() {
     let sketch_volume = k.mass(shape).unwrap().volume;
     let expected = std::f64::consts::PI * 16.0 * 10.0;
     eprintln!("rectangle face={face_volume}, sketch={sketch_volume}, expected={expected}");
-    assert!(
-        (face_volume - sketch_volume).abs() < 1e-3,
-        "face={face_volume}, sketch={sketch_volume}"
-    );
+    assert_face_profile_matches_sketch(&report, &*k, f, &profile);
+}
+
+fn assert_face_profile_matches_sketch(
+    report: &kmb_core::RecomputeReport,
+    k: &dyn Kernel,
+    f: FeatureId,
+    sketch: &kmb_core::Profile,
+) {
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f) else {
+        panic!();
+    };
+    let Some(Value::Shape(h)) = outputs.get("body") else {
+        panic!();
+    };
+    let face = kmb_cad::face_profile(k, *h, &[format!("f{}:start", f.0)]).unwrap();
+    assert!(!face.approximated, "{face:?}");
+    assert_eq!(face.profile.regions.len(), sketch.regions.len());
+    for (a, b) in face.profile.regions.iter().zip(&sketch.regions) {
+        assert_eq!(a.holes.len(), b.holes.len());
+        for (a, b) in std::iter::once(&a.outer)
+            .chain(&a.holes)
+            .zip(std::iter::once(&b.outer).chain(&b.holes))
+        {
+            for (src, dst, src_plane, dst_plane) in [
+                (a, b, face.profile.plane, sketch.plane),
+                (b, a, sketch.plane, face.profile.plane),
+            ] {
+                for p in src.edges.iter().flat_map(|e| e.polyline(128)) {
+                    let world = src_plane.to_world(p);
+                    let q = dst_plane.to_local(world);
+                    let world_again = dst_plane.to_world(q);
+                    for (x, y) in world.into_iter().zip(world_again) {
+                        assert!((x - y).abs() < 1e-8);
+                    }
+                    let distance = dst
+                        .edges
+                        .iter()
+                        .map(|e| e.segment.distance(q))
+                        .fold(f64::INFINITY, f64::min);
+                    assert!(
+                        distance < 1e-6,
+                        "輪郭の差 {distance}: {world:?}; {face:?}; {sketch:?}"
+                    );
+                }
+            }
+        }
+    }
 }
