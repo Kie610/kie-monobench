@@ -36,9 +36,11 @@ impl From<ShapeHandle> for HandleRepr {
 pub type P2 = [f64; 2];
 pub type P3 = [f64; 3];
 
+mod instances;
 mod math;
 mod profile;
 
+pub use instances::*;
 pub use math::*;
 pub use profile::*;
 
@@ -439,7 +441,8 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("ブーリアン".into()))
     }
 
-    /// 形状を動かした複製を作る。面の名前の末尾に `suffix` を足す。
+    /// 形状を動かした複製を作る。面の名前の末尾に `suffix` を足す。`suffix` が空で行列が回転・
+    /// 鏡映・平行移動だけなら、出現([`Kernel::instance`])を返してよい。
     fn transform(
         &self,
         shape: ShapeHandle,
@@ -448,6 +451,20 @@ pub trait Kernel: Send + Sync {
     ) -> Result<ShapeHandle, KernelError> {
         let _ = (shape, m, suffix);
         Err(KernelError::Unsupported("移動".into()))
+    }
+
+    /// 形 `shape` を行列 `m`(回転・鏡映・平行移動)で置いた出現を作る。面・辺・頂点の名前は元と同じ。
+    /// 出現をさらに置くと、元の形に行列を掛け合わせた 1 段の出現になる。同じ元を同じ行列で置くと
+    /// 同じ出現を返す。名前を足さない [`Kernel::transform`](動かすだけ)も出現を返す。
+    /// 既定は写して動かすだけ(出現として覚えない)。
+    fn instance(&self, shape: ShapeHandle, m: &Matrix4) -> Result<ShapeHandle, KernelError> {
+        self.transform(shape, m, "")
+    }
+
+    /// 出現なら、その元の形と行列([`Kernel::instance`])。出現でなければ `None`。
+    fn instance_of(&self, shape: ShapeHandle) -> Option<(ShapeHandle, Matrix4)> {
+        let _ = shape;
+        None
     }
 
     fn faces(&self, shape: ShapeHandle) -> Result<Vec<FaceInfo>, KernelError> {

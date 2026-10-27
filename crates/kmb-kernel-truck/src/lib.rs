@@ -101,6 +101,8 @@ struct Store {
 #[derive(Default)]
 pub struct TruckKernel {
     store: Mutex<Store>,
+    /// 出現の表([`Kernel::instance`])。出現は写して動かした形を持つ(B-rep は共有しない)
+    instances: Mutex<k::Instances>,
 }
 
 impl TruckKernel {
@@ -129,6 +131,45 @@ impl TruckKernel {
             ));
         }
         Err(KernelError::UnknownShape(h))
+    }
+
+    /// 形を行列で写して動かした複製(面の名前の末尾に `suffix` を足す)。
+    fn moved_copy(
+        &self,
+        shape: ShapeHandle,
+        m: &k::Matrix4,
+        suffix: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        if let Some(why) = k::placement_problem(m) {
+            return Err(KernelError::Failed(why.into()));
+        }
+        if let Some(im) = self.imported(shape) {
+            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(U12 の立てる。回すと
+            // 動かすだけなので、体積と面積はそのまま)
+            let moved = transform_imported(&im, m, suffix);
+            let mut s = self.lock();
+            s.next += 1;
+            let id = s.next;
+            s.imported.insert(id, moved);
+            return Ok(ShapeHandle(id));
+        }
+        let body = self.get(shape)?;
+        let mat = to_matrix(m);
+        let moved = guard("移動", || {
+            Ok(Body {
+                parts: body
+                    .parts
+                    .iter()
+                    .map(|p| {
+                        Part::new(
+                            tm::builder::transformed(&p.solid, mat),
+                            p.names.iter().map(|n| format!("{n}{suffix}")).collect(),
+                        )
+                    })
+                    .collect(),
+            })
+        })?;
+        Ok(self.put(moved))
     }
 
     fn imported(&self, h: ShapeHandle) -> Option<import::Imported> {
@@ -725,36 +766,21 @@ impl Kernel for TruckKernel {
         m: &k::Matrix4,
         suffix: &str,
     ) -> Result<ShapeHandle, KernelError> {
-        if let Some(why) = k::placement_problem(m) {
-            return Err(KernelError::Failed(why.into()));
+        if suffix.is_empty() && k::is_rigid(m) {
+            return self.instance(shape, m);
         }
-        if let Some(im) = self.imported(shape) {
-            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(U12 の立てる。回すと
-            // 動かすだけなので、体積と面積はそのまま)
-            let moved = transform_imported(&im, m, suffix);
-            let mut s = self.lock();
-            s.next += 1;
-            let id = s.next;
-            s.imported.insert(id, moved);
-            return Ok(ShapeHandle(id));
-        }
-        let body = self.get(shape)?;
-        let mat = to_matrix(m);
-        let moved = guard("移動", || {
-            Ok(Body {
-                parts: body
-                    .parts
-                    .iter()
-                    .map(|p| {
-                        Part::new(
-                            tm::builder::transformed(&p.solid, mat),
-                            p.names.iter().map(|n| format!("{n}{suffix}")).collect(),
-                        )
-                    })
-                    .collect(),
-            })
-        })?;
-        Ok(self.put(moved))
+        self.moved_copy(shape, m, suffix)
+    }
+
+    fn instance(&self, shape: ShapeHandle, m: &k::Matrix4) -> Result<ShapeHandle, KernelError> {
+        k::place_instance(&self.instances, shape, m, |b, m| self.moved_copy(b, m, ""))
+    }
+
+    fn instance_of(&self, shape: ShapeHandle) -> Option<(ShapeHandle, k::Matrix4)> {
+        self.instances
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .of(shape)
     }
 
     fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
@@ -1068,6 +1094,11 @@ impl Kernel for TruckKernel {
     }
 
     fn retain(&self, live: &HashSet<ShapeHandle>) {
+        let live = &self
+            .instances
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(live);
         let mut s = self.lock();
         s.bodies.retain(|id, _| live.contains(&ShapeHandle(*id)));
         s.imported.retain(|id, _| live.contains(&ShapeHandle(*id)));
