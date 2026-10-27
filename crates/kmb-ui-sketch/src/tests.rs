@@ -127,7 +127,11 @@ fn an_inconsistent_sketch_shows_the_same_reason_as_command_outputs() {
             .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
     );
     h.run();
-    assert_eq!(h.get_all_by_label(&reason).count(), 0, "解けたら理由を消す");
+    assert_eq!(
+        h.query_all_by_label(&reason).count(),
+        0,
+        "解けたら理由を消す"
+    );
 }
 
 #[test]
