@@ -1328,8 +1328,8 @@ pub fn register(reg: &mut Registry) {
                     Field::pick("faces", "面", &[RefKind::Face], 1, None),
                     Field::expr("value", "熱(W、面全体)").plain("W")
                         .help("LED やモータードライバーの発熱など。面全体の合計"),
-                    Field::opt_expr("from", "入れ始め(s)").plain("s").help("時間で変わる熱だけに使う。空なら 0"),
-                    Field::opt_expr("until", "入れ終わり(s)").plain("s").help("時間で変わる熱だけに使う。空なら終わりの時刻"),
+                    Field::opt_expr("from", "入れ始め(s)").plain("s").only("time", "transient", "").help("時間で変わる熱だけに使う。空なら 0"),
+                    Field::opt_expr("until", "入れ終わり(s)").plain("s").only("time", "transient", "").help("時間で変わる熱だけに使う。空なら終わりの時刻"),
                 ],
             ))
             .field(Field::rows(
