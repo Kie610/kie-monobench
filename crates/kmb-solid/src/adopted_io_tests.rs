@@ -168,6 +168,7 @@ fn import(b: &mut DocBuilder, step: &str) -> kmb_core::FeatureId {
             step: step.into(),
             stand_up: false,
             upright: false,
+            units: true,
         },
     )
 }
@@ -218,4 +219,65 @@ fn an_extrude_joined_from_an_imported_face_adds_to_that_part() {
         m.volume
     );
     assert!(close(m.max[2], 15.0, 1e-6), "{m:?}");
+}
+
+/// mm の STEP の単位の行を inch に書き替える(換算の量 25.4 mm を添えた単位)。
+fn in_inch(step: &str) -> String {
+    let mm = "SI_UNIT(.MILLI.,.METRE.)";
+    assert_eq!(step.matches(mm).count(), 1, "mm の単位を 1 つだけ書く");
+    let inch = step.replacen(mm, "CONVERSION_BASED_UNIT('INCH',#999001)", 1);
+    let end = inch.rfind("ENDSEC;").unwrap();
+    format!(
+        "{}#999001=LENGTH_MEASURE_WITH_UNIT(LENGTH_MEASURE(25.4),#999002);\n\
+         #999002=(LENGTH_UNIT() NAMED_UNIT(*) {mm});\n{}",
+        &inch[..end],
+        &inch[end..]
+    )
+}
+
+/// 長さの単位を見る前に inch の STEP を読み込んだ文書は、開き直しても前と同じ大きさ(ファイルの数を
+/// mm とみなす)で読み、その旨の注意を出す。新しく読み込んだ物(`units` の印)は 25.4 倍の正しい大きさ。
+#[test]
+fn an_inch_step_imported_before_units_were_read_keeps_its_old_size() {
+    let k = TestKernel::new();
+    let step = in_inch(&box_step(&k));
+    let read = |units: bool| {
+        let mut b = DocBuilder::new();
+        let part = b.feature(
+            IMPORT_STEP,
+            "読み込み",
+            ImportStep {
+                file: "元.step".into(),
+                step: step.clone(),
+                stand_up: false,
+                upright: false,
+                units,
+            },
+        );
+        let mut doc = b.finish("読み込み");
+        let reg = registry();
+        let report = doc.recompute(&reg, &*k);
+        assert_ok(&report);
+        let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = report.feature(part) else {
+            panic!("{:?}", report.feature(part));
+        };
+        let warnings = kmb_core::warnings_of(outputs);
+        (final_mass(&mut doc, &k), warnings)
+    };
+    let (old, warned) = read(false);
+    assert!(close(old.volume, 20.0 * 20.0 * 10.0, 2e-3), "{old:?}");
+    assert!(close(old.max[0], 20.0, 1e-3), "{old:?}");
+    assert!(warned.iter().any(|w| w.contains("inch")), "{warned:?}");
+    let (new, warned) = read(true);
+    let s = 25.4_f64;
+    assert!(
+        close(new.volume, 20.0 * 20.0 * 10.0 * s * s * s, 2e-3),
+        "{new:?}"
+    );
+    assert!(close(new.max[0], 20.0 * s, 1e-3), "{new:?}");
+    assert!(warned.is_empty(), "{warned:?}");
+    // 印の無い前の文書のデータは、単位を見ない読み方になる
+    let old_data = serde_json::json!({"file": "元.step", "step": step});
+    let parsed: ImportStep = serde_json::from_value(old_data).unwrap();
+    assert!(!parsed.units);
 }
