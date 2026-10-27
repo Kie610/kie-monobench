@@ -169,6 +169,7 @@ fn classify(files: &[String], packages: &[Package]) -> Changes {
 const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     // 押し出し・ブーリアン・フィレット・面取り・穴など、形そのものの試験
     ("kmb-solid", None),
+    ("kmb-cad-surface", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
 ];

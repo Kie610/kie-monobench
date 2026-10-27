@@ -426,7 +426,7 @@ fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> im
         }
         out
     };
-    let meshes = im
+    let meshes: Vec<Option<PolygonMesh>> = im
         .meshes
         .iter()
         .map(|mesh| {
@@ -453,6 +453,21 @@ fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> im
                 .collect()
         })
         .collect();
+    // 体積と面積は、大きさを変える行列(尺度など)の時だけ取り直す。体積は行列式の分だけ変わる
+    let (volume, area) = if k::is_rigid(m) {
+        (im.volume, im.area)
+    } else {
+        let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+        let area: f64 = meshes
+            .iter()
+            .flatten()
+            .flat_map(triangles)
+            .map(|t| tri_area(&t))
+            .sum();
+        (im.volume * det.abs(), area)
+    };
     // 外形の箱は、箱の 8 つの角を動かして取り直す
     let mut min = [f64::INFINITY; 3];
     let mut max = [f64::NEG_INFINITY; 3];
@@ -476,8 +491,8 @@ fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> im
         edges,
         min,
         max,
-        volume: im.volume,
-        area: im.area,
+        volume,
+        area,
     }
 }
 
