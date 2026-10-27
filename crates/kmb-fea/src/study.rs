@@ -584,9 +584,14 @@ struct Job {
 
 impl Job {
     /// 解いた後に中止が届いた場合も、結果を残せるかを確かめる。
-    fn check_cancelled(&self, c: &Control, result: SimResult) -> Result<SimResult, String> {
-        if c.cancelled() && !result.partial {
-            return Err(CANCELLED.into());
+    fn check_cancelled(&self, c: &Control, mut result: SimResult) -> Result<SimResult, String> {
+        if c.cancelled() {
+            if matches!(self.solve, Solve::Transient(_)) {
+                result.partial = true;
+            }
+            if !result.partial {
+                return Err(CANCELLED.into());
+            }
         }
         Ok(result)
     }
