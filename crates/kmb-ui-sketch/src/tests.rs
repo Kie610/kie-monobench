@@ -132,6 +132,26 @@ fn an_inconsistent_sketch_shows_the_same_reason_as_command_outputs() {
         0,
         "解けたら理由を消す"
     );
+    // 投影の追従を含め、機能が理由を返して止まった時も下の帯へ渡す。
+    let length = sketch
+        .constraints
+        .iter_mut()
+        .find_map(|constraint| constraint.kind.value_mut())
+        .unwrap();
+    *length = "unknown_length".into();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    let Some(FeatureStatus::Error { message }) = h.state().report().feature(id) else {
+        panic!("理由を返して止まる");
+    };
+    assert!(
+        h.get_all_by_label(message)
+            .any(|node| node.rect().top() > 750.0),
+        "機能が止まった理由も下の帯へ出す"
+    );
 }
 
 #[test]
