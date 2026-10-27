@@ -403,9 +403,7 @@ fn svg_scale_rejects_tiny_and_negative_values() {
 #[test]
 fn svg_scale_checks_page_dimensions_and_complete_transform_arguments() {
     for attr in ["width", "height"] {
-        for value in [
-            "0", "-1mm", "NaN", "inf", "1e999mm", "1e9mm", "1e-12mm", "wrong",
-        ] {
+        for value in ["0", "-1mm", "NaN", "inf", "1e999mm", "1e9mm", "1e-12mm"] {
             assert_bad_svg_scale(&format!(
                 r#"<svg {attr}="{value}"><path d="M0 0 L10 10"/></svg>"#
             ));
@@ -495,4 +493,100 @@ fn svg_scale_error_is_a_typed_input_problem_without_document_changes() {
     assert_eq!(result.kind, ProblemKind::Input);
     assert!(result.message.contains("倍率"));
     assert!(data.features.is_empty());
+}
+
+fn svg_compatibility_line(attributes: &str, content: &str) -> String {
+    format!(r#"<svg {attributes} viewBox="0 0 96 48">{content}<path d="M0 0 L96 48"/></svg>"#)
+}
+
+#[test]
+fn review_svg_percentage_dimensions_keep_the_viewbox_size() {
+    let result = from_svg(&svg_compatibility_line(r#"width="100%" height="100%""#, "")).unwrap();
+    let (lo, hi) = result.bounds.unwrap();
+    assert!(close2(lo, [0.0, 0.0], 1e-10));
+    assert!(close2(hi, [25.4, 12.7], 1e-10));
+}
+
+#[test]
+fn review_svg_auto_and_font_dimensions_keep_the_viewbox_size() {
+    let expected = from_svg(&svg_compatibility_line("", "")).unwrap();
+    for attr in [
+        r#"width="auto""#,
+        r#"width="2em" height="3ex""#,
+        r#"width="wrong""#,
+    ] {
+        let result = from_svg(&svg_compatibility_line(attr, "")).unwrap();
+        assert_eq!(result.shapes, expected.shapes, "{attr}");
+    }
+}
+
+#[test]
+fn review_svg_numeric_dimensions_still_reject_invalid_values() {
+    for attr in ["width", "height"] {
+        for value in [
+            "0mm", "-1px", "NaNmm", "infmm", "-infcm", "1e999mm", "1e9mm",
+        ] {
+            assert_bad_svg_scale(&svg_compatibility_line(&format!(r#"{attr}="{value}""#), ""));
+        }
+    }
+}
+
+#[test]
+fn review_svg_a_point_has_a_zero_size_reason() {
+    let reason = from_svg(r#"<svg><path d="M3 4 C3 4 3 4 3 4"/></svg>"#).unwrap_err();
+    assert!(reason.contains("形の大きさが 0"), "{reason}");
+}
+
+#[test]
+fn review_svg_a_zero_length_line_has_a_zero_size_reason() {
+    let reason = from_svg(r#"<svg><line x1="3" y1="4" x2="3" y2="4"/></svg>"#).unwrap_err();
+    assert!(reason.contains("形の大きさが 0"), "{reason}");
+}
+
+#[test]
+fn review_svg_hidden_transforms_do_not_stop_visible_geometry() {
+    let expected = from_svg(&svg_compatibility_line("", "")).unwrap();
+    for hidden in [
+        r#"<g display="none" transform="scale(NaN)"><path transform="scale(-1)" d="M0 0 L4 4"/></g>"#,
+        r#"<defs transform="scale(0)"><g transform="translate(inf)"><path d="M0 0 L4 4"/></g></defs>"#,
+    ] {
+        let result = from_svg(&svg_compatibility_line("", hidden)).unwrap();
+        assert_eq!(result.shapes, expected.shapes, "{hidden}");
+    }
+}
+
+#[test]
+fn review_svg_relative_dimensions_insert_the_same_sketch_through_the_action() {
+    use kmb_core::{
+        Context, DocumentData, Edit, Extension, NullKernel, Outcome, RecomputeReport, Registry,
+    };
+    use std::sync::Arc;
+    let path = std::env::temp_dir().join(format!("svg-compatibility-{}.svg", std::process::id()));
+    let doc = DocumentData::default();
+    let report = RecomputeReport::default();
+    let registry = Registry::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let mut cx = Context::new(&doc, &report, &registry, &kernel);
+    cx.file = Some(&path);
+    let mut expected = None;
+    for attr in [
+        "",
+        r#"width="100%" height="100%""#,
+        r#"width="auto""#,
+        r#"width="2em" height="3ex""#,
+    ] {
+        std::fs::write(&path, svg_compatibility_line(attr, "")).unwrap();
+        let Outcome::Change { edits, .. } = SvgCommands.run(INSERT_SVG, &cx).unwrap().unwrap()
+        else {
+            panic!("挿入の変更")
+        };
+        assert!(matches!(edits.first(), Some(Edit::Insert { .. })));
+        if let Some(expected) = &expected {
+            assert_eq!(&edits, expected, "{attr}");
+        } else {
+            expected = Some(edits);
+        }
+    }
+    std::fs::remove_file(&path).unwrap();
+    assert!(doc.features.is_empty());
 }

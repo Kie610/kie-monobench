@@ -15,6 +15,7 @@ const MIN_SIZE_MM: f64 = 1e-5;
 const MAX_SIZE_MM: f64 = 1e6;
 const TOO_LARGE: &str = "SVG の倍率が大きすぎます。形を 1000000 mm 以下にしてください";
 const TOO_SMALL: &str = "SVG の倍率が小さすぎます。形を 0.00001 mm 以上にしてください";
+const ZERO_SIZE: &str = "SVG の形の大きさが 0 です。長さのある線か曲線を指定してください";
 const BAD_SCALE: &str = "SVG の倍率が正しくありません。有限で正の倍率を指定してください";
 
 fn positive(value: f64) -> Result<f64, String> {
@@ -638,14 +639,21 @@ fn parse_path(d: &str) -> Vec<Shape> {
 
 /// 根の svg の、利用者単位から mm(y 上向き)への変換
 fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Result<Affine, String> {
-    let length = |key| {
-        attr(key)
-            .map(|s| {
-                length_mm(&s)
-                    .ok_or_else(|| BAD_SCALE.to_string())
-                    .and_then(size_mm)
-            })
-            .transpose()
+    let length = |key| -> Result<Option<f64>, String> {
+        let Some(text) = attr(key) else {
+            return Ok(None);
+        };
+        let text = text.trim();
+        let (number, unit) = ["px", "mm", "cm", "in", "pt", "pc", "q", "Q"]
+            .iter()
+            .find_map(|unit| text.strip_suffix(unit).map(|number| (number, *unit)))
+            .unwrap_or((text, ""));
+        // 相対単位や auto は用紙の寸法に使わず、viewBox から大きさを決める。
+        // 数として読める値の非有限・0・負・過大は、指定なしへ置き換えない。
+        let Ok(value) = number.trim().parse::<f64>() else {
+            return Ok(None);
+        };
+        size_mm(value * unit_mm(unit).expect("絶対単位だけを選ぶ")).map(Some)
     };
     let w = length("width")?;
     let h = length("height")?;
@@ -745,6 +753,7 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
     let mut skipped: HashMap<String, usize> = HashMap::new();
     let mut stack: Vec<Frame> = Vec::new();
     let mut root: Option<Affine> = None;
+    let mut has_geometry = false;
     for tag in tags(text) {
         let (name, attrs, empty) = match tag {
             Tag::End(name) => {
@@ -785,28 +794,30 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
             || HIDDEN.contains(&local)
             || attr("display").is_some_and(|d| d.trim() == "none");
         let mut m = base;
-        if let Some(t) = attr("transform") {
-            m = m.then_after(&parse_transform(&t)?);
-        }
-        // 入れ子の svg は x・y だけずらす
-        if local == "svg" && parent.is_some() {
-            m = m.then_after(&Affine::translate(
-                length_user(attr("x").as_deref()),
-                length_user(attr("y").as_deref()),
-            ));
-        }
-        check_transform(&m)?;
         if !hidden {
+            if let Some(t) = attr("transform") {
+                m = m.then_after(&parse_transform(&t)?);
+            }
+            // 入れ子の svg は x・y だけずらす。
+            if local == "svg" && parent.is_some() {
+                m = m.then_after(&Affine::translate(
+                    length_user(attr("x").as_deref()),
+                    length_user(attr("y").as_deref()),
+                ));
+            }
+            check_transform(&m)?;
             if UNSUPPORTED.contains(&local) {
                 *skipped.entry(local.to_string()).or_default() += 1;
                 hidden = true;
             } else {
                 let num = |k: &str| length_user(attr(k).as_deref());
-                let local_shapes = element_shapes(local, &attr, &num);
-                for shape in &local_shapes {
-                    let shape = transform_shape(shape, &m);
-                    check_shape(&shape)?;
-                    shapes.push(shape);
+                if let Some(local_shapes) = element_shapes(local, &attr, &num) {
+                    has_geometry = true;
+                    for shape in &local_shapes {
+                        let shape = transform_shape(shape, &m);
+                        check_shape(&shape)?;
+                        shapes.push(shape);
+                    }
                 }
             }
         }
@@ -819,7 +830,13 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
     }
     let imported = Imported::new(shapes, skipped);
     if let Some((lo, hi)) = imported.bounds {
-        size_mm((hi[0] - lo[0]).max(hi[1] - lo[1]))?;
+        let size = (hi[0] - lo[0]).max(hi[1] - lo[1]);
+        if size == 0.0 {
+            return Err(ZERO_SIZE.into());
+        }
+        size_mm(size)?;
+    } else if has_geometry {
+        return Err(ZERO_SIZE.into());
     }
     Ok(imported)
 }
@@ -829,7 +846,7 @@ fn element_shapes(
     local: &str,
     attr: &dyn Fn(&str) -> Option<String>,
     num: &dyn Fn(&str) -> f64,
-) -> Vec<Shape> {
+) -> Option<Vec<Shape>> {
     let mut out = Vec::new();
     match local {
         "path" => {
@@ -883,7 +900,7 @@ fn element_shapes(
         "rect" => {
             let (x, y, w, h) = (num("x"), num("y"), num("width"), num("height"));
             if !(w > 0.0 && h > 0.0) {
-                return out;
+                return Some(out);
             }
             let (ax, ay) = (attr("rx"), attr("ry"));
             let (mut rx, mut ry) = (num("rx"), num("ry"));
@@ -922,7 +939,7 @@ fn element_shapes(
                 }
             }
         }
-        _ => {}
+        _ => return None,
     }
-    out
+    Some(out)
 }
