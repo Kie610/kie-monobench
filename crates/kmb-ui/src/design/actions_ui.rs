@@ -12,6 +12,30 @@ pub(crate) struct Ran {
 }
 
 impl Workspace {
+    fn show_output_warnings(&mut self, info: &serde_json::Value) {
+        if let Some(warnings) = info.get("warnings").and_then(|w| w.as_array()) {
+            let warnings = warnings
+                .iter()
+                .filter_map(|w| w.as_str())
+                .collect::<Vec<_>>()
+                .join(
+                    "
+",
+                );
+            if !warnings.is_empty() {
+                let current = self.win.message.take().unwrap_or_default();
+                self.win.message = Some(if current.is_empty() {
+                    warnings
+                } else {
+                    format!(
+                        "{current}
+{warnings}"
+                    )
+                });
+            }
+        }
+    }
+
     /// 今の選択での文脈。
     pub(crate) fn context(&self) -> Context<'_> {
         self.context_with(self.cur.selected, None)
@@ -609,16 +633,20 @@ impl Workspace {
                 }
             }
             Outcome::File {
-                suffix, contents, ..
+                suffix,
+                contents,
+                info,
             } => {
                 match file {
                     Some(p) => self.write_to(&p, &contents),
                     None => self.write_beside(&suffix, &contents),
                 }
+                self.show_output_warnings(&info);
                 None
             }
-            Outcome::Files { files, .. } => {
+            Outcome::Files { files, info } => {
                 self.write_files(file.as_deref(), &files);
+                self.show_output_warnings(&info);
                 None
             }
             // 空の知らせは「言うことがない」(結果の表示の切り替えなど)。知らせの欄に空の行を残さない

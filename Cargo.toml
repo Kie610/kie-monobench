@@ -44,6 +44,7 @@ kmb-solid = { path = "crates/kmb-solid" }
 kmb-cad = { path = "crates/kmb-cad" }
 kmb-interchange = { path = "crates/kmb-interchange" }
 kmb-cad-extrude = { path = "crates/kmb-cad-extrude" }
+kmb-cad-surface = { path = "crates/kmb-cad-surface" }
 kmb-cad-revolve = { path = "crates/kmb-cad-revolve" }
 kmb-cad-sweep = { path = "crates/kmb-cad-sweep" }
 kmb-cad-boolean = { path = "crates/kmb-cad-boolean" }

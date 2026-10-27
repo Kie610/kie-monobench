@@ -23,6 +23,7 @@ kmb-cad.workspace = true
 kmb-cad-extrude.workspace = true
 kmb-cad-revolve.workspace = true
 kmb-cad-sweep.workspace = true
+kmb-cad-surface.workspace = true
 kmb-cad-boolean.workspace = true
 kmb-cad-datum.workspace = true
 kmb-cad-hole.workspace = true

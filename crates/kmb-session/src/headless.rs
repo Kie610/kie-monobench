@@ -11,7 +11,7 @@ use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// ボディ 1 つの質量の値(M47)。`props` の項目はそのまま並べる(前の `mass` の形に足しただけ)。
+/// ボディごとの測定値。ソリッドには体積と質量、面のボディには面積と外形を返す。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct BodyMass {
     /// ブラウザと同じボディの名前
@@ -19,7 +19,9 @@ pub struct BodyMass {
     /// ボディを最初に作った機能(材料はこの ID に付く)
     pub root: FeatureId,
     #[serde(flatten)]
-    pub props: MassProps,
+    pub props: Option<MassProps>,
+    #[serde(flatten)]
+    pub sheet: Option<SheetFacts>,
     /// 付けた物理材料
     #[serde(skip_serializing_if = "Option::is_none")]
     pub material: Option<String>,
@@ -29,6 +31,16 @@ pub struct BodyMass {
     /// 質量(g)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mass: Option<f64>,
+}
+
+/// 面のボディの測定値。体積と質量の項目を持たない。
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct SheetFacts {
+    pub body_kind: kmb_core::kernel::BodyKind,
+    pub description: String,
+    pub area: f64,
+    pub min: [f64; 3],
+    pub max: [f64; 3],
 }
 
 /// 画面で選んでいる物(操作の文脈に渡す)。CLI・MCP は機能を 1 つ選ぶだけ([`Headless::run`])。

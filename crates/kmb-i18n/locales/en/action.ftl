@@ -346,5 +346,7 @@ action-drawing-delete = Delete drawing
 action-drawing-delete-tip = Delete a sheet or view; delete child views first
 action-drawing-picture = Export drawing lines
 action-drawing-picture-tip = Export the sheet geometry and problems as JSON
+action-cad-surface-patch = Surface patch
+action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written

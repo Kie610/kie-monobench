@@ -55,6 +55,106 @@ fn sample_is_well_constrained_and_shown() {
 }
 
 #[test]
+fn an_inconsistent_sketch_shows_the_same_reason_as_command_outputs() {
+    let mut sketch = kmb_sketch::Sketch::default();
+    let a = sketch.add_point(0.0, 0.0);
+    let b = sketch.add_point(10.0, 0.0);
+    let line = sketch.add_line(a, b);
+    sketch.add_constraint(ConstraintKind::Fix { point: a });
+    sketch.add_constraint(ConstraintKind::Horizontal { line });
+    for length in [10, 12] {
+        sketch.add_constraint(ConstraintKind::Length {
+            line,
+            value: format!("{length} mm"),
+        });
+    }
+    let mut doc = Document::new();
+    let id = doc.alloc_feature_id();
+    doc.apply(kmb_core::Transaction::new(
+        "スケッチ",
+        vec![kmb_core::Op::InsertFeature {
+            index: None,
+            entry: kmb_core::FeatureEntry {
+                id,
+                type_id: kmb_sketch::SKETCH.into(),
+                name: "矛盾するスケッチ".into(),
+                data: serde_json::to_value(&sketch).unwrap(),
+                suppressed: false,
+                pin_bodies: false,
+            },
+        }],
+    ))
+    .unwrap();
+    let mut ws = ws_of(doc, None, reg());
+    ws.open_edit(id);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let Some(FeatureStatus::Ok { outputs, .. }) = h.state().report().feature(id) else {
+        panic!("矛盾したスケッチも診断と形を返す");
+    };
+    let solution = kmb_sketch::solution_of(&outputs["sketch"]).unwrap();
+    let reason = kmb_sketch::inconsistency_reason(&sketch, &solution).unwrap();
+    assert!(reason.contains("長さ 2件"), "{reason}");
+    let modules = reg();
+    let context = kmb_core::Context::new(
+        h.state().document().data(),
+        h.state().report(),
+        &modules.registry,
+        &modules.kernel,
+    );
+    let status = modules.extensions.status(&context);
+    let diagnoses = status
+        .iter()
+        .find(|(key, _)| key == "sketch_diagnostics")
+        .expect("MCP の状態に診断がある");
+    assert_eq!(diagnoses.1[0]["reason"], reason);
+    assert!(outputs.values().any(|value| {
+        modules
+            .extensions
+            .describe(value)
+            .is_some_and(|text| text == reason)
+    }));
+    assert!(
+        h.get_all_by_label(&reason)
+            .any(|node| node.rect().top() > 750.0),
+        "画面の下の帯にも同じ理由を出す"
+    );
+    sketch.constraints.pop();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    assert_eq!(
+        h.query_all_by_label(&reason).count(),
+        0,
+        "解けたら理由を消す"
+    );
+    // 投影の追従を含め、機能が理由を返して止まった時も下の帯へ渡す。
+    let length = sketch
+        .constraints
+        .iter_mut()
+        .find_map(|constraint| constraint.kind.value_mut())
+        .unwrap();
+    *length = "unknown_length".into();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    let Some(FeatureStatus::Error { message }) = h.state().report().feature(id) else {
+        panic!("理由を返して止まる");
+    };
+    assert!(
+        h.get_all_by_label(message)
+            .any(|node| node.rect().top() > 750.0),
+        "機能が止まった理由も下の帯へ出す"
+    );
+}
+
+#[test]
 fn editing_a_parameter_updates_the_sketch_and_can_be_undone() {
     let mut h = harness();
     h.run();

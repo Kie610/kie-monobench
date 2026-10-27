@@ -347,5 +347,7 @@ action-drawing-delete = 図面を削除
 action-drawing-delete-tip = 用紙かビューを削除する。子のビューがある時は先に子を削除する
 action-drawing-picture = 図面の線を書き出す
 action-drawing-picture-tip = 用紙の線と問題を JSON に書き出す
+action-cad-surface-patch = 面を張る
+action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない

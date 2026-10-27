@@ -50,3 +50,5 @@ feature-flow-volume = 3D の流れ
 feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)
 
 # 図面は用紙の区画に保存する。
+feature-solid-surface-patch = 面を張る
+feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る
