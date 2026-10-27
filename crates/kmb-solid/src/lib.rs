@@ -63,6 +63,7 @@ pub fn register(reg: &mut Registry) {
 
 mod adopted_failure_tests;
 mod adopted_io_tests;
+mod adopted_reference_tests;
 mod adopted_shape_tests;
 mod adopted_sketch_tests;
 mod asm_tests;
