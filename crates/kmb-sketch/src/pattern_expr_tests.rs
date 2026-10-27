@@ -193,6 +193,7 @@ fn document_recompute_tracks_count_parameters_and_renames_them() {
                         name: "並び".into(),
                         data: serde_json::to_value(s).unwrap(),
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 },
             ],
