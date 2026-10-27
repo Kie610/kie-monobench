@@ -2,7 +2,10 @@
 
 use super::*;
 
-pub(crate) fn status_text(s: &Solution) -> String {
+pub(crate) fn status_text(sketch: &Sketch, s: &Solution) -> String {
+    if let Some(reason) = kmb_sketch::inconsistency_reason(sketch, s) {
+        return reason;
+    }
     if s.is_blank() {
         return kmb_sketch::NO_SHAPE.into();
     }

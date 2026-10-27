@@ -298,3 +298,6 @@ fn a_live_script_that_fails_puts_the_document_back() {
     assert_eq!(width(&h), "77");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[path = "cmdline_tests/adopted_tests.rs"]
+mod adopted;

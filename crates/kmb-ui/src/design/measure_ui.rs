@@ -74,20 +74,13 @@ impl Workspace {
             _ => None,
         };
         let body = face.and_then(|feature| {
-            let props = self
-                .cur
-                .scene
-                .key()
-                .iter()
-                .find(|(f, _)| *f == feature)
-                .and_then(|(_, h)| self.cur.work.kernel().mass(*h).ok())?;
-            Some(measure::BodyFacts {
-                props,
-                material: kmb_session::body_material(
-                    self.cur.work.doc().data(),
-                    self.body_root(feature),
-                ),
-            })
+            let h = self.cur.scene.key().iter().find(|(f, _)| *f == feature)?.1;
+            measure::BodyFacts::of(
+                self.cur.work.kernel().as_ref(),
+                h,
+                kmb_session::body_material(self.cur.work.doc().data(), self.body_root(feature)),
+            )
+            .ok()
         });
         let Some(m) = &mut self.cur.measure else {
             return;

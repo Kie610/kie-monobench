@@ -124,6 +124,7 @@ fn a_part_read_from_step_is_machined_without_gouging() {
             step,
             stand_up: false,
             upright: false,
+            units: true,
         }),
     );
     let tools = add(&mut doc, TOOLS, "工具", json(&ToolLibrary::starter()));

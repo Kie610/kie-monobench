@@ -7,6 +7,11 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+one_curve_whole_output_is_explicit_and_refuses_an_added_second_curve = "truck の回(面のボディを作る口が未対応)"
+planar_surface_follows_dimensions_and_survives_document_round_trip = "truck の回(面のボディを作る口が未対応)"
+spatial_sketch_lines_form_a_sheet_and_invalid_wire_reference_stops = "truck の回(面のボディを作る口が未対応)"
+a_body_edge_loop_is_preserved_and_older_solid_document_is_unchanged = "truck の回(面のボディを作る口が未対応)"
+reordering_the_same_number_of_sketch_lines_keeps_the_selected_entities = "truck の回(面のボディを作る口が未対応)"
 a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized = "truck の回(平面での分割に対応していない)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"
@@ -24,6 +29,7 @@ a_sealed_void_survives_a_cut_beside_it = "truck の回(シェル)"
 radius_kinds_and_g2_round_a_corner_with_the_expected_volume = "truck の回(丸めの半径の種類と G2)"
 mid_radii_take_expressions_and_follow_a_renamed_parameter = "truck の回(途中の半径を変える丸め)"
 a_thinner_middle_on_a_long_top_edge_keeps_the_plate = "truck の回(途中の半径を変える丸め)"
+variable_fillet_on_a_round_rim_keeps_the_cylinder = "truck の回(円の辺の途中の半径を変える丸めに非対応)"
 split_cuts_a_plate_by_a_plane_and_stops_when_the_plane_misses_it = "truck の回(平面での分割)"
 offset_faces_widens_a_hole_and_keeps_the_face_name = "truck の回(面のオフセット)"
 patterned_cuts_and_shells_preview_what_they_remove = "truck の回(同じ平面で接するブーリアンとシェル)"
