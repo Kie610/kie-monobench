@@ -1,0 +1,12 @@
+# 名前で欄を探して式を入れ、設定の単位で距離を決める。
+type "field:数#1" "2 + 3" enter
+wait
+expect "field:数#1" = "2 + 3"
+click "設定"
+click "単位"
+select "この文書の長さの単位" "インチ(in)"
+click "Close window"
+expect "単位 in"
+type "field:距離#1" "1" enter
+wait
+expect "field:距離#1" = "1 in"

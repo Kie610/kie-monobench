@@ -280,6 +280,7 @@ impl Workspace {
         };
         let mut chosen = None;
         let mut close = false;
+        let (candidates, cancel) = (self.win.t("view-candidates"), self.win.t("common-cancel"));
         let r = egui::Area::new(egui::Id::new("pick_candidates"))
             .fixed_pos(pos + egui::vec2(8.0, 8.0))
             .order(egui::Order::Foreground)
@@ -288,7 +289,7 @@ impl Workspace {
                     // 長い名前は … で切って一覧の幅に収め、指すと全部の名前を出す
                     let max_w = crate::theme::fs(CANDIDATE_WIDTH);
                     ui.set_max_width(max_w);
-                    ui.weak("重なっているもの(手前から)");
+                    ui.weak(&candidates);
                     for p in &list {
                         let name = self
                             .cur
@@ -317,7 +318,7 @@ impl Workspace {
                             chosen = Some(p.clone());
                         }
                     }
-                    if ui.button("キャンセル").clicked() {
+                    if ui.button(&cancel).clicked() {
                         close = true;
                     }
                 });

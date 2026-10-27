@@ -1,6 +1,6 @@
 //! DXF の操作(画面・CLI・MCP に出す): スケッチへの挿入と、スケッチの DXF での保存。
 
-use kmb_core::{Action, Context, Extension, Input, Outcome, Place};
+use kmb_core::{Action, Arg, Context, Extension, Input, Outcome, Place};
 
 /// DXF を挿入(選んでいるスケッチへ。なければ XY 平面の新しいスケッチ)
 pub const INSERT_DXF: &str = "cad.sketch.insert_dxf";
@@ -9,6 +9,31 @@ pub const EXPORT_DXF: &str = "cad.sketch.export_dxf";
 
 /// DXF の操作。
 pub struct DxfCommands;
+
+fn insert_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let path = cx.file.ok_or("DXF のファイルを選んでから使う")?;
+    let bytes = std::fs::read(path).map_err(|e| {
+        kmb_core::Problem::new(
+            kmb_core::ProblemKind::File,
+            format!("{} を読めません: {e}", path.display()),
+        )
+    })?;
+    let mut read = crate::from_dxf_bytes(&bytes)?;
+    let cleanup = cx.arg("cleanup").and_then(|v| v.as_bool()).unwrap_or(true);
+    let mut counts = None;
+    if cleanup {
+        let tolerance = cx.arg_f64("cleanup_tolerance")?.unwrap_or(0.01);
+        let clean = crate::clean(&read.shapes, tolerance)?;
+        counts = Some((clean.removed, clean.joined));
+        read.bounds = kmb_sketch::shapes_bounds(&clean.shapes);
+        read.shapes = clean.shapes;
+    }
+    let mut result = kmb_sketch::insert_imported(cx, "DXF", read)?;
+    if let (Some((removed, joined)), Outcome::Change { label, .. }) = (counts, &mut result) {
+        *label = format!("{label}(重複を {removed} 本除去、端点を {joined} 組接続)");
+    }
+    Ok(result)
+}
 
 /// 選んでいるスケッチを DXF にする(補助線は書かない)。
 fn export_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
@@ -41,6 +66,7 @@ impl Extension for DxfCommands {
                 .icon("dxf")
                 .aliases("でぃーえっくすえふ dxf そうにゅう いんぽーと import 2d")
                 .hint("DXF の線・円弧・円・点を、選んでいるスケッチへ足す。スケッチを選んでいなければ XY 平面に新しく作る")
+                .args(vec![Arg::flag("cleanup","重複した線をまとめ、近い端点をつなぐ").default(true), Arg::length("cleanup_tolerance","端点をつなぐ許容差(mm)").default(0.01)])
                                 .input(Input::OpenFile {
                     title: "DXF を挿入".into(),
                     filter: "DXF".into(),
@@ -68,7 +94,7 @@ impl Extension for DxfCommands {
 
     fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         Some(match id {
-            INSERT_DXF => kmb_sketch::insert_file(cx, "DXF", crate::from_dxf),
+            INSERT_DXF => insert_dxf(cx),
             EXPORT_DXF => export_dxf(cx),
             _ => return None,
         })

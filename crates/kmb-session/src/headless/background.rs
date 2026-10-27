@@ -292,6 +292,9 @@ impl Headless {
 }
 
 #[cfg(test)]
+mod step_cancel_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use kmb_core::{Op, Param, Transaction};

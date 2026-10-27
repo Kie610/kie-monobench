@@ -276,6 +276,7 @@ pub fn body_keys(
                 InputRef::Param { name } => {
                     names.insert(name);
                 }
+                InputRef::Units => {}
             }
         }
     }
@@ -300,10 +301,13 @@ pub fn body_keys(
     }
     while let Some(n) = todo.pop() {
         names.insert(n.clone());
-        if let Some(e) = expr_of(&n)
-            && let Ok(ast) = kmb_core::parse_expr(&e)
-        {
-            for r in ast.references() {
+        if let Some(e) = expr_of(&n) {
+            // 文字のパラメータの式は差し込みの文字
+            let refs = kmb_core::parse_expr(&e)
+                .map(|ast| ast.references())
+                .or_else(|_| kmb_core::Template::parse(&e).map(|t| t.references()))
+                .unwrap_or_default();
+            for r in refs {
                 if !names.contains(&r) {
                     todo.push(r);
                 }

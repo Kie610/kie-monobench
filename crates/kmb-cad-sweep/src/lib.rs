@@ -18,6 +18,8 @@ pub const LOFT: &str = "solid.loft@1";
 pub const SWEEP_SKETCH: &str = "cad.sweep";
 /// 断面を順にクリックし、ガイドレールを選んでロフトを作る操作(ツールバーの「ロフト」)。
 pub const LOFT_SKETCH: &str = "cad.loft";
+/// ロフトの端の点を、クリックで選び直す。
+pub const LOFT_POINT: &str = "cad.loft_point";
 
 /// スケッチの線(要素の番号)。`entity` を省くとスケッチの最初の線。端のつながる線もたどる。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -263,12 +265,44 @@ impl Feature for Sweep {
 pub const MAX_SECTIONS: usize = 50;
 
 /// ロフトの断面 1 つ(スケッチの輪郭か、その中の領域)。
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionKind {
+    #[default]
+    Profile,
+    Point,
+}
+
+impl SectionKind {
+    fn is_profile(&self) -> bool {
+        *self == Self::Profile
+    }
+}
+
+/// 輪郭の断面か、端に置く点の参照。
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Section {
-    pub profile: FeatureId,
+    #[serde(default, skip_serializing_if = "SectionKind::is_profile")]
+    pub kind: SectionKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<FeatureId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point: Option<PointRef>,
+}
+
+impl Section {
+    fn profile(&self) -> Result<FeatureId, EvalError> {
+        self.profile
+            .ok_or_else(|| EvalError::InvalidData("輪郭の断面にはスケッチを選んでください".into()))
+    }
+    fn point(&self) -> Result<&PointRef, EvalError> {
+        self.point
+            .as_ref()
+            .ok_or_else(|| EvalError::InvalidData("端の点を選んでください".into()))
+    }
 }
 
 /// 断面を順につなぐ。例: `{"sections": [{"profile": 1}, {"profile": 2}]}`。断面は閉じた輪郭 1 つずつ
@@ -285,13 +319,37 @@ pub struct Loft {
     pub target: Option<FeatureId>,
 }
 
-impl Feature for Loft {
-    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v: Vec<InputRef> = self
+impl Loft {
+    fn point_end(&self) -> Result<Option<(bool, &PointRef)>, EvalError> {
+        let mut points = self
             .sections
             .iter()
-            .flat_map(|s| profile_inputs(s.profile, &s.regions))
-            .collect();
+            .enumerate()
+            .filter(|(_, s)| s.kind == SectionKind::Point);
+        let Some((i, section)) = points.next() else {
+            return Ok(None);
+        };
+        if points.next().is_some() || (i != 0 && i + 1 != self.sections.len()) {
+            return Err(EvalError::InvalidData(
+                "点の断面は最初か最後のどちらか1つだけに置いてください。途中や両端には置けません"
+                    .into(),
+            ));
+        }
+        Ok(Some((i == 0, section.point()?)))
+    }
+}
+
+impl Feature for Loft {
+    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+        self.point_end()?;
+        let mut v = Vec::new();
+        for s in &self.sections {
+            if s.kind == SectionKind::Point {
+                v.push(s.point()?.input());
+            } else {
+                v.extend(profile_inputs(s.profile()?, &s.regions));
+            }
+        }
         for r in &self.rails {
             v.extend(r.inputs());
         }
@@ -301,6 +359,21 @@ impl Feature for Loft {
 
     fn pass_through(&self) -> Vec<(String, InputRef)> {
         keep_target(self.operation, self.target)
+    }
+
+    fn keeps(&self) -> Vec<FeatureId> {
+        self.sections
+            .iter()
+            .filter(|s| s.kind == SectionKind::Point)
+            .filter_map(|s| match s.point.as_ref()? {
+                PointRef::Vertex { feature, .. }
+                    if self.operation == Operation::New || self.target != Some(*feature) =>
+                {
+                    Some(*feature)
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
@@ -315,22 +388,36 @@ impl Feature for Loft {
                 self.sections.len()
             )));
         }
+        self.point_end()?;
         // 同じ断面が 2 度入ると、厚さの無い所ができてカーネルが長く迷う(AI や台本が同じ輪郭を何度も渡した時)
         for (i, s) in self.sections.iter().enumerate() {
             if let Some(j) = self.sections[..i].iter().position(|t| t == s) {
                 return Err(EvalError::InvalidData(format!(
-                    "ロフトの断面 {} と {} が同じです({} の同じ輪郭)。1 つを外すか、別の輪郭を選んでください",
+                    "ロフトの断面 {} と {} が同じです。同じ断面を外すか、別の輪郭や点を選んでください",
                     j + 1,
-                    i + 1,
-                    s.profile
+                    i + 1
                 )));
             }
         }
+        let point = self
+            .point_end()?
+            .map(|(first, p)| p.resolve(ctx).map(|at| (first, at)))
+            .transpose()?;
         let sections = self
             .sections
             .iter()
-            .map(|s| chosen(ctx, s.profile, &s.regions))
+            .filter(|s| s.kind == SectionKind::Profile)
+            .map(|s| chosen(ctx, s.profile()?, &s.regions))
             .collect::<Result<Vec<_>, _>>()?;
+        if point.is_some()
+            && sections
+                .iter()
+                .any(|p| p.regions.iter().any(|r| !r.holes.is_empty()))
+        {
+            return Err(EvalError::InvalidData(
+                "点へのロフトには穴の無い輪郭を選んでください".into(),
+            ));
+        }
         let rails = self
             .rails
             .iter()
@@ -339,10 +426,21 @@ impl Feature for Loft {
             .collect::<Result<Vec<_>, _>>()?;
         finish(
             ctx,
-            Recipe::Loft {
-                operation: self.operation,
-                sections,
-                rails,
+            match point {
+                Some((at_start, point)) => Recipe::Loft {
+                    operation: self.operation,
+                    sections,
+                    point: Some(point),
+                    at_start,
+                    rails,
+                },
+                None => Recipe::Loft {
+                    operation: self.operation,
+                    sections,
+                    rails,
+                    point: None,
+                    at_start: false,
+                },
             },
             self.target,
         )
@@ -397,7 +495,16 @@ pub fn register(reg: &mut Registry) {
             .field(Field::rows(
                 "sections",
                 "断面",
-                vec![Field::output("profile", "プロファイル", "profile")],
+                vec![
+                    Field::choice("kind", "断面の種類", &[("profile", "輪郭"), ("point", "点")]),
+                    Field::output("profile", "プロファイル", "profile").only("@kind", "profile", "profile"),
+                    Field::choice("point.kind", "点の元", &[("datum", "作業点"), ("sketch", "スケッチの点"), ("vertex", "ボディの頂点")]).only("@kind", "point", "profile"),
+                    Field::output("point.datum", "作業点", kmb_interchange::DATUM_OUTPUT).only("@point.kind", "datum", "datum").and_only("@kind", "point", "profile"),
+                    Field::output("point.sketch", "点のスケッチ", "points").only("@point.kind", "sketch", "datum").and_only("@kind", "point", "profile"),
+                    Field::integer("point.point", "点の番号").unitless().only("@point.kind", "sketch", "datum").and_only("@kind", "point", "profile"),
+                    Field::info("point.feature", "頂点のボディ").only("@point.kind", "vertex", "datum").and_only("@kind", "point", "profile"),
+                    Field::info("point.vertex", "頂点").only("@point.kind", "vertex", "datum").and_only("@kind", "point", "profile"),
+                ],
             ))
             .field(Field::rows(
                 "rails",
@@ -538,27 +645,33 @@ fn sections_from(v: &serde_json::Value) -> Result<Vec<Section>, String> {
     };
     let list = v.as_array().ok_or_else(bad)?;
     list.iter()
-        .map(|p| match p {
-            serde_json::Value::Number(n) => Ok(Section {
-                profile: FeatureId(n.as_u64().ok_or_else(bad)?),
-                regions: vec![],
-            }),
-            serde_json::Value::Object(o) => Ok(Section {
-                profile: FeatureId(o.get("profile").and_then(|x| x.as_u64()).ok_or_else(bad)?),
-                regions: o
-                    .get("key")
-                    .and_then(|k| k.as_str())
-                    .map(|k| vec![k.to_string()])
-                    .unwrap_or_default(),
-            }),
-            _ => Err(bad()),
+        .map(|value| {
+            if let Some(n) = value.as_u64() {
+                return Ok(Section {
+                    profile: Some(FeatureId(n)),
+                    ..Default::default()
+                });
+            }
+            let mut object = value.as_object().ok_or_else(bad)?.clone();
+            if let Some(key) = object.remove("key") {
+                let key = key.as_str().ok_or_else(bad)?;
+                if object.contains_key("regions") {
+                    return Err("断面の領域は key と regions の片方だけで指定してください".into());
+                }
+                object.insert("regions".into(), json!([key]));
+            }
+            serde_json::from_value(serde_json::Value::Object(object))
+                .map_err(|e| format!("断面の指定を読めません: {e}"))
         })
         .collect()
 }
 
 /// 領域が 1 つだけのスケッチは領域の名前を覚えない(線を変えても全体を使う)。
 fn tidy(cx: &Context<'_>, mut s: Section) -> Section {
-    if regions::faces_of(cx, s.profile).len() <= 1 {
+    if s.kind == SectionKind::Profile
+        && s.profile
+            .is_some_and(|p| regions::faces_of(cx, p).len() <= 1)
+    {
         s.regions.clear();
     }
     s
@@ -578,7 +691,13 @@ fn add_loft(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         return Err("断面を 2 つ以上選んでください(つなぐ順にクリック)".into());
     }
     for s in &sections {
-        regions::chosen_profile(cx, s.profile, &s.regions)?;
+        if s.kind == SectionKind::Profile {
+            regions::chosen_profile(
+                cx,
+                s.profile.ok_or("輪郭の断面のスケッチを選んでください")?,
+                &s.regions,
+            )?;
+        }
     }
     let rails = match cx.arg("rails").filter(|v| !v.is_null()) {
         Some(v) => v
@@ -598,6 +717,7 @@ fn add_loft(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         operation: Operation::New,
         target: None,
     };
+    data.point_end().map_err(|e| e.to_string())?;
     Ok(Outcome::insert(
         "ロフトを追加",
         LOFT,
@@ -633,18 +753,85 @@ fn sweep_handles(cx: &Context<'_>) -> Vec<Handle> {
     ]
 }
 
+/// 断面に使う点も、輪郭と同じ候補の選択で決める。
+fn point_choices(cx: &Context<'_>, before: Option<FeatureId>) -> Vec<HandleChoice> {
+    let end = before
+        .and_then(|id| cx.data.index_of(id))
+        .unwrap_or(cx.data.features.len());
+    let earlier = |id| cx.data.index_of(id).is_some_and(|i| i < end);
+    let mut out = Vec::new();
+    let mut add = |point: PointRef, at: k::P3, label: String| {
+        let outline = (0..3)
+            .map(|axis| {
+                let mut a = at;
+                let mut b = at;
+                a[axis] -= 0.5;
+                b[axis] += 0.5;
+                vec![a, b]
+            })
+            .collect();
+        out.push(HandleChoice {
+            value: json!({"kind":"point", "point":point}),
+            label,
+            outline,
+            ..Default::default()
+        });
+    };
+    for (feature, name, point) in kmb_interchange::datum_points(cx, before) {
+        add(PointRef::Datum { feature }, point.at, name);
+    }
+    for feature in cx
+        .candidates("points")
+        .into_iter()
+        .map(FeatureId)
+        .filter(|f| earlier(*f))
+    {
+        if let Some(points) = cx
+            .output(feature, "points")
+            .and_then(kmb_core::Points::from_value)
+        {
+            for (point, p) in points.points {
+                add(
+                    PointRef::Sketch { feature, point },
+                    points.plane.to_world(p),
+                    format!("スケッチ {feature} の点 {point}"),
+                );
+            }
+        }
+    }
+    for (feature, body) in kmb_core::visible_bodies_before(cx.data, cx.registry, cx.report, before)
+    {
+        for vertex in kmb_core::vertices(cx.kernel.as_ref(), body) {
+            add(
+                PointRef::Vertex {
+                    feature,
+                    vertex: vertex.name.clone(),
+                },
+                vertex.at,
+                format!("ボディ {feature} の頂点 {}", vertex.name),
+            );
+        }
+    }
+    out
+}
+
 /// ロフトを作る手順: 最初の断面 → 次の断面(3 つ以上は Ctrl を押しながら順に)→ ガイドレール
 /// (無ければ Enter)。
 fn loft_handles(cx: &Context<'_>) -> Vec<Handle> {
     // どのスケッチの領域も一緒に選べるよう、組を 1 つにする
     let mut choices = regions::region_choices(cx, &regions::candidates(cx));
+    choices.extend(point_choices(cx, None));
     for c in &mut choices {
         c.group = 0;
     }
     vec![
         Handle {
             choices: choices.clone(),
-            ..Handle::new("first", "最初の断面(輪郭)をクリック", Gesture::Choice)
+            ..Handle::new(
+                "first",
+                "最初の断面(輪郭か端の点)をクリック",
+                Gesture::Choice,
+            )
         },
         Handle {
             choices,
@@ -666,13 +853,45 @@ fn loft_handles(cx: &Context<'_>) -> Vec<Handle> {
     ]
 }
 
+/// 点の入力が未完成の時も、点を選び直して編集を続けられる。
+fn selected_point_section(cx: &Context<'_>) -> Option<(FeatureId, serde_json::Value, usize)> {
+    let id = cx.selected?;
+    let entry = cx.data.feature(id)?;
+    if entry.type_id != LOFT {
+        return None;
+    }
+    let rows = entry.data.get("sections")?.as_array()?;
+    let mut points = rows
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.get("kind").and_then(|v| v.as_str()) == Some("point"));
+    let (i, _) = points.next()?;
+    if points.next().is_some() || (i != 0 && i + 1 != rows.len()) {
+        return None;
+    }
+    Some((id, entry.data.clone(), i))
+}
+
+fn repick_point(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let (id, mut data, row) =
+        selected_point_section(cx).ok_or("端に点のあるロフトを選んでください")?;
+    let point: PointRef =
+        serde_json::from_value(cx.arg("point").ok_or("端にする点を選んでください")?.clone())
+            .map_err(|e| format!("端の点の参照を読めません: {e}"))?;
+    data["sections"][row]["point"] = serde_json::to_value(point).map_err(|e| e.to_string())?;
+    Ok(Outcome::Change {
+        label: "ロフトの端の点を選び直す".into(),
+        edits: vec![kmb_core::Edit::SetData { id, data }],
+    })
+}
+
 /// スイープ・ロフトの操作。
 pub struct SweepCommands;
 
 impl Extension for SweepCommands {
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let none = regions::candidates(cx).is_empty();
-        vec![
+        let mut actions = vec![
             Action::new(SWEEP_SKETCH, "スイープ", "cad")
                 .args(regions::args())
                 .arg(kmb_core::Arg::value(
@@ -698,11 +917,11 @@ impl Extension for SweepCommands {
             Action::new(LOFT_SKETCH, "ロフト", "cad")
                 .arg(kmb_core::Arg::value(
                     "first",
-                    "最初の断面 {\"profile\": スケッチ, \"key\": 領域の名前} かスケッチの番号",
+                    "最初の断面(輪郭の指定か、kind: point と point の参照)",
                 ))
                 .arg(kmb_core::Arg::list(
                     "sections",
-                    "続きの断面の並び(つなぐ順。[{\"profile\": スケッチ, \"key\": 領域の名前}] かスケッチの番号の並び)",
+                    "続きの断面の並び(点は最初か最後の片方だけ。つなぐ順。[{\"profile\": スケッチ, \"key\": 領域の名前}] かスケッチの番号の並び)",
                 ))
                 .arg(kmb_core::Arg::list(
                     "rails",
@@ -714,13 +933,26 @@ impl Extension for SweepCommands {
                 .hint("押してから断面(別の平面に描いた輪郭)をつなぐ順にクリックし、ガイドレールの線を選ぶ(無ければ Enter)")
                 .at(&[Place::Menu])
                 .disabled_if(none.then_some("閉じた輪郭のあるスケッチがありません")),
-        ]
+            Action::new(LOFT_POINT, "端の点を選び直す", "cad")
+                .arg(kmb_core::Arg::value("point", "端の点の参照(作業点・スケッチの点・ボディの頂点)").required())
+                .menu("作成")
+                .icon("loft")
+                .keep_edit()
+                .at(&[Place::Panel])
+                .disabled_if(selected_point_section(cx).is_none().then_some("端に点のあるロフトを選んでください")),
+        ];
+        // 選んだ機能を編集する時だけ表示する。未選択時は検索用の使えない宣言を残す。
+        actions.retain(|a| {
+            a.id != LOFT_POINT || cx.selected.is_none() || selected_point_section(cx).is_some()
+        });
+        actions
     }
 
     fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
         match id {
             SWEEP_SKETCH => Some(add_sweep(cx)),
             LOFT_SKETCH => Some(add_loft(cx)),
+            LOFT_POINT => Some(repick_point(cx)),
             _ => None,
         }
     }
@@ -729,6 +961,17 @@ impl Extension for SweepCommands {
         match id {
             SWEEP_SKETCH => Some(sweep_handles(cx)),
             LOFT_SKETCH => Some(loft_handles(cx)),
+            LOFT_POINT => {
+                let (id, _, _) = selected_point_section(cx)?;
+                let mut choices = point_choices(cx, Some(id));
+                for c in &mut choices {
+                    c.value = c.value["point"].take();
+                }
+                Some(vec![Handle {
+                    choices,
+                    ..Handle::new("point", "ロフトの端にする点をクリック", Gesture::Choice)
+                }])
+            }
             _ => None,
         }
     }

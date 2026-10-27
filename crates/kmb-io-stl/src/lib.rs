@@ -1,9 +1,11 @@
-//! 三角形の網([`kmb_core::Mesh`])を STL(単位は mm)と 3MF([`threemf`]。色と単位も)に書き出す。
-//! 書き出しの操作(STL・STEP・3MF)も持つ([`ExportCommands`])。今の視点の線の DXF・SVG は kmb-io-view。
+//! 三角形の網([`kmb_core::Mesh`])を STL(単位は mm)・3MF([`threemf`]。色と単位も)・OBJ に書き出す。
+//! 書き出しの操作(STL・STEP・3MF・OBJ)も持つ([`ExportCommands`])。今の視点の線の DXF・SVG は kmb-io-view。
 
 mod commands;
+pub mod obj;
 pub mod threemf;
-pub use commands::{EXPORT_3MF, EXPORT_STEP, EXPORT_STL, ExportCommands};
+pub use commands::{EXPORT_3MF, EXPORT_OBJ, EXPORT_STEP, EXPORT_STL, ExportCommands};
+pub use obj::write_obj;
 pub use threemf::{Body3mf, write_3mf};
 
 use kmb_core::Mesh;
@@ -81,7 +83,7 @@ pub fn module() -> kmb_core::Module {
 mod tests {
     use super::*;
 
-    fn tetra() -> Mesh {
+    pub(crate) fn tetra() -> Mesh {
         Mesh {
             positions: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             normals: vec![[0.0; 3]; 4],

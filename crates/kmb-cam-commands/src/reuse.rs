@@ -76,7 +76,8 @@ pub(crate) struct Reuse {
     defaults: Arc<RwLock<Map<String, Json>>>,
     data_dir: Arc<RwLock<Option<PathBuf>>>,
     /// テンプレートの名前の一覧と、読んだ時のフォルダの更新時刻(操作の一覧は毎コマ求められるので、
-    /// フォルダが変わった時だけ読み直す)
+    /// フォルダが変わった時だけ読み直す)。時刻は外で足し消しされた時のためで、自分で書いた・消した時は
+    /// `forget_templates` で捨てる(Windows ではフォルダの時刻が前と同じままのことがある)
     listed: Arc<RwLock<(Option<std::time::SystemTime>, Vec<String>)>>,
 }
 
@@ -207,6 +208,11 @@ impl Reuse {
 
     pub(crate) fn set_data_dir(&self, dir: Option<&Path>) {
         *self.data_dir.write().expect("データフォルダの鍵") = dir.map(Path::to_path_buf);
+        self.forget_templates();
+    }
+
+    /// 覚えたテンプレートの一覧を捨て、次に求められた時に読み直す。
+    fn forget_templates(&self) {
         *self.listed.write().expect("テンプレートの一覧の鍵") = (None, Vec::new());
     }
 
@@ -364,7 +370,9 @@ impl Reuse {
         }
         let existed = path.exists();
         let text = serde_json::to_string_pretty(&t).expect("JSON にできる");
-        std::fs::write(&path, text).map_err(|e| {
+        let written = std::fs::write(&path, text);
+        self.forget_templates();
+        written.map_err(|e| {
             Problem::new(
                 ProblemKind::File,
                 format!("{} に書けません: {e}", path.display()),
@@ -561,7 +569,9 @@ impl Reuse {
         if let Some(name) = id.strip_prefix(DELETE_TEMPLATE) {
             return Some((|| {
                 let p = self.template_path(name)?;
-                std::fs::remove_file(&p).map_err(|e| {
+                let removed = std::fs::remove_file(&p);
+                self.forget_templates();
+                removed.map_err(|e| {
                     Problem::new(
                         ProblemKind::File,
                         format!("{} を消せません: {e}", p.display()),

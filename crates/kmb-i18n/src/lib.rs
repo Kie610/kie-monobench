@@ -128,7 +128,8 @@ macro_rules! files {
 }
 
 pub const FILES: &[(Lang, &str, &str)] = files!(
-    "common", "settings", "frame", "menu", "toolbar", "action", "feature", "browser", "timeline"
+    "common", "settings", "frame", "menu", "toolbar", "action", "feature", "browser", "timeline",
+    "view", "review"
 );
 
 /// 全言語の文言。作るのは起動の時に 1 回(画面は窓の状態に持つ)。

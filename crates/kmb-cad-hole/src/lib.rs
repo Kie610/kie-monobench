@@ -586,6 +586,27 @@ impl Feature for Hole {
                 Payload::to_value(&info),
             );
         }
+        // ねじ穴は 3D のビューでねじ山の陰影を付ける(下穴の壁。穴の口から深さまで)
+        if self.tap == Tap::Tapped
+            && let Some((size, _)) = self.thread()?
+        {
+            let axis = k::scale(k::normalize(plane.normal()), -1.0);
+            let marks = centers
+                .iter()
+                .map(|(_, c)| kmb_interchange::ThreadMark {
+                    start: plane.to_world(*c),
+                    axis,
+                    length: depth,
+                    radius: size.tap_drill() / 2.0,
+                    pitch: size.pitch,
+                    internal: true,
+                })
+                .collect();
+            out.insert(
+                kmb_interchange::THREAD_MARKS_OUTPUT.into(),
+                Payload::to_value(&kmb_interchange::ThreadMarks { marks }),
+            );
+        }
         // 黙った失敗を防ぐ: 何も削れなければ誤りにする(点が形の外にある時など)
         if let Some(Value::Shape(body)) = out.get("body")
             && let (Ok(a), Ok(b)) = (ctx.kernel().volume(target), ctx.kernel().volume(*body))

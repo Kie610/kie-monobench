@@ -382,8 +382,9 @@ fn value_ui(
                     out_of_range(ws, s, data, &typed_expr(ws, f, &cur, t))
                         .map(|why| format!("{} は{why}なので入れられません", t.trim()))
                 };
+                let beside = if f.step.is_some() { STEP_WIDTH } else { 0.0 };
                 let (mut new, focused) =
-                    expr_field_reserving(ui, key, &cur, focus, hint, 0.0, &check);
+                    expr_field_reserving(ui, key, &cur, focus, hint, beside, &check);
                 if focus && focused {
                     ws.cur.focus_new.set(None);
                 }
@@ -399,6 +400,10 @@ fn value_ui(
                                 kmb_session::params::unit_mismatch(f.unit.as_ref(), q.dim).is_none()
                             })
                     });
+                }
+                // ▲▼ で 1 刻みずつ変えて、形の変わり方を見比べる
+                if let Some(v) = step_buttons(ui, f, &cur) {
+                    new = Some(v);
                 }
                 // パラメータ名の候補。押すと式の後ろに足す
                 let names: Vec<String> = ws
@@ -511,7 +516,14 @@ fn value_ui(
                     });
                 return;
             }
-            if let Some(v) = expr_field(ui, key, &cur) {
+            let typed = ui
+                .horizontal(|ui| {
+                    // 数の欄は ƒ を持たないので、ƒ の分に残した幅へ ▲▼ が収まる
+                    let typed = expr_field(ui, key, &cur);
+                    step_buttons(ui, f, &cur).or(typed)
+                })
+                .inner;
+            if let Some(v) = typed {
                 let v = v.trim();
                 if v.is_empty() && *optional {
                     f.set(data, None);
@@ -525,7 +537,7 @@ fn value_ui(
                 }
             }
         }
-        FieldKind::Text | FieldKind::File => {
+        FieldKind::Text | FieldKind::Template | FieldKind::File => {
             let cur = f.get(data).and_then(Json::as_str).unwrap_or("").to_string();
             ui.horizontal(|ui| {
                 if let Some(v) = expr_field(ui, key, &cur) {
@@ -1362,6 +1374,43 @@ fn typing_preview(
     }
     log::debug!("打っている途中の値 {text} で形を付いて来させる");
     Some(text)
+}
+
+/// ▲▼ の幅(欄の幅をこの分だけ狭める)。▲ と ▼ は 1 段の高さに上下に重ねる。
+const STEP_WIDTH: f32 = 18.0;
+
+/// 刻み([`kmb_core::Step`])のある欄の横の ▲▼。押したら新しい値を返す。式(パラメータの名前など)の
+/// 値は数に置き換えて壊さないよう、押せなくして理由を吹き出しに出す。
+fn step_buttons(ui: &mut egui::Ui, f: &Field, cur: &str) -> Option<String> {
+    let step = f.step.as_ref()?;
+    let mut out = None;
+    let h = ui.spacing().interact_size.y / 2.0;
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.spacing_mut().button_padding = egui::vec2(1.0, 0.0);
+        for (up, mark, what) in [(true, "▲", "1 つ増やす"), (false, "▼", "1 つ減らす")]
+        {
+            let next = step.next(cur, up);
+            let name = format!("{} {mark}", f.label);
+            let button = egui::Button::new(egui::RichText::new(mark).size(h * 0.7))
+                .small()
+                .min_size(egui::vec2(STEP_WIDTH - 2.0, h));
+            let r = ui.add_enabled(next.is_some(), button);
+            r.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, next.is_some(), &name)
+            });
+            let r = if cur.trim().parse::<f64>().is_err() && !cur.trim().is_empty() {
+                r.on_disabled_hover_text("式の値は ▲▼ で変えられません(数を打つと使えます)")
+            } else {
+                r.on_hover_text(what)
+            };
+            if r.clicked() {
+                log::info!("欄 {} を {mark} で {cur} から {:?} へ", f.key, next);
+                out = next;
+            }
+        }
+    });
+    out
 }
 
 /// 範囲の外のため受け付けなかった欄と理由を覚える名前(覚えるのは最後の 1 つだけ。どれかの欄を
