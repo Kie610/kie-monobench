@@ -15,6 +15,16 @@ use kmb_sketch::SketchPlane;
 use serde_json::json;
 use std::sync::Arc;
 
+#[test]
+fn expanded_thread_fasteners_include_large_metric_sizes() {
+    for (name, major, pitch) in [("M24", 24.0, 3.0), ("M30", 30.0, 3.5)] {
+        let size = kmb_asm::fastener::metric(name)
+            .unwrap_or_else(|| panic!("{name} が規格部品の表にある"));
+        assert_eq!((size.d, size.pitch), (major, pitch));
+        assert!(size.socket[0] > major && size.nut[0] > major);
+    }
+}
+
 struct Bench {
     doc: Document,
     reg: kmb_core::Registry,

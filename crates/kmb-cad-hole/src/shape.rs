@@ -403,6 +403,15 @@ mod tests {
     }
 
     #[test]
+    fn expanded_thread_holes_have_clearances_and_recesses() {
+        for name in ["M14", "M16", "M20", "M24", "M30"] {
+            let size = thread(name).unwrap_or_else(|| panic!("{name} が穴の表にある"));
+            assert!(size.clearance[0] > size.major);
+            assert!(size.counterbore.0 > size.clearance[2]);
+        }
+    }
+
+    #[test]
     fn the_thread_table_is_ordered_and_consistent() {
         for w in THREADS.windows(2) {
             assert!(w[0].major < w[1].major);

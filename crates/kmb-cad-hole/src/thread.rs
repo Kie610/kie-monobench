@@ -641,6 +641,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn expanded_thread_families_parse_and_keep_their_designations() {
+        for (name, major, tpi, canonical) in [
+            (" 1/4 - 20 unc ", 6.35, 20.0, "1/4-20 UNC"),
+            ("#10-32 unf", 4.826, 32.0, "#10-32 UNF"),
+            ("1-1/2-6", 38.1, 6.0, "1-1/2-6 UNC"),
+            ("g 1 / 8", 9.728, 28.0, "G1/8"),
+            ("Rp 1 1/4", 41.91, 11.0, "Rp1 1/4"),
+        ] {
+            let size = parse_size(name).unwrap_or_else(|| panic!("{name} が読める"));
+            assert!((size.major - major).abs() < 1e-9, "{name}");
+            assert!((size.pitch - 25.4 / tpi).abs() < 1e-9, "{name}");
+            assert_eq!(size.name(), canonical);
+            assert_eq!(parse_size(&size.name()), Some(size));
+        }
+        assert!(
+            parse_size("#10-24 UNF").is_none(),
+            "並目と細目を取り違えない"
+        );
+    }
+
+    #[test]
     fn names_parse_with_or_without_the_pitch() {
         let m6 = parse_size("M6").unwrap();
         assert_eq!((m6.major, m6.pitch, m6.coarse), (6.0, 1.0, true));
