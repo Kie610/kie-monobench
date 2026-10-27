@@ -116,7 +116,18 @@ fn an_inconsistent_sketch_shows_the_same_reason_as_command_outputs() {
             .describe(value)
             .is_some_and(|text| text == reason)
     }));
-    assert!(h.get_all_by_label(&reason).count() > 0);
+    assert!(
+        h.get_all_by_label(&reason)
+            .any(|node| node.rect().top() > 750.0),
+        "画面の下の帯にも同じ理由を出す"
+    );
+    sketch.constraints.pop();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    assert_eq!(h.get_all_by_label(&reason).count(), 0, "解けたら理由を消す");
 }
 
 #[test]
