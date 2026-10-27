@@ -204,7 +204,9 @@ fn a_body_material_gives_mass_and_undoes() {
 
 #[test]
 fn a_thinner_middle_on_a_long_top_edge_keeps_the_plate() {
-    // 板の体積が大きく失われる丸めは、理由つきで止める。計算が通った場合は板の体積を保つ。
+    // 不具合(2026-10-19 の写真撮りで見つけた): 60×40×8 の板の上の長い辺を、半径 1 mm・途中の
+    // 半径 0.5 = 0.5 mm で丸めると、「計算できた」のに板が辺に沿った細い棒(体積 27 mm³)になった。
+    // 始めの半径が 1.2 mm 以下で、途中が始めより小さい時に起きた
     if !smlib() {
         kmb_contract::skip!("truck は途中の半径を変える丸めを作れない");
     }
