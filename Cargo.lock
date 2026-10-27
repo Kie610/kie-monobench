@@ -3023,6 +3023,7 @@ name = "kmb-session"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-image",
