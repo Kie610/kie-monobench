@@ -7,6 +7,11 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+a_shaft_with_clearance_is_neither_overlap_nor_coincident = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_oversized_shaft_has_the_annular_overlap_volume = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_exact_shaft_reports_the_cylindrical_face_as_coincident = "truck の回(同じ円筒で接するブーリアン)"
+a_half_inserted_shaft_marks_only_the_inserted_length = "truck の回(同じ円筒で接するブーリアン)"
+circular_end_edges_do_not_make_a_waisted_side_cylindrical = "truck の回(ロフトに対応していない)"
 a_split_lid_rim_keeps_its_named_edge_when_the_plate_is_resized = "truck の回(平面での分割に対応していない)"
 frames_become_a_readable_av1_mp4 = "ffmpeg か ffprobe が無い所、ffmpeg が AV1 を絵に戻せない所(クラウドなど)"
 windows_h264_makes_a_readable_mp4 = "Media Foundation か ffprobe の無い Windows"

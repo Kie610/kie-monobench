@@ -68,7 +68,8 @@ fn cylinders(faces: &[FaceInfo], edges: &[EdgeInfo]) -> Vec<Cylinder> {
                 return None;
             }
             let area = TAU * x.radius * length;
-            if !face.area.is_finite() || (face.area - area).abs() > area * 1e-5 + PLANE_GAP {
+            // 面積は数値積分の近似値なので、半径の検査は網の点と法線でも行う。
+            if !face.area.is_finite() || (face.area - area).abs() > area * 1e-4 + PLANE_GAP {
                 return None;
             }
             Some(Cylinder {
@@ -107,18 +108,24 @@ pub(super) fn pairs(
     for x in a {
         for y in &b {
             let offset = sub(y.origin, x.origin);
+            let parallel = dot(x.axis, y.axis);
             if x.inside == y.inside
                 || (x.radius - y.radius).abs() > PLANE_GAP
-                || dot(x.axis, y.axis).abs() < 1.0 - 1e-9
+                || parallel.abs() < 1.0 - 1e-9
                 || norm(radial(offset, x.axis)) > PLANE_GAP
             {
                 continue;
             }
             let from = dot(offset, x.axis);
-            let to = from + dot(y.axis, x.axis) * y.length;
+            let to = from + parallel * y.length;
             let lo = from.min(to).max(0.0);
             let hi = from.max(to).min(x.length);
-            if hi - lo > PLANE_GAP {
+            // 僅かな傾きも長さに沿って広がるため、重なる両端で軸線の隔たりを確かめる。
+            let same_line = |t| {
+                let on_y = add(offset, scale(y.axis, (t - from) / parallel));
+                norm(radial(on_y, x.axis)) <= PLANE_GAP
+            };
+            if hi - lo > PLANE_GAP && same_line(lo) && same_line(hi) {
                 pairs.push(Pair {
                     a: x.clone(),
                     b: y.clone(),
@@ -228,4 +235,97 @@ pub(super) fn contact(pairs: &[Pair], a: &Mesh, b: &Mesh) -> (TableMark, f64) {
         area += TAU * pair.a.radius * (pair.hi - pair.lo);
     }
     (mark, area)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kmb_core::kernel::{ArcEdge, Seam, cross};
+
+    /// 面の候補判定だけに必要な、直線の軸と両端の円を返す。
+    struct Ends {
+        origin: P3,
+        axis: P3,
+        length: f64,
+    }
+
+    impl Kernel for Ends {
+        fn name(&self) -> &str {
+            "試験の円筒の辺"
+        }
+
+        fn arc_edges(&self, h: ShapeHandle) -> Result<Vec<EdgeInfo>, KernelError> {
+            let (origin, axis, length) = if h.0 == 0 {
+                ([0.0; 3], [0.0, 0.0, 1.0], 10.0)
+            } else {
+                (self.origin, self.axis, self.length)
+            };
+            let r = scale(normalize(cross(axis, [0.0, 1.0, 0.0])), 2.5);
+            Ok([(length, 1.0), (0.0, -1.0)]
+                .into_iter()
+                .map(|(z, sign)| {
+                    let center = add(origin, scale(axis, z));
+                    let point = add(center, r);
+                    EdgeInfo {
+                        faces: [format!("cap{z}"), "side".into()],
+                        a: point,
+                        b: point,
+                        convex: true,
+                        seam: Seam::Corner,
+                        arc: Some(ArcEdge {
+                            center,
+                            axis: scale(axis, sign),
+                            radius: 2.5,
+                            sweep: TAU * sign,
+                            inside: h.0 != 0,
+                        }),
+                        curve: vec![],
+                    }
+                })
+                .collect())
+        }
+    }
+
+    fn count(origin: P3, axis: P3, length: f64) -> usize {
+        let kernel = Ends {
+            origin,
+            axis,
+            length,
+        };
+        let face = |length| FaceInfo {
+            name: "side".into(),
+            planar: None,
+            area: TAU * 2.5 * length,
+        };
+        pairs(
+            &kernel,
+            ShapeHandle(0),
+            ShapeHandle(1),
+            &[face(10.0)],
+            &[face(length)],
+        )
+        .unwrap()
+        .len()
+    }
+
+    #[test]
+    fn nearly_parallel_axes_must_remain_coaxial_at_both_overlap_ends() {
+        assert_eq!(
+            count([0.0; 3], [0.0, 0.0, 1.0], 10.0),
+            1,
+            "同軸の候補は残る"
+        );
+        let (sin, cos) = 3e-5_f64.sin_cos();
+        assert!(cos >= 1.0 - 1e-9, "向きの許容差だけなら平行とみなす角度");
+        assert!(10.0 * sin > PLANE_GAP, "軸の端では同一線の許容差を超える");
+        let counts = [
+            count([0.0; 3], [sin, 0.0, cos], 10.0),
+            count([0.0, 0.0, 12.0], [sin, 0.0, -cos], 7.0),
+        ];
+        assert_eq!(
+            counts,
+            [0, 0],
+            "重なる範囲の終端か始端で軸線が離れる組は外す"
+        );
+    }
 }

@@ -343,6 +343,9 @@ impl Bench {
 
 #[test]
 fn a_shaft_with_clearance_is_neither_overlap_nor_coincident() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck は同軸の軸と穴のブーリアンで内部分類に失敗します");
+    }
     let b = Bench::fits(5.0, 5.05, -2.0, 12.0);
     for coincident in [false, true] {
         let (clashes, failed) = interferences_with(&b.cx(), coincident);
@@ -353,6 +356,9 @@ fn a_shaft_with_clearance_is_neither_overlap_nor_coincident() {
 
 #[test]
 fn an_oversized_shaft_has_the_annular_overlap_volume() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck は同軸の軸と穴のブーリアンで内部分類に失敗します");
+    }
     let b = Bench::fits(5.05, 5.0, -2.0, 12.0);
     let (clashes, failed) = interferences_with(&b.cx(), true);
     assert!(failed.is_empty(), "{failed:?}");
@@ -379,6 +385,21 @@ fn check_contact(from: f64, to: f64, length: f64) {
     let want = std::f64::consts::PI * 5.0 * length;
     assert!((c.area - want).abs() < 1e-5, "{} / {want}", c.area);
     assert!(!c.mark.tris.is_empty(), "一致する円筒を塗る");
+    let painted_area: f64 = c
+        .mark
+        .tris
+        .iter()
+        .map(|t| {
+            let [p, q, r] = t.map(|p| p.map(f64::from));
+            let n = kmb_core::kernel::cross(sub(q, p), sub(r, p));
+            // 表裏の二重化を除いた、塗る三角形の面積。
+            dot(n, n).sqrt() / 4.0
+        })
+        .sum();
+    assert!(
+        (painted_area / want - 1.0).abs() < 0.01,
+        "塗る網の面積 {painted_area} / {want}"
+    );
     let (lo, hi) = (from.max(0.0) as f32, to.min(10.0) as f32);
     for p in c.mark.tris.iter().flatten() {
         assert!(p[2] >= lo - 1e-4 && p[2] <= hi + 1e-4, "{p:?}, {lo}..{hi}");
@@ -387,16 +408,25 @@ fn check_contact(from: f64, to: f64, length: f64) {
 
 #[test]
 fn an_exact_shaft_reports_the_cylindrical_face_as_coincident() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck は同じ円筒で接するブーリアンに失敗します");
+    }
     check_contact(-2.0, 12.0, 10.0);
 }
 
 #[test]
 fn a_half_inserted_shaft_marks_only_the_inserted_length() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck は同じ円筒で接するブーリアンに失敗します");
+    }
     check_contact(5.0, 15.0, 5.0);
 }
 
 #[test]
 fn circular_end_edges_do_not_make_a_waisted_side_cylindrical() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck はロフトに対応していません");
+    }
     let mut b = Bench::new();
     b.add(
         BODY,
