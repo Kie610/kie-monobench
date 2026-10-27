@@ -144,6 +144,7 @@ impl Headless {
                     o["expr"] = json!(expr);
                     match status {
                         Some(ParamStatus::Ok { value }) => o["value"] = json!(value.to_string()),
+                        Some(ParamStatus::Text { value }) => o["value"] = json!(value),
                         Some(ParamStatus::Error { message }) => o["error"] = json!(message),
                         None => {}
                     }

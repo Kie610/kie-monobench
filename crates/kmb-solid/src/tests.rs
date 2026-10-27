@@ -169,7 +169,7 @@ fn revolve_and_circular_pattern() {
         REVOLVE,
         "輪",
         Revolve {
-            profile: s,
+            profile: Some(s),
             regions: Vec::new(),
             axis: Axis::SketchX,
             angle: "360 deg".into(),
@@ -179,6 +179,7 @@ fn revolve_and_circular_pattern() {
             angle2: None,
             extent: RevolveExtent::Angle,
             to_face: None,
+            ..Default::default()
         },
     );
     let mut doc = b.finish("回転");
@@ -1094,7 +1095,7 @@ fn revolve_auto_axis_uses_the_axis_the_profile_sits_on() {
         REVOLVE,
         "円柱",
         Revolve {
-            profile: s,
+            profile: Some(s),
             regions: Vec::new(),
             axis: Axis::Auto,
             angle: "360 deg".into(),
@@ -1104,6 +1105,7 @@ fn revolve_auto_axis_uses_the_axis_the_profile_sits_on() {
             angle2: None,
             extent: RevolveExtent::Angle,
             to_face: None,
+            ..Default::default()
         },
     );
     let mut doc = b.finish("自動の軸");
@@ -1178,7 +1180,7 @@ fn revolve_and_patterns_take_origin_axes_and_sketch_lines() {
         b: Some(kmb_core::PointId(c.0)),
     };
     let revolve = |axis: Axis| Revolve {
-        profile: s,
+        profile: Some(s),
         regions: Vec::new(),
         axis,
         angle: "360 deg".into(),
@@ -1188,6 +1190,7 @@ fn revolve_and_patterns_take_origin_axes_and_sketch_lines() {
         angle2: None,
         extent: RevolveExtent::Angle,
         to_face: None,
+        ..Default::default()
     };
     let id = b.feature(REVOLVE, "輪", revolve(Axis::OriginZ));
     let mut doc = b.finish("回転");

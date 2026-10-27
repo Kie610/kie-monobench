@@ -995,7 +995,7 @@ pub fn register(reg: &mut Registry) {
             ))
             .field(distance_type_field("distance_type", "距離の決め方"))
             .field(Field::expr("spacing", "距離").length().help("距離の決め方が「間隔」なら写し同士の間、「全体の幅」なら両端の写しの間"))
-            .field(Field::expr("count", "個数").unitless().help("元を含む数(3 なら元と写し 2 つ)。対称なら片側の数"))
+            .field(Field::expr("count", "個数").unitless().step(1.0, 1.0).help("元を含む数(3 なら元と写し 2 つ)。対称なら片側の数"))
             .field(symmetric_field("symmetric", "対称"))
             .field(
                 Field::choice(
@@ -1017,7 +1017,7 @@ pub fn register(reg: &mut Registry) {
             .field(distance_type_field("distance_type2", "距離の決め方 2"))
             .field(Field::expr("spacing2", "距離 2").length())
             .field(
-                Field::expr("count2", "個数 2").unitless()
+                Field::expr("count2", "個数 2").unitless().step(1.0, 1.0)
                     .help("方向 2 の、元を含む数(対称なら片側の数)。1 なら向きの 1 列だけ(2 以上で格子)"),
             )
             .field(symmetric_field("symmetric2", "対称 2"))
@@ -1096,6 +1096,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::expr("count", "個数")
                     .unitless()
+                    .step(1.0, 1.0)
                     .help("元を含む数(6 なら元と写し 5 つ)"),
             )
             .field(Field::expr("angle", "全体の角度").angle())

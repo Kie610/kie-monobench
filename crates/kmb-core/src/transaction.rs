@@ -1,7 +1,7 @@
 use crate::document::{
     Component, DocumentData, FeatureEntry, Group, NamedView, Param, ParamView, Properties,
 };
-use crate::{FeatureId, ParamId, ParamKey};
+use crate::{FeatureId, ParamId, ParamKey, ParamUnit};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -319,13 +319,17 @@ fn move_row_keys(
         .collect()
 }
 
-fn check_expr(expr: &str) -> Result<(), TxError> {
-    kmb_expr::parse(expr)
-        .map(|_| ())
-        .map_err(|e| TxError::BadExpr {
-            expr: expr.into(),
-            message: e.to_string(),
-        })
+/// パラメータの式を確かめる。文字のパラメータ([`ParamUnit::Text`])は差し込みの文字として読む。
+fn check_expr(expr: &str, unit: ParamUnit) -> Result<(), TxError> {
+    let checked = if unit == ParamUnit::Text {
+        kmb_expr::Template::parse(expr).map(|_| ())
+    } else {
+        kmb_expr::parse(expr).map(|_| ())
+    };
+    checked.map_err(|e| TxError::BadExpr {
+        expr: expr.into(),
+        message: e.to_string(),
+    })
 }
 
 fn check_name(data: &DocumentData, name: &str, except: Option<ParamId>) -> Result<(), TxError> {
@@ -530,7 +534,7 @@ fn apply_op(data: &mut DocumentData, op: Op) -> Result<Vec<Op>, TxError> {
         Op::AddParam { index, param } => {
             check_new_id(data, param.id.0)?;
             check_name(data, &param.name, None)?;
-            check_expr(&param.expr)?;
+            check_expr(&param.expr, param.unit)?;
             let idx = index.unwrap_or(data.params.len());
             if idx > data.params.len() {
                 return Err(TxError::IndexOutOfRange(idx));
@@ -549,13 +553,23 @@ fn apply_op(data: &mut DocumentData, op: Op) -> Result<Vec<Op>, TxError> {
         }
         Op::SetParamExpr { id, expr } => {
             let idx = param_index(data, id)?;
-            check_expr(&expr)?;
+            check_expr(&expr, data.params[idx].unit)?;
             let old = std::mem::replace(&mut data.params[idx].expr, expr);
             Ok(vec![Op::SetParamExpr { id, expr: old }])
         }
         Op::SetParamInfo { id, comment, unit } => {
             let idx = param_index(data, id)?;
             let p = &mut data.params[idx];
+            // 文字から数の単位に替える時は、今の値が数の式でなければ断る
+            if p.unit == ParamUnit::Text
+                && unit != ParamUnit::Text
+                && kmb_expr::parse(&p.expr).is_err()
+            {
+                return Err(TxError::BadExpr {
+                    expr: p.expr.clone(),
+                    message: "先に値を数の式に直してください".into(),
+                });
+            }
             let old = Op::SetParamInfo {
                 id,
                 comment: std::mem::replace(&mut p.comment, comment),

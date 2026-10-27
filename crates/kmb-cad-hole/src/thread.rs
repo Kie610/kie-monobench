@@ -291,6 +291,50 @@ pub fn cylinder_of(
     })
 }
 
+/// 3D のビューにねじ山の陰影を付ける印。ねじは開いた端(穴の口・ボスの先。出っ張りの円の辺)から
+/// `length`(省くと面の全長)だけ続く。両端とも開いていれば(貫通の穴)軸の向きの手前の端から。
+/// 両端の分からない面(円の辺が片側だけ)は印を出さない。
+pub fn mark_of(
+    kernel: &dyn kmb_core::Kernel,
+    body: ShapeHandle,
+    face: &str,
+    c: &Cylinder,
+    pitch: f64,
+    length: Option<f64>,
+) -> Option<kmb_interchange::ThreadMark> {
+    let ends: Vec<(f64, bool)> = kernel
+        .arc_edges(body)
+        .ok()?
+        .into_iter()
+        .filter(|e| e.faces[1] == face)
+        .filter_map(|e| Some((k::dot(k::sub(e.arc?.center, c.center), c.axis), e.convex)))
+        .collect();
+    let lo = ends.iter().map(|e| e.0).fold(f64::INFINITY, f64::min);
+    let hi = ends.iter().map(|e| e.0).fold(f64::NEG_INFINITY, f64::max);
+    let full = hi - lo;
+    if full <= 1e-9 || full.is_nan() {
+        return None;
+    }
+    let open = |t: f64| {
+        ends.iter()
+            .any(|&(u, convex)| convex && (u - t).abs() < 1e-6)
+    };
+    let from_hi = open(hi) && !open(lo);
+    let (t, axis) = if from_hi {
+        (hi, k::scale(c.axis, -1.0))
+    } else {
+        (lo, c.axis)
+    };
+    Some(kmb_interchange::ThreadMark {
+        start: k::add(c.center, k::scale(c.axis, t)),
+        axis,
+        length: length.unwrap_or(full).min(full),
+        radius: c.diameter / 2.0,
+        pitch,
+        internal: c.internal,
+    })
+}
+
 /// ねじの巻く向き。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -354,9 +398,11 @@ impl Feature for Thread {
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let body = body_of(ctx, self.target)?;
         let c = cylinder_of(ctx.kernel(), body, &self.face).map_err(EvalError::InvalidData)?;
-        let (_, mut warn) = resolve(self, &c).map_err(EvalError::InvalidData)?;
+        let (size, mut warn) = resolve(self, &c).map_err(EvalError::InvalidData)?;
+        let mut thread_length = None;
         if let Some(src) = &self.length {
             let l = length(ctx, src, "ねじの長さ")?;
+            thread_length = Some(l);
             if l <= 0.0 {
                 return Err(EvalError::InvalidData(
                     "ねじの長さは 0 より大きくしてください".into(),
@@ -398,6 +444,19 @@ impl Feature for Thread {
         ]
         .into();
         kmb_core::add_warnings(&mut out, warn);
+        if let Some(mark) = mark_of(
+            ctx.kernel(),
+            body,
+            &self.face,
+            &c,
+            size.pitch,
+            thread_length,
+        ) {
+            out.insert(
+                kmb_interchange::THREAD_MARKS_OUTPUT.into(),
+                kmb_core::Payload::to_value(&kmb_interchange::ThreadMarks { marks: vec![mark] }),
+            );
+        }
         Ok(out)
     }
 

@@ -1,9 +1,10 @@
 //! 後から直せるパターンのパネル。
 //! パターンの元か写しを選ぶと、数・角度・距離などの欄と、写しの抑制・解除のボタンを出す。
 
-use crate::view::{DimValues, Editor};
+use crate::view::Editor;
 use kmb_sketch::{
-    AngularSpacing, DistanceType, EntityId, PatternAxis, PatternDef, PatternId, Sketch, Solution,
+    AngularSpacing, DistanceType, EntityId, PatternDef, PatternExpressions, PatternId, Sketch,
+    Solution,
 };
 
 /// 選んだ要素が属するパターン(最初に見つかったもの)。
@@ -23,48 +24,76 @@ pub(crate) fn selected_pattern(editor: &Editor, sketch: &Sketch) -> Option<Patte
     })
 }
 
-/// 欄を直し終えた(引いている途中は反映しない。取り消しの段を 1 つにする)。
-fn done(r: &egui::Response) -> bool {
-    r.drag_stopped() || (r.changed() && !r.dragged())
+/// 寸法と同じ文字の欄。単位は数値だけを打った時に付け、式の参照はそのまま残す。
+fn expression(
+    ui: &mut egui::Ui,
+    label: &str,
+    text: &mut String,
+    unit: Option<&str>,
+) -> (bool, bool) {
+    let l = ui.label(label);
+    let id = ui.next_auto_id();
+    let completion = kmb_ui::complete::begin(ui, id);
+    let r = ui
+        .add(completion.filter(egui::TextEdit::singleline(text).id(id).desired_width(100.0)))
+        .labelled_by(l.id);
+    let completed = completion.end(ui, &r, text, &[]);
+    let editing = r.has_focus() || r.changed() || completed;
+    let commit = r.lost_focus() && ui.input(|i| !i.key_pressed(egui::Key::Escape));
+    if commit {
+        *text = match unit {
+            Some("length") => crate::view::typed_value(text),
+            Some(u) => kmb_ui::with_unit_of(text, &format!("0 {u}")),
+            None => text.trim().to_string(),
+        };
+    }
+    if let Some(unit) = unit {
+        ui.weak(if unit == "length" {
+            kmb_core::display_unit().name()
+        } else {
+            unit
+        });
+    }
+    (editing, commit)
 }
 
-/// パターンのパネル。直したスケッチを返す。欄を引いている間は文書を変えず、引いている途中の
-/// 値で作り直した見本を `editor.pattern_ghost` に置く(ビューが文書の代わりに描く)。
+/// パターンのパネル。入力中は文書を変えず、評価できた式の見本を出す。
 pub(crate) fn panel(
     ui: &mut egui::Ui,
     editor: &mut Editor,
     sketch: &Sketch,
     sol: &Solution,
-    values: Option<&DimValues>,
+    lookup: &dyn Fn(&str) -> Option<kmb_core::Quantity>,
 ) -> Option<Sketch> {
     let Some((id, pattern)) =
         selected_pattern(editor, sketch).and_then(|id| Some((id, sketch.pattern(id)?)))
     else {
         editor.pattern_ghost = None;
+        editor.pattern_input = None;
         return None;
     };
-    // 引いている途中は、前のコマまでに引いた値から続ける(欄はマウスの動いたコマでしか
-    // 引いた値を返さないので、文書の値から始めると止まったコマで元へ戻る)
-    let mut def = match &editor.pattern_ghost {
-        Some((d, ..)) => d.clone(),
-        None => pattern.def.clone(),
-    };
+    let mut def = pattern.def.clone();
+    let mut expressions = editor
+        .pattern_input
+        .as_ref()
+        .filter(|(p, _)| *p == id)
+        .map(|(_, e)| e.clone())
+        .or_else(|| pattern.expressions.clone())
+        .unwrap_or_else(|| PatternExpressions::from_def(&def));
     let mut changed = false;
-    // 欄を引いている途中
-    let mut dragging = false;
+    let mut editing = false;
     let mut remove: Option<bool> = None;
     let title = match &def {
         PatternDef::Circular(_) => "円形状パターン",
         PatternDef::Rectangular(_) => "矩形状パターン",
     };
     ui.strong(format!("{title}({id})"));
-    match &mut def {
-        PatternDef::Circular(c) => {
+    match (&mut def, &mut expressions) {
+        (PatternDef::Circular(c), PatternExpressions::Circular { count, angle }) => {
             ui.horizontal(|ui| {
-                let l = ui.label("数");
-                let r = ui.add(egui::DragValue::new(&mut c.count).range(1..=360));
-                dragging |= r.dragged();
-                changed |= done(&r.labelled_by(l.id));
+                let (active, commit) = expression(ui, "数", count, None);
+                editing |= active;
+                changed |= commit;
                 egui::ComboBox::from_id_salt("pattern_spacing")
                     .selected_text(match c.spacing {
                         AngularSpacing::Total => "全体",
@@ -82,68 +111,56 @@ pub(crate) fn panel(
                     });
             });
             ui.horizontal(|ui| {
-                let l = ui.label("角度");
-                let mut deg = c.angle.to_degrees();
-                let r = ui
-                    .add(
-                        egui::DragValue::new(&mut deg)
-                            .range(-360.0..=360.0)
-                            .speed(1.0)
-                            .suffix(" deg"),
-                    )
-                    .labelled_by(l.id);
-                dragging |= r.dragged();
-                if (done(&r) || r.dragged()) && deg.abs() > 1e-9 {
-                    c.angle = deg.to_radians();
-                    changed |= done(&r);
-                }
+                let (active, commit) = expression(ui, "角度", angle, Some("deg"));
+                editing |= active;
+                changed |= commit;
             });
         }
-        PatternDef::Rectangular(r) => {
-            for (k, d) in r.directions.iter_mut().enumerate() {
-                ui.horizontal_wrapped(|ui| {
+        (PatternDef::Rectangular(r), PatternExpressions::Rectangular { directions }) => {
+            for (k, (d, e)) in r.directions.iter_mut().zip(directions).enumerate() {
+                ui.push_id(k, |ui| {
                     ui.label(format!("方向 {}", k + 1));
-                    let l = ui.label("数");
-                    let r = ui.add(egui::DragValue::new(&mut d.count).range(1..=200));
-                    dragging |= r.dragged();
-                    changed |= done(&r.labelled_by(l.id));
-                    let l = ui.label("距離");
-                    let resp = ui
-                        .add(
-                            egui::DragValue::new(&mut d.distance)
-                                .speed(0.5)
-                                .suffix(" mm"),
-                        )
-                        .labelled_by(l.id);
-                    dragging |= resp.dragged();
-                    changed |= done(&resp);
-                    egui::ComboBox::from_id_salt(("pattern_dist", k))
-                        .selected_text(match d.distance_type {
-                            DistanceType::Spacing => "間隔",
-                            DistanceType::Extent => "範囲",
-                        })
-                        .show_ui(ui, |ui| {
-                            for (v, l) in [
-                                (DistanceType::Spacing, "間隔"),
-                                (DistanceType::Extent, "範囲"),
-                            ] {
-                                changed |=
-                                    ui.selectable_value(&mut d.distance_type, v, l).changed();
-                            }
+                    ui.horizontal(|ui| {
+                        let (active, commit) = expression(ui, "数", &mut e.count, None);
+                        editing |= active;
+                        changed |= commit;
+                    });
+                    ui.horizontal(|ui| {
+                        let (active, commit) =
+                            expression(ui, "距離", &mut e.distance, Some("length"));
+                        editing |= active;
+                        changed |= commit;
+                    });
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt(("pattern_dist", k))
+                            .selected_text(match d.distance_type {
+                                DistanceType::Spacing => "間隔",
+                                DistanceType::Extent => "範囲",
+                            })
+                            .show_ui(ui, |ui| {
+                                for (v, l) in [
+                                    (DistanceType::Spacing, "間隔"),
+                                    (DistanceType::Extent, "範囲"),
+                                ] {
+                                    changed |=
+                                        ui.selectable_value(&mut d.distance_type, v, l).changed();
+                                }
+                            });
+                        changed |= ui.checkbox(&mut d.symmetric, "対称").changed();
+                    });
+                    if let Some(a) = &mut e.angle {
+                        ui.horizontal(|ui| {
+                            let (active, commit) = expression(ui, "向き", a, Some("deg"));
+                            editing |= active;
+                            changed |= commit;
                         });
-                    changed |= ui.checkbox(&mut d.symmetric, "対称").changed();
-                    if let PatternAxis::Angle(a) = &mut d.axis {
-                        let mut deg = a.to_degrees();
-                        ui.label("向き");
-                        let resp = ui.add(egui::DragValue::new(&mut deg).speed(1.0).suffix(" deg"));
-                        dragging |= resp.dragged();
-                        if done(&resp) || resp.dragged() {
-                            *a = deg.to_radians();
-                            changed |= done(&resp);
-                        }
                     }
                 });
             }
+        }
+        _ => {
+            editor.dim_error = Some("パターンの式と種類が合いません".into());
+            return None;
         }
     }
     // 選んだ写しを抑制する(作らない)
@@ -194,7 +211,7 @@ pub(crate) fn panel(
     ui.separator();
     let mut s = sketch.clone();
     s.adopt_solution(sol);
-    ghost(editor, &s, id, &def, dragging && def != pattern.def, values);
+
     if let Some(keep) = remove {
         if s.remove_pattern(id, keep) {
             editor.selection.retain(|e| s.entity(*e).is_some());
@@ -202,47 +219,58 @@ pub(crate) fn panel(
         }
         return None;
     }
-    if !changed {
+    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        editor.pattern_input = None;
+        editor.pattern_ghost = None;
+        editor.dim_error = None;
         return None;
     }
-    if s.edit_pattern(id, def) {
-        editor
-            .selection
-            .retain(|e: &EntityId| s.entity(*e).is_some());
-        editor.dim_error = None;
-        Some(s)
-    } else {
-        editor.dim_error =
-            Some("この値ではパターンを作れません(数が 0、角度や距離が 0 など)".into());
-        None
-    }
-}
-
-/// 欄を引いている間の見本を作り直す(値が変わった時だけ解く)。引いていないか、値が元のままなら消す。
-fn ghost(
-    editor: &mut Editor,
-    s: &Sketch,
-    id: PatternId,
-    def: &PatternDef,
-    dragging: bool,
-    values: Option<&DimValues>,
-) {
-    if !dragging {
+    let dirty = def != pattern.def || pattern.expressions.as_ref() != Some(&expressions);
+    if !editing && !changed {
         editor.pattern_ghost = None;
-        return;
+        return None;
     }
-    if editor
-        .pattern_ghost
-        .as_ref()
-        .is_some_and(|(d, ..)| d == def)
-    {
-        return;
+    editor.pattern_input = Some((id, expressions.clone()));
+    let p = s.patterns.iter_mut().find(|p| p.id == id)?;
+    p.def = def;
+    // 見本にも欄の既定の単位を使う。入力中の文字は補完で書き換えない。
+    let mut normalized = expressions;
+    match &mut normalized {
+        PatternExpressions::Circular { angle, .. } => *angle = kmb_ui::with_unit_of(angle, "0 deg"),
+        PatternExpressions::Rectangular { directions } => {
+            for d in directions {
+                d.distance = crate::view::typed_value(&d.distance);
+                if let Some(a) = &mut d.angle {
+                    *a = kmb_ui::with_unit_of(a, "0 deg");
+                }
+            }
+        }
     }
-    let mut p = s.clone();
-    let empty = DimValues::default();
-    editor.pattern_ghost = p
-        .edit_pattern(id, def.clone())
-        .then(|| kmb_sketch::solve(&p, values.unwrap_or(&empty)).ok())
-        .flatten()
-        .map(|sol| (def.clone(), p, sol));
+    p.expressions = Some(normalized);
+    let evaluated = kmb_sketch::dimension_values(&s, lookup).and_then(|values| {
+        let s = s.evaluated_patterns(&values)?;
+        let sol = kmb_sketch::solve(&s, &values).map_err(|e| e.to_string())?;
+        Ok((s, sol))
+    });
+    match evaluated {
+        Ok((s, sol)) => {
+            editor.dim_error = None;
+            if changed && dirty {
+                editor.pattern_input = None;
+                editor.pattern_ghost = None;
+                editor
+                    .selection
+                    .retain(|e: &EntityId| s.entity(*e).is_some());
+                Some(s)
+            } else {
+                editor.pattern_ghost = dirty.then(|| (s.pattern(id).unwrap().def.clone(), s, sol));
+                None
+            }
+        }
+        Err(e) => {
+            editor.dim_error = Some(e);
+            editor.pattern_ghost = None;
+            None
+        }
+    }
 }

@@ -323,10 +323,85 @@ double outward_sign(const SmFace* face)
     return 1.0;
 }
 
+// 有理曲面の制御点が同じ平面にあれば、曲面全体もその平面に載る。
+// 点へ縮む端を持つ三角の曲面では、外形の箱による平面の判定だけでは見落とすことがある。
+bool planar_control_net(const SmSurface* surface, SmPoint3d* point)
+{
+    if (!surface->IsKindOf(SmBSplineSurface_TYPE))
+        return false;
+    const auto* spline = static_cast<const SmBSplineSurface*>(surface);
+    ULONG nu = spline->GetNumberControlPoints(SM_SP_U), nv = spline->GetNumberControlPoints(SM_SP_V);
+    // 境の列が点へ縮む曲面に限る。通常の輪郭どうしのロフトの判定は変えない。
+    const auto collapsed = [&](bool fixed_u, ULONG index) {
+        SmPoint3d anchor;
+        double weight = 0;
+        if (spline->GetControlPoint(SM_CP_NON_RATIONAL, fixed_u ? index : 0, fixed_u ? 0 : index, anchor, weight) != SM_SUCCESS)
+            return false;
+        const ULONG count = fixed_u ? nv : nu;
+        for (ULONG i = 1; i < count; ++i)
+        {
+            SmPoint3d p;
+            if (spline->GetControlPoint(SM_CP_NON_RATIONAL, fixed_u ? index : i, fixed_u ? i : index, p, weight) != SM_SUCCESS)
+                return false;
+            const SmVector3d d(p.x - anchor.x, p.y - anchor.y, p.z - anchor.z);
+            if (dot(d, d) > 1e-18)
+                return false;
+        }
+        return true;
+    };
+    if (nu < 2 || nv < 2 || !(collapsed(true, 0) || collapsed(true, nu - 1) || collapsed(false, 0) || collapsed(false, nv - 1)))
+        return false;
+    SmTArray<SmPoint3d> points;
+    SmTArray<double> weights;
+    if (spline->GetControlPointNet(nu, nv, points, weights) != SM_SUCCESS || points.GetSize() < 3)
+        return false;
+    const SmPoint3d origin = points[0];
+    const auto offset = [&](const SmPoint3d& p) { return SmVector3d(p.x - origin.x, p.y - origin.y, p.z - origin.z); };
+    SmVector3d along(0, 0, 0), normal(0, 0, 0);
+    double longest = 0;
+    for (ULONG i = 0; i < points.GetSize(); ++i)
+    {
+        const auto& p = points[i];
+        if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+            return false;
+        const SmVector3d d = offset(p);
+        if (dot(d, d) > longest)
+        {
+            longest = dot(d, d);
+            along = d;
+        }
+    }
+    for (ULONG i = 0; i < weights.GetSize(); ++i)
+        if (!std::isfinite(weights[i]) || weights[i] <= 0)
+            return false;
+    if (longest < 1e-18)
+        return false;
+    along = unit(along);
+    double widest = 0;
+    for (ULONG i = 0; i < points.GetSize(); ++i)
+    {
+        const SmVector3d n = cross(along, offset(points[i]));
+        if (dot(n, n) > widest)
+        {
+            widest = dot(n, n);
+            normal = n;
+        }
+    }
+    if (widest < 1e-18)
+        return false;
+    normal = unit(normal);
+    for (ULONG i = 0; i < points.GetSize(); ++i)
+        if (std::fabs(dot(offset(points[i]), normal)) > 1e-9)
+            return false;
+    if (point)
+        *point = origin;
+    return true;
+}
+
 bool planar_normal(const SmFace* face, SmVector3d& normal, SmPoint3d* point = nullptr)
 {
     const SmSurface* s = face->GetSurface();
-    if (!s || !s->IsPlanar(1e-9, point))
+    if (!s || (!s->IsPlanar(1e-9, point) && !planar_control_net(s, point)))
         return false;
     SmVector3d n;
     if (s->EvaluateNormal(face->GetUVDomain().GetMid(), TRUE, TRUE, n) != SM_SUCCESS)

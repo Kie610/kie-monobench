@@ -189,6 +189,9 @@ pub(crate) enum Placement {
 pub struct Pattern {
     pub id: PatternId,
     pub def: PatternDef,
+    /// 式が正。def の数値と copies は最後に編集した時の形。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expressions: Option<crate::PatternExpressions>,
     #[serde(default)]
     pub copies: Vec<PatternCopy>,
 }
@@ -244,7 +247,12 @@ impl Sketch {
     pub fn add_pattern(&mut self, def: PatternDef) -> Option<PatternId> {
         let copies = self.generate(&def)?;
         let id = PatternId(self.patterns.iter().map(|p| p.id.0).max().unwrap_or(0) + 1);
-        self.patterns.push(Pattern { id, def, copies });
+        self.patterns.push(Pattern {
+            id,
+            expressions: Some(crate::PatternExpressions::from_def(&def)),
+            def,
+            copies,
+        });
         self.add_constraint(ConstraintKind::Pattern { pattern: id });
         Some(id)
     }
@@ -341,7 +349,15 @@ impl Sketch {
         }
         let gone: Vec<EntityId> = old_ents.into_iter().collect();
         self.remove_entities(&gone);
-        self.patterns.insert(at, Pattern { id, def, copies });
+        self.patterns.insert(
+            at,
+            Pattern {
+                id,
+                expressions: Some(crate::PatternExpressions::from_def(&def)),
+                def,
+                copies,
+            },
+        );
         true
     }
 
@@ -481,6 +497,14 @@ impl Sketch {
 
     /// 定義どおりに写しを作る。作れない定義なら何もせず `None`。
     fn generate(&mut self, def: &PatternDef) -> Option<Vec<PatternCopy>> {
+        self.generate_missing(def, &BTreeSet::new())
+    }
+
+    pub(crate) fn generate_missing(
+        &mut self,
+        def: &PatternDef,
+        existing: &BTreeSet<[i32; 2]>,
+    ) -> Option<Vec<PatternCopy>> {
         let ids: Vec<EntityId> = def
             .entities()
             .iter()
@@ -494,6 +518,9 @@ impl Sketch {
         let from = self.copy_sources(&ids);
         let mut out = vec![];
         for (index, place) in places {
+            if existing.contains(&index) {
+                continue;
+            }
             let before = self.constraints.iter().map(|c| c.id.0).max().unwrap_or(0);
             let entities = match place {
                 Place::Shift(d) => self.copy_mapped(&ids, &|p| add(p, d), 0.0),
@@ -539,6 +566,9 @@ impl Sketch {
         let mut owned: BTreeSet<ConstraintId> = BTreeSet::new();
         let mut patterns = std::mem::take(&mut self.patterns);
         for p in &mut patterns {
+            if p.expressions.is_none() {
+                p.expressions = Some(crate::PatternExpressions::from_def(&p.def));
+            }
             let ids: Vec<EntityId> = p
                 .def
                 .entities()
@@ -608,7 +638,7 @@ impl Sketch {
                     }
                 }
                 PatternDef::Rectangular(r) => {
-                    for d in &mut r.directions {
+                    for (k, d) in r.directions.iter_mut().enumerate() {
                         if let PatternAxis::Line(l) = d.axis
                             && gone.contains(&l)
                         {
@@ -620,7 +650,13 @@ impl Sketch {
                                     .unwrap_or([1.0, 0.0]),
                                 _ => [1.0, 0.0],
                             };
-                            d.axis = PatternAxis::Angle(v[1].atan2(v[0]));
+                            let a = v[1].atan2(v[0]);
+                            d.axis = PatternAxis::Angle(a);
+                            if let Some(crate::PatternExpressions::Rectangular { directions }) =
+                                &mut p.expressions
+                            {
+                                directions[k].angle = Some(format!("{} deg", a.to_degrees()));
+                            }
                         }
                     }
                 }

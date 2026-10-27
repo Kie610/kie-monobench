@@ -129,7 +129,7 @@ impl Workspace {
             .into_iter()
             .filter_map(|r| match r {
                 InputRef::Output { feature, .. } => Some(feature),
-                InputRef::Param { .. } => None,
+                InputRef::Param { .. } | InputRef::Units => None,
             })
             .filter_map(|f| d.index_of(f))
             .max()

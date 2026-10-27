@@ -480,7 +480,75 @@ fn grid_center(cam: &Camera, a: usize, b: usize, half: f32, major: f32) -> (f32,
     (round(cam.target[a] + sa), round(cam.target[b] + sb), half)
 }
 
-/// 格子と軸の線分(空間の両端と色)を `line` へ渡す。CPU と GPU の描画で同じ線を使う。
+/// 格子の線の薄れ方: 薄れ始める所と消える所。`round` は格子の真ん中からの距離(半分の大きさに対する
+/// 割合)、`deep` は透視の時の視点からの距離(回す中心までの距離に対する割合)。細かい線は遠くで詰まって
+/// 縞に見えるので、太い線より手前で消す。透視で低く見ると、端が地平線の手前で横一線に切れて見えていた
+/// (10-27 v3)。平面の上の距離だけで薄めると、遠い所は画面の上で数画素に縮むので、視点からの距離でも
+/// 薄める。真上から見る平行投影では画面の角は 0.4 ほどなので変わらない。
+#[derive(Clone, Copy)]
+struct Fade {
+    round: (f32, f32),
+    deep: (f32, f32),
+}
+const GRID_FADE_MINOR: Fade = Fade {
+    round: (0.45, 0.8),
+    deep: (1.2, 3.0),
+};
+const GRID_FADE_MAJOR: Fade = Fade {
+    round: (0.55, 1.0),
+    deep: (1.5, 4.5),
+};
+/// XY 平面の格子を薄くし始める視線の高さと、消えきる高さ(視線の向きの Z。`grid_plane` が描かなくなる
+/// 0.08 で消えきる)
+const GRID_LOW: (f32, f32) = (0.08, 0.14);
+/// 1 本の線を分ける数(区間ごとに 1 つの濃さで引く。同じ濃さの続く区間はまとめる)
+const GRID_PIECES: usize = 24;
+
+/// `lo` から `hi` へ 0 から 1 へ滑らかに上がる値(`lo > hi` なら下がる)。
+fn smooth(lo: f32, hi: f32, x: f32) -> f32 {
+    let t = ((x - lo) / (hi - lo)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// 格子の真ん中から `v` 離れた 1 本の線(真ん中からの距離 `r1` の円の内側)を区間に分け、区間の
+/// 真ん中の濃さ `k`(線に沿った位置から 0〜1)を透明度にして `put` へ渡す(線に沿った位置の両端と色)。
+fn fade_line(
+    r1: f32,
+    v: f32,
+    c: Color32,
+    k: &dyn Fn(f32) -> f32,
+    put: &mut dyn FnMut(f32, f32, Color32),
+) {
+    if v.abs() >= r1 {
+        return;
+    }
+    let s1 = (r1 * r1 - v * v).sqrt();
+    let [r, g, b, _] = c.to_srgba_unmultiplied();
+    let at = |j: usize| -s1 + 2.0 * s1 * j as f32 / GRID_PIECES as f32;
+    // 同じ濃さの続く区間は 1 本にまとめる(始まりと濃さ)
+    let mut run: Option<(f32, u8)> = None;
+    for j in 0..=GRID_PIECES {
+        let alpha = if j < GRID_PIECES {
+            (255.0 * k((at(j) + at(j + 1)) * 0.5)).round() as u8
+        } else {
+            0
+        };
+        match run {
+            Some((_, a)) if a == alpha && j < GRID_PIECES => {}
+            _ => {
+                if let Some((from, a)) = run
+                    && a > 0
+                {
+                    put(from, at(j), Color32::from_rgba_unmultiplied(r, g, b, a));
+                }
+                run = Some((at(j), alpha));
+            }
+        }
+    }
+}
+
+/// 格子と軸の線分(空間の両端と色)を `line` へ渡す。CPU と GPU の描画で同じ線を使う。格子の線は
+/// 透明度を持つ(遠くで薄れる)。
 pub(crate) fn guide_segments(
     cam: &Camera,
     rect: Rect,
@@ -509,17 +577,49 @@ pub(crate) fn guide_segments(
             p[b] = vb;
             p
         };
-        for i in -n..=n {
-            let v = i as f32 * step;
-            let on_major = ((v / major).round() * major - v).abs() < step * 0.01;
-            let c = if on_major { major_c } else { minor_c };
-            let (x, y) = (ca + v, cb + v);
-            // 原点を通る線が X・Y の軸に重なる時は、軸の色の線だけ引く(Z の軸は短いので格子を残す)
-            if !(g.axes && b != 2 && x.abs() < step * 0.01) {
-                line(at(x, cb - half), at(x, cb + half), c);
-            }
-            if !(g.axes && a != 2 && y.abs() < step * 0.01) {
-                line(at(ca - half, y), at(ca + half, y), c);
+        // 平面を低く見るほど全体を薄くし、描かなくなる角度で消えきる(急に消えないように)
+        let (_, _, e) = cam.basis();
+        let low = if (a, b) == (0, 1) {
+            smooth(GRID_LOW.0, GRID_LOW.1, e[2].abs())
+        } else {
+            1.0
+        };
+        let eye = cam.eye_position(rect);
+        let dist = cam.distance(rect).unwrap_or(1.0);
+        // 平面の上の点(2 つの座標)の濃さ
+        let alpha = |fade: Fade, pa: f32, pb: f32| {
+            let r = ((pa - ca).powi(2) + (pb - cb).powi(2)).sqrt();
+            let deep = eye.map_or(1.0, |o| {
+                let p = at(pa, pb);
+                let d = (0..3).map(|i| (p[i] - o[i]).powi(2)).sum::<f32>().sqrt();
+                smooth(fade.deep.1 * dist, fade.deep.0 * dist, d)
+            });
+            low * smooth(fade.round.1 * half, fade.round.0 * half, r) * deep
+        };
+        if low > 0.0 {
+            for i in -n..=n {
+                let v = i as f32 * step;
+                let on_major = ((v / major).round() * major - v).abs() < step * 0.01;
+                let (c, fade) = if on_major {
+                    (major_c, GRID_FADE_MAJOR)
+                } else {
+                    (minor_c, GRID_FADE_MINOR)
+                };
+                let r1 = fade.round.1 * half;
+                let (x, y) = (ca + v, cb + v);
+                // 原点を通る線が X・Y の軸に重なる時は、軸の色の線だけ引く(Z の軸は短いので格子を残す)
+                if !(g.axes && b != 2 && x.abs() < step * 0.01) {
+                    let k = |s: f32| alpha(fade, x, cb + s);
+                    fade_line(r1, v, c, &k, &mut |s, t, c| {
+                        line(at(x, cb + s), at(x, cb + t), c)
+                    });
+                }
+                if !(g.axes && a != 2 && y.abs() < step * 0.01) {
+                    let k = |s: f32| alpha(fade, ca + s, y);
+                    fade_line(r1, v, c, &k, &mut |s, t, c| {
+                        line(at(ca + s, y), at(ca + t, y), c)
+                    });
+                }
             }
         }
     }
@@ -543,7 +643,7 @@ pub(super) struct Raster {
 }
 
 impl Raster {
-    /// 深度を見ずに線を引く(画素の位置)。
+    /// 深度を見ずに線を引く(画素の位置)。透明度のある色は下の色と混ぜる(同じ画素は 1 度だけ)。
     fn line(&mut self, a: Pos2, b: Pos2, c: Color32) {
         // 絵の枠で切ってから引く(格子の線は画面の外へ長く伸びる)
         let d = b - a;
@@ -572,10 +672,24 @@ impl Raster {
         }
         let (a, b) = (a + d * t0, a + d * t1);
         let n = ((b - a).length().ceil() as usize).clamp(1, 100_000);
+        let k = f32::from(c.a()) / 255.0;
+        let [r, g, bl, _] = c.to_srgba_unmultiplied();
+        let mut last = usize::MAX;
         for i in 0..=n {
             let p = a + (b - a) * (i as f32 / n as f32);
             if p.x >= 0.0 && p.y >= 0.0 && (p.x as usize) < self.w && (p.y as usize) < self.h {
-                self.color[p.y as usize * self.w + p.x as usize] = c;
+                let at = p.y as usize * self.w + p.x as usize;
+                if at == last {
+                    continue;
+                }
+                last = at;
+                self.color[at] = if c.a() == 255 {
+                    c
+                } else {
+                    let d = self.color[at];
+                    let f = |x: u8, y: u8| (y as f32 + (x as f32 - y as f32) * k).round() as u8;
+                    Color32::from_rgb(f(r, d.r()), f(g, d.g()), f(bl, d.b()))
+                };
             }
         }
     }

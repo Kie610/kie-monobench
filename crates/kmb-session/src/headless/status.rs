@@ -115,6 +115,9 @@ impl Headless {
                     Some(ParamStatus::Ok { value }) => {
                         json!({"name": p.name, "expr": p.expr, "value": units.show(*value)})
                     }
+                    Some(ParamStatus::Text { value }) => {
+                        json!({"name": p.name, "expr": p.expr, "value": value, "unit": "text"})
+                    }
                     Some(ParamStatus::Error { message }) => {
                         json!({"name": p.name, "expr": p.expr, "error": message})
                     }
@@ -185,6 +188,7 @@ impl Headless {
                     let mut o = json!({"name": p.name, "expr": p.expr, "feature": p.feature.0, "label": p.label});
                     match &p.status {
                         ParamStatus::Ok { value } => o["value"] = json!(units.show(*value)),
+                        ParamStatus::Text { value } => o["value"] = json!(value),
                         ParamStatus::Error { message } => o["error"] = json!(message),
                     }
                     o
@@ -201,6 +205,7 @@ impl Headless {
                     let mut o = json!({"feature": v.feature.0, "key": v.key, "label": v.label, "expr": v.expr});
                     match &v.status {
                         ParamStatus::Ok { value } => o["value"] = json!(units.show(*value)),
+                        ParamStatus::Text { value } => o["value"] = json!(value),
                         ParamStatus::Error { message } => o["error"] = json!(message),
                     }
                     o
@@ -265,6 +270,7 @@ impl Headless {
         for p in &self.report.params {
             match &p.status {
                 ParamStatus::Ok { value } => s += &format!("  {} = {value}\n", p.name),
+                ParamStatus::Text { value } => s += &format!("  {} = 「{value}」\n", p.name),
                 ParamStatus::Error { message } => {
                     s += &format!("  {} : 誤り({message})\n", p.name);
                 }
@@ -279,6 +285,9 @@ impl Headless {
                             "  {} = {}({} {})= {value}\n",
                             p.name, p.expr, p.feature, p.label
                         )
+                    }
+                    ParamStatus::Text { value } => {
+                        s += &format!("  {} = 「{value}」\n", p.name);
                     }
                     ParamStatus::Error { message } => {
                         s += &format!("  {} : 誤り({message})\n", p.name);
