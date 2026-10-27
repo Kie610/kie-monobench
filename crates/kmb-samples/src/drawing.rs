@@ -43,7 +43,7 @@ fn attach(mut doc: Document) -> Document {
                 parent: "front".into(),
                 side: Side::Right,
             },
-            [80., 0.],
+            [110., 0.],
         ),
         view(
             "section",
