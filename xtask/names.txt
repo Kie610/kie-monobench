@@ -67,6 +67,7 @@ cad.hole_on_face	kmb-cad-hole
 cad.hole_to_face	kmb-cad-hole
 cad.import_step	kmb-cad-import-step
 cad.loft	kmb-cad-sweep
+cad.loft_point	kmb-cad-sweep
 cad.measure	kmb-cad
 cad.mirror_on_face	kmb-cad-pattern
 cad.mirror_plane	kmb-cad-pattern

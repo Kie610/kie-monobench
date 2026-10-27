@@ -2514,6 +2514,7 @@ version = "0.1.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
+ "kmb-interchange",
  "kmb-workspace-hack",
  "serde",
  "serde_json",
