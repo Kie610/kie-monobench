@@ -33,6 +33,9 @@ mod names;
 mod offset;
 mod origin;
 mod pattern;
+mod pattern_expr;
+#[cfg(test)]
+mod pattern_expr_tests;
 mod profile;
 mod reference;
 mod section;
@@ -76,6 +79,7 @@ pub use pattern::{
     AngularSpacing, CircularPattern, DistanceType, Pattern, PatternAxis, PatternCenter,
     PatternCopy, PatternDef, PatternDirection, PatternId, RectangularPattern,
 };
+pub use pattern_expr::{DirectionExpressions, PatternExpressions};
 pub use profile::{curves_of, entity_segments, faces_of, open_ends_of, profile_of};
 pub use reference::{
     ITEMS_TYPE, ItemShape, RefItem, RefShape, SketchItem, SketchItems, body_edge_refs, body_refs,
@@ -230,7 +234,12 @@ impl Feature for Sketch {
             .iter()
             .filter(|c| !c.reference)
             .filter_map(|c| c.kind.value());
-        for v in offset.into_iter().chain(values) {
+        for v in offset.into_iter().chain(values).chain(
+            self.patterns
+                .iter()
+                .filter_map(|p| p.expressions.as_ref())
+                .flat_map(|e| e.fields().into_iter().map(|f| f.expr)),
+        ) {
             for i in expr_inputs(v)? {
                 // 同じスケッチの寸法の名前は、スケッチの中で解く
                 let own = matches!(&i, InputRef::Param { name } if self.is_own_name(name));
@@ -314,6 +323,9 @@ impl Feature for Sketch {
                 ));
             }
         }
+        let sketch = sketch
+            .evaluated_patterns(&values)
+            .map_err(EvalError::InvalidData)?;
         let sketch = &sketch;
         let solution = solve(sketch, &values).map_err(|e| EvalError::InvalidData(e.to_string()))?;
         let (profile, _) = profile_of(&default_profile_sketch(sketch), &solution, plane);
@@ -412,11 +424,27 @@ pub fn dimension_values(
     sketch: &Sketch,
     lookup: &dyn Fn(&str) -> Option<kmb_core::Quantity>,
 ) -> Result<HashMap<ConstraintId, f64>, String> {
-    let dims = sketch.dim_exprs();
+    let dims = sketch.dim_exprs()?;
     let qs = names::eval_dims(&dims, lookup)?;
     let mut values = HashMap::new();
     for d in &dims {
-        let v = names::checked(d.id, d.name, d.expr, qs[&d.id], d.angle, false)?;
+        let q = qs[&d.id];
+        let v = if let Some(max) = d.count_max {
+            if !q.dim.is_none()
+                || !q.value.is_finite()
+                || q.value.fract() != 0.0
+                || q.value < 1.0
+                || q.value > max as f64
+            {
+                return Err(format!(
+                    "パターンの数 `{}` は単位なしの 1〜{max} の整数にしてください",
+                    d.expr
+                ));
+            }
+            q.value
+        } else {
+            names::checked(d.id, d.name, d.expr, q, d.angle, d.signed)?
+        };
         values.insert(d.id, v);
     }
     Ok(values)
