@@ -205,6 +205,7 @@ fn shell_stops_with_a_reason_where_the_inner_faces_would_overlap() {
                     type_id: SHELL.into(),
                     name: "シェル".into(),
                     suppressed: false,
+                    pin_bodies: false,
                     data: serde_json::to_value(shell(
                         vec![Ref::Face {
                             feature: body,
@@ -310,6 +311,7 @@ fn a_sealed_void_survives_a_cut_beside_it() {
                         type_id: type_id.into(),
                         name: name.into(),
                         suppressed: false,
+                        pin_bodies: false,
                         data,
                     },
                 }],
@@ -381,6 +383,7 @@ fn insert(doc: &mut kmb_core::Document, type_id: &str, data: serde_json::Value) 
                 type_id: type_id.into(),
                 name: type_id.into(),
                 suppressed: false,
+                pin_bodies: false,
                 data,
             },
         }],
@@ -447,13 +450,20 @@ fn the_tangent_chain_opens_the_faces_joined_smoothly() {
     let full = 20.0 * 20.0 * 10.0 - (4.0 * 4.0 - std::f64::consts::PI * 4.0) * 10.0;
     assert!(chained > 0.0 && chained < full * 0.6, "{chained} / {full}");
 
-    // 全部の面を選ぶと、本体が残らないことを理由に断る
+    // 全部の面を選ぶと、本体が残らないことを理由に断る(殻は丸めの後の形を読むので、その面の全部)
+    let report = doc.recompute(&reg, &*k);
+    let FeatureStatus::Ok { outputs, .. } = report.feature(fillet).unwrap() else {
+        panic!()
+    };
+    let kmb_core::Value::Shape(rounded) = &outputs["body"] else {
+        panic!()
+    };
     let all: Vec<Ref> = k
-        .faces(*h)
+        .faces(*rounded)
         .unwrap()
         .into_iter()
         .map(|f| Ref::Face {
-            feature: block,
+            feature: fillet,
             face: f.name,
         })
         .collect();

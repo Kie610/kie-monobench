@@ -18,6 +18,8 @@ pub enum Edit {
     },
     /// 機能を抑制する・抑制を外す(文字を線に分解した後の元の文字など)
     SetSuppressed { id: FeatureId, suppressed: bool },
+    /// 読むボディをデータの番号の形のまま読むかを変える([`crate::FeatureEntry::pin_bodies`])
+    SetPinBodies { id: FeatureId, pin: bool },
     /// パラメータの式を変える(構成表の行を当てるなど)
     SetParamExpr { id: crate::ParamId, expr: String },
     /// 部品の木を丸ごと置き換える(部品を作る・ボディを移すなど)。番号が 0 の部品には、適用する側が

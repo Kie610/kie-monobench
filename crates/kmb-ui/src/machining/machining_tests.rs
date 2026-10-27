@@ -669,6 +669,7 @@ fn the_rest_tool_reads_from_the_previous_tool_to_the_new_one() {
         name: "ポケットの残り".into(),
         data: serde_json::json!({ "tool": 5, "rest_tool": 2 }),
         suppressed: false,
+        pin_bodies: false,
     };
     assert_eq!(crate::browser_ui::tool_meta(&f), "T2→T5");
     // 前の工具を直径で打った時は、その直径から

@@ -11,7 +11,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 /// 版 4(2026-10-23): モジュールごとの区画(`sections`)を足し、モーション スタディ(`motion_studies`)と
 /// 接触セット(`contacts`)を区画 `asm.motion`・`asm.contacts` へ移した。
 /// 版 5(2026-10-24): 構成表・材料・外観・アニメーションの段を、それぞれのモジュールの区画へ移した。
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// 文書のファイルの拡張子(点を付けない)。保存・開く・リンク・一覧はこれを使い、字で書かない
 /// (点検: 文書の拡張子)。製品名(kieMonoBench)から `kmb`。中身は今までどおり JSON。
@@ -136,6 +136,10 @@ pub struct FeatureEntry {
     pub data: serde_json::Value,
     #[serde(default)]
     pub suppressed: bool,
+    /// 真なら、読むボディをデータの機能の番号の形のまま読む(保存の形の版 5 までの読み方)。
+    /// 偽(新しく足す機能)なら、その手前でのそのボディの最新の形を読む([`crate::BodyTable`])
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pin_bodies: bool,
 }
 
 /// タイムラインのグループ。`first` から `last` までの続いた機能をまとめる。
@@ -731,6 +735,7 @@ impl Document {
                             name,
                             data,
                             suppressed: false,
+                            pin_bodies: false,
                         },
                     }]
                 }
@@ -738,6 +743,7 @@ impl Document {
                 crate::Edit::SetSuppressed { id, suppressed } => {
                     vec![Op::SetSuppressed { id, suppressed }]
                 }
+                crate::Edit::SetPinBodies { id, pin } => vec![Op::SetPinBodies { id, pin }],
                 crate::Edit::SetParamExpr { id, expr } => vec![Op::SetParamExpr { id, expr }],
                 crate::Edit::SetComponents {
                     components: mut list,
@@ -1132,6 +1138,50 @@ impl Document {
         true
     }
 
+    /// 読むボディを固定する印([`FeatureEntry::pin_bodies`])のうち、要らない物(今の読み方でも同じ形を
+    /// 読む機能の物)を外す。結果を変えないので、取り消しの記録にしない(古い版の文書を開いた直後に
+    /// 使う。保存すると印が消える)。種類を組み立てられない機能の印は残す。外した数を返す。
+    pub fn release_pins(&mut self, registry: &Registry) -> usize {
+        let table = crate::BodyTable::build(&self.data, registry);
+        let mut n = 0;
+        for f in &mut self.data.features {
+            if f.pin_bodies
+                && !table.stale().contains_key(&f.id)
+                && matches!(registry.instantiate(&f.type_id, &f.data), Some(Ok(_)))
+            {
+                f.pin_bodies = false;
+                n += 1;
+            }
+        }
+        if n > 0 {
+            log::info!("前の版の読み方の印を外した: {n} 個(読む形は変わらない)");
+        }
+        n
+    }
+
+    /// 前の版のアプリが付けた伸びた面の名前(同じ面を 2 回以上割った `a:end#1#0` など)を指す参照を、
+    /// 再計算の結果 `report` の表([`RecomputeReport::face_aliases`])で今の名前(`a:end~f12#0`)に
+    /// 書き換える。書き換えるのは記述子が宣言する選ぶ欄と付け替えの鍵だけで、1 つに決まらない名前は
+    /// 書き換えない(参照は切れたまま止まる)。結果を変えないので、取り消しの記録にしない(古い版の文書を
+    /// 開いた直後に使う)。書き換えた名前の数を返す。書き換えたら再計算し直す。
+    pub fn rename_old_faces(&mut self, registry: &Registry, report: &RecomputeReport) -> usize {
+        if report.face_aliases.is_empty() {
+            return 0;
+        }
+        let current = report.face_aliases.current();
+        let rename = |name: &str| crate::face_names::rename_old(name, &current);
+        let mut n = 0;
+        for f in &mut self.data.features {
+            if let Some(desc) = registry.descriptor(&f.type_id) {
+                n += desc.rename_faces(&mut f.data, &rename);
+            }
+        }
+        if n > 0 {
+            log::info!("前の版の面の名前を今の名前に書き換えた: {n} 個(読む形は変わらない)");
+        }
+        n
+    }
+
     /// 変わった入力の下流だけを評価し直す。入力が同じ機能はキャッシュを使う。
     /// 先に寸法の名前をそろえる([`Document::settle_names`])。
     pub fn recompute(&mut self, registry: &Registry, kernel: &dyn Kernel) -> RecomputeReport {
@@ -1292,7 +1342,18 @@ fn resolve_new(v: &mut serde_json::Value, added: &[FeatureId], self_id: FeatureI
 /// 鍵はモジュールが名乗る。kmb-interchange の `motion`・`contact`)。
 /// 4 → 5: 上の階の構成表・材料・外観・アニメーションの段を、モジュールの区画へ移す
 /// ([`migrate_4`])。
+/// 5 → 6: 全部の機能に、読むボディをデータの番号の形のまま読む印(`pin_bodies`)を付ける
+/// (開いた形を前と同じにする。印の要らない機能は開いた後に [`Document::release_pins`] が外す)。
 fn migrate(from: u32, raw: &mut serde_json::Value) {
+    if from == 5
+        && let Some(list) = raw
+            .get_mut("features")
+            .and_then(serde_json::Value::as_array_mut)
+    {
+        for f in list.iter_mut().filter_map(serde_json::Value::as_object_mut) {
+            f.insert("pin_bodies".into(), serde_json::Value::Bool(true));
+        }
+    }
     if from == 4 {
         migrate_4(raw);
     }
