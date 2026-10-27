@@ -1,0 +1,23 @@
+# English と日本語の切り替えが、押し出しの編集パネルの欄にすぐ反映される。
+#! sample part
+
+dclick "button:板"
+expect "距離"
+expect "プロファイル"
+shot 日本語の編集パネル
+click "設定"
+select "表示の言語" "English"
+click "Close window"
+expect "Distance"
+expect "Profile"
+expect "Start"
+expect "距離" missing
+shot 英語の編集パネル
+click "Preferences"
+select "Display language" "日本語"
+click "Close window"
+expect "距離"
+expect "プロファイル"
+expect "開始"
+expect "Distance" missing
+shot 日本語へ戻した編集パネル

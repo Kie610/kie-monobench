@@ -123,3 +123,20 @@ fn os_locale_and_setting_values() {
         assert_eq!(Choice::parse(ch.code()), ch);
     }
 }
+
+#[test]
+fn field_ids_use_the_feature_kind_and_the_full_field_path() {
+    assert_eq!(field_id("solid.extrude@1", "start_offset"), "field-solid-extrude-start-offset");
+    assert_eq!(field_id("solid.edge@2", "edges.radius"), "field-solid-edge-edges-radius");
+    assert_ne!(field_id("solid.edge@1", "radius"), field_id("solid.edge@1", "edges.radius"));
+}
+
+#[test]
+fn untranslated_field_languages_use_english() {
+    let c = Catalog::with_os(Lang::Ja);
+    let id = "field-solid-extrude-distance";
+    assert_eq!(c.text(Lang::Ja, id), "距離");
+    for lang in [Lang::En, Lang::ZhHans, Lang::ZhHant, Lang::Ko] {
+        assert_eq!(c.text(lang, id), "Distance");
+    }
+}
