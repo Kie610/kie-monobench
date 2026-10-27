@@ -258,6 +258,7 @@ fn a_thinner_middle_on_a_long_top_edge_keeps_the_plate() {
                     name: "丸め".into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))

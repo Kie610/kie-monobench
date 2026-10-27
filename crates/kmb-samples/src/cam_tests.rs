@@ -110,6 +110,7 @@ fn a_part_read_from_step_is_machined_without_gouging() {
                     name: name.into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             });
             id
@@ -471,6 +472,7 @@ fn pin_holes_land_on_the_same_spots_when_flipped() {
                         name: "ピン穴".into(),
                         data: json(&pins),
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 }],
             ))
@@ -594,6 +596,7 @@ pub(crate) fn insert_op(
                     name: name.into(),
                     data,
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
@@ -668,6 +671,7 @@ pub(crate) fn replace_with_adaptive(
                         name: name.into(),
                         data: json(&adaptive),
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 },
             ],
@@ -871,6 +875,7 @@ fn a_design_feature_added_after_the_setup_is_flagged_on_the_setup() {
                     name: "後から足した丸め".into(),
                     data: serde_json::to_value(&fillet).unwrap(),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))

@@ -26,6 +26,7 @@ fn doc() -> Doc {
         name: name.into(),
         data,
         suppressed: false,
+        pin_bodies: false,
     };
     let face = json!({"setup": 3, "tools": 2, "tool": 1, "leave": "0.2 mm", "rpm": "9000"});
     let contour = json!({
