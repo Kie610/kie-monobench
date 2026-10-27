@@ -621,14 +621,11 @@ fn write_keycast_screens() {
         ("light", kmb_ui::layout::Brightness::Light),
     ] {
         for (width, text_scale) in [(1280.0, 1.0), (1920.0, 1.0), (1920.0, 2.5)] {
-            let device = kmb_ui_mouse3d::Mouse3d::fake();
-            device.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
             let mut ws = Workspace::new(
                 kmb_samples::reference_document(),
                 None,
                 kmb_bundle::modules(),
-            )
-            .with_mouse3d(device);
+            );
             ws.layout_mut().brightness = brightness;
             ws.layout_mut().appearance.text_scale = text_scale;
             let mut screen = Screen::sized(ws, Some([width, 1000.0]));
@@ -669,6 +666,14 @@ expect "操作の表示: Ctrl+Z 取り消す" exists
             screen.h.step();
             screen.h.hover_at(pos + egui::vec2(10.0, 0.0));
             screen.h.step();
+            // 偽機器の軸は実時間で戻るので、写真を描く直前に報告を渡してつなぐ。
+            let device = kmb_ui_mouse3d::Mouse3d::fake();
+            device.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
+            let ws = std::mem::replace(
+                screen.h.state_mut(),
+                Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules()),
+            );
+            *screen.h.state_mut() = ws.with_mouse3d(device);
             screen.write(&dir, &format!("{stem}-after"));
             screen.h.drop_at(pos + egui::vec2(10.0, 0.0));
         }

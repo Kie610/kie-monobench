@@ -97,6 +97,7 @@ pub(crate) enum Row {
 #[derive(Clone)]
 struct Entry {
     key: Option<Key>,
+    modifiers_only: bool,
     mods: Modifiers,
     chord: String,
     name: Option<String>,
@@ -110,6 +111,7 @@ pub(crate) struct Keycast {
     settings: KeycastSettings,
     entries: Vec<Entry>,
     modifiers: String,
+    modifiers_used: bool,
     mouse: [bool; 3],
     wheel: (i8, f64),
     drag: bool,
@@ -135,8 +137,8 @@ fn modifiers(m: Modifiers) -> String {
     parts.join("+")
 }
 
-fn allowed(key: Key, mods: Modifiers, typing: bool) -> bool {
-    if matches!(
+fn modifier_key(key: Key) -> bool {
+    matches!(
         key,
         Key::ShiftLeft
             | Key::ShiftRight
@@ -146,7 +148,11 @@ fn allowed(key: Key, mods: Modifiers, typing: bool) -> bool {
             | Key::AltRight
             | Key::SuperLeft
             | Key::SuperRight
-    ) {
+    )
+}
+
+fn allowed(key: Key, mods: Modifiers, typing: bool) -> bool {
+    if modifier_key(key) {
         return false;
     }
     !typing
@@ -183,7 +189,36 @@ pub(crate) fn command_name(ctx: &egui::Context, text: String, key: bool) {
     });
 }
 
+/// 固定名の項目を画面で押した時だけ、その項目と同じ名前を渡す。
+pub(crate) fn command_response(response: egui::Response, name: String) -> egui::Response {
+    if response.clicked() {
+        command_name(&response.ctx, name, false);
+    }
+    response
+}
+
 impl Keycast {
+    fn change_modifiers(&mut self, next: Modifiers, now: f64) {
+        let next = modifiers(next);
+        if self.modifiers == next {
+            return;
+        }
+        if !self.modifiers.is_empty() && !self.modifiers_used {
+            self.entries.push(Entry {
+                key: None,
+                modifiers_only: true,
+                mods: Modifiers::NONE,
+                chord: self.modifiers.clone(),
+                name: None,
+                count: 1,
+                down: false,
+                released: now,
+            });
+        }
+        self.modifiers = next;
+        self.modifiers_used = false;
+    }
+
     pub(crate) fn take_input(
         &mut self,
         input: &egui::InputState,
@@ -209,26 +244,35 @@ impl Keycast {
             }
             e.down = down;
         }
-        self.modifiers = if s.keys && input.focused {
-            modifiers(input.modifiers)
-        } else {
-            String::new()
-        };
         if !s.keys {
-            self.entries.retain(|e| e.key.is_none());
+            self.modifiers.clear();
+            self.modifiers_used = false;
+            self.entries
+                .retain(|e| e.key.is_none() && !e.modifiers_only);
         }
         for event in &input.events {
             match event {
+                egui::Event::ModifiersChanged(mods) if s.keys && input.focused => {
+                    self.change_modifiers(*mods, now);
+                }
+                egui::Event::Key { key, modifiers, .. }
+                    if s.keys && input.focused && modifier_key(*key) =>
+                {
+                    self.change_modifiers(*modifiers, now);
+                }
                 egui::Event::Key {
                     key,
                     pressed: true,
                     modifiers,
                     ..
                 } if s.keys && allowed(*key, *modifiers, typing) => {
+                    self.change_modifiers(*modifiers, now);
+                    self.modifiers_used = true;
                     let chord = keys::chord_name((*modifiers, *key));
                     self.frame_key = Some(chord.clone());
                     self.entries.push(Entry {
                         key: Some(*key),
+                        modifiers_only: false,
                         mods: *modifiers,
                         chord,
                         name: None,
@@ -246,6 +290,19 @@ impl Keycast {
                     self.wheel = (if delta.y > 0.0 { 1 } else { -1 }, now + 0.5);
                 }
                 _ => {}
+            }
+        }
+        if s.keys {
+            self.change_modifiers(
+                if input.focused {
+                    input.modifiers
+                } else {
+                    Modifiers::NONE
+                },
+                now,
+            );
+            if !self.entries.iter().any(|e| e.down && e.key.is_some()) {
+                self.modifiers_used = false;
             }
         }
         if self.entries.len() > 3 {
@@ -313,6 +370,7 @@ impl Keycast {
             } else if self.frame_click && self.settings.mouse {
                 self.entries.push(Entry {
                     key: None,
+                    modifiers_only: false,
                     mods: Modifiers::NONE,
                     chord: String::new(),
                     name: Some(name.text),
@@ -384,7 +442,7 @@ impl Keycast {
             if !e.down && remaining <= 0.0 {
                 continue;
             }
-            if e.key.is_some() && s.keys {
+            if (e.key.is_some() || e.modifiers_only) && s.keys {
                 rows.push(Row::Keys {
                     chord: e.chord.clone(),
                     name: if s.names { e.name.clone() } else { None },
@@ -789,6 +847,13 @@ impl crate::Workspace {
         }
         self.win.keycast.settings = s.clone();
         self.win.keycast.mouse3d_visible &= self.win.layout.mouse3d.enabled;
+        // 欄を描く途中で入力先が移ったコマも、最初の文字を描く前に除く。
+        if ctx.egui_wants_keyboard_input() {
+            self.win
+                .keycast
+                .entries
+                .retain(|e| e.key.is_none_or(|key| allowed(key, e.mods, true)));
+        }
         self.win.keycast.finish_names(name, ctx.input(|i| i.time));
         self.win.keycast.show(
             ctx,
@@ -1073,15 +1138,18 @@ mod tests {
         ws.win.layout.keycast = on();
         let mut value = String::new();
         let mut field = Rect::NOTHING;
-        run_frame(&ctx, egui::RawInput::default(), |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                field = ui.text_edit_singleline(&mut value).rect;
+        let mut field_id = egui::Id::NULL;
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
+                let response = ui.text_edit_singleline(&mut value);
+                field = response.rect;
+                field_id = response.id;
             });
-        });
+        })
+        .drop_without_applying_deltas();
         assert!(!ctx.egui_wants_keyboard_input());
         let pos = field.center();
-        run_frame(
-            &ctx,
+        ctx.run_ui(
             egui::RawInput {
                 time: Some(1.0),
                 events: vec![
@@ -1103,16 +1171,20 @@ mod tests {
                 ],
                 ..Default::default()
             },
-            |ctx| {
-                ws.take_keycast(ctx);
-                egui::CentralPanel::default().show(ctx, |ui| {
+            |ui| {
+                let ctx = ui.ctx().clone();
+                ws.take_keycast(&ctx);
+                // 入力を受け取った後、欄を描く途中で入力先が移る境界を作る。
+                ctx.memory_mut(|m| m.request_focus(field_id));
+                egui::CentralPanel::default().show(ui, |ui| {
                     ui.text_edit_singleline(&mut value);
                 });
                 assert_eq!(value, "a", "欄を押した同じコマで文字を打つ");
                 assert!(ctx.egui_wants_keyboard_input());
-                ws.show_keycast(ctx);
+                ws.show_keycast(&ctx);
             },
-        );
+        )
+        .drop_without_applying_deltas();
         assert!(
             !ws.win
                 .keycast
@@ -1120,6 +1192,27 @@ mod tests {
                 .iter()
                 .any(|row| matches!(row, Row::Keys { chord, .. } if chord == "A")),
             "欄へ入った最初の文字を表示しない"
+        );
+        ctx.memory_mut(|m| m.surrender_focus(field_id));
+        run_frame(
+            &ctx,
+            egui::RawInput {
+                time: Some(1.1),
+                ..Default::default()
+            },
+            |ctx| {
+                ws.take_keycast(ctx);
+                assert!(!ctx.egui_wants_keyboard_input());
+                ws.show_keycast(ctx);
+            },
+        );
+        assert!(
+            !ws.win
+                .keycast
+                .rows(1.1)
+                .iter()
+                .any(|row| matches!(row, Row::Keys { chord, .. } if chord == "A")),
+            "表示時間の内に欄から出ても、打った文字が履歴から戻らない"
         );
     }
 

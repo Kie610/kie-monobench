@@ -459,6 +459,13 @@ impl Workspace {
                 let (t, w) = sec_words(s);
                 hits(query, &format!("{t} {w}")) || !self.key_rows(query).is_empty()
             }
+            Sec::Keycast => {
+                let (t, w) = sec_words(s);
+                hits(
+                    query,
+                    &format!("{t} {w} {}", self.win.t("settings-keycast-title")),
+                )
+            }
             _ => {
                 let (t, w) = sec_words(s);
                 hits(query, &format!("{t} {w}"))
