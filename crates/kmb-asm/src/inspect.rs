@@ -377,7 +377,7 @@ type Item = (
 
 /// 部品表: 中にボディを持つ部品ごとと、部品に入っていないボディごとに 1 つ。規格部品は部品に
 /// 入っていても 1 個ずつ数える。外形・体積・質量を測り、材料と寸法(0.1 mm)と体積(1 mm³)が同じ物を
-/// 1 行にまとめて数える(カットリスト)。外形の箱は世界の軸に沿った箱(斜めに置いた板は大きく出る)。
+/// 1 行にまとめて数える(カットリスト)。出現の部品は、形によらず元の部品の行で数える。外形の箱は世界の軸に沿った箱(斜めに置いた板は大きく出る)。
 pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
     let data = cx.data;
     let bodies = cx.visible_bodies();
@@ -390,6 +390,8 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
     let fasteners: Vec<Option<(String, String)>> =
         roots.iter().map(|r| fastener_item(cx, *r)).collect();
     let mut items: Vec<Item> = Vec::new();
+    // 行ごとの部品(出現なら元の部品)。部品の行は、材料・寸法でなくこれでまとめる
+    let mut keys: Vec<Option<u64>> = Vec::new();
     for c in &data.components {
         let shapes: Vec<(ShapeHandle, FeatureId)> = bodies
             .iter()
@@ -399,7 +401,13 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
             .map(|(((_, h), r), _)| (*h, *r))
             .collect();
         if !shapes.is_empty() {
-            items.push((c.name.clone(), "部品", shapes, None));
+            // 出現の部品は元の部品の行で数える
+            let src = crate::occurrence::source_of(data, c.id);
+            let name = src
+                .and_then(|s| data.component(s))
+                .map_or_else(|| c.name.clone(), |s| s.name.clone());
+            keys.push(Some(src.unwrap_or(c.id)));
+            items.push((name, "部品", shapes, None));
         }
     }
     for (i, (_, h)) in bodies.iter().enumerate() {
@@ -418,8 +426,15 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
         }
     }
     let materials_of = kmb_look::material::of(data);
+    keys.resize(items.len(), None);
     let mut rows: Vec<BomRow> = Vec::new();
-    for (name, kind, shapes, fallback) in items {
+    // 部品(出現なら元の部品)→ 数えた行
+    let mut row_of: Vec<(u64, usize)> = Vec::new();
+    for ((name, kind, shapes, fallback), key) in items.into_iter().zip(keys) {
+        if let Some(&(_, i)) = key.and_then(|k| row_of.iter().find(|(c, _)| *c == k)) {
+            rows[i].count += 1;
+            continue;
+        }
         let mut lo = [f64::INFINITY; 3];
         let mut hi = [f64::NEG_INFINITY; 3];
         let mut volume = 0.0;
@@ -460,7 +475,11 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
                 && (0..3).all(|i| ((r.size[i] - size[i]) * 10.0).round() == 0.0)
                 && (r.volume - volume).round() == 0.0
         };
-        match rows.iter_mut().find(|r| same(r)) {
+        let at = rows.iter().position(same).unwrap_or(rows.len());
+        if let Some(k) = key {
+            row_of.push((k, at));
+        }
+        match rows.get_mut(at) {
             Some(r) => {
                 r.count += 1;
                 if !r.names.contains(&name) {
