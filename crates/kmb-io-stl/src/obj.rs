@@ -75,6 +75,29 @@ mod tests {
     }
 
     #[test]
+    fn vertex_coordinates_use_at_most_six_decimal_places_after_unit_conversion() {
+        let mut mesh = crate::tests::tetra();
+        mesh.positions[0] = [12.3, -1.2345678, -0.00000001];
+        let mut out = Vec::new();
+        write_obj(&[("形".into(), mesh)], LengthUnit::Mm, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(
+            text.lines().find(|l| l.starts_with("v ")),
+            Some("v 12.3 -1.234568 0")
+        );
+
+        let mut mesh = crate::tests::tetra();
+        mesh.positions[0] = [25.4, 12.7, -0.000001];
+        let mut out = Vec::new();
+        write_obj(&[("形".into(), mesh)], LengthUnit::In, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(
+            text.lines().find(|l| l.starts_with("v ")),
+            Some("v 1 0.5 0")
+        );
+    }
+
+    #[test]
     fn object_indices_continue_and_units_and_names_are_safe() {
         let mut mesh = crate::tests::tetra();
         for point in &mut mesh.positions {

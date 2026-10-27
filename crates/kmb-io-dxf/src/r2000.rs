@@ -173,3 +173,18 @@ pub(crate) fn upgrade(text: &str) -> String {
         1,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn invalid_group_codes_are_reported_without_panicking() {
+        let result = std::panic::catch_unwind(|| upgrade("bad\nSECTION\n"));
+        assert!(result.is_ok(), "数でないグループコードをpanicにしない");
+    }
+    #[test]
+    fn missing_table_names_are_reported_without_panicking() {
+        let result = std::panic::catch_unwind(|| upgrade("  0\nTABLE\n 70\n1\n  0\nEOF\n"));
+        assert!(result.is_ok(), "名前のない表をpanicにしない");
+    }
+}

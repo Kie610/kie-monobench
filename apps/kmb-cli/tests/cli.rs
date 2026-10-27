@@ -426,3 +426,102 @@ fn a_feature_made_with_component_goes_into_that_component() {
     let doc = read(&d.join("a.json"));
     assert_eq!(doc["components"][0]["bodies"], serde_json::json!([made]));
 }
+
+#[test]
+fn obj_export_writes_indexed_triangles_without_a_material_file() {
+    let d = temp_dir("obj-indexed-triangles");
+    let document = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
+    ok(&d, &["sample", &document]);
+    let result = Command::new(env!("CARGO_BIN_EXE_kmb"))
+        .args([
+            "run",
+            &document,
+            "io.export_obj",
+            "--arg",
+            "unit=cm",
+            "--out",
+            "part.obj",
+        ])
+        .current_dir(&d)
+        .env("XDG_DATA_HOME", d.join("data"))
+        .env("APPDATA", d.join("data"))
+        .env(kmb_session::logging::ENV, "info")
+        .output()
+        .expect("OBJ の書き出しを起動できる");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let logs = kmb_session::logging::log_dir(&d.join("data").join(kmb_session::DATA_DIR_NAME));
+    let logs = std::fs::read_dir(logs)
+        .unwrap()
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        logs.contains("OBJ を書き出す: ボディ 1 個、三角形") && logs.contains("単位 cm"),
+        "OBJ のボディ数・三角形数・単位をログに残す: {logs}"
+    );
+    let text = std::fs::read_to_string(d.join("part.obj")).unwrap();
+    let mut vertices: Vec<[f64; 3]> = Vec::new();
+    let mut normals: Vec<[f64; 3]> = Vec::new();
+    let mut faces = Vec::new();
+    let mut names = Vec::new();
+    for line in text.lines() {
+        let mut words = line.split_whitespace();
+        match words.next() {
+            Some("v") | Some("vn") => {
+                let values = words.map(|v| v.parse::<f64>().unwrap()).collect::<Vec<_>>();
+                assert_eq!(values.len(), 3);
+                assert!(values.iter().all(|x| x.is_finite()));
+                let point = [values[0], values[1], values[2]];
+                if line.starts_with("vn ") {
+                    normals.push(point);
+                } else {
+                    vertices.push(point);
+                }
+            }
+            Some("o") => names.push(words.collect::<Vec<_>>().join(" ")),
+            Some("f") => faces.push(
+                words
+                    .map(|v| {
+                        let (vertex, normal) = v.split_once("//").unwrap();
+                        (
+                            vertex.parse::<usize>().unwrap(),
+                            normal.parse::<usize>().unwrap(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => {}
+        }
+    }
+    assert!(!vertices.is_empty() && !normals.is_empty() && !faces.is_empty() && !names.is_empty());
+    let mut volume = 0.;
+    for face in faces {
+        assert_eq!(face.len(), 3);
+        for &(v, n) in &face {
+            assert!((1..=vertices.len()).contains(&v));
+            assert!((1..=normals.len()).contains(&n));
+        }
+        let [a, b, c] = [
+            vertices[face[0].0 - 1],
+            vertices[face[1].0 - 1],
+            vertices[face[2].0 - 1],
+        ];
+        volume += (a[0] * (b[1] * c[2] - b[2] * c[1])
+            + a[1] * (b[2] * c[0] - b[0] * c[2])
+            + a[2] * (b[0] * c[1] - b[1] * c[0]))
+            / 6.;
+    }
+    assert!(volume > 0., "外向きの三角形で正の体積になる: {volume}");
+    assert!(!std::fs::read_dir(&d).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .path()
+            .extension()
+            .is_some_and(|ext| ext == "mtl")
+    }));
+    std::fs::remove_dir_all(&d).unwrap();
+}

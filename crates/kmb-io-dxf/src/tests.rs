@@ -12,9 +12,21 @@ fn inserted_test_sketch(bytes: &[u8]) -> Sketch {
 }
 
 fn inserted_test_result(bytes: &[u8], args: serde_json::Value) -> (Sketch, String) {
-    use kmb_core::{
-        Context, DocumentData, Extensions, NullKernel, Outcome, RecomputeReport, Registry,
+    let result = inserted_test_outcome(bytes, args);
+    let kmb_core::Outcome::Change { edits, label } = result.unwrap() else {
+        panic!("スケッチの挿入")
     };
+    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
+        panic!("新しいスケッチ")
+    };
+    (serde_json::from_value(data.clone()).unwrap(), label)
+}
+
+fn inserted_test_outcome(
+    bytes: &[u8],
+    args: serde_json::Value,
+) -> Result<kmb_core::Outcome, kmb_core::Problem> {
+    use kmb_core::{Context, DocumentData, Extensions, NullKernel, RecomputeReport, Registry};
     use std::sync::Arc;
     let path = std::env::temp_dir().join(format!(
         "dxf-upgrade-{}-{}.dxf",
@@ -34,13 +46,59 @@ fn inserted_test_result(bytes: &[u8], args: serde_json::Value) -> (Sketch, Strin
     cx.args = &args;
     let result = Extensions(vec![Arc::new(DxfCommands)]).run(INSERT_DXF, &cx);
     std::fs::remove_file(&path).unwrap();
-    let Outcome::Change { edits, label } = result.unwrap() else {
-        panic!("スケッチの挿入")
-    };
-    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
-        panic!("新しいスケッチ")
-    };
-    (serde_json::from_value(data.clone()).unwrap(), label)
+    result
+}
+
+#[test]
+fn nearly_vertical_reversed_lines_merge_despite_coordinate_noise() {
+    let cleaned = clean(
+        &[
+            Shape::Line {
+                a: [0., 0.],
+                b: [1e-17, 1.],
+            },
+            Shape::Line {
+                a: [-1e-17, 1.],
+                b: [0., 0.],
+            },
+        ],
+        0.01,
+    )
+    .unwrap();
+    assert_eq!(cleaned.removed, 1);
+    assert_eq!(cleaned.shapes.len(), 1);
+}
+
+#[test]
+fn invalid_cleanup_tolerance_is_rejected_even_when_cleanup_is_disabled() {
+    let text = line_dxf(&[([0., 0.], [1., 1.])]);
+    for cleanup in [false, true] {
+        for tolerance in [0., -1., 0.0000005, 2.] {
+            let result = inserted_test_outcome(
+                text.as_bytes(),
+                serde_json::json!({"cleanup":cleanup,"cleanup_tolerance":tolerance}),
+            );
+            let error = result.expect_err("整理を止めても指定した許容差を確かめる");
+            assert_eq!(error.kind, kmb_core::ProblemKind::Input);
+            assert!(error.message.contains("許容差"), "{error}");
+        }
+    }
+}
+
+#[test]
+fn layer_line_breaks_are_reported_without_panicking() {
+    let sketch = sample_sketch();
+    let sol = solved(&sketch);
+    for construction in [false, true] {
+        let mut options = DxfOptions::default();
+        if construction {
+            options.construction_layer = "線\n不正な行".into();
+        } else {
+            options.layer = "線\n不正な行".into();
+        }
+        let result = std::panic::catch_unwind(|| to_dxf(&sketch, &sol, &options));
+        assert!(result.is_ok(), "画層名の改行をpanicにしない");
+    }
 }
 
 #[test]
