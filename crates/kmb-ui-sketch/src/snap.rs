@@ -303,8 +303,13 @@ impl Augmented {
             point: center,
             line,
         });
-        if !s.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: ring } if point == b && ring == circle)) {
-            s.add_constraint(ConstraintKind::PointOnCircle { point: b, circle });
+        // 始点の円周上拘束と中点で終点も円周上になる。四分点の仮の終点に付いた
+        // 同じ円の自動拘束だけを除き、文書にある拘束は変えない。
+        if let Some(auto) = self.auto.get(&b) {
+            s.constraints.retain(|c| {
+                !(auto.contains(&c.id)
+                    && matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: ring } if point == b && ring == circle))
+            });
         }
         true
     }
@@ -575,7 +580,11 @@ mod tests {
         let end = moved.get(&end).copied().unwrap_or(end);
         let line = moved.get(&line).copied().unwrap_or(line);
         assert_eq!(out.constraints.iter().filter(|c| matches!(c.kind, ConstraintKind::Midpoint { point, line: l } if point == center && l == line)).count(), 1);
-        assert_eq!(out.constraints.iter().filter(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == end && c == circle)).count(), 1);
+        assert!(!out.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == end && c == circle)));
+        assert_eq!(out.constraints.len(), s.constraints.len() + 1);
+        for old in &s.constraints {
+            assert!(out.constraints.contains(old), "既存拘束を変えない: {old:?}");
+        }
         let mut states = Vec::new();
         for r in [5.0, 8.0] {
             let dim = out
@@ -590,7 +599,10 @@ mod tests {
             for axis in 0..2 {
                 assert!(((a[axis] + b[axis]) / 2.0 - c[axis]).abs() < 1e-6);
             }
-            assert!(((b[0] - c[0]).hypot(b[1] - c[1]) - r).abs() < 1e-6);
+            for p in [a, b] {
+                assert!(((p[0] - c[0]).hypot(p[1] - c[1]) - r).abs() < 1e-6);
+            }
+            assert_eq!(sol.dof, 1);
             eprintln!(
                 "radius={r} midpoint=ok endpoint_on_circle=ok dof={} status={:?}",
                 sol.dof, sol.status
@@ -636,7 +648,25 @@ mod tests {
             let mut drawn = aug.sketch.clone();
             let line = drawn.add_line(start, end);
             assert!(aug.attach_diameter(&mut drawn, line, start, end));
-            assert_eq!(drawn.constraints.iter().filter(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == end && c == circle)).count(), 1);
+            assert!(!drawn.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == end && c == circle)));
+            let (out, moved) = aug.prune(drawn, &[]);
+            let at = |id| moved.get(&id).copied().unwrap_or(id);
+            let (start, end, line) = (at(start), at(end), at(line));
+            assert!(out.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: c } if point == start && c == circle)));
+            assert!(out.constraints.iter().any(|c| matches!(c.kind, ConstraintKind::Midpoint { point, line: l } if point == center && l == line)));
+            for old in &s.constraints {
+                assert!(out.constraints.contains(old), "既存拘束を変えない: {old:?}");
+            }
+            let sol = kmb_sketch::solve(&out, &HashMap::new()).unwrap();
+            assert!(!matches!(sol.status, kmb_sketch::SolveStatus::OverConstrained { .. } | kmb_sketch::SolveStatus::Inconsistent { .. }), "{sol:?}");
+            let (a, b, c) = (sol.points[&start], sol.points[&end], sol.points[&center]);
+            for axis in 0..2 {
+                assert!(((a[axis] + b[axis]) / 2.0 - c[axis]).abs() < 1e-6);
+            }
+            let r = kmb_sketch::radius(&out, &sol, circle).unwrap();
+            for p in [a, b] {
+                assert!(((p[0] - c[0]).hypot(p[1] - c[1]) - r).abs() < 1e-6);
+            }
         }
     }
 }
