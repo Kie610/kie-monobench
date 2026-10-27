@@ -19,6 +19,14 @@ click "表示"
 click "ワイヤフレーム"
 expect "操作の表示: マウス ワイヤフレーム" exists
 key Escape
+click "表示"
+click "シェーディング、エッジ表示のみ"
+key Escape
+pick f8:end
+rclick ~"選んだ面:"
+click "全体表示"#2
+expect "操作の表示: マウス 全体表示" exists
+key Escape
 
 # 表示の言語も画面の部品で替え、固定の働きの名前が英語になることを確かめる。
 key Ctrl+,
