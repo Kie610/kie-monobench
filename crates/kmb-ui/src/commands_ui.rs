@@ -379,6 +379,9 @@ impl Workspace {
             open = false;
         }
         if let Some(id) = run {
+            if let Some(c) = self.commands().into_iter().find(|c| c.id == id) {
+                crate::keycast::command_name(ctx, c.name, false);
+            }
             self.run_command(id);
         } else if open {
             self.search.text = Some(q);

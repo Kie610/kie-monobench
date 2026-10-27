@@ -1,0 +1,11 @@
+# 設定の部品から表示を入れ、画面と同じ入力の道でキーの札を確かめる。
+#! sample part
+
+key Ctrl+,
+click "マウスとキー"
+type ~"設定を探す" "操作の表示"
+click "押したキーとマウスを画面に出す(録画・解説向け)"
+expect "コマンドの名前も出す" exists
+key Ctrl+,
+key F8
+expect "操作の表示: F8" exists
