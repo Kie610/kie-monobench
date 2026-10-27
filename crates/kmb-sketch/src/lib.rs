@@ -50,7 +50,7 @@ pub use auto_constrain::{
 pub use clip::Clip;
 pub use commands::{
     ADD_SKETCH, REDEFINE_PLANE, SKETCH_ON_FACE, SketchCommands, insert_feature, insert_file,
-    picked_sketch_plane, selected_sketch,
+    insert_imported, picked_sketch_plane, selected_sketch,
 };
 pub use curve::{
     conic_preview, ellipse_minor_point, ellipse_preview, spline_preview, spline_preview_degree,
