@@ -219,6 +219,15 @@ fn nested_box_step(k: &TestKernel) -> String {
     let (leaf, _) = find("PRODUCT_DEFINITION(");
     let (_, shape_def) = find("SHAPE_DEFINITION_REPRESENTATION(");
     let leaf_shape = refs(shape_def)[1];
+    let leaf_record = records.iter().find(|(id, _)| *id == leaf_shape).unwrap().1;
+    let leaf_axis = refs(leaf_record)
+        .into_iter()
+        .find(|axis| {
+            records
+                .iter()
+                .any(|(id, r)| id == axis && r.starts_with("AXIS2_PLACEMENT_3D("))
+        })
+        .expect("箱の表現の items に原点の配置軸がある");
     let (_, brep) = find("ADVANCED_BREP_SHAPE_REPRESENTATION(");
     let geom = *refs(brep).last().unwrap();
     let context = find("PRODUCT_DEFINITION_CONTEXT(").0;
@@ -231,13 +240,13 @@ fn nested_box_step(k: &TestKernel) -> String {
 #{f0}=PRODUCT_DEFINITION_FORMATION('','',#{p0});
 #{d0}=PRODUCT_DEFINITION('outer','',#{f0},#{ctx});
 #{s0}=PRODUCT_DEFINITION_SHAPE('','',#{d0});
-#{r0}=SHAPE_REPRESENTATION('',(#{axis0}),#{geom});
+#{r0}=SHAPE_REPRESENTATION('',(#{axis0},#{axis1}),#{geom});
 #{sd0}=SHAPE_DEFINITION_REPRESENTATION(#{s0},#{r0});
 #{p1}=PRODUCT('inner','inner','',(#{pc}));
 #{f1}=PRODUCT_DEFINITION_FORMATION('','',#{p1});
 #{d1}=PRODUCT_DEFINITION('inner','',#{f1},#{ctx});
 #{s1}=PRODUCT_DEFINITION_SHAPE('','',#{d1});
-#{r1}=SHAPE_REPRESENTATION('',(#{axis0}),#{geom});
+#{r1}=SHAPE_REPRESENTATION('',(#{axis0},#{axis2}),#{geom});
 #{sd1}=SHAPE_DEFINITION_REPRESENTATION(#{s1},#{r1});
 #{point0}=CARTESIAN_POINT('',(0.,0.,0.));
 #{point1}=CARTESIAN_POINT('',(30.,0.,0.));
@@ -252,7 +261,7 @@ fn nested_box_step(k: &TestKernel) -> String {
 #{cd0}=CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(#{rr0},#{us0});
 #{use1}=NEXT_ASSEMBLY_USAGE_OCCURRENCE('inner-leaf','','',#{d1},#{leaf},$);
 #{us1}=PRODUCT_DEFINITION_SHAPE('','',#{use1});
-#{tr1}=ITEM_DEFINED_TRANSFORMATION('','',#{axis0},#{axis2});
+#{tr1}=ITEM_DEFINED_TRANSFORMATION('','',#{leaf_axis},#{axis2});
 #{rr1}=(REPRESENTATION_RELATIONSHIP('','',#{leaf_shape},#{r1}) REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION(#{tr1}) SHAPE_REPRESENTATION_RELATIONSHIP());
 #{cd1}=CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(#{rr1},#{us1});
 "#,
