@@ -620,7 +620,7 @@ fn write_keycast_screens() {
         ("dark", kmb_ui::layout::Brightness::Dark),
         ("light", kmb_ui::layout::Brightness::Light),
     ] {
-        for (width, text_scale) in [(1280.0, 1.0), (1920.0, 1.0), (1920.0, 2.5)] {
+        for (width, text_scale) in [(1280.0, 1.0), (1280.0, 2.5), (1920.0, 1.0), (1920.0, 2.5)] {
             let mut ws = Workspace::new(
                 kmb_samples::reference_document(),
                 None,
