@@ -1086,6 +1086,28 @@ mod tests {
     }
 
     #[test]
+    fn repeated_events_in_one_frame_are_counted_before_limiting_rows() {
+        let ctx = egui::Context::default();
+        let mut k = Keycast::default();
+        input(
+            &ctx,
+            &mut k,
+            &on(),
+            1.0,
+            (0..4)
+                .map(|_| key(Key::F8, Modifiers::NONE, true))
+                .collect(),
+            Modifiers::NONE,
+            false,
+            None,
+        );
+        assert!(matches!(
+            &k.rows(1.0)[..],
+            [Row::Keys { chord, count: 4, .. }] if chord == "F8"
+        ));
+    }
+
+    #[test]
     fn typing_never_keeps_plain_letters_digits_spaces_or_shift_letters() {
         let ctx = egui::Context::default();
         let mut k = Keycast::default();
