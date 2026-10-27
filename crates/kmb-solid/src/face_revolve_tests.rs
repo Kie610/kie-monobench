@@ -167,6 +167,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
                 })
                 .unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
