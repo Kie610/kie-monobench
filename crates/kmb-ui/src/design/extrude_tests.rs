@@ -205,6 +205,7 @@ fn keyhole_document() -> kmb_core::Document {
                 name: "スケッチ1".into(),
                 data: serde_json::to_value(s).unwrap(),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))

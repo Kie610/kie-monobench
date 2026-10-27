@@ -104,6 +104,7 @@ fn add_feature(doc: &mut Document, type_id: &str, data: serde_json::Value) -> Fe
         name: type_id.into(),
         data,
         suppressed: false,
+        pin_bodies: false,
     };
     doc.apply(Transaction::new(
         "機能追加",
@@ -552,6 +553,7 @@ fn perform(doc: &mut Document, a: &Action) {
                 name: "v".into(),
                 data: json!({"expr": e}),
                 suppressed: false,
+                pin_bodies: false,
             };
             Op::InsertFeature {
                 index: i.map(|i| i as usize % (d.features.len() + 1)),
@@ -567,6 +569,7 @@ fn perform(doc: &mut Document, a: &Action) {
                 name: "d".into(),
                 data: json!({"source": src}),
                 suppressed: false,
+                pin_bodies: false,
             };
             Op::InsertFeature { index: None, entry }
         }

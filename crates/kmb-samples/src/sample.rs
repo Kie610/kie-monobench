@@ -224,6 +224,7 @@ impl DocBuilder {
                 name: name.into(),
                 data: serde_json::to_value(data).expect("機能のデータは JSON にできる"),
                 suppressed: false,
+                pin_bodies: false,
             },
         });
         id

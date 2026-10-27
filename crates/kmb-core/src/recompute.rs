@@ -85,6 +85,13 @@ pub struct RecomputeReport {
     /// 毎回変わるので、比べる時は見ない
     #[serde(skip)]
     times: HashMap<FeatureId, f64>,
+    /// ボディの系譜の表(機能が読むボディをどの形に解いたか)。文書から決まるので、比べる時は見ない
+    #[serde(skip)]
+    pub bodies: std::sync::Arc<crate::BodyTable>,
+    /// そろえた面の名前と前の決まりの名前の表([`crate::FaceAliases`])。前の文書の参照を書き換えるのに
+    /// 使う。形から決まるので、比べる時は見ない
+    #[serde(skip)]
+    pub face_aliases: std::sync::Arc<crate::FaceAliases>,
 }
 
 impl PartialEq for RecomputeReport {
@@ -172,8 +179,8 @@ impl RecomputeReport {
 /// [`recompute_detached`] に渡した後で [`crate::Document::put_cache`] で戻す。
 #[derive(Default)]
 pub struct Cache {
-    /// (入力のハッシュ、出力、計算にかかった時間 ms)
-    entries: HashMap<FeatureId, Vec<(u64, Outputs, f64)>>,
+    /// (入力のハッシュ、出力、計算にかかった時間 ms、そろえた面の名前と前の決まりの名前)
+    entries: HashMap<FeatureId, Vec<(u64, Outputs, f64, Aliases)>>,
     /// 結果のほかに、カーネルに残させる形状(画面がまだ出している前の形。M27)
     held: HashSet<ShapeHandle>,
 }
@@ -184,18 +191,18 @@ impl Cache {
 
     /// 入力のハッシュが `key` の結果。見つかったものは一番新しいものとして並べ直す。
     /// 計算にかかった時間(ms)も返す。
-    fn get(&mut self, id: FeatureId, key: u64) -> Option<(&Outputs, f64)> {
+    fn get(&mut self, id: FeatureId, key: u64) -> Option<(&Outputs, f64, &Aliases)> {
         let list = self.entries.get_mut(&id)?;
-        let i = list.iter().position(|(k, _, _)| *k == key)?;
+        let i = list.iter().position(|(k, ..)| *k == key)?;
         let hit = list.remove(i);
         list.insert(0, hit);
-        Some((&list[0].1, list[0].2))
+        Some((&list[0].1, list[0].2, &list[0].3))
     }
 
-    fn insert(&mut self, id: FeatureId, key: u64, out: Outputs, ms: f64) {
+    fn insert(&mut self, id: FeatureId, key: u64, out: Outputs, ms: f64, aliases: Aliases) {
         let list = self.entries.entry(id).or_default();
-        list.retain(|(k, _, _)| *k != key);
-        list.insert(0, (key, out, ms));
+        list.retain(|(k, ..)| *k != key);
+        list.insert(0, (key, out, ms, aliases));
         list.truncate(Self::KEEP);
     }
 
@@ -204,7 +211,7 @@ impl Cache {
         self.entries
             .values()
             .flatten()
-            .flat_map(|(_, out, _)| out.values())
+            .flat_map(|(_, out, ..)| out.values())
             .filter_map(|v| match v {
                 Value::Shape(h) => Some(*h),
                 _ => None,
@@ -358,6 +365,8 @@ pub(crate) fn run(
     let (mut evaluated, mut reused) = (0, 0);
     let mut times: HashMap<FeatureId, f64> = HashMap::new();
     let active = data.active_len();
+    let bodies = crate::BodyTable::build(data, registry);
+    let mut aliases = crate::FaceAliases::default();
 
     // 別のスレッドで計算を待つ機能(互いに依存しない、形を作らない種類)。依存する機能か、
     // 形を作る機能が来たら、先に計算し終える(結果は機能の順に並べるので、順に計算した時と同じ)
@@ -386,6 +395,11 @@ pub(crate) fn run(
                     .ok()?
                     .inputs()
                     .ok()
+                    .map(|v| {
+                        v.iter()
+                            .map(|i| bodies.resolve(entry.id, i))
+                            .collect::<Vec<_>>()
+                    })
             }))
             .ok()
             .flatten()
@@ -405,12 +419,14 @@ pub(crate) fn run(
                 &mut pending,
                 data,
                 registry,
+                &bodies,
                 kernel,
                 &ok_params,
                 cache,
                 &mut outputs,
                 &mut features,
                 &mut times,
+                &mut aliases,
             );
         }
         if let Some(inputs) = concurrent {
@@ -432,9 +448,10 @@ pub(crate) fn run(
             let key = hasher.finish();
             let status = match checked {
                 Err(st) => Some(st),
-                Ok(()) => cache.get(entry.id, key).map(|(out, ms)| {
+                Ok(()) => cache.get(entry.id, key).map(|(out, ms, pairs)| {
                     reused += 1;
                     times.insert(entry.id, ms);
+                    aliases.extend(pairs);
                     FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -450,7 +467,6 @@ pub(crate) fn run(
                         slot: features.len(),
                         id: entry.id,
                         key,
-                        inputs,
                     });
                     // 計算し終えたら置き換える
                     features.push(FeatureResult {
@@ -465,7 +481,7 @@ pub(crate) fn run(
         let status = if i >= active {
             FeatureStatus::RolledBack
         } else if entry.suppressed {
-            if let Some(out) = pass_through(entry, i, registry, &position, &outputs) {
+            if let Some(out) = pass_through(entry, i, registry, &bodies, &position, &outputs) {
                 outputs.insert(entry.id, out);
             }
             FeatureStatus::Suppressed
@@ -487,7 +503,7 @@ pub(crate) fn run(
                 entry.data.to_string().hash(&mut hasher);
                 for input in &inputs {
                     if let Err(st) = check_input(
-                        input,
+                        &bodies.resolve(entry.id, input),
                         i,
                         &position,
                         &params,
@@ -500,9 +516,10 @@ pub(crate) fn run(
                     }
                 }
                 let key = hasher.finish();
-                if let Some((out, ms)) = cache.get(entry.id, key) {
+                if let Some((out, ms, pairs)) = cache.get(entry.id, key) {
                     reused += 1;
                     times.insert(entry.id, ms);
+                    aliases.extend(pairs);
                     return FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -513,6 +530,7 @@ pub(crate) fn run(
                     declared: &inputs,
                     params: &ok_params,
                     outputs: &outputs,
+                    redirect: bodies.redirects(entry.id),
                     kernel,
                     registry,
                     data,
@@ -522,8 +540,10 @@ pub(crate) fn run(
                 let ms = t.elapsed().as_secs_f64() * 1e3;
                 times.insert(entry.id, ms);
                 match result {
-                    Ok(out) => {
-                        cache.insert(entry.id, key, out.clone(), ms);
+                    Ok(mut out) => {
+                        let pairs = shorten_names(kernel, entry.id, &mut out, &aliases);
+                        aliases.extend(&pairs);
+                        cache.insert(entry.id, key, out.clone(), ms, pairs);
                         FeatureStatus::Ok {
                             outputs: out,
                             reused: false,
@@ -546,14 +566,17 @@ pub(crate) fn run(
         &mut pending,
         data,
         registry,
+        &bodies,
         kernel,
         &ok_params,
         cache,
         &mut outputs,
         &mut features,
         &mut times,
+        &mut aliases,
     );
     cache.entries.retain(|id, _| position.contains_key(id));
+    pin_warnings(data, &bodies, &mut features);
 
     let report = RecomputeReport {
         params,
@@ -563,6 +586,8 @@ pub(crate) fn run(
         reused,
         stamp: next_stamp(),
         times,
+        bodies: std::sync::Arc::new(bodies),
+        face_aliases: std::sync::Arc::new(aliases),
     };
     log::info!(
         "再計算: 機能 {} 個、評価 {}、再利用 {}、誤り {}、{:.1} ms",
@@ -626,7 +651,72 @@ struct Job {
     id: FeatureId,
     /// 入力のハッシュ(キャッシュの鍵)
     key: u64,
-    inputs: Vec<InputRef>,
+}
+
+/// そろえた面の名前と、前の決まり(そろえない)での名前の組。
+type Aliases = Vec<(String, String)>;
+
+/// 機能 `id` の結果の形の面の名前をそろえる([`crate::face_names`]。2 回以上割った面を
+/// `元~f{id}#k` に)。そろえた名前と前の決まりの名前の組を返す。`aliases` はそれより前の機能の組。
+fn shorten_names(
+    kernel: &dyn Kernel,
+    id: FeatureId,
+    out: &mut Outputs,
+    aliases: &crate::FaceAliases,
+) -> Aliases {
+    let tag = format!("f{}", id.0);
+    let mut done: HashMap<ShapeHandle, ShapeHandle> = HashMap::new();
+    let mut pairs = Vec::new();
+    for v in out.values_mut() {
+        let Value::Shape(h) = v else {
+            continue;
+        };
+        if let Some(n) = done.get(h) {
+            *h = *n;
+            continue;
+        }
+        let Ok(names) = kernel.face_names(*h) else {
+            continue;
+        };
+        let list: Vec<(String, String)> = crate::face_names::shorten(&names, &tag)
+            .into_iter()
+            .map(|(i, new)| (names[i].clone(), new))
+            .collect();
+        if list.is_empty() {
+            done.insert(*h, *h);
+            continue;
+        }
+        // 付け替えは名前で面を探すので、新しい名前が今ある名前と重なる時は仮の名前を挟む
+        let renamed = if list.iter().any(|(_, to)| names.contains(to)) {
+            let tmp: Vec<(String, String)> = list
+                .iter()
+                .enumerate()
+                .map(|(i, (from, _))| (from.clone(), format!("{tag}\u{0}{i}")))
+                .collect();
+            let back: Vec<(String, String)> = tmp
+                .iter()
+                .zip(&list)
+                .map(|((_, t), (_, to))| (t.clone(), to.clone()))
+                .collect();
+            kernel
+                .rename_faces(*h, &tmp)
+                .and_then(|m| kernel.rename_faces(m, &back))
+        } else {
+            kernel.rename_faces(*h, &list)
+        };
+        match renamed {
+            Ok(n) => {
+                pairs.extend(
+                    list.iter()
+                        .map(|(old, new)| (new.clone(), aliases.legacy(old))),
+                );
+                done.insert(*h, n);
+                *h = n;
+            }
+            Err(e) => log::warn!("機能 {tag} の面の名前をそろえられなかった: {e}"),
+        }
+    }
+    pairs
 }
 
 /// 機能の結果を記録する(ログ、後ろの機能が読む出力、結果の並び)。
@@ -674,12 +764,14 @@ fn run_jobs(
     pending: &mut Vec<Job>,
     data: &DocumentData,
     registry: &Registry,
+    bodies: &crate::BodyTable,
     kernel: &dyn Kernel,
     params: &HashMap<String, Quantity>,
     cache: &mut Cache,
     outputs: &mut HashMap<FeatureId, Outputs>,
     features: &mut [FeatureResult],
     times: &mut HashMap<FeatureId, f64>,
+    aliases: &mut crate::FaceAliases,
 ) {
     if pending.is_empty() {
         return;
@@ -695,11 +787,13 @@ fn run_jobs(
                 Some(Err(e)) => return Err(e.to_string()),
                 Some(Ok(f)) => f,
             };
+            let declared = feature.inputs().map_err(|e| e.to_string())?;
             let mut ctx = EvalCtx {
                 id: job.id,
-                declared: &job.inputs,
+                declared: &declared,
                 params,
                 outputs: ready,
+                redirect: bodies.redirects(job.id),
                 kernel,
                 registry,
                 data,
@@ -733,8 +827,10 @@ fn run_jobs(
         let entry = &data.features[job.index];
         times.insert(job.id, ms);
         let status = match result {
-            Ok(out) => {
-                cache.insert(job.id, job.key, out.clone(), ms);
+            Ok(mut out) => {
+                let pairs = shorten_names(kernel, job.id, &mut out, aliases);
+                aliases.extend(&pairs);
+                cache.insert(job.id, job.key, out.clone(), ms, pairs);
                 FeatureStatus::Ok {
                     outputs: out,
                     reused: false,
@@ -793,6 +889,7 @@ fn pass_through(
     entry: &crate::FeatureEntry,
     index: usize,
     registry: &Registry,
+    bodies: &crate::BodyTable,
     position: &HashMap<FeatureId, usize>,
     outputs: &HashMap<FeatureId, Outputs>,
 ) -> Option<Outputs> {
@@ -803,7 +900,7 @@ fn pass_through(
         .pass_through()
         .into_iter()
         .filter_map(|(name, from)| {
-            let InputRef::Output { feature, slot } = from else {
+            let InputRef::Output { feature, slot } = bodies.resolve(entry.id, &from) else {
                 return None;
             };
             if position.get(&feature).is_none_or(|&p| p >= index) {
@@ -813,6 +910,29 @@ fn pass_through(
         })
         .collect();
     (!out.is_empty()).then_some(out)
+}
+
+/// 固定の印が付き、そのボディの最新の形と違う形を読んでいる機能に、警告を足す。
+fn pin_warnings(data: &DocumentData, bodies: &crate::BodyTable, features: &mut [FeatureResult]) {
+    let name = |id: FeatureId| data.feature(id).map_or(id.to_string(), |f| f.name.clone());
+    for r in features {
+        let (Some(list), FeatureStatus::Ok { outputs, .. }) =
+            (bodies.stale().get(&r.id), &mut r.status)
+        else {
+            continue;
+        };
+        let warnings = list
+            .iter()
+            .map(|((read, _), (tip, _))| {
+                format!(
+                    "この機能は前の版の読み方で、機能「{}」の時点のボディを読んでいます(後から足した機能「{}」が入っていません)。「最新の形を読む」で付いて来ます",
+                    name(*read),
+                    name(*tip)
+                )
+            })
+            .collect();
+        crate::add_warnings(outputs, warnings);
+    }
 }
 
 fn error(message: String) -> FeatureStatus {
@@ -1105,7 +1225,7 @@ pub fn visible_bodies_before(
                 && let Some(Ok(f)) = registry.instantiate(&entry.type_id, &entry.data)
             {
                 for (out, from) in f.pass_through() {
-                    if let InputRef::Output { feature, slot } = from
+                    if let InputRef::Output { feature, slot } = report.bodies.resolve(r.id, &from)
                         && out == "body"
                         && slot == "body"
                     {
@@ -1130,9 +1250,10 @@ pub fn visible_bodies_before(
         {
             let keeps = f.keeps();
             for i in inputs {
-                if let InputRef::Output { feature, slot } = i
+                if let InputRef::Output { feature, slot } = report.bodies.resolve(r.id, &i)
                     && slot == "body"
                     && !keeps.contains(&feature)
+                    && !keeps.contains(&i_feature(&i))
                 {
                     consumed.insert(origin(&passed, feature));
                 }
@@ -1145,11 +1266,21 @@ pub fn visible_bodies_before(
 
 /// ボディを最初に作った機能(ボディの名前の鍵)。機能が読む `body` を前へたどる(元を残す機能の
 /// `keeps` に当たったら、そこで止める: 移動/コピーの写しは別のボディ)。
-pub fn body_root(data: &DocumentData, registry: &Registry, mut id: FeatureId) -> FeatureId {
+pub fn body_root(data: &DocumentData, registry: &Registry, id: FeatureId) -> FeatureId {
+    root_in(&crate::BodyTable::build(data, registry), data, registry, id)
+}
+
+/// [`body_root`] を、作った表 `bodies` で求める。
+fn root_in(
+    bodies: &crate::BodyTable,
+    data: &DocumentData,
+    registry: &Registry,
+    mut id: FeatureId,
+) -> FeatureId {
     for _ in 0..data.features.len() {
         let Some(f) = data.feature(id) else { break };
         // 元を残す機能(移動/コピーのコピー)は、ここから別のボディ
-        match reads_body(registry, f) {
+        match reads_body(bodies, registry, f) {
             Some(u) => id = u,
             None => break,
         }
@@ -1197,11 +1328,12 @@ pub fn reads_now(
 /// 後でほかのボディに結合して見えなくなったボディも数えるので、ほかのボディを結合で使っても
 /// 番号は変わらない。並びは `bodies` の順。
 pub fn body_labels(data: &DocumentData, registry: &Registry, bodies: &[FeatureId]) -> Vec<String> {
+    let table = crate::BodyTable::build(data, registry);
     let roots: Vec<FeatureId> = bodies
         .iter()
-        .map(|b| body_root(data, registry, *b))
+        .map(|b| root_in(&table, data, registry, *b))
         .collect();
-    let all = body_roots(data, registry, &roots);
+    let all = body_roots(&table, data, registry, &roots);
     roots
         .iter()
         .map(|r| {
@@ -1216,12 +1348,17 @@ pub fn body_labels(data: &DocumentData, registry: &Registry, bodies: &[FeatureId
 /// 文書でボディを作った機能(ボディの名前の鍵)のすべて、タイムラインの順: ソリッドの機能のうち
 /// 読むボディが無い物(か、元を残す機能の写し)と、`extra`(見えているボディの元。ソリッドの区分で
 /// ない機能が作ったボディも数える)。
-fn body_roots(data: &DocumentData, registry: &Registry, extra: &[FeatureId]) -> Vec<FeatureId> {
+fn body_roots(
+    bodies: &crate::BodyTable,
+    data: &DocumentData,
+    registry: &Registry,
+    extra: &[FeatureId],
+) -> Vec<FeatureId> {
     let mut v: Vec<FeatureId> = data
         .features
         .iter()
         .filter(|f| registry.category(&f.type_id) == Some(crate::descriptor::category::SOLID))
-        .filter(|f| reads_body(registry, f).is_none())
+        .filter(|f| reads_body(bodies, registry, f).is_none())
         .map(|f| f.id)
         .chain(extra.iter().copied())
         .collect();
@@ -1231,17 +1368,30 @@ fn body_roots(data: &DocumentData, registry: &Registry, extra: &[FeatureId]) -> 
 }
 
 /// 機能 `f` が読んで受け継ぐボディ(元を残す機能の写しなら無し)。読み込めなければ無し。
-fn reads_body(registry: &Registry, f: &crate::FeatureEntry) -> Option<FeatureId> {
+/// 読むボディは表 `bodies` で解いた形(その手前の最新の形)。
+fn reads_body(
+    bodies: &crate::BodyTable,
+    registry: &Registry,
+    f: &crate::FeatureEntry,
+) -> Option<FeatureId> {
     let feature = registry.instantiate(&f.type_id, &f.data)?.ok()?;
-    let up = feature
+    let raw = feature
         .inputs()
         .unwrap_or_default()
         .into_iter()
-        .find_map(|i| match i {
-            InputRef::Output { feature, slot } if slot == "body" => Some(feature),
-            _ => None,
-        })?;
-    (!feature.keeps().contains(&up)).then_some(up)
+        .find(|i| matches!(i, InputRef::Output { slot, .. } if slot == "body"))?;
+    if feature.keeps().contains(&i_feature(&raw)) {
+        return None;
+    }
+    Some(i_feature(&bodies.resolve(f.id, &raw)))
+}
+
+/// 入力の機能(パラメータなら番号 0。ボディの入力にだけ使う)。
+fn i_feature(i: &InputRef) -> FeatureId {
+    match i {
+        InputRef::Output { feature, .. } => *feature,
+        InputRef::Param { .. } => FeatureId(0),
+    }
 }
 
 /// 機能 `from` が出したボディを、タイムラインの最後まで受け継いだ機能。後の機能が `body` を読んで
@@ -1261,7 +1411,7 @@ pub fn body_heir(
         let Some(Ok(f)) = registry.instantiate(&entry.type_id, &entry.data) else {
             continue;
         };
-        let reads = |i: &InputRef, body_only: bool| matches!(i, InputRef::Output { feature, slot } if *feature == cur && (!body_only || slot == "body"));
+        let reads = |i: &InputRef, body_only: bool| matches!(report.bodies.resolve(r.id, i), InputRef::Output { feature, slot } if feature == cur && (!body_only || slot == "body"));
         let takes = match &r.status {
             _ if f.keeps().contains(&cur) => false,
             FeatureStatus::Suppressed => f.pass_through().iter().any(|(_, i)| reads(i, false)),

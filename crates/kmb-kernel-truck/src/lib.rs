@@ -757,6 +757,37 @@ impl Kernel for TruckKernel {
         Ok(self.put(moved))
     }
 
+    fn face_names(&self, shape: ShapeHandle) -> Result<Vec<String>, KernelError> {
+        let s = self.lock();
+        if let Some(im) = s.imported.get(&shape.0) {
+            return Ok(im.names.clone());
+        }
+        let body = s
+            .bodies
+            .get(&shape.0)
+            .ok_or(KernelError::UnknownShape(shape))?;
+        Ok(body.parts.iter().flat_map(|p| p.names.clone()).collect())
+    }
+
+    /// 面の名前を付け替えた形(形は同じ。面の網と体積は前のまま使う)。
+    fn rename_faces(
+        &self,
+        shape: ShapeHandle,
+        renames: &[(String, String)],
+    ) -> Result<ShapeHandle, KernelError> {
+        let mut body = self.get(shape)?;
+        for (from, to) in renames {
+            let n = body
+                .parts
+                .iter_mut()
+                .flat_map(|p| p.names.iter_mut())
+                .find(|n| *n == from)
+                .ok_or_else(|| KernelError::Failed(format!("面 {from} がありません")))?;
+            *n = to.clone();
+        }
+        Ok(self.put(body))
+    }
+
     fn faces(&self, shape: ShapeHandle) -> Result<Vec<FaceInfo>, KernelError> {
         if let Some(im) = self.imported(shape) {
             return Ok(im

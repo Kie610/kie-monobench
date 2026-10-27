@@ -197,6 +197,7 @@ fn edge_features_report_bad_references() {
                         name: "辺".into(),
                         data,
                         suppressed: false,
+                        pin_bodies: false,
                     },
                 }],
             ))
@@ -742,7 +743,7 @@ fn rounding_the_keyhole_top_face_reaches_the_arc_edge() {
                 type_id: FILLET.into(),
                 name: "丸め".into(),
                 data: serde_json::json!({"target": 4, "faces": ["f2:end"], "arcs": true, "radius": "2 mm"}),
-                suppressed: false,
+                suppressed: false, pin_bodies: false,
             },
         }],
     ))
@@ -795,6 +796,7 @@ fn fillet_beside_a_hole(side: u32, radius: &str, fit: bool) -> (FeatureStatus, O
                     "target": hole.0, "edges": [edge], "radius": radius, "fit": fit
                 }),
                 suppressed: false,
+                pin_bodies: false,
             },
         }],
     ))
@@ -1112,6 +1114,7 @@ fn a_chamfer_on_the_pocket_rim_leaves_no_thin_face_at_its_corners() {
                         "distance": "1 mm",
                     }),
                     suppressed: false,
+                    pin_bodies: false,
                 },
             }],
         ))
