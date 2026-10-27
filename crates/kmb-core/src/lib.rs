@@ -15,6 +15,7 @@ mod ids;
 pub mod kernel;
 mod modules;
 mod names;
+mod occurrence;
 mod payload;
 mod problem;
 mod recompute;
