@@ -305,9 +305,6 @@ impl Keycast {
                 self.modifiers_used = false;
             }
         }
-        if self.entries.len() > 3 {
-            self.entries.drain(..self.entries.len() - 3);
-        }
         self.mouse = [
             PointerButton::Primary,
             PointerButton::Middle,
@@ -787,7 +784,7 @@ fn mouse(ui: &mut egui::Ui, down: [bool; 3], size: f32, look: theme::Look) {
 
 impl crate::Workspace {
     /// 登録済みの固定名との一致だけを許す。動的な操作名には利用者の名前や値が入る。
-    fn keycast_fixed_name(&self, text_id: &str, name: &str) -> Option<String> {
+    pub(crate) fn keycast_fixed_name(&self, text_id: &str, name: &str) -> Option<String> {
         kmb_i18n::Lang::ALL
             .into_iter()
             .any(|lang| {
