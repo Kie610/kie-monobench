@@ -185,7 +185,34 @@ pub struct AnyEdge {
     pub points: Vec<[f64; 3]>,
 }
 
+#[repr(C)]
+pub struct JcBoundary {
+    pub kind: i32,
+    pub count: u32,
+    pub points: *const f64,
+    pub brep: *const JcBrep,
+    pub f0: u32,
+    pub f1: u32,
+    pub center: [f64; 3],
+    pub axis: [f64; 3],
+    pub sweep: f64,
+}
+
 unsafe extern "C" {
+    fn jc_planar_sheet(
+        plane: *const JcPlane,
+        segments: *const JcSegment,
+        lens: *const u32,
+        loops: usize,
+        out: *mut *mut JcBrep,
+    ) -> i32;
+    fn jc_patch_sheet(
+        boundary: *const JcBoundary,
+        count: usize,
+        planar: i32,
+        out: *mut *mut JcBrep,
+    ) -> i32;
+    fn jc_is_sheet(brep: *const JcBrep, out: *mut i32) -> i32;
     fn jc_last_error() -> *const c_char;
     fn jc_all_edges(
         brep: *const JcBrep,
@@ -390,6 +417,33 @@ pub fn extrude_taper(
     take(code, out)
 }
 
+pub fn planar_sheet(plane: &JcPlane, segments: &[JcSegment], lens: &[u32]) -> Result<Brep, String> {
+    let mut out = std::ptr::null_mut();
+    let code = unsafe {
+        jc_planar_sheet(
+            plane,
+            segments.as_ptr(),
+            lens.as_ptr(),
+            lens.len(),
+            &mut out,
+        )
+    };
+    take(code, out)
+}
+
+pub fn patch_sheet(boundary: &[JcBoundary], planar: bool) -> Result<Brep, String> {
+    let mut out = std::ptr::null_mut();
+    let code = unsafe {
+        jc_patch_sheet(
+            boundary.as_ptr(),
+            boundary.len(),
+            i32::from(planar),
+            &mut out,
+        )
+    };
+    take(code, out)
+}
+
 /// 曲面 1 枚の中身(制御点は u ごとに v の並びで、x, y, z, 重み)。
 pub struct Patch {
     pub degree_u: u32,
@@ -566,6 +620,17 @@ pub fn revolve(
 }
 
 impl Brep {
+    pub fn raw(&self) -> *const JcBrep {
+        self.0
+    }
+
+    pub fn is_sheet(&self) -> Result<bool, String> {
+        let mut sheet = 0;
+        let code = unsafe { jc_is_sheet(self.0, &mut sheet) };
+        status(code)?;
+        Ok(sheet != 0)
+    }
+
     pub fn copy(&self) -> Result<Brep, String> {
         let mut out = std::ptr::null_mut();
         // SAFETY: self.0 は生きている形状

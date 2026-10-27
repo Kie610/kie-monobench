@@ -465,6 +465,14 @@ fn json_arg(s: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(s).map_err(|e| format!("データが JSON として読めません: {e}"))
 }
 
+fn show_output_warnings(info: &serde_json::Value) {
+    if let Some(warnings) = info.get("warnings").and_then(|w| w.as_array()) {
+        for warning in warnings.iter().filter_map(|w| w.as_str()) {
+            eprintln!("警告: {warning}");
+        }
+    }
+}
+
 fn write(out: &Path, contents: &[u8]) -> Result<(), Problem> {
     kmb_session::write_output(out, contents)
 }
@@ -796,6 +804,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             for b in w.mass()? {
                 match (b.material, b.mass) {
                     (Some(m), Some(g)) => println!("{}: {m}、{g:.3} g", b.name),
+                    _ if b.sheet.is_some() => println!("{}: 面のボディ(体積なし)", b.name),
                     _ => println!("{}: 材料なし", b.name),
                 }
             }
@@ -811,8 +820,19 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             } else {
                 let r3 = |p: [f64; 3]| p.map(|v| (v * 1e3).round() / 1e3 + 0.0);
                 for b in &all {
-                    let m = &b.props;
                     println!("{}:", b.name);
+                    let Some(m) = &b.props else {
+                        if let Some(sheet) = &b.sheet {
+                            println!("  {}", sheet.description);
+                            println!("  面積 {:.3} mm²", sheet.area);
+                            println!(
+                                "  外形 最小 {:?}、最大 {:?} mm",
+                                r3(sheet.min),
+                                r3(sheet.max)
+                            );
+                        }
+                        continue;
+                    };
                     println!("  体積   {:.3} mm³", m.volume);
                     println!("  表面積 {:.3} mm²", m.area);
                     println!(
@@ -863,8 +883,12 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 };
             }
             match w.run(&action, None, None, &args) {
-                Ok(Ran::File { contents, .. }) => write(&out, &contents)?,
-                Ok(Ran::Files { files, .. }) => {
+                Ok(Ran::File { contents, info, .. }) => {
+                    show_output_warnings(&info);
+                    write(&out, &contents)?;
+                }
+                Ok(Ran::Files { files, info }) => {
+                    show_output_warnings(&info);
                     for p in Headless::write_files(&out, &files)? {
                         println!("{}", p.display());
                     }
@@ -1012,18 +1036,22 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                         println!("{a}");
                     }
                 }
-                Ran::File { contents, .. } => match out {
-                    Some(o) => write(&o, &contents)?,
-                    None => match String::from_utf8(contents) {
-                        Ok(t) => print!("{t}"),
-                        Err(_) => {
-                            return Err(
-                                "中身が文字でないので --out で書き出す先を指定します".into()
-                            );
-                        }
-                    },
-                },
-                Ran::Files { files, .. } => {
+                Ran::File { contents, info, .. } => {
+                    show_output_warnings(&info);
+                    match out {
+                        Some(o) => write(&o, &contents)?,
+                        None => match String::from_utf8(contents) {
+                            Ok(t) => print!("{t}"),
+                            Err(_) => {
+                                return Err(
+                                    "中身が文字でないので --out で書き出す先を指定します".into()
+                                );
+                            }
+                        },
+                    }
+                }
+                Ran::Files { files, info } => {
+                    show_output_warnings(&info);
                     let o = out.ok_or("いくつものファイルを書くので --out で名前を指定します")?;
                     for p in Headless::write_files(&o, &files)? {
                         println!("{}", p.display());

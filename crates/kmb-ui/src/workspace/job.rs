@@ -159,6 +159,9 @@ impl Workspace {
             .and_then(|e| e.downcast::<Vec<(FeatureId, Mesh)>>().ok())
         {
             self.cur.scene.set(&r.bodies, *meshes);
+            self.cur
+                .scene
+                .set_body_kinds(self.cur.work.kernel().as_ref());
         } else if self.cur.scene.needs(&r.bodies) {
             self.cur
                 .scene

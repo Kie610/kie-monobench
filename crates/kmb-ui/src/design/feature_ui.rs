@@ -5,6 +5,18 @@ use crate::Workspace;
 use kmb_core::{FeatureEntry, FeatureId, FeatureStatus, Field, FieldKind};
 use serde_json::Value as Json;
 
+/// 条件で参照元を切り替える行は、欄を選ぶ途中も残す。削除は行の × で行う。
+/// 選ぶ欄だけの行は、共通の空行の整理を使う。
+pub(crate) fn prune_panel_rows(desc: &kmb_core::Descriptor, data: &mut Json) -> bool {
+    let conditional = |f: &Field| matches!(&f.kind,FieldKind::Rows{fields} if fields.iter().any(|s|matches!(s.kind,FieldKind::Pick{..}) && s.when.is_some()));
+    if !desc.fields.iter().any(conditional) {
+        return desc.prune_rows(data);
+    }
+    let mut plain = desc.clone();
+    plain.fields.retain(|f| !conditional(f));
+    plain.prune_rows(data)
+}
+
 /// `before` より前にあり、出力 `slot` を持つ機能。
 fn features_with(ws: &Workspace, before: FeatureId, slot: &str) -> Vec<(FeatureId, String)> {
     let mut out = Vec::new();
@@ -1039,7 +1051,7 @@ fn descriptor_form(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry) -> O
     if !desc.hint.is_empty() {
         ui.weak(&desc.hint);
     }
-    desc.prune_rows(&mut data);
+    prune_panel_rows(&desc, &mut data);
     (data != base).then_some(data)
 }
 
@@ -1263,7 +1275,7 @@ fn rows_ui(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry, f: &Field, d
             ws.leave_rows_pick();
         }
     }
-    if let Some(p) = pick {
+    if let Some(p) = pick.filter(|p| p.when.is_none()) {
         ui.horizontal(|ui| {
             let add = ui
                 .add_enabled(!pending, egui::Button::new("+"))
@@ -1283,6 +1295,32 @@ fn rows_ui(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry, f: &Field, d
                 );
             }
         });
+    } else if ui
+        .small_button("+ 行を追加")
+        .on_hover_text("新しい行を足し、参照と値を欄で指定する")
+        .clicked()
+    {
+        let mut rows = f
+            .get(data)
+            .and_then(Json::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut row = rows
+            .last()
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Some(values) = row.as_object_mut() {
+            for field in &fields {
+                if matches!(
+                    field.kind,
+                    FieldKind::Output { .. } | FieldKind::Pick { .. }
+                ) {
+                    values.remove(&field.key);
+                }
+            }
+        }
+        rows.push(row);
+        f.set(data, Some(Json::Array(rows)));
     }
 }
 
