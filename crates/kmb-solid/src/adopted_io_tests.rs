@@ -1,6 +1,4 @@
-//! 他のソフトで起きた読み書きの不具合が、JC では起きないことを確かめる(採用分の点検で「試験だけ」と
-//! 判定した物)。ねじ穴のある部品の STEP の書き出し、細い面のある形の網、読み込んだ STEP の面からの
-//! 押し出し。
+//! ねじ穴のある部品の STEP の書き出し、細い面のある形の表示と STL、入れ子の STEP の面からの押し出し。
 
 use super::*;
 use crate::tests::{TestKernel, assert_ok, close, final_mass, rect_sketch, registry};
@@ -31,7 +29,7 @@ fn plate(b: &mut DocBuilder, [x, y, w, h]: [f64; 4], t: f64) -> kmb_core::Featur
     )
 }
 
-/// 10-20 p5: ねじ穴(M6 のめねじ、貫通)を 2 つ開けた板を STEP に書き出すと止まらずに書け、
+/// ねじ穴(M6 のめねじ、貫通)を 2 つ開けた板を STEP に書き出すと止まらずに書け、
 /// 読み直すと体積・外形・面の数が元と同じ(JC はねじ山を形にせず下穴の円柱で書く)。
 #[test]
 fn a_plate_with_tapped_holes_writes_to_step_and_reads_back() {
@@ -91,7 +89,7 @@ fn a_plate_with_tapped_holes_writes_to_step_and_reads_back() {
     }
 }
 
-/// 10-20 p7: 高さが 0.02 mm だけ違う箱を並べて足した形(段の所に幅 0.02 mm の細い面ができる)の
+/// 高さが 0.02 mm だけ違う箱を並べて足した形(段の所に幅 0.02 mm の細い面ができる)の
 /// 表示と STL の網は、閉じている。頂点を位置で寄せると、どの辺もちょうど 2 つの三角形に使われる
 /// (穴が空けば 1 つだけの辺ができる)。
 #[test]
@@ -127,28 +125,57 @@ fn a_mesh_of_a_shape_with_a_thin_face_has_no_gaps() {
     assert!(thin >= 1, "細い面がある");
     for tol in [0.1, 0.01] {
         let m = k.mesh(h, tol).unwrap();
-        // 位置を 1e-4 mm で丸めて同じ頂点にする
-        let key = |v: u32| m.positions[v as usize].map(|c| (f64::from(c) * 1e4).round() as i64);
-        let mut edges: std::collections::HashMap<([i64; 3], [i64; 3]), usize> = Default::default();
-        for t in &m.triangles {
-            for i in 0..3 {
-                let (p, q) = (key(t[i]), key(t[(i + 1) % 3]));
-                if p == q {
-                    continue;
-                }
+        assert_closed_triangles(
+            &m.triangles
+                .iter()
+                .map(|t| t.map(|i| m.positions[i as usize]))
+                .collect::<Vec<_>>(),
+            &format!("表示 {tol}"),
+        );
+        let mut stl = Vec::new();
+        kmb_io_stl::write_binary(&[m], &mut stl).unwrap();
+        let count = u32::from_le_bytes(stl[80..84].try_into().unwrap()) as usize;
+        assert_eq!(stl.len(), 84 + 50 * count);
+        let triangles: Vec<[[f32; 3]; 3]> = stl[84..]
+            .as_chunks::<50>()
+            .0
+            .iter()
+            .map(|facet| {
+                std::array::from_fn(|i| {
+                    std::array::from_fn(|j| {
+                        let at = 12 + i * 12 + j * 4;
+                        f32::from_le_bytes(facet[at..at + 4].try_into().unwrap())
+                    })
+                })
+            })
+            .collect();
+        assert_eq!(triangles.len(), count);
+        assert_closed_triangles(&triangles, &format!("STL {tol}"));
+    }
+}
+
+/// 同じ位置の頂点を 1e-4 mm で寄せ、すべての辺が三角形 2 枚に使われることを確かめる。
+fn assert_closed_triangles(triangles: &[[[f32; 3]; 3]], what: &str) {
+    assert!(!triangles.is_empty(), "{what}: 三角形がある");
+    let key = |p: [f32; 3]| p.map(|c| (f64::from(c) * 1e4).round() as i64);
+    let mut edges: std::collections::HashMap<([i64; 3], [i64; 3]), usize> = Default::default();
+    for t in triangles {
+        for i in 0..3 {
+            let (p, q) = (key(t[i]), key(t[(i + 1) % 3]));
+            if p != q {
                 *edges
                     .entry(if p < q { (p, q) } else { (q, p) })
                     .or_default() += 1;
             }
         }
-        let open: Vec<_> = edges.iter().filter(|(_, n)| **n != 2).collect();
-        assert!(
-            open.is_empty(),
-            "{tol}: 閉じていない辺 {} 本 {:?}",
-            open.len(),
-            &open[..open.len().min(4)]
-        );
     }
+    let open: Vec<_> = edges.iter().filter(|(_, n)| **n != 2).collect();
+    assert!(
+        open.is_empty(),
+        "{what}: 閉じていない辺 {} 本 {:?}",
+        open.len(),
+        &open[..open.len().min(4)]
+    );
 }
 
 /// 読み込む STEP: 20×20×10 の箱(JC で書いた物)。
@@ -157,6 +184,112 @@ fn box_step(k: &TestKernel) -> String {
     plate(&mut b, [0.0, 0.0, 20.0, 20.0], 10.0);
     let h = body(&mut b.finish("元"), k);
     k.export_step(&[h]).unwrap()
+}
+
+/// 自分で書いた箱を、外箱→内箱→箱の二段の部品関係に入れる。
+/// 外箱から内箱は X に 30 mm、内箱から箱は Y に 20 mm ずらす。
+fn nested_box_step(k: &TestKernel) -> String {
+    let step = box_step(k);
+    let records: Vec<(u64, &str)> = step
+        .split(';')
+        .filter_map(|s| {
+            let s = s.get(s.find('#')? + 1..)?;
+            let (id, rhs) = s.split_once('=')?;
+            Some((id.trim().parse().ok()?, rhs.trim()))
+        })
+        .collect();
+    let refs = |s: &str| -> Vec<u64> {
+        s.split('#')
+            .skip(1)
+            .map(|s| {
+                s.chars()
+                    .take_while(char::is_ascii_digit)
+                    .collect::<String>()
+                    .parse()
+                    .unwrap()
+            })
+            .collect()
+    };
+    let find = |name: &str| {
+        records
+            .iter()
+            .find(|(_, r)| r.starts_with(name))
+            .unwrap_or_else(|| panic!("STEP に {name} がある"))
+    };
+    let (leaf, _) = find("PRODUCT_DEFINITION(");
+    let (_, shape_def) = find("SHAPE_DEFINITION_REPRESENTATION(");
+    let leaf_shape = refs(shape_def)[1];
+    let (_, brep) = find("ADVANCED_BREP_SHAPE_REPRESENTATION(");
+    let geom = *refs(brep).last().unwrap();
+    let context = find("PRODUCT_DEFINITION_CONTEXT(").0;
+    let product_context = find("PRODUCT_CONTEXT(").0;
+    let n = records.iter().map(|(i, _)| *i).max().unwrap() + 1;
+    let id = |i: u64| n + i;
+    let extra = format!(
+        r#"
+#{p0}=PRODUCT('outer','outer','',(#{pc}));
+#{f0}=PRODUCT_DEFINITION_FORMATION('','',#{p0});
+#{d0}=PRODUCT_DEFINITION('outer','',#{f0},#{ctx});
+#{s0}=PRODUCT_DEFINITION_SHAPE('','',#{d0});
+#{r0}=SHAPE_REPRESENTATION('',(#{axis0}),#{geom});
+#{sd0}=SHAPE_DEFINITION_REPRESENTATION(#{s0},#{r0});
+#{p1}=PRODUCT('inner','inner','',(#{pc}));
+#{f1}=PRODUCT_DEFINITION_FORMATION('','',#{p1});
+#{d1}=PRODUCT_DEFINITION('inner','',#{f1},#{ctx});
+#{s1}=PRODUCT_DEFINITION_SHAPE('','',#{d1});
+#{r1}=SHAPE_REPRESENTATION('',(#{axis0}),#{geom});
+#{sd1}=SHAPE_DEFINITION_REPRESENTATION(#{s1},#{r1});
+#{point0}=CARTESIAN_POINT('',(0.,0.,0.));
+#{point1}=CARTESIAN_POINT('',(30.,0.,0.));
+#{point2}=CARTESIAN_POINT('',(0.,20.,0.));
+#{axis0}=AXIS2_PLACEMENT_3D('',#{point0},$,$);
+#{axis1}=AXIS2_PLACEMENT_3D('',#{point1},$,$);
+#{axis2}=AXIS2_PLACEMENT_3D('',#{point2},$,$);
+#{use0}=NEXT_ASSEMBLY_USAGE_OCCURRENCE('outer-inner','','',#{d0},#{d1},$);
+#{us0}=PRODUCT_DEFINITION_SHAPE('','',#{use0});
+#{tr0}=ITEM_DEFINED_TRANSFORMATION('','',#{axis0},#{axis1});
+#{rr0}=(REPRESENTATION_RELATIONSHIP('','',#{r1},#{r0}) REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION(#{tr0}) SHAPE_REPRESENTATION_RELATIONSHIP());
+#{cd0}=CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(#{rr0},#{us0});
+#{use1}=NEXT_ASSEMBLY_USAGE_OCCURRENCE('inner-leaf','','',#{d1},#{leaf},$);
+#{us1}=PRODUCT_DEFINITION_SHAPE('','',#{use1});
+#{tr1}=ITEM_DEFINED_TRANSFORMATION('','',#{axis0},#{axis2});
+#{rr1}=(REPRESENTATION_RELATIONSHIP('','',#{leaf_shape},#{r1}) REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION(#{tr1}) SHAPE_REPRESENTATION_RELATIONSHIP());
+#{cd1}=CONTEXT_DEPENDENT_SHAPE_REPRESENTATION(#{rr1},#{us1});
+"#,
+        p0 = id(0),
+        f0 = id(1),
+        d0 = id(2),
+        s0 = id(3),
+        r0 = id(4),
+        sd0 = id(5),
+        p1 = id(6),
+        f1 = id(7),
+        d1 = id(8),
+        s1 = id(9),
+        r1 = id(10),
+        sd1 = id(11),
+        point0 = id(12),
+        point1 = id(13),
+        point2 = id(14),
+        axis0 = id(15),
+        axis1 = id(16),
+        axis2 = id(17),
+        use0 = id(18),
+        us0 = id(19),
+        tr0 = id(20),
+        rr0 = id(21),
+        cd0 = id(22),
+        use1 = id(23),
+        us1 = id(24),
+        tr1 = id(25),
+        rr1 = id(26),
+        cd1 = id(27),
+        pc = product_context,
+        ctx = context,
+    );
+    assert_eq!(extra.matches("NEXT_ASSEMBLY_USAGE_OCCURRENCE").count(), 2);
+    let end = step.rfind("ENDSEC;").unwrap();
+    format!("{}{}{}", &step[..end], extra, &step[end..])
 }
 
 fn import(b: &mut DocBuilder, step: &str) -> kmb_core::FeatureId {
@@ -172,7 +305,7 @@ fn import(b: &mut DocBuilder, step: &str) -> kmb_core::FeatureId {
     )
 }
 
-/// 10-22 i5: 読み込んだ STEP の部品の上の面にスケッチを描いて結合で押し出すと、読み込んだ部品に
+/// 二段に入れ子になった STEP の部品の上の面にスケッチを描いて結合で押し出すと、読み込んだ部品に
 /// 足され、ボディは 1 つのまま体積が増える(別の形にならない)。
 #[test]
 fn an_extrude_joined_from_an_imported_face_adds_to_that_part() {
@@ -181,11 +314,12 @@ fn an_extrude_joined_from_an_imported_face_adds_to_that_part() {
         // truck は STEP を網で読むので、その面から押し出せない
         kmb_contract::skip!("truck は読み込んだ STEP を網で読む");
     }
-    let step = box_step(&k);
+    let step = nested_box_step(&k);
     // 上の面の名前を、読み込んだだけの文書で探す
     let mut b = DocBuilder::new();
     import(&mut b, &step);
     let h = body(&mut b.finish("読み込み"), &k);
+    eprintln!("入れ子の配置: {:?}", k.mass(h).unwrap());
     let top = k
         .faces(h)
         .unwrap()

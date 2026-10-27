@@ -3122,6 +3122,7 @@ dependencies = [
  "kmb-contract",
  "kmb-core",
  "kmb-interchange",
+ "kmb-io-stl",
  "kmb-kernel-smlib",
  "kmb-kernel-truck",
  "kmb-look",
