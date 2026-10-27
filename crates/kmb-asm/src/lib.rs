@@ -24,6 +24,7 @@ pub mod joint;
 pub mod link;
 pub mod motion;
 pub mod motion_link;
+pub mod occurrence;
 pub mod part;
 pub mod position;
 pub mod rigid;
@@ -36,6 +37,9 @@ pub use inspect::{
 };
 pub use joint::{Frame, How, JOINT, Joint, JointKind, Origin, Snap, TRANSFORM_TYPE};
 pub use link::{LINK, LINK_BODY, Link, LinkBody, LinkCommands};
+pub use occurrence::{
+    DETACH_OCCURRENCE, OCCURRENCE, Occurrence, PLACE_OCCURRENCE, SYNC_OCCURRENCE,
+};
 pub use part::{Part, heir_before};
 pub use position::{DRAG_POSITION, MOVE_PART, POSITION, Position};
 pub use snap::SnapPick;
@@ -71,6 +75,7 @@ pub fn register(reg: &mut Registry) {
     reg.declare_section::<kmb_interchange::animation::Storyboard>();
     joint::register(reg);
     link::register(reg);
+    occurrence::register(reg);
     fastener::register(reg);
     position::register(reg);
     rigid::register(reg);
@@ -851,6 +856,33 @@ impl Extension for AsmCommands {
                 .icon("component")
                 .aliases("ぶひん 部品 こんぽーねんと コンポーネント component くみたて 組立")
                 .hint("選んでいるボディをまとめて部品にする(選んでいなければ空の部品)。ブラウザの部品の木に出て、名前は右クリックの「名前変更」で変える"),
+            Action::new(PLACE_OCCURRENCE, "部品をもう 1 つ置く", "cad")
+                .args([
+                    Arg::integer("part", "置く部品の番号(省くと選んでいるボディの部品。出現なら元の部品)"),
+                    Arg::integer("count", "置く数(1〜1000)").default(1),
+                    Arg::length("x", "1 つごとの X のずらし(省くと元の幅と隙間だけ横へ)"),
+                    Arg::length("y", "1 つごとの Y のずらし"),
+                    Arg::length("z", "1 つごとの Z のずらし"),
+                ])
+                .menu("組立")
+                .icon("component")
+                .aliases("しゅつげん 出現 おなじ 同じ ぶひん 部品 おく 置く ふやす 増やす いんすたんす インスタンス occurrence instance")
+                .hint("選んだ部品を形を写さずにもう 1 つ置く(出現)。元を直すと全部が変わり、部品表では同じ部品として数える。出現の部品は「独立した部品にする」で元から切り離せる")
+                .disabled_if(occurrence::place_why(cx)),
+            Action::new(DETACH_OCCURRENCE, "独立した部品にする", "cad")
+                .arg(Arg::integer("part", "出現の部品の番号(省くと選んでいるボディの部品)"))
+                .menu("組立")
+                .icon("component")
+                .aliases("どくりつ 独立 しゅつげん 出現 きりはなす 切り離す detach")
+                .hint("出現の部品を、今の形を写した普通の部品にする。以後は元を直しても変わらない")
+                .disabled_if(occurrence::detach_why(cx)),
+            Action::new(SYNC_OCCURRENCE, "元にそろえる", "cad")
+                .arg(Arg::integer("part", "出現の部品の番号(省くと選んでいるボディの部品)"))
+                .menu("組立")
+                .icon("component")
+                .aliases("もと 元 そろえる 揃える しゅつげん 出現 sync")
+                .hint("元の部品に後から足したボディを、出現の部品にも同じ置き方で足す")
+                .disabled_if(occurrence::sync_why(cx).as_deref()),
             Action::new(NEW_SNAP_JOINT, "ジョイント", "cad")
                 .args([
                     Arg::value("moving", "部品 1(動かす部品)の面"),
@@ -1155,6 +1187,9 @@ impl Extension for AsmCommands {
             NEW_JOINT => new_joint(cx),
             NEW_SNAP_JOINT => new_snap_joint(cx),
             NEW_FASTENER => new_fastener(cx),
+            PLACE_OCCURRENCE => occurrence::place(cx),
+            DETACH_OCCURRENCE => occurrence::detach(cx),
+            SYNC_OCCURRENCE => occurrence::sync(cx),
             anim::EXPLODE => anim::explode(cx),
             anim::DRIVE => anim::drive(cx),
             motion::MOTION_STUDY => motion::run(cx),
