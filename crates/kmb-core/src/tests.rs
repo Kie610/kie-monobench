@@ -2183,3 +2183,20 @@ fn a_choice_of_origin_planes_is_an_origin_plane_field_by_itself() {
     );
     assert!(!Field::choice("op", "操作", &[("new", "新規"), ("join", "結合")]).origin_planes);
 }
+
+/// 確かめること: ▲▼ の刻みは数だけの値を 1 つずつ変え、下限より下げず、式は書き換えない。
+#[test]
+fn step_changes_plain_numbers_only() {
+    let s = Field::expr("count", "個数")
+        .unitless()
+        .step(1.0, 1.0)
+        .step
+        .unwrap();
+    assert_eq!(s.next("3", true).as_deref(), Some("4"));
+    assert_eq!(s.next(" 3 ", false).as_deref(), Some("2"));
+    assert_eq!(s.next("1", false), None);
+    assert_eq!(s.next("n * 2", true), None);
+    assert_eq!(s.next("", true), None);
+    let fine = Step { by: 0.1, min: 0.0 };
+    assert_eq!(fine.next("0.2", true).as_deref(), Some("0.3"));
+}
