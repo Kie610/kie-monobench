@@ -2,8 +2,9 @@
 //! 自分で読み、SMLib の面(平面・円筒・円すい・球・円環・B スプライン)を辺の曲線で切り抜いて縫い、
 //! 足し引き・穴・フィレットに使える立体にする(ffi::step_solid)。
 //!
-//! 読むのは形だけ(色・名前・アセンブリの置き方は読まない)。長さは truck の読み込みと同じく、
-//! ファイルの数をそのまま mm として使う(単位を見ない)。角度の単位(円すいの半頂角)は見る。
+//! 読むのは形だけ(色・名前・アセンブリの置き方は読まない)。長さはファイルの単位
+//! (`kmb_format::step::length_unit`。inch・m など)から mm に直し、点と半径に掛ける。読めない単位は
+//! ファイルの数を mm とみなす(注意は読み込みの機能が出す)。角度の単位(円すいの半頂角)も見る。
 //! 対応していない曲面や曲線があれば理由を返し、呼ぶ側が今までの読み方(網)に戻す。
 //!
 //! 面の名前は truck の読み込みと同じ `step{殻の番号}:f{殻の中の面の番号}`(殻は CLOSED_SHELL・
@@ -325,6 +326,8 @@ struct Data {
     recs: HashMap<u64, Inst>,
     /// 角度の単位をラジアンに直す倍率
     angle: f64,
+    /// 長さの単位を mm に直す倍率
+    len: f64,
 }
 
 fn num(p: &P) -> Result<f64, String> {
@@ -410,7 +413,12 @@ impl Data {
     }
 
     fn point(&self, id: u64) -> Result<P3, String> {
-        self.triple(id, "CARTESIAN_POINT")
+        Ok(k::scale(self.triple(id, "CARTESIAN_POINT")?, self.len))
+    }
+
+    /// 長さの数(半径など)を mm にする。
+    fn length(&self, p: &P) -> Result<f64, String> {
+        Ok(num(p)? * self.len)
     }
 
     fn direction(&self, id: u64) -> Result<P3, String> {
@@ -450,10 +458,16 @@ impl Data {
         let f = || self.frame(rid(arg(r, 1)?)?);
         Ok(match r.name.as_str() {
             "PLANE" => Surf::Plane(f()?),
-            "CYLINDRICAL_SURFACE" => Surf::Cylinder(f()?, num(arg(r, 2)?)?),
-            "CONICAL_SURFACE" => Surf::Cone(f()?, num(arg(r, 2)?)?, num(arg(r, 3)?)? * self.angle),
-            "SPHERICAL_SURFACE" => Surf::Sphere(f()?, num(arg(r, 2)?)?),
-            "TOROIDAL_SURFACE" => Surf::Torus(f()?, num(arg(r, 2)?)?, num(arg(r, 3)?)?),
+            "CYLINDRICAL_SURFACE" => Surf::Cylinder(f()?, self.length(arg(r, 2)?)?),
+            "CONICAL_SURFACE" => Surf::Cone(
+                f()?,
+                self.length(arg(r, 2)?)?,
+                num(arg(r, 3)?)? * self.angle,
+            ),
+            "SPHERICAL_SURFACE" => Surf::Sphere(f()?, self.length(arg(r, 2)?)?),
+            "TOROIDAL_SURFACE" => {
+                Surf::Torus(f()?, self.length(arg(r, 2)?)?, self.length(arg(r, 3)?)?)
+            }
             other => return Err(format!("曲面 {other}(#{id})には対応していません")),
         })
     }
@@ -525,11 +539,11 @@ impl Data {
                 self.direction(rid(arg(v, 1)?)?)?;
                 Curve::Line
             }
-            "CIRCLE" => Curve::Circle(self.frame(rid(arg(r, 1)?)?)?, num(arg(r, 2)?)?),
+            "CIRCLE" => Curve::Circle(self.frame(rid(arg(r, 1)?)?)?, self.length(arg(r, 2)?)?),
             "ELLIPSE" => Curve::Ellipse(
                 self.frame(rid(arg(r, 1)?)?)?,
-                num(arg(r, 2)?)?,
-                num(arg(r, 3)?)?,
+                self.length(arg(r, 2)?)?,
+                self.length(arg(r, 3)?)?,
             ),
             // 面の上の曲線は 3D の曲線だけを使う
             "SURFACE_CURVE" | "SEAM_CURVE" | "INTERSECTION_CURVE" => {
@@ -961,6 +975,7 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
     let data = Data {
         recs,
         angle: if degrees { PI / 180.0 } else { 1.0 },
+        len: kmb_format::step::length_unit(text).mm,
     };
     let mut shells: Vec<u64> = data
         .recs

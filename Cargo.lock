@@ -2467,6 +2467,7 @@ dependencies = [
  "encoding_rs",
  "kmb-cad",
  "kmb-core",
+ "kmb-format",
  "kmb-interchange",
  "kmb-workspace-hack",
  "log",
@@ -2861,6 +2862,7 @@ dependencies = [
  "cc",
  "kmb-contract",
  "kmb-core",
+ "kmb-format",
  "kmb-kernel-truck",
  "kmb-workspace-hack",
  "log",
@@ -2875,6 +2877,7 @@ version = "0.1.0"
 dependencies = [
  "kmb-contract",
  "kmb-core",
+ "kmb-format",
  "kmb-workspace-hack",
  "serde_json",
  "truck-meshalgo",

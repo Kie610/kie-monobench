@@ -12,6 +12,7 @@ layer = "kernel"
 
 [dependencies]
 kmb-core.workspace = true
+kmb-format.workspace = true
 smlib-sys.workspace = true
 serde.workspace = true
 serde_json.workspace = true
