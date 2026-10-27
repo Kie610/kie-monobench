@@ -1326,3 +1326,7 @@ mod speed_tests;
 #[cfg(test)]
 #[path = "solver_check_tests.rs"]
 mod check_tests;
+
+#[cfg(test)]
+#[path = "solver_regression_tests.rs"]
+mod regression_tests;
