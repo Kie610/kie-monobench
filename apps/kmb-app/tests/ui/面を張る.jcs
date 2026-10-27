@@ -10,5 +10,5 @@ pick 候補:断面
 key Enter
 until "面を張る1" exists 60s
 click "体積を計測#1"
-until ~"面のボディ.*体積なし" 60s
+until ~"面のボディ(体積なし)" 60s
 shot 面を張った後
