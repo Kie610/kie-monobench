@@ -1696,7 +1696,13 @@ impl Kernel for SmlibKernel {
             )));
         };
         log::info!("STEP を SMLib の立体に組めないので網で読みます: {why}");
-        let h = k.import_step(step)?;
+        // 網でも読めない時は、両方の理由を返す(網の読み手の理由だけでは、立体に組めなかった
+        // 本当の理由が見えない)
+        let h = k.import_step(step).map_err(|e| {
+            KernelError::Failed(format!(
+                "STEP を立体に組めません: {why}。網でも読めません: {e}"
+            ))
+        })?;
         Ok(self.adopt_imported(h))
     }
 

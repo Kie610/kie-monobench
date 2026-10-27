@@ -101,16 +101,26 @@ impl Feature for ImportStep {
                 .map_err(kernel_err)?;
         }
         let mut out: Outputs = [("body".to_string(), Value::Shape(body))].into();
+        let mut warnings = Vec::new();
+        let surfaces = kmb_format::step::open_shells_beside_solids(&self.step);
+        if surfaces > 0 {
+            warnings.push(format!(
+                "STEP の面だけのボディ {surfaces} 個(公差の補助の面など)は読まず、立体だけを読みました"
+            ));
+        }
         let unit = kmb_format::step::length_unit(&self.step);
         match unit.warning {
-            Some(w) => {
-                log::warn!("{w}");
-                kmb_core::add_warnings(&mut out, vec![w]);
-            }
+            Some(w) => warnings.push(w),
             None if unit.mm != 1.0 => {
                 log::info!("STEP の長さの単位 {} を mm に直して読みました", unit.name);
             }
             None => {}
+        }
+        if !warnings.is_empty() {
+            for w in &warnings {
+                log::warn!("{w}");
+            }
+            kmb_core::add_warnings(&mut out, warnings);
         }
         Ok(out)
     }
