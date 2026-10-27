@@ -37,5 +37,5 @@ Other languages only need the IDs that have been translated; missing ones fall b
 
 - `field.ftl` の ID は `field-<種類の版を外した物>-<欄の鍵>`。`.` と `_` は `-` にする。行の中の欄は親の鍵も含める(`edges.radius` → `edges-radius`)。説明は後ろに `-help`。
   Field IDs use the feature kind without its version and the complete field key. Replace dots and underscores with hyphens. Include the parent key for row fields; append `-help` for help text.
-- 日本語は記述子の欄の名前・説明と同じにする。専用の編集器も `kmb_ui::translated_field` で同じ訳を使う。訳の無い拡張の欄は、記述子の既定の字で出す。
-  Japanese must match each descriptor's label and help. Custom editors use the same translations through `kmb_ui::translated_field`. Fields without translations retain their descriptor defaults.
+- 日本語は記述子の欄の名前・説明と同じにする。専用の編集器で `Field` を描く時は、`kmb_ui::translated_field` で同じ訳を引ける。訳の無い拡張の欄は、記述子の既定の字で出す。
+  Japanese must match each descriptor's label and help. Custom editors rendering a descriptor field can use the same translations through `kmb_ui::translated_field`. Fields without translations retain their descriptor defaults.

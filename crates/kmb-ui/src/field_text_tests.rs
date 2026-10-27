@@ -1,4 +1,4 @@
-//! 確かめること: 欄の訳と記述子の一致、行の中の欄、専用の編集器と汎用の欄が使う文言の一致。
+//! 確かめること: 欄の訳と記述子の一致、行の中の欄、独自の欄向けの公開口と言語の共有。
 
 use crate::*;
 use kmb_core::{Field, FieldKind};
@@ -37,7 +37,7 @@ fn every_descriptor_field_has_texts_matching_its_module() {
 }
 
 #[test]
-fn custom_panels_use_the_same_field_texts_and_keep_unknown_defaults() {
+fn custom_field_api_uses_shared_words_and_keeps_unknown_defaults() {
     let ctx = egui::Context::default();
     let mut ws = Workspace::new(kmb_samples::sample_document(), None, kmb_bundle::modules());
     let f = Field::expr("distance", "距離").help("範囲が「すべて」「対象まで」の時は使わない");
