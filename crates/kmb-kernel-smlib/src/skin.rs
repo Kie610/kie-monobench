@@ -739,7 +739,12 @@ struct Rail {
 }
 
 impl Rail {
-    fn new(p: &PlanarPath, loops: &[Loop3], which: usize) -> Result<Rail, String> {
+    fn new(
+        p: &PlanarPath,
+        loops: &[Loop3],
+        which: usize,
+        point: Option<(usize, P3)>,
+    ) -> Result<Rail, String> {
         let edges = path3(p);
         if edges.is_empty() {
             return Err(format!("ガイドレール {which} に線がありません"));
@@ -756,7 +761,10 @@ impl Rail {
             // レールの上で、輪郭にいちばん近い所
             let (mut best, mut bd) = (0usize, f64::INFINITY);
             for (j, q) in samples.iter().enumerate() {
-                let d = dist(*q, l.at(l.nearest_coarse(*q)));
+                let d = match point.filter(|(index, _)| *index == i) {
+                    Some((_, p)) => dist(*q, p),
+                    None => dist(*q, l.at(l.nearest_coarse(*q))),
+                };
                 if d < bd {
                     (best, bd) = (j, d);
                 }
@@ -767,7 +775,10 @@ impl Rail {
             );
             let gap = |r: f64| {
                 let q = path_at(&edges, &lens, r);
-                l.nearest(q).1
+                match point.filter(|(index, _)| *index == i) {
+                    Some((_, p)) => dist(q, p),
+                    None => l.nearest(q).1,
+                }
             };
             for _ in 0..50 {
                 let a = lo + (hi - lo) / 3.0;
@@ -865,6 +876,49 @@ fn stretch(fixed: P3, from: P3, to: P3) -> Matrix4 {
 /// ロフトの曲面の網。断面は穴の無い閉じた輪郭 1 つずつ(穴のある断面は、呼ぶ側が外側と穴に分けて
 /// 別にロフトし、穴を引く)。
 pub fn loft(sections: &[Profile], rails: &[PlanarPath], tag: &str) -> Result<Vec<Surface>, String> {
+    loft_with_point(sections, rails, tag, None)
+}
+
+/// 点の断面は輪郭と同じ区間分けを使い、曲面の端の制御点をすべて同じ位置にする。
+pub fn loft_to_point(
+    sections: &[Profile],
+    point: P3,
+    at_start: bool,
+    rails: &[PlanarPath],
+    tag: &str,
+) -> Result<Vec<Surface>, String> {
+    let adjacent = if at_start {
+        sections.first()
+    } else {
+        sections.last()
+    }
+    .ok_or("点へのロフトには輪郭が1つ以上要ります")?;
+    if !point.iter().all(|v| v.is_finite()) {
+        return Err("ロフトの端の点の位置が数ではありません".into());
+    }
+    if k::dot(
+        k::sub(point, adjacent.plane.origin),
+        k::normalize(adjacent.plane.normal()),
+    )
+    .abs()
+        < 1e-6
+    {
+        return Err(
+            "ロフトの端の点が隣の輪郭と同じ平面にあります。点を輪郭の平面から離してください".into(),
+        );
+    }
+    let mut all = sections.to_vec();
+    let index = if at_start { 0 } else { all.len() };
+    all.insert(index, adjacent.clone());
+    loft_with_point(&all, rails, tag, Some((index, point)))
+}
+
+fn loft_with_point(
+    sections: &[Profile],
+    rails: &[PlanarPath],
+    tag: &str,
+    point: Option<(usize, P3)>,
+) -> Result<Vec<Surface>, String> {
     if sections.len() < 2 {
         return Err("ロフトには断面が 2 つ以上要ります".into());
     }
@@ -890,6 +944,9 @@ pub fn loft(sections: &[Profile], rails: &[PlanarPath], tag: &str) -> Result<Vec
     }
     // k9: 続きの断面が同じ平面にあると、間をつなげない
     for i in 1..sections.len() {
+        if point.is_some_and(|(index, _)| index == i || index + 1 == i) {
+            continue;
+        }
         let (a, b) = (&sections[i - 1].plane, &sections[i].plane);
         let (na, nb) = (k::normalize(a.normal()), k::normalize(b.normal()));
         if k::dot(na, nb).abs() > 1.0 - 1e-9 && k::dot(k::sub(b.origin, a.origin), na).abs() < 1e-6
@@ -903,7 +960,7 @@ pub fn loft(sections: &[Profile], rails: &[PlanarPath], tag: &str) -> Result<Vec
     let rails: Vec<Rail> = rails
         .iter()
         .enumerate()
-        .map(|(i, r)| Rail::new(r, &loops, i + 1))
+        .map(|(i, r)| Rail::new(r, &loops, i + 1, point))
         .collect::<Result<_, _>>()?;
     // レールに触れる所の割合は、輪郭の向きをそろえてから探す
     let al = if rails.is_empty() {
@@ -916,17 +973,25 @@ pub fn loft(sections: &[Profile], rails: &[PlanarPath], tag: &str) -> Result<Vec
             }
         }
         let pick = |r: &Rail| -> Vec<f64> {
-            ls.iter()
+            let mut picks: Vec<f64> = ls
+                .iter()
                 .zip(&r.at)
                 .map(|(l, a)| l.nearest(r.point(*a)).0)
-                .collect()
+                .collect();
+            if let Some((i, _)) = point {
+                picks[i] = picks[if i == 0 { 1 } else { i - 1 }];
+            }
+            picks
         };
         let a = pick(&rails[0]);
         let s = rails.get(1).map(pick);
         align(ls, Some(&a), s.as_deref())
     };
     // 断面の中心の間の長さの割合で、u の値を決める
-    let cs: Vec<P3> = al.loops.iter().map(Loop3::centroid).collect();
+    let mut cs: Vec<P3> = al.loops.iter().map(Loop3::centroid).collect();
+    if let Some((i, p)) = point {
+        cs[i] = p;
+    }
     let mut params = vec![0.0];
     for w in cs.windows(2) {
         let d = dist(w[0], w[1]).max(1e-9);
@@ -943,22 +1008,32 @@ pub fn loft(sections: &[Profile], rails: &[PlanarPath], tag: &str) -> Result<Vec
             .map(|i| piece_spans(&al, i, b))
             .max()
             .unwrap_or(1);
-        let curves: Vec<Vec<H>> = (0..al.loops.len())
+        let mut curves: Vec<Vec<H>> = (0..al.loops.len())
             .map(|i| piece(&al, i, b, spans).0)
             .collect();
-        let name = piece(&al, 0, b, spans).1.to_string();
+        if let Some((i, p)) = point {
+            for q in &mut curves[i] {
+                *q = h(p, q[3]);
+            }
+        }
+        let first = usize::from(point.is_some_and(|(i, _)| i == 0));
+        let name = piece(&al, first, b, spans).1.to_string();
         let (degree, knots, rows) = skin_rows(&curves, &params);
         out.push(Surface {
             degree_u: degree,
             knots_u: knots,
             knots_v: arc_knots(spans),
             rows,
-            caps: 3,
+            caps: match point {
+                Some((0, _)) => 2,
+                Some(_) => 1,
+                None => 3,
+            },
             name: format!("{tag}:side:{name}"),
         });
     }
     if !rails.is_empty() {
-        out = follow_rails(out, &params, &rails, &al)?;
+        out = follow_rails(out, &params, &rails, &al, point)?;
     }
     Ok(out)
 }
@@ -969,6 +1044,7 @@ fn follow_rails(
     params: &[f64],
     rails: &[Rail],
     al: &Aligned,
+    point: Option<(usize, P3)>,
 ) -> Result<Vec<Surface>, String> {
     const STEPS: usize = 8;
     // 2 本目のレールが触れる所から始まる区間(断面 0 で、その点にいちばん近い境目)。レールが 1 本なら、
@@ -1029,7 +1105,7 @@ fn follow_rails(
     Ok(surfaces
         .into_iter()
         .map(|s| {
-            let sections: Vec<Vec<H>> = us
+            let mut sections: Vec<Vec<H>> = us
                 .iter()
                 .zip(&moves)
                 .map(|(&u, m)| {
@@ -1039,6 +1115,13 @@ fn follow_rails(
                         .collect()
                 })
                 .collect();
+            // レールが許容差の内側で点の近くを通っても、選んだ端の点は動かさない。
+            if let Some((i, p)) = point {
+                let end = if i == 0 { 0 } else { sections.len() - 1 };
+                for q in &mut sections[end] {
+                    *q = h(p, q[3]);
+                }
+            }
             let (degree, knots, rows) = skin_rows(&sections, &us);
             Surface {
                 degree_u: degree,

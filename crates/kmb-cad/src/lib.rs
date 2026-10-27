@@ -9,6 +9,8 @@ mod face_profile;
 mod flush;
 mod inspect;
 pub mod plane;
+mod point_ref;
+pub use point_ref::PointRef;
 pub mod prism;
 pub mod regions;
 pub mod stop_at;
@@ -320,6 +322,11 @@ pub enum Recipe {
         sections: Vec<Profile>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         rails: Vec<k::PlanarPath>,
+        /// 端の点。無ければ輪郭の断面だけをつなぐ。
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        point: Option<P3>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        at_start: bool,
     },
     /// 複数の道具を順に効かせる(ザグリのある穴を複数の点にあける時など)。演算はどれも同じ
     Many { parts: Vec<Recipe> },
@@ -519,8 +526,13 @@ impl Recipe {
                 operation,
                 sections,
                 rails,
+                point,
+                ..
             } => {
                 *operation = op;
+                if let Some(p) = point {
+                    *p = k::transform_point(m, *p);
+                }
                 for p in sections {
                     p.plane = transform_plane(m, &p.plane);
                 }
@@ -641,8 +653,18 @@ pub fn apply_recipe(
                 .map_err(kernel_err)?,
         ),
         Recipe::Loft {
-            sections, rails, ..
-        } => boolean(kernel.loft(sections, rails, tag).map_err(kernel_err)?),
+            sections,
+            rails,
+            point,
+            at_start,
+            ..
+        } => boolean(
+            match point {
+                Some(p) => kernel.loft_to_point(sections, *p, *at_start, rails, tag),
+                None => kernel.loft(sections, rails, tag),
+            }
+            .map_err(kernel_err)?,
+        ),
         Recipe::Extrude {
             profile,
             from,

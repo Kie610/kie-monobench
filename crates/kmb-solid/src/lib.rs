@@ -82,6 +82,7 @@ mod modify_tests;
 mod multi_pick_tests;
 mod origin_tests;
 mod pattern_tests;
+mod point_loft_tests;
 mod segment_tests;
 mod shell_tests;
 mod sweep_loft_tests;

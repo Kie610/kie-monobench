@@ -168,8 +168,8 @@ fn a_loft_joins_a_square_to_a_circle_and_refuses_sections_on_one_plane() {
     let s = sweep_loft_sample();
     let mut doc = s.doc;
     let section = |p: FeatureId| Section {
-        profile: p,
-        regions: vec![],
+        profile: Some(p),
+        ..Default::default()
     };
     let data = Loft {
         sections: vec![section(s.square), section(s.circle)],
@@ -261,8 +261,8 @@ fn a_loft_of_sections_with_holes_stays_hollow() {
     let high = section("上", Some("30 mm"));
     let mut doc = b.finish("中空のロフト");
     let section = |profile| Section {
-        profile,
-        regions: vec![],
+        profile: Some(profile),
+        ..Default::default()
     };
     // 領域を選ばない断面は、四角から円を抜いた領域(穴のある輪郭)
     let data = Loft {
