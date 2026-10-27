@@ -8,7 +8,7 @@
 //! | [`dxf`] | DXF R12(AC1009)の最小の形(HEADER・TABLES・ENTITIES)を書く |
 //! | [`svg`] | SVG の数の書き方と、文字の置き換え |
 //! | [`base64`] | バイト列と base64 の文字の行き来(絵を JSON に入れる) |
-//! | [`step`] | STEP の長さの単位を読む(形の読み手が mm にそろえる倍率) |
+//! | [`step`] | STEP の長さの単位を読む(形の読み手が mm にそろえる倍率)、実体を 1 つずつに分ける |
 
 pub mod base64;
 pub mod dxf;
