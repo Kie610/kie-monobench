@@ -127,6 +127,13 @@ pub trait Feature {
     fn keeps(&self) -> Vec<FeatureId> {
         Vec::new()
     }
+    /// この機能の `body` が、入力のボディの形を別の位置に置き直しただけの出現なら、その入力。
+    /// 出現は新しいボディになり([`crate::BodyLine::of`])、再計算はこの入力に元のボディの
+    /// 定義の座標の形を渡す(機能はそれを [`crate::Kernel::instance`] で置く)。出現を読む後ろの
+    /// 機能には、元のその時点の最新の形を出現の位置に置いた形を渡す。
+    fn instance_of(&self) -> Option<InputRef> {
+        None
+    }
 }
 
 /// 機能が持つ、名前の付いた式([`Feature::model_params`])。
@@ -374,6 +381,8 @@ pub struct EvalCtx<'a> {
     pub(crate) outputs: &'a HashMap<FeatureId, Outputs>,
     /// 読むボディの付け替え(データの形 → 読む形。[`crate::BodyTable::redirects`])
     pub(crate) redirect: &'a BTreeMap<crate::BodyState, crate::BodyState>,
+    /// 出現の置き直し(読む形 → 渡す値。[`crate::Feature::instance_of`])
+    pub(crate) placed: &'a BTreeMap<crate::BodyState, Value>,
     pub(crate) kernel: &'a dyn Kernel,
     pub(crate) registry: &'a Registry,
     /// 計算している文書。誤りの文でボディ・部品を名前で指すためだけに読む
@@ -464,6 +473,9 @@ impl EvalCtx<'_> {
             Some((f, s)) => (*f, s.as_str()),
             None => (feature, slot),
         };
+        if let Some(v) = self.placed.get(&(feature, slot.to_string())) {
+            return Ok(v);
+        }
         self.outputs
             .get(&feature)
             .and_then(|o| o.get(slot))

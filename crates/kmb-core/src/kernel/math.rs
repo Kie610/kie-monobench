@@ -64,6 +64,47 @@ pub fn placement_problem(m: &Matrix4) -> Option<&'static str> {
     None
 }
 
+/// 行列の積 `a × b`(`b` を先に掛ける)。
+pub fn mat_mul(a: &Matrix4, b: &Matrix4) -> Matrix4 {
+    let mut m = [[0.0; 4]; 4];
+    for (i, row) in m.iter_mut().enumerate() {
+        for (j, v) in row.iter_mut().enumerate() {
+            *v = (0..4).map(|t| a[i][t] * b[t][j]).sum();
+        }
+    }
+    m
+}
+
+/// 向きの部分が回転か鏡映(長さと角度を変えない)の行列か。拡大縮小・せん断を含む物は偽。
+pub fn is_rigid(m: &Matrix4) -> bool {
+    if placement_problem(m).is_some() {
+        return false;
+    }
+    (0..3).all(|i| {
+        (0..3).all(|j| {
+            let d: f64 = (0..3).map(|t| m[t][i] * m[t][j]).sum();
+            (d - if i == j { 1.0 } else { 0.0 }).abs() < 1e-9
+        })
+    })
+}
+
+/// 回転か鏡映の行列([`is_rigid`])の逆(向きの部分は転置)。
+pub fn rigid_inverse(m: &Matrix4) -> Matrix4 {
+    let mut r = IDENTITY;
+    for i in 0..3 {
+        for j in 0..3 {
+            r[i][j] = m[j][i];
+        }
+        r[i][3] = -(0..3).map(|t| m[t][i] * m[t][3]).sum::<f64>();
+    }
+    r
+}
+
+/// 単位行列とほとんど同じ(数の誤差だけ違う)か。
+pub fn near_identity(m: &Matrix4) -> bool {
+    (0..4).all(|i| (0..4).all(|j| (m[i][j] - IDENTITY[i][j]).abs() < 1e-12))
+}
+
 /// 点に変換行列をかける。
 pub fn transform_point(m: &Matrix4, p: P3) -> P3 {
     let mut out = [0.0; 3];

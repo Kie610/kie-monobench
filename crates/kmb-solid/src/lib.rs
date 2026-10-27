@@ -82,6 +82,7 @@ mod hole_tests;
 mod link_tests;
 mod modify_tests;
 mod multi_pick_tests;
+mod occurrence_tests;
 mod origin_tests;
 mod pattern_tests;
 mod point_loft_tests;
