@@ -312,7 +312,7 @@ pub fn mark_of(
     let lo = ends.iter().map(|e| e.0).fold(f64::INFINITY, f64::min);
     let hi = ends.iter().map(|e| e.0).fold(f64::NEG_INFINITY, f64::max);
     let full = hi - lo;
-    if !(full > 1e-9) {
+    if full <= 1e-9 || full.is_nan() {
         return None;
     }
     let open = |t: f64| {
