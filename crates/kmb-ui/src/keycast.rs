@@ -1657,6 +1657,42 @@ mod tests {
         assert_eq!(*h.state(), 1);
     }
 
+    fn check_context_menu_name(item: &str) {
+        let ws = crate::Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        );
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(Vec2::new(1600.0, 900.0))
+            .build_ui_state(|ui, ws: &mut crate::Workspace| ws.ui(ui), ws);
+        let script = format!(
+            r#"key Ctrl+,
+click "マウスとキー"
+type ~"設定を探す" "操作の表示"
+click "押したキーとマウスを画面に出す(録画・解説向け)"
+expect "コマンドの名前も出す" exists
+key Ctrl+,
+pick f8:end
+rclick ~"選んだ面:"
+click "{item}"
+expect "操作の表示: マウス {item}" exists
+"#
+        );
+        let result = crate::cmdline_tests::run(&mut h, &script);
+        assert!(result.ok, "{}", result.report());
+    }
+
+    #[test]
+    fn context_menu_measure_uses_the_clicked_fixed_name() {
+        check_context_menu_name("測る");
+    }
+
+    #[test]
+    fn context_menu_registered_action_uses_the_clicked_fixed_name() {
+        check_context_menu_name("面にスケッチ");
+    }
+
     #[test]
     fn ui_tools_enable_the_overlay_and_find_the_pressed_key() {
         let ws = crate::Workspace::new(
