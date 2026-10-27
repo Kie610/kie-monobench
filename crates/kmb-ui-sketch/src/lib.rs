@@ -584,6 +584,8 @@ fn sketches_used(
 /// 文書のスケッチと、解けた形(どちらかが読めなければ `None`)。
 fn sketch_of(host: &EditorHost<'_>, entry: &FeatureEntry) -> Option<(Sketch, Solution)> {
     let sketch: Sketch = serde_json::from_value(entry.data.clone()).ok()?;
+    let values = dimension_values(host, &sketch)?;
+    let sketch = sketch.evaluated_patterns(&values).ok()?;
     let solution = host
         .output(entry.id, "sketch")
         .and_then(kmb_sketch::solution_of)?;
@@ -1315,11 +1317,13 @@ impl FeatureEditor for SketchEditor {
         }
         // パターンの元か写しを選んでいれば、パターンの欄(後から直せる。拘束の欄より上に出す)
         let values = dimension_values(host, &sketch);
-        let patterned =
-            pattern_ui::panel(ui, &mut self.editor, &sketch, &solution, values.as_ref())
-                .or_else(|| group_ui::polygon_panel(ui, &mut self.editor, &sketch, &solution))
-                .and_then(|s| refuse_broken_dims(host, &sketch, s, &mut self.editor))
-                .map(to_value);
+        let params = host.param_values();
+        let patterned = pattern_ui::panel(ui, &mut self.editor, &sketch, &solution, &|n| {
+            params.get(n).copied()
+        })
+        .or_else(|| group_ui::polygon_panel(ui, &mut self.editor, &sketch, &solution))
+        .and_then(|s| refuse_broken_dims(host, &sketch, s, &mut self.editor))
+        .map(to_value);
         // 選んだボディの辺や角(まだ写していない物)は、ここで仮に写してパネルの相手にする。
         // パネルで何かを付けた時だけ文書に入る(網羅版 G10)
         let saved = self.editor.selection.clone();
