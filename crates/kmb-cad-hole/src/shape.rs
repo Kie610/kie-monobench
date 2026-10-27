@@ -73,7 +73,8 @@ pub struct ThreadSize {
 }
 
 /// メートル並目ネジの表。下穴と通し穴は ISO 273・JIS B 1001、ザグリは六角穴付き
-/// ボルト用の一般的な表(深さは頭が沈む H″)。M2・M2.5 のザグリと皿は頭の径から見積もった値。
+/// ボルト用の余裕を持つ寸法。M14 以上のザグリは頭径に 2〜3 mm、頭高に 1 mm の逃げを足す。
+/// 皿は頭の径に寄せた参考値で、M14 以上は呼び径の 2 倍。
 pub const THREADS: &[ThreadSize] = &[
     ThreadSize {
         name: "M2",
@@ -155,6 +156,51 @@ pub const THREADS: &[ThreadSize] = &[
         clearance: [13.0, 13.5, 14.5],
         counterbore: (20.0, 13.0),
         countersink: 24.5,
+    },
+    ThreadSize {
+        name: "M14",
+        major: 14.0,
+        pitch: 2.0,
+        tap_drill: 12.0,
+        clearance: [15.0, 15.5, 16.5],
+        counterbore: (23.0, 15.0),
+        countersink: 28.0,
+    },
+    ThreadSize {
+        name: "M16",
+        major: 16.0,
+        pitch: 2.0,
+        tap_drill: 14.0,
+        clearance: [17.0, 17.5, 18.5],
+        counterbore: (26.0, 17.0),
+        countersink: 32.0,
+    },
+    ThreadSize {
+        name: "M20",
+        major: 20.0,
+        pitch: 2.5,
+        tap_drill: 17.5,
+        clearance: [21.0, 22.0, 24.0],
+        counterbore: (33.0, 21.0),
+        countersink: 40.0,
+    },
+    ThreadSize {
+        name: "M24",
+        major: 24.0,
+        pitch: 3.0,
+        tap_drill: 21.0,
+        clearance: [25.0, 26.0, 28.0],
+        counterbore: (39.0, 25.0),
+        countersink: 48.0,
+    },
+    ThreadSize {
+        name: "M30",
+        major: 30.0,
+        pitch: 3.5,
+        tap_drill: 26.5,
+        clearance: [31.0, 33.0, 35.0],
+        counterbore: (48.0, 31.0),
+        countersink: 60.0,
     },
 ];
 

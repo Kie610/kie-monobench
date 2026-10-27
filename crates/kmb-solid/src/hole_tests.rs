@@ -113,7 +113,7 @@ fn a_tapped_hole_takes_a_typed_size_outside_the_table() {
     }
     // 通し穴は表の呼びだけ。読めない呼びと一緒に、理由を出して止まる
     for (size, tap, want) in [
-        ("M16", Tap::Clearance, "通し穴の径は表の"),
+        ("M18", Tap::Clearance, "通し穴の径は表の"),
         ("M7", Tap::Tapped, "読めません"),
     ] {
         let mut doc = tapped(size, tap);
@@ -241,4 +241,144 @@ fn hole_sizes_that_do_not_fit_are_reported() {
         .unwrap()
         .status;
     assert!(format!("{st:?}").contains("M7"), "{st:?}");
+}
+
+#[test]
+fn expanded_thread_tapped_holes_use_all_families_and_survive_reopening() {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    use kmb_sketch::SketchPlane;
+    let k = TestKernel::new();
+    for (name, diameter) in [
+        ("M14", 12.0),
+        ("M16", 14.0),
+        ("M20", 17.5),
+        ("M24", 21.0),
+        ("M30", 26.5),
+        ("1/4-20 UNC", 0.201 * 25.4),
+        ("#10-32 UNF", 0.159 * 25.4),
+        ("G1/8", 8.8),
+        ("Rp1/4", 11.8),
+        ("M6x1", 5.0),
+    ] {
+        let mut b = DocBuilder::new();
+        let sketch = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 100.0, 80.0);
+        let plate = b.feature(
+            EXTRUDE,
+            "板",
+            Extrude {
+                profile: Some(sketch),
+                distance: "12 mm".into(),
+                ..Default::default()
+            },
+        );
+        let mut points = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
+        let point = points.fixed_point(50.0, 40.0);
+        let sketch = b.feature(kmb_sketch::SKETCH, "穴の位置", points.build());
+        b.feature(
+            HOLE,
+            "ねじ穴",
+            Hole {
+                points: vec![kmb_core::PointId(point.0)],
+                tap: Tap::Tapped,
+                size: Some(name.into()),
+                depth: Some("8 mm".into()),
+                ..Hole::new(plate, sketch)
+            },
+        );
+        let mut doc = b.finish("ねじの族");
+        let expected = 100.0 * 80.0 * 12.0 - cyl(diameter / 2.0, 8.0);
+        for reopen in [false, true] {
+            if reopen {
+                doc = kmb_core::Document::from_json(&doc.to_json()).unwrap();
+            }
+            let report = doc.recompute(&registry(), &*k);
+            assert_ok(&report);
+            let bodies = visible_bodies(doc.data(), &registry(), &report);
+            assert_eq!(bodies.len(), 1);
+            let volume = k.mass(bodies[0].1).unwrap().volume;
+            assert!(
+                close(volume, expected, 1e-2),
+                "{name}: {volume} vs {expected}"
+            );
+        }
+    }
+}
+
+#[test]
+fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape() {
+    use kmb_core::{Context, Extensions, Kernel, Outcome, ProblemKind};
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    use kmb_sketch::SketchPlane;
+    use std::sync::Arc;
+    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let reg = registry();
+    let actions = Extensions(vec![Arc::new(kmb_cad_hole::thread::ThreadCommands)]);
+    for name in ["M24", "M30", "1/4-20 UNC", "#10-32 UNF", "G1/4", "Rp1/4"] {
+        let size = kmb_cad_hole::thread::parse_size(name).unwrap();
+        let mut b = DocBuilder::new();
+        let mut circle = SketchBuilder::new(SketchPlane::Xy);
+        let center = circle.fixed_point(0.0, 0.0);
+        if name.starts_with("Rp") {
+            circle.circle(
+                center,
+                &format!("{} mm", size.major + 8.0),
+                size.major / 2.0 + 4.0,
+            );
+        }
+        circle.circle(center, &format!("{} mm", size.major), size.major / 2.0);
+        let sketch = b.feature(kmb_sketch::SKETCH, "円", circle.build());
+        let cylinder = b.feature(
+            EXTRUDE,
+            "円筒",
+            Extrude {
+                profile: Some(sketch),
+                distance: "10 mm".into(),
+                ..Default::default()
+            },
+        );
+        let mut doc = b.finish("ねじ属性");
+        let report = doc.recompute(&reg, k.as_ref());
+        assert_ok(&report);
+        let body = visible_bodies(doc.data(), &reg, &report)[0].1;
+        let volume = k.mass(body).unwrap().volume;
+        let face = k
+            .arc_edges(body)
+            .unwrap()
+            .into_iter()
+            .find(|edge| {
+                kmb_cad_hole::thread::cylinder_of(k.as_ref(), body, &edge.faces[1]).is_ok_and(|c| {
+                    c.internal == name.starts_with("Rp") && (c.diameter - size.major).abs() < 1e-4
+                })
+            })
+            .unwrap()
+            .faces[1]
+            .clone();
+        let args = serde_json::json!({"feature":cylinder.0,"face":face,"size":name});
+        let cx = Context {
+            args: &args,
+            ..Context::new(doc.data(), &report, &reg, &k)
+        };
+        let Outcome::Change { label, edits } = actions.run(THREAD_ON_FACE, &cx).unwrap() else {
+            panic!()
+        };
+        let bad = serde_json::json!({"feature":cylinder.0,"face":face,"size":name,"unknown":true});
+        let invalid = Context { args: &bad, ..cx };
+        assert_eq!(
+            actions.run(THREAD_ON_FACE, &invalid).err().unwrap().kind,
+            ProblemKind::Input
+        );
+        doc.apply_edits(&label, edits).unwrap();
+        let saved = doc.to_json();
+        let mut doc = kmb_core::Document::from_json(&saved).unwrap();
+        assert_eq!(doc.to_json(), saved);
+        let report = doc.recompute(&reg, k.as_ref());
+        assert_ok(&report);
+        let bodies = visible_bodies(doc.data(), &reg, &report);
+        assert_eq!(bodies.len(), 1);
+        assert!(close(k.mass(bodies[0].1).unwrap().volume, volume, 1e-6));
+        assert_eq!(
+            doc.data().features.last().unwrap().data["size"],
+            size.name()
+        );
+    }
 }

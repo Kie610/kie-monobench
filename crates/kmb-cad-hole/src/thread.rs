@@ -1,4 +1,4 @@
-//! ねじ(`solid.thread@1`): 円筒の面にメートルねじの属性を付ける。形のねじ山は作らない。
+//! ねじ(`solid.thread@1`): 円筒の面にねじの属性を付ける。形のねじ山は作らない。
 //! 面の径から近い呼び(M6×1 など)を提案し、呼び径とピッチを見せる。
 //!
 //! 円筒の向き・径・長さは、平らな面と直角に交わる円の辺([`kmb_core::Kernel::arc_edges`])から
@@ -46,15 +46,80 @@ pub const METRIC: &[(f64, f64, &[f64])] = &[
     (36.0, 4.0, &[3.0]),
 ];
 
-/// ねじの呼び(例: M6×1)。
+/// ねじの族。管用は平行ねじだけを扱う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    Metric,
+    Unified,
+    Pipe,
+}
+
+/// ねじの呼び。寸法はすべて mm。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Size {
-    /// 呼び径(外径)
+    pub family: Family,
+    /// 呼び径(ねじ山の外径)
     pub major: f64,
     pub pitch: f64,
-    /// 並目か
+    /// メートルの並目、またはユニファイの UNC か。
     pub coarse: bool,
+    nominal: &'static str,
+    tap: f64,
+    /// 管用の平行内ねじ Rp か。
+    pipe_internal: bool,
 }
+
+/// ASME B1.1 の呼び径(in)、UNC・UNF の山数と、切削タップ用の代表下穴(in)。
+/// 下穴はねじ山の基本の谷の径とは別の、切削のための値。
+struct Unified {
+    nominal: &'static str,
+    inch: f64,
+    tpi: [u16; 2],
+    tap: [f64; 2],
+}
+
+#[rustfmt::skip]
+const UNIFIED: &[Unified] = &[
+    Unified { nominal: "#4", inch: 0.112, tpi: [40, 48], tap: [0.0890, 0.0935] },
+    Unified { nominal: "#5", inch: 0.125, tpi: [40, 44], tap: [0.1015, 0.1040] },
+    Unified { nominal: "#6", inch: 0.138, tpi: [32, 40], tap: [0.1065, 0.1130] },
+    Unified { nominal: "#8", inch: 0.164, tpi: [32, 36], tap: [0.1360, 0.1360] },
+    Unified { nominal: "#10", inch: 0.190, tpi: [24, 32], tap: [0.1495, 0.1590] },
+    Unified { nominal: "#12", inch: 0.216, tpi: [24, 28], tap: [0.1770, 0.1820] },
+    Unified { nominal: "1/4", inch: 0.25, tpi: [20, 28], tap: [0.2010, 0.2130] },
+    Unified { nominal: "5/16", inch: 0.3125, tpi: [18, 24], tap: [0.2570, 0.2720] },
+    Unified { nominal: "3/8", inch: 0.375, tpi: [16, 24], tap: [0.3125, 0.3320] },
+    Unified { nominal: "7/16", inch: 0.4375, tpi: [14, 20], tap: [0.3680, 25.0 / 64.0] },
+    Unified { nominal: "1/2", inch: 0.5, tpi: [13, 20], tap: [27.0 / 64.0, 29.0 / 64.0] },
+    Unified { nominal: "9/16", inch: 0.5625, tpi: [12, 18], tap: [31.0 / 64.0, 33.0 / 64.0] },
+    Unified { nominal: "5/8", inch: 0.625, tpi: [11, 18], tap: [17.0 / 32.0, 37.0 / 64.0] },
+    Unified { nominal: "3/4", inch: 0.75, tpi: [10, 16], tap: [21.0 / 32.0, 11.0 / 16.0] },
+    Unified { nominal: "7/8", inch: 0.875, tpi: [9, 14], tap: [49.0 / 64.0, 13.0 / 16.0] },
+    Unified { nominal: "1", inch: 1.0, tpi: [8, 12], tap: [7.0 / 8.0, 15.0 / 16.0] },
+    Unified { nominal: "1-1/8", inch: 1.125, tpi: [7, 12], tap: [63.0 / 64.0, 1.0 + 3.0 / 64.0] },
+    Unified { nominal: "1-1/4", inch: 1.25, tpi: [7, 12], tap: [1.0 + 7.0 / 64.0, 1.0 + 11.0 / 64.0] },
+    Unified { nominal: "1-3/8", inch: 1.375, tpi: [6, 12], tap: [1.0 + 7.0 / 32.0, 1.0 + 19.0 / 64.0] },
+    Unified { nominal: "1-1/2", inch: 1.5, tpi: [6, 12], tap: [1.0 + 11.0 / 32.0, 1.0 + 27.0 / 64.0] },
+];
+
+/// ISO 228-1・ISO 7-1 の管用平行ねじの基本寸法。呼びの数は外径(in)ではない。
+struct Pipe {
+    nominal: &'static str,
+    major: f64,
+    tpi: u16,
+    tap: f64,
+}
+
+#[rustfmt::skip]
+const PIPE: &[Pipe] = &[
+    Pipe { nominal: "1/8", major: 9.728, tpi: 28, tap: 8.8 },
+    Pipe { nominal: "1/4", major: 13.157, tpi: 19, tap: 11.8 },
+    Pipe { nominal: "3/8", major: 16.662, tpi: 19, tap: 15.25 },
+    Pipe { nominal: "1/2", major: 20.955, tpi: 14, tap: 19.0 },
+    Pipe { nominal: "3/4", major: 26.441, tpi: 14, tap: 24.5 },
+    Pipe { nominal: "1", major: 33.249, tpi: 11, tap: 30.75 },
+    Pipe { nominal: "1 1/4", major: 41.910, tpi: 11, tap: 39.5 },
+];
 
 fn num(v: f64) -> String {
     let s = format!("{v:.2}");
@@ -62,19 +127,34 @@ fn num(v: f64) -> String {
 }
 
 impl Size {
-    /// 保存する名前(例: `M6x1`)。
+    /// 保存する名前。メートルは `M6x1`、ユニファイは `1/4-20 UNC`、管用は `G1/4`・`Rp1/4`。
     pub fn name(&self) -> String {
-        format!("M{}x{}", num(self.major), num(self.pitch))
+        match self.family {
+            Family::Metric => format!("M{}x{}", num(self.major), num(self.pitch)),
+            Family::Unified => format!(
+                "{}-{:.0} {}",
+                self.nominal,
+                25.4 / self.pitch,
+                if self.coarse { "UNC" } else { "UNF" }
+            ),
+            Family::Pipe => format!(
+                "{}{}",
+                if self.pipe_internal { "Rp" } else { "G" },
+                self.nominal
+            ),
+        }
     }
 
-    /// 見せる名前(例: `M6×1`)。
+    /// 見せる名前。メートルの区切りには × を使う。
     pub fn label(&self) -> String {
-        format!("M{}×{}", num(self.major), num(self.pitch))
+        self.name().replace('x', "×")
     }
 
-    /// 内ねじの下穴の径。並目で穴の表([`crate::THREADS`])にある呼びは表の下穴(穴の機能のネジ穴と
-    /// 同じ径)、ほかは呼び径 − ピッチ。
+    /// 内ねじの代表下穴。メートル並目の表にある呼びは穴の機能と同じ値。
     pub fn tap_drill(&self) -> f64 {
+        if self.family != Family::Metric {
+            return self.tap;
+        }
         match crate::THREADS.iter().find(|t| {
             self.coarse
                 && (t.major - self.major).abs() < 1e-9
@@ -86,63 +166,222 @@ impl Size {
     }
 }
 
-/// 表のすべての呼び(径の小さい順、同じ径なら並目が先)。
+/// 族ごとに、径の小さい順、同じ径なら並目が先の呼び。
 pub fn sizes() -> Vec<Size> {
-    METRIC
-        .iter()
-        .flat_map(|(d, c, fine)| {
-            std::iter::once(Size {
-                major: *d,
-                pitch: *c,
+    let mut out = Vec::new();
+    for (major, coarse, fine) in METRIC {
+        for (i, pitch) in std::iter::once(coarse).chain(fine.iter()).enumerate() {
+            out.push(Size {
+                family: Family::Metric,
+                major: *major,
+                pitch: *pitch,
+                coarse: i == 0,
+                nominal: "",
+                tap: 0.0,
+                pipe_internal: false,
+            });
+        }
+    }
+    for row in UNIFIED {
+        for i in 0..2 {
+            out.push(Size {
+                family: Family::Unified,
+                major: row.inch * 25.4,
+                pitch: 25.4 / f64::from(row.tpi[i]),
+                coarse: i == 0,
+                nominal: row.nominal,
+                tap: row.tap[i] * 25.4,
+                pipe_internal: false,
+            });
+        }
+    }
+    for row in PIPE {
+        for pipe_internal in [false, true] {
+            out.push(Size {
+                family: Family::Pipe,
+                major: row.major,
+                pitch: 25.4 / f64::from(row.tpi),
                 coarse: true,
-            })
-            .chain(fine.iter().map(|p| Size {
-                major: *d,
-                pitch: *p,
-                coarse: false,
-            }))
-        })
-        .collect()
+                nominal: row.nominal,
+                tap: row.tap,
+                pipe_internal,
+            });
+        }
+    }
+    out
 }
 
-/// 名前(`M6`、`M6x1`、`M6×0.75`、大小文字・空白は問わない)から呼びを探す。ピッチを省くと並目。
-pub fn parse_size(name: &str) -> Option<Size> {
-    let s: String = name
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect::<String>()
-        .to_ascii_uppercase()
-        .replace('×', "X");
-    let s = s.strip_prefix('M')?;
-    let (d, p) = match s.split_once('X') {
-        Some((d, p)) => (d.parse::<f64>().ok()?, Some(p.parse::<f64>().ok()?)),
-        None => (s.parse::<f64>().ok()?, None),
+fn fraction(s: &str) -> Option<f64> {
+    let n = match s.split_once('/') {
+        Some((a, b)) => a.parse::<f64>().ok()? / b.parse::<f64>().ok()?,
+        None => s.parse::<f64>().ok()?,
     };
-    sizes().into_iter().find(|z| {
-        (z.major - d).abs() < 1e-9
-            && match p {
-                Some(p) => (z.pitch - p).abs() < 1e-9,
-                None => z.coarse,
-            }
+    (n.is_finite() && n > 0.0).then_some(n)
+}
+
+/// 分数と帯分数の呼びを読む。管用では呼びの数字であり、外径への換算には使わない。
+fn nominal_inch(s: &str) -> Option<f64> {
+    if s.trim().starts_with('-') {
+        return None;
+    }
+    let s = s.trim().replace(['"', '″'], "");
+    let s = s
+        .strip_suffix("INCH")
+        .or_else(|| s.strip_suffix("IN"))
+        .unwrap_or(&s)
+        .trim();
+    if let Some(n) = s.strip_prefix('#') {
+        let n = n.trim().parse::<u16>().ok()?;
+        return Some(0.060 + 0.013 * f64::from(n));
+    }
+    let s = s
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(" /", "/")
+        .replace("/ ", "/")
+        .replace('-', " ");
+    let parts: Vec<_> = s.split_whitespace().collect();
+    match &parts[..] {
+        [whole, part] if !whole.contains('/') && part.contains('/') => {
+            Some(whole.parse::<f64>().ok()? + fraction(part)?)
+        }
+        [single] => fraction(single),
+        _ => None,
+    }
+}
+
+fn unified_parts(name: &str) -> Option<(f64, u16, Option<bool>)> {
+    let s = name.trim();
+    let (s, coarse) = match s.strip_suffix("UNC") {
+        Some(s) => (s, Some(true)),
+        None => match s.strip_suffix("UNF") {
+            Some(s) => (s, Some(false)),
+            None => (s, None),
+        },
+    };
+    let (nominal, tpi) = s.trim().rsplit_once('-')?;
+    Some((nominal_inch(nominal)?, tpi.trim().parse().ok()?, coarse))
+}
+
+fn pipe_parts(name: &str) -> Option<(bool, &str)> {
+    name.strip_prefix("RP")
+        .map(|s| (true, s.trim()))
+        .or_else(|| name.strip_prefix('G').map(|s| (false, s.trim())))
+}
+
+/// メートル、ユニファイ、管用平行ねじの呼びを読む。族とピッチ・山数の矛盾は受けない。
+pub fn parse_size(name: &str) -> Option<Size> {
+    let upper = name.trim().to_ascii_uppercase().replace('×', "X");
+    if upper.starts_with('M') {
+        let s: String = upper.chars().filter(|c| !c.is_whitespace()).collect();
+        let s = s.strip_prefix('M')?;
+        let (major, pitch) = match s.split_once('X') {
+            Some((d, p)) => (d.parse::<f64>().ok()?, Some(p.parse::<f64>().ok()?)),
+            None => (s.parse::<f64>().ok()?, None),
+        };
+        return sizes().into_iter().find(|s| {
+            s.family == Family::Metric
+                && (s.major - major).abs() < 1e-9
+                && pitch.map_or(s.coarse, |p| (s.pitch - p).abs() < 1e-9)
+        });
+    }
+    if let Some((internal, nominal)) = pipe_parts(&upper) {
+        let d = nominal_inch(nominal)?;
+        let row = PIPE
+            .iter()
+            .find(|r| (nominal_inch(r.nominal).unwrap_or(0.0) - d).abs() < 1e-9)?;
+        return sizes().into_iter().find(|s| {
+            s.family == Family::Pipe && s.nominal == row.nominal && s.pipe_internal == internal
+        });
+    }
+    let (major, tpi, coarse) = unified_parts(&upper)?;
+    sizes().into_iter().find(|s| {
+        s.family == Family::Unified
+            && (s.major - major * 25.4).abs() < 1e-9
+            && (s.pitch - 25.4 / f64::from(tpi)).abs() < 1e-9
+            && coarse.is_none_or(|c| s.coarse == c)
     })
 }
 
-/// 表に無い呼び `name` の誤りの文。
-/// 径が表にあればその径のピッチ、無ければ近い呼び(上下 1 つずつ)と細目の書き方の例を言う(10-26 k6)。
+/// 表に無い呼びの誤り。族に応じた近い呼びと、正しい書き方を示す。
 pub fn unknown_size(name: &str) -> String {
     let head = format!("ねじの呼び「{name}」は表にありません");
-    let s: String = name
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .collect::<String>()
-        .to_ascii_uppercase()
-        .replace('×', "X");
-    let d = s
+    let upper = name.trim().to_ascii_uppercase().replace('×', "X");
+    if let Some((internal, nominal)) = pipe_parts(&upper) {
+        let prefix = if internal { "Rp" } else { "G" };
+        let near = nominal_inch(nominal)
+            .map(|d| {
+                let below = PIPE
+                    .iter()
+                    .rev()
+                    .find(|r| nominal_inch(r.nominal).unwrap_or(0.0) <= d);
+                let above = PIPE
+                    .iter()
+                    .find(|r| nominal_inch(r.nominal).unwrap_or(0.0) >= d);
+                let mut names: Vec<_> = below
+                    .into_iter()
+                    .chain(above)
+                    .map(|r| format!("{prefix}{}", r.nominal))
+                    .collect();
+                names.dedup();
+                names.join(" と ")
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| format!("{prefix}1/8 と {prefix}1/4"));
+        return format!(
+            "{head}。管用の平行ねじは {prefix}1/4 のように書きます。近い呼びは {near}。テーパねじは扱いません"
+        );
+    }
+    if upper.starts_with('R') {
+        return format!(
+            "{head}。テーパねじ R・Rc は扱いません。平行ねじ G1/4・Rp1/4 は別の種類です"
+        );
+    }
+    if !upper.starts_with('M')
+        && (upper.contains(['#', '/', '-']) || upper.ends_with("UNC") || upper.ends_with("UNF"))
+    {
+        let near = unified_parts(&upper)
+            .map(|(d, _, _)| d)
+            .or_else(|| nominal_inch(&upper))
+            .map(|d| {
+                let rows: Vec<_> =
+                    if let Some(row) = UNIFIED.iter().find(|r| (r.inch - d).abs() < 1e-9) {
+                        vec![row]
+                    } else {
+                        UNIFIED
+                            .iter()
+                            .rev()
+                            .find(|r| r.inch < d)
+                            .into_iter()
+                            .chain(UNIFIED.iter().find(|r| r.inch > d))
+                            .collect()
+                    };
+                rows.into_iter()
+                    .map(|r| {
+                        format!(
+                            "{}-{} UNC・{}-{} UNF",
+                            r.nominal, r.tpi[0], r.nominal, r.tpi[1]
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" と ")
+            })
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "#4-40 UNC・#4-48 UNF".into());
+        return format!(
+            "{head}。近い呼びは {near}。並目 UNC・細目 UNF と山数を合わせて書いてください(例: 1/4-20 UNC・1/4-28 UNF)"
+        );
+    }
+    let compact: String = upper.chars().filter(|c| !c.is_whitespace()).collect();
+    let d = compact
         .strip_prefix('M')
         .and_then(|r| r.split('X').next())
         .and_then(|d| d.parse::<f64>().ok());
     let Some(d) = d else {
-        return format!("{head}。M と呼び径で書き、細目はピッチを付けます(例: M6、M6x0.75)");
+        return format!(
+            "{head}。M と呼び径で書き、細目はピッチを付けます(例: M6、M6x0.75)。ほかの族は 1/4-20 UNC・G1/4・Rp1/4 のように書きます"
+        );
     };
     let pitches = |(major, coarse, fine): &(f64, f64, &[f64])| {
         let fine: Vec<String> = fine.iter().map(|p| num(*p)).collect();
@@ -177,7 +416,7 @@ pub fn unknown_size(name: &str) -> String {
 }
 
 /// 面の径 `diameter` に近い順の呼び(同じ近さなら並目)。おねじもめねじも呼び径で比べる
-/// (穴もねじの呼び径の概形で作ることが多いので、6 mm の穴は M6。Kie 2026-10-17)。
+/// (穴もねじの呼び径の概形で作ることが多いので、6 mm の穴は M6)。
 pub fn suggest(diameter: f64) -> Vec<Size> {
     let mut v = sizes();
     v.sort_by(|a, b| {
@@ -189,16 +428,13 @@ pub fn suggest(diameter: f64) -> Vec<Size> {
 }
 
 /// 円筒 `c` に近い順の呼び。おねじもめねじも呼び径で比べる(穴もねじの呼び径の概形で作ることが
-/// 多いので、6 mm の穴は M6。Kie 2026-10-17)。ただし、めねじの径が穴の表のネジ穴の下穴とちょうど
+/// 多いので、6 mm の穴は M6)。ただし、めねじの径が表の下穴とちょうど
 /// 同じなら、その呼びを先にする(JC のネジ穴で開けた M6 の 5 mm は M5 でなく M6)。
 pub fn suggest_for(c: &Cylinder) -> Vec<Size> {
     let mut v = suggest(c.diameter);
     if c.internal
         && let Some(i) = v.iter().position(|s| {
-            s.coarse
-                && crate::THREADS.iter().any(|t| {
-                    (t.major - s.major).abs() < 1e-9 && (t.tap_drill - c.diameter).abs() < 1e-3
-                })
+            (s.family != Family::Metric || s.coarse) && (s.tap_drill() - c.diameter).abs() < 1e-3
         })
     {
         let s = v.remove(i);
@@ -381,6 +617,9 @@ fn resolve(t: &Thread, c: &Cylinder) -> Result<(Size, Vec<String>), String> {
             )
         })?
     };
+    if size.family == Family::Pipe && size.pipe_internal && !c.internal {
+        return Err("Rp は管用の平行内ねじです。穴の円筒の面を選んでください".into());
+    }
     Ok((size, mismatch(c, &size, &near[0]).into_iter().collect()))
 }
 
@@ -427,7 +666,21 @@ impl Feature for Thread {
                     s.label(),
                     num(s.major),
                     num(s.pitch),
-                    if s.coarse { "並目" } else { "細目" },
+                    match s.family {
+                        Family::Metric =>
+                            if s.coarse {
+                                "並目"
+                            } else {
+                                "細目"
+                            },
+                        Family::Unified =>
+                            if s.coarse {
+                                "UNC"
+                            } else {
+                                "UNF"
+                            },
+                        Family::Pipe => "管用平行",
+                    },
                     if i == 0 && c.internal {
                         " ← 穴の径に近い"
                     } else if i == 0 {
@@ -605,7 +858,7 @@ impl Extension for ThreadCommands {
                 .icon("thread")
                 .aliases("ねじ ネジ thread タップ おねじ めねじ")
                 .hint("押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いメートルねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める")
-                // 帯の前には出さない(Kie 2026-10-21 の画板)
+                // 作成の一覧に出し、帯の前には出さない。
                 .at(&[Place::Menu])
                 .disabled_if(none.then_some("ボディがありません")),
         ]
@@ -662,6 +915,103 @@ mod tests {
     }
 
     #[test]
+    fn expanded_thread_spellings_and_invalid_series_are_unambiguous() {
+        for (name, canonical) in [
+            ("1/4-20", "1/4-20 UNC"),
+            (" 1 / 4 in - 28 unf ", "1/4-28 UNF"),
+            ("1/4\"-20 UNC", "1/4-20 UNC"),
+            ("1/4″-20 unc", "1/4-20 UNC"),
+            ("1 1/2-12 UNF", "1-1/2-12 UNF"),
+            ("1.5-6", "1-1/2-6 UNC"),
+            ("g 1-1/4", "G1 1/4"),
+            ("rP 1 / 4", "Rp1/4"),
+            (" m 6 × 0.75 ", "M6x0.75"),
+        ] {
+            assert_eq!(parse_size(name).unwrap().name(), canonical, "{name}");
+        }
+        for name in [
+            "1/4-0",
+            "1/4-20 UNF",
+            "#10-24 UNF",
+            "G0",
+            "Rp-1/4",
+            "-1/4-20",
+            "1/0-20",
+            "GNaN",
+            "R1/4",
+            "Rc1/4",
+        ] {
+            assert!(parse_size(name).is_none(), "{name}");
+        }
+    }
+
+    #[test]
+    fn expanded_thread_tables_use_basic_dimensions_and_separate_tap_drills() {
+        for size in sizes() {
+            assert_eq!(parse_size(&size.name()), Some(size));
+            assert!(
+                size.tap_drill() > 0.0 && size.tap_drill() < size.major,
+                "{}",
+                size.name()
+            );
+            if size.family == Family::Unified {
+                let minor = size.major - 1.08253175 * size.pitch;
+                assert!(size.tap_drill() > minor, "{}", size.name());
+            }
+        }
+        for (nominal, minor) in [("G1/8", 8.566), ("G1/4", 11.445), ("G1 1/4", 38.952)] {
+            let size = parse_size(nominal).unwrap();
+            assert!((size.major - 1.280654 * size.pitch - minor).abs() < 0.002);
+        }
+        let inch = parse_size("1/4-20 UNC").unwrap();
+        assert_eq!(inch.family, Family::Unified);
+        assert!((inch.major - 0.25 * 25.4).abs() < 1e-12);
+        assert!((inch.tap_drill() - 0.201 * 25.4).abs() < 1e-12);
+        assert_eq!(parse_size("G1/4").unwrap().family, Family::Pipe);
+        assert_eq!(parse_size("M6").unwrap().family, Family::Metric);
+    }
+
+    #[test]
+    fn expanded_thread_unknown_names_point_to_sizes_in_the_same_family() {
+        let m = unknown_size("#10-24 UNF");
+        assert!(m.contains("#10-24 UNC") && m.contains("#10-32 UNF"), "{m}");
+        let m = unknown_size("1/3-20 UNC");
+        assert!(m.contains("5/16-18 UNC") && m.contains("3/8-16 UNC"), "{m}");
+        let m = unknown_size("G1/3");
+        assert!(m.contains("G1/4") && m.contains("G3/8"), "{m}");
+        let m = unknown_size("Rp1/3");
+        assert!(m.contains("Rp1/4") && m.contains("Rp3/8"), "{m}");
+    }
+
+    #[test]
+    fn expanded_thread_choices_and_saved_metric_data_keep_their_contract() {
+        let field = crate::hole_fields()
+            .into_iter()
+            .find(|f| f.key == "size")
+            .unwrap();
+        let Some(kmb_core::Suggest::Values { values }) = field.suggest else {
+            panic!()
+        };
+        assert_eq!(values[0].value, crate::DEFAULT_SIZE);
+        for name in [
+            "M14",
+            "M16",
+            "M20",
+            "M24",
+            "M30",
+            "1/4-20 UNC",
+            "#10-32 UNF",
+            "G1/4",
+            "Rp1/4",
+        ] {
+            assert!(values.iter().any(|v| v.value == name), "{name}");
+        }
+        let old = serde_json::json!({"target":1,"face":"f1:side","size":"M6x1"});
+        let thread: Thread = serde_json::from_value(old.clone()).unwrap();
+        assert_eq!(serde_json::to_value(thread).unwrap(), old);
+    }
+
+    #[test]
     fn names_parse_with_or_without_the_pitch() {
         let m6 = parse_size("M6").unwrap();
         assert_eq!((m6.major, m6.pitch, m6.coarse), (6.0, 1.0, true));
@@ -676,7 +1026,7 @@ mod tests {
 
     #[test]
     fn an_unknown_size_names_the_nearest_sizes_and_a_fine_pitch() {
-        // 表に無い呼びは、近い呼びと細目の書き方の例まで言う(10-26 k6)
+        // 表に無い呼びは、近い呼びと細目の書き方の例まで言う。
         let m = unknown_size("M28");
         assert!(m.contains("M27(並目 3・細目 2) と M30"), "{m}");
         assert!(m.contains("M27x2"), "細目の例: {m}");

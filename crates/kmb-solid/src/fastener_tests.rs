@@ -17,11 +17,60 @@ use std::sync::Arc;
 
 #[test]
 fn expanded_thread_fasteners_include_large_metric_sizes() {
-    for (name, major, pitch) in [("M24", 24.0, 3.0), ("M30", 30.0, 3.5)] {
-        let size = kmb_asm::fastener::metric(name)
-            .unwrap_or_else(|| panic!("{name} が規格部品の表にある"));
-        assert_eq!((size.d, size.pitch), (major, pitch));
-        assert!(size.socket[0] > major && size.nut[0] > major);
+    for name in ["M14", "M16", "M20", "M24", "M30"] {
+        let size = kmb_asm::fastener::metric(name).unwrap();
+        let hole = kmb_cad_hole::thread(name).unwrap();
+        assert_eq!(
+            (size.d, size.pitch, size.tap),
+            (hole.major, hole.pitch, hole.tap_drill)
+        );
+        assert_eq!(size.clearance, hole.clearance);
+        assert!(hole.counterbore.0 > size.socket[0]);
+        assert!(hole.counterbore.1 > size.socket[1]);
+    }
+}
+
+#[test]
+fn expanded_thread_large_bolts_nuts_and_washers_make_closed_bodies() {
+    for name in ["M24", "M30"] {
+        for kind in ["socket_head", "hex_bolt", "hex_nut", "washer"] {
+            let mut b = DocBuilder::new();
+            let fastener = b.feature(
+                FASTENER,
+                "規格部品",
+                json!({
+                    "kind":kind,"size":name,"length":"40 mm",
+                    "places":[{"center":[0,0,0],"normal":[0,0,1]}]
+                }),
+            );
+            b.feature(
+                kmb_asm::fastener::FASTENER_BODY,
+                "ボディ",
+                json!({"fastener":fastener.0,"index":0}),
+            );
+            let mut doc = b.finish("大きい規格部品");
+            let reg = registry();
+            let k = SmlibKernel::new();
+            let report = doc.recompute(&reg, &k);
+            assert_ok(&report);
+            let bodies = visible_bodies(doc.data(), &reg, &report);
+            assert_eq!(bodies.len(), 1);
+            let body = bodies[0].1;
+            assert_eq!(k.check(body).unwrap(), (true, 1, 0), "{name} {kind}");
+            assert!(k.mass(body).unwrap().volume > 0.0);
+            let table = kmb_asm::fastener::metric(name).unwrap();
+            let expected_height = match kind {
+                "socket_head" => 40.0 + table.socket[1],
+                "hex_bolt" => 40.0 + table.hex_head[1],
+                "hex_nut" => table.nut[1],
+                _ => table.washer[2],
+            };
+            let (min, max) = k.bounds(body).unwrap();
+            assert!(
+                (max[2] - min[2] - expected_height).abs() < 1e-3,
+                "{name} {kind}: {min:?} {max:?}"
+            );
+        }
     }
 }
 

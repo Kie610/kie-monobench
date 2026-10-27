@@ -275,7 +275,7 @@ impl Hole {
             .unwrap_or(DEFAULT_SIZE)
     }
 
-    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は表(M2〜M12 並目)に無い呼びも、ねじの表にあれば
+    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は通し穴の表に無い呼びも、ねじの表にあれば
     /// 打って使える(例: `M6x0.75`、`M16`)。通し穴は通し穴・ザグリ・皿の径が要るので表の呼びだけ。
     fn thread(&self) -> Result<Option<(thread::Size, Option<&'static ThreadSize>)>, EvalError> {
         if self.tap == Tap::Simple {
@@ -291,12 +291,11 @@ impl Hole {
         };
         let size = thread::parse_size(name).ok_or_else(|| {
             EvalError::InvalidData(format!(
-                "ネジのサイズ {name} は読めません(表の {} を選ぶか、M6x0.75・M16 のように打ってください)",
-                table()
+                "ネジのサイズ {name} は読めません。{}",
+                thread::unknown_size(name)
             ))
         })?;
-        let row = size
-            .coarse
+        let row = (size.family == thread::Family::Metric && size.coarse)
             .then(|| THREADS.iter().find(|t| (t.major - size.major).abs() < 1e-9))
             .flatten();
         if row.is_none() && self.tap == Tap::Clearance {
@@ -716,18 +715,25 @@ pub(crate) const DEFAULT_SIZE: &str = "M3";
 
 /// 穴の設定欄(欄で指定する穴と、面に穴の作っている途中のパネルで同じものを使う)。
 pub fn hole_fields() -> Vec<Field> {
-    // よく使う M3 を最初(既定)にし、M4 から M12、最後に M2・M2.5 を並べる
-    let mut sizes: Vec<&str> = THREADS.iter().map(|t| t.name).collect();
-    let first = sizes.iter().position(|s| *s == DEFAULT_SIZE).unwrap_or(0);
+    // 通し穴にも使えるメートル並目を M3 から並べ、ほかの族のねじ穴の呼びを続ける。
+    let mut sizes: Vec<String> = THREADS.iter().map(|t| t.name.to_string()).collect();
+    let first = sizes.iter().position(|s| s == DEFAULT_SIZE).unwrap_or(0);
     sizes.rotate_left(first);
+    sizes.extend(
+        thread::sizes()
+            .into_iter()
+            .filter(|s| s.family != thread::Family::Metric)
+            .map(|s| s.name()),
+    );
+    let names: Vec<&str> = sizes.iter().map(String::as_str).collect();
     vec![
         Field::choice("kind", "穴のタイプ", KINDS),
         Field::choice("tap", "ねじ穴のタイプ", TAPS)
             .help("ネジ山の形は作らない。径を表から決め、ネジの属性として残す"),
         Field::text("size", "サイズ")
-            .suggest(&sizes)
+            .suggest(&names)
             .unless("tap", "simple")
-            .help("一覧の呼び(並目)を選ぶか、M6x0.75(細目)・M16 のように打つ(ネジ穴だけ。通し穴は一覧の呼び)"),
+            .help("呼びを選ぶか、M6x0.75・1/4-20 UNC・G1/4・Rp1/4 のように打つ。通し穴はメートル並目の表の呼びだけ"),
         Field::choice("fit", "はめあい", FITS)
             .only("tap", "clearance", "simple")
             .help("通し穴の径(ISO 273 の精・中・粗)"),
