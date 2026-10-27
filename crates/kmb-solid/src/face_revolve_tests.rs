@@ -72,7 +72,11 @@ fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
         );
         let mut doc = b.finish("面の回転");
         let expected = 2.0 * std::f64::consts::PI.powi(2) * 5.0 * if hole { 3.0 } else { 4.0 };
-        assert!((mass(&mut doc, &*k, r) - expected).abs() < 1e-3);
+        let actual = mass(&mut doc, &*k, r);
+        assert!(
+            (actual - expected).abs() < 1e-3,
+            "hole={hole}, volume={actual}, expected={expected}"
+        );
         let reg = registry();
         let report = doc.recompute(&reg, &*k);
         let ids: Vec<_> = kmb_core::visible_bodies(doc.data(), &reg, &report)
@@ -177,7 +181,12 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
             }],
         ))
         .unwrap();
-        assert!((mass(&mut doc, &*k, r) - std::f64::consts::PI * 16.0 * length).abs() < 1e-3);
+        let actual = mass(&mut doc, &*k, r);
+        let expected = std::f64::consts::PI * 16.0 * length;
+        assert!(
+            (actual - expected).abs() < 1e-3,
+            "length={length}, volume={actual}, expected={expected}"
+        );
     }
     // 同じ軸を含む別の平面の2面も、それぞれ回して合わせる。
     let data = serde_json::to_value(Revolve {
