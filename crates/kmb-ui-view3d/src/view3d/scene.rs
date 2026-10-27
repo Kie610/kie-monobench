@@ -6,6 +6,8 @@ use super::*;
 pub struct SceneBody {
     pub feature: FeatureId,
     pub mesh: Mesh,
+    /// 面のボディは裏からも描く。測定用の網は片面のまま保つ。
+    pub two_sided: bool,
     pub(super) edges: Vec<[[f32; 3]; 2]>,
     /// 面ごとの決まった色(`mesh.face_names` の順。`None` と足りない面はボディの色)
     pub colors: Vec<Option<Color32>>,
@@ -250,7 +252,27 @@ impl Scene {
             return false;
         }
         self.set(bodies, build_meshes_at(kernel, bodies, self.tolerance()));
+        self.set_body_kinds(kernel);
         true
+    }
+
+    /// 作った網のボディの種類を反映する。裏側の三角形を測定用の網へ混ぜない。
+    pub fn set_body_kinds(&mut self, kernel: &dyn Kernel) {
+        let mut changed = false;
+        for b in self.bodies.iter_mut().chain(&mut self.stowed) {
+            let two_sided = self
+                .key
+                .iter()
+                .find(|(f, _)| *f == b.feature)
+                .is_some_and(|(_, h)| {
+                    kernel.body_kind(*h).ok() == Some(kmb_core::kernel::BodyKind::Sheet)
+                });
+            changed |= b.two_sided != two_sided;
+            b.two_sided = two_sided;
+        }
+        if changed {
+            self.sort_hidden();
+        }
     }
 
     /// 網の細かさ(mm)。
@@ -267,6 +289,7 @@ impl Scene {
         let bodies = self.key.clone();
         log::info!("網の細かさを {tolerance} mm にして作り直す");
         self.set(&bodies, build_meshes_at(kernel, &bodies, tolerance));
+        self.set_body_kinds(kernel);
         true
     }
 
@@ -292,6 +315,7 @@ impl Scene {
             })
             .map(|(feature, mesh, plain)| SceneBody {
                 feature,
+                two_sided: false,
                 edges: feature_edges(&mesh),
                 look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
                 face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
@@ -897,4 +921,93 @@ pub(super) fn feature_edges(m: &Mesh) -> Vec<[[f32; 3]; 2]> {
         .iter()
         .flat_map(|l| l.windows(2).map(|w| [w[0], w[1]]))
         .collect()
+}
+
+#[cfg(test)]
+mod sheet_tests {
+    use super::*;
+    #[test]
+    fn sheet_back_is_visible_without_doubling_the_measurement_mesh() {
+        struct SheetKernel;
+        impl Kernel for SheetKernel {
+            fn name(&self) -> &str {
+                "sheet-test"
+            }
+            fn body_kind(
+                &self,
+                _: ShapeHandle,
+            ) -> Result<kmb_core::kernel::BodyKind, kmb_core::KernelError> {
+                Ok(kmb_core::kernel::BodyKind::Sheet)
+            }
+        }
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [10., 0., 0.], [10., 10., 0.], [0., 10., 0.]],
+            normals: vec![[0., 0., 1.]; 4],
+            triangles: vec![[0, 1, 2], [0, 2, 3]],
+            triangle_faces: vec![0, 0],
+            face_names: vec!["face".into()],
+            edges: vec![],
+        };
+        let mut scene = Scene::default();
+        scene.set(
+            &[(FeatureId(1), ShapeHandle(1))],
+            vec![(FeatureId(1), mesh)],
+        );
+        let white = Color32::WHITE;
+        let colors = Colors::from_look(Palette {
+            dark: true,
+            canvas: Color32::BLACK,
+            ink: white,
+            ink2: white,
+            ink3: white,
+            err: white,
+            warn: white,
+            design: white,
+            cam: white,
+            shade3: white,
+            accent: white,
+            inks: Inks::DARK,
+        });
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(128., 128.));
+        let mut cam = Camera::default();
+        cam.set_view(0., -90.);
+        cam.fit_box([0., 0., 0.], [10., 10., 0.], rect);
+        let draw = |scene: &Scene| {
+            render_guided(
+                scene,
+                &cam,
+                [128, 128],
+                1.,
+                &[],
+                None,
+                &colors,
+                Shading::Shaded,
+                Guides {
+                    grid: false,
+                    axes: false,
+                },
+                &[],
+                &Behind::default(),
+            )
+        };
+        let before = draw(&scene);
+        scene.set_body_kinds(&SheetKernel);
+        assert!(scene.bodies[0].two_sided);
+        let after = draw(&scene);
+        assert!(
+            before
+                .pixels
+                .iter()
+                .zip(&after.pixels)
+                .filter(|(a, b)| a != b)
+                .count()
+                > 1000,
+            "裏面の面積が見える"
+        );
+        assert_eq!(
+            scene.bodies[0].mesh.triangles.len(),
+            2,
+            "測定の面積は片面のまま"
+        );
+    }
 }

@@ -1049,6 +1049,7 @@ fn interference_checks_a_step_body_that_smlib_reads_as_a_solid() {
             step: other,
             stand_up: false,
             upright: false,
+            units: true,
         },
     );
     let mut t = Bench {
@@ -1092,6 +1093,7 @@ fn interference_lists_a_shape_only_body_as_unchecked_with_the_reason() {
             step: other,
             stand_up: false,
             upright: false,
+            units: true,
         },
     );
     let _ = block_id;

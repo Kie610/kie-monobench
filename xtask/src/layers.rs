@@ -98,6 +98,11 @@ pub const DEV_KERNEL: [&str; 1] = ["kmb-solid"];
 /// 開発用の依存で、上の表に入らない今の辺。(crate, 依存先, 理由)。直したら行を消す
 /// (消し忘れると「もう無い」で落ちる)。
 const DEV_KNOWN: &[(&str, &str, &str)] = &[
+    (
+        "kmb-solid",
+        "kmb-io-stl",
+        "細い面の形を実際の STL に書き、辺の閉じ方を読む試験",
+    ),
     // 画面の写真の試験(tests/screens.rs)が、書き出した 3MF の中身を形式の crate で読んで確かめる
     ("kmb-app", "kmb-io-stl", "写真の試験が書き出した 3MF を読む"),
 ];

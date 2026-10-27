@@ -7,7 +7,7 @@
 //! GPU が無い時(画面の試験、描画装置を作れなかった時)は、CPU の描画をそのまま使う。
 //! 面を拾うのは、どちらでも CPU の計算([`crate::view3d::pick_at`]。ボディごとの箱の木で調べる)。
 //! 辺を拾うのも、どちらでも CPU の計算([`crate::view3d::edge_at`]。隠れは面の箱の木で調べる)。
-//! 前は GPU があれば番号の絵で拾っていたが、PC によって拾う辺が変わらないよう 1 本にした(2026-10-24 Kie)。
+//! PC によらず同じ辺を拾うため、GPU の有無にかかわらず CPU で選ぶ。
 
 use crate::Shading;
 use crate::view3d::{Behind, Camera, Colors, Ghost, GhostLayer, Guides, Pick, Scene};
@@ -1074,12 +1074,15 @@ impl Gpu {
         for b in &scene.bodies {
             let m = &b.mesh;
             for t in &m.triangles {
-                for &i in t {
-                    let i = i as usize;
-                    corners.push(Corner {
-                        p: m.positions[i],
-                        n: m.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]),
-                    });
+                for reverse in 0..if b.two_sided { 2 } else { 1 } {
+                    let indices = if reverse == 0 { *t } else { [t[2], t[1], t[0]] };
+                    for i in indices {
+                        let i = i as usize;
+                        corners.push(Corner {
+                            p: m.positions[i],
+                            n: m.normals.get(i).copied().unwrap_or([0.0, 0.0, 1.0]),
+                        });
+                    }
                 }
             }
             for [p, q] in b.edge_segments() {
@@ -1694,7 +1697,7 @@ fn face_colors(
             .collect();
         for f in &m.triangle_faces {
             let c = per_face.get(*f as usize).copied().unwrap_or([0; 4]);
-            out.extend([c, c, c]);
+            out.extend(std::iter::repeat_n(c, if b.two_sided { 6 } else { 3 }));
         }
     }
     out
@@ -1707,7 +1710,7 @@ fn cap_colors(scene: &Scene, colors: &Colors) -> Vec<[u8; 4]> {
         let [r, g, bb, _] = scene.cap_color(bi, colors).to_srgba_unmultiplied();
         out.extend(std::iter::repeat_n(
             [r, g, bb, 255],
-            b.mesh.triangles.len() * 3,
+            b.mesh.triangles.len() * if b.two_sided { 6 } else { 3 },
         ));
     }
     out

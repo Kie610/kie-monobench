@@ -49,14 +49,15 @@ impl Headless {
                 bodies
                     .iter()
                     .find(|(f, _)| *f == p.feature)
-                    .and_then(|(_, h)| self.modules().kernel.mass(*h).ok())
-                    .map(|props| {
+                    .and_then(|(_, h)| {
                         let data = self.doc().data();
                         let root = kmb_core::body_root(data, &self.modules().registry, p.feature);
-                        kmb_measure::BodyFacts {
-                            props,
-                            material: body_material(data, root),
-                        }
+                        kmb_measure::BodyFacts::of(
+                            self.modules().kernel.as_ref(),
+                            *h,
+                            body_material(data, root),
+                        )
+                        .ok()
                     })
             }
             _ => None,

@@ -90,6 +90,7 @@ cad.sketch3d@1	kmb-sketch-3d
 cad.sketch@1	kmb-sketch
 cad.sketch_on_face	kmb-sketch
 cad.split_plane	kmb-cad-modify
+cad.surface_patch	kmb-cad-surface
 cad.sweep	kmb-cad-sweep
 cad.text.explode	kmb-text
 cad.text.font	kmb-text
@@ -247,6 +248,7 @@ solid.scale@1	kmb-cad-modify
 solid.shell@1	kmb-cad-edge
 solid.split@1	kmb-cad-modify
 solid.split_part@1	kmb-cad-modify
+solid.surface_patch@1	kmb-cad-surface
 solid.sweep@1	kmb-cad-sweep
 solid.thread@1	kmb-cad-hole
 study.cancel	kmb-study

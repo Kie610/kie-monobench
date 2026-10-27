@@ -535,9 +535,21 @@ pub(crate) fn constraint_panel(
             SolveStatus::OverConstrained { .. } => l.pal.warn,
             SolveStatus::Inconsistent { .. } => l.pal.err,
         };
-        let status = view::status_text(sol);
-        theme::chip(ui, &status, Some(color))
-            .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
+        let status = view::status_text(sketch, sol);
+        let response = if matches!(sol.status, SolveStatus::Inconsistent { .. }) {
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(&status)
+                        .size(theme::fs(11.0))
+                        .color(color),
+                )
+                .wrap(),
+            )
+            .on_hover_text(&status)
+        } else {
+            theme::chip(ui, &status, Some(color))
+        };
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
         theme::chip(
             ui,
             &format!("拘束 {}", sketch.constraints.len() - dims),

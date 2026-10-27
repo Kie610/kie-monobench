@@ -36,7 +36,16 @@ impl Headless {
             .into_iter()
             .zip(names)
             .map(|((id, h), name)| {
-                let props = self.modules.kernel.mass(h).map_err(|e| e.to_string())?;
+                let facts = kmb_measure::BodyFacts::of(self.modules.kernel.as_ref(), h, None)
+                    .map_err(|e| e.to_string())?;
+                let props = (!facts.sheet).then_some(facts.props);
+                let sheet = facts.sheet.then_some(super::SheetFacts {
+                    body_kind: kmb_core::kernel::BodyKind::Sheet,
+                    description: "面のボディ(体積なし)".into(),
+                    area: facts.props.area,
+                    min: facts.props.min,
+                    max: facts.props.max,
+                });
                 let root = kmb_core::body_root(data, reg, id);
                 let material = Some(kmb_look::material::material_of(data, root));
                 let density = material
@@ -47,7 +56,9 @@ impl Headless {
                     name,
                     root,
                     props,
-                    mass: density.map(|d| kmb_look::material::mass_of(props.volume, d)),
+                    sheet,
+                    mass: props
+                        .and_then(|p| density.map(|d| kmb_look::material::mass_of(p.volume, d))),
                     material,
                     density,
                 })
@@ -300,5 +311,82 @@ impl Headless {
             s += &format!("  {} {}: {t}\n", f.id, f.name);
         }
         s
+    }
+}
+
+#[cfg(test)]
+mod sheet_tests {
+    use super::*;
+    use kmb_core::{
+        EvalCtx, EvalError, Feature, InputRef, Kernel, KernelError, Outputs, ShapeHandle,
+    };
+    struct Sheet;
+    impl Feature for Sheet {
+        fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+            Ok(vec![])
+        }
+        fn evaluate(&self, _: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+            Ok([("body".into(), Value::Shape(ShapeHandle(1)))].into())
+        }
+    }
+    struct SheetKernel;
+    impl Kernel for SheetKernel {
+        fn name(&self) -> &str {
+            "sheet-test"
+        }
+        fn body_kind(&self, _: ShapeHandle) -> Result<kmb_core::kernel::BodyKind, KernelError> {
+            Ok(kmb_core::kernel::BodyKind::Sheet)
+        }
+        fn faces(&self, _: ShapeHandle) -> Result<Vec<kmb_core::FaceInfo>, KernelError> {
+            Ok(vec![kmb_core::FaceInfo {
+                name: "f1:face".into(),
+                area: 100.0,
+                planar: None,
+            }])
+        }
+        fn bounds(&self, _: ShapeHandle) -> Result<([f64; 3], [f64; 3]), KernelError> {
+            Ok(([0., 0., 0.], [10., 10., 0.]))
+        }
+        fn mass(&self, _: ShapeHandle) -> Result<kmb_core::MassProps, KernelError> {
+            panic!("面のボディの体積を聞かない")
+        }
+    }
+    #[test]
+    fn sheet_body_in_mass_list_has_area_and_bounds_without_zero_grams() {
+        let module = kmb_core::Module::new("sheet-test", |r| {
+            r.register_described(
+                kmb_core::Descriptor::new("test.sheet@1", kmb_core::category::SOLID, "面"),
+                |_| Ok(Box::new(Sheet)),
+            )
+        });
+        let modules = kmb_core::Modules::assemble(vec![module], std::sync::Arc::new(SheetKernel));
+        let mut doc = kmb_core::Document::new();
+        let id = doc.alloc_feature_id();
+        doc.apply(kmb_core::Transaction::new(
+            "面",
+            vec![kmb_core::Op::InsertFeature {
+                index: None,
+                entry: kmb_core::FeatureEntry {
+                    id,
+                    type_id: "test.sheet@1".into(),
+                    name: "面".into(),
+                    data: json!({}),
+                    suppressed: false,
+                    pin_bodies: false,
+                },
+            }],
+        ))
+        .unwrap();
+        let work = Headless::with_document(modules, doc, None);
+        let mass = work.mass().unwrap();
+        assert_eq!(mass.len(), 1);
+        assert_eq!(mass[0].mass, None);
+        assert_eq!(mass[0].props, None);
+        let json = serde_json::to_value(&mass[0]).unwrap();
+        assert!(json.get("volume").is_none());
+        assert!(json.get("mass").is_none());
+        assert_eq!(json["body_kind"], "sheet");
+        assert_eq!(json["area"], 100.0);
+        assert_eq!(json["max"], json!([10., 10., 0.]));
     }
 }
