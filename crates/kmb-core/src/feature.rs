@@ -47,8 +47,15 @@ pub fn warnings_of(out: &Outputs) -> Vec<String> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InputRef {
-    Param { name: String },
-    Output { feature: FeatureId, slot: String },
+    Param {
+        name: String,
+    },
+    Output {
+        feature: FeatureId,
+        slot: String,
+    },
+    /// 文書の長さの単位(設計の属性の `units`)。差し込みの文字が数を文字にする時に読む
+    Units,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -119,6 +126,13 @@ pub trait Feature {
     /// この機能が読んでも、見えるボディに残る。
     fn keeps(&self) -> Vec<FeatureId> {
         Vec::new()
+    }
+    /// この機能の `body` が、入力のボディの形を別の位置に置き直しただけの出現なら、その入力。
+    /// 出現は新しいボディになり([`crate::BodyLine::of`])、再計算はこの入力に元のボディの
+    /// 定義の座標の形を渡す(機能はそれを [`crate::Kernel::instance`] で置く)。出現を読む後ろの
+    /// 機能には、元のその時点の最新の形を出現の位置に置いた形を渡す。
+    fn instance_of(&self) -> Option<InputRef> {
+        None
     }
 }
 
@@ -341,14 +355,34 @@ pub fn expr_inputs(src: &str) -> Result<Vec<InputRef>, EvalError> {
         .collect())
 }
 
+/// 差し込みの文字([`kmb_expr::Template`])から、参照するパラメータを入力として列挙する。
+/// 差し込みがあれば文書の長さの単位([`InputRef::Units`])も数える(名前 1 つの差し込みは、
+/// 数か文字かが文書を見ないと決まらないので、数として数える)。
+pub fn template_inputs(src: &str) -> Result<Vec<InputRef>, EvalError> {
+    let t = kmb_expr::Template::parse(src)?;
+    let mut out: Vec<InputRef> = t
+        .references()
+        .into_iter()
+        .map(|name| InputRef::Param { name })
+        .collect();
+    if t.has_slots() {
+        out.push(InputRef::Units);
+    }
+    Ok(out)
+}
+
 /// 評価中の機能に渡す文脈。宣言済みの入力だけを返す。
 pub struct EvalCtx<'a> {
     pub(crate) id: FeatureId,
     pub(crate) declared: &'a [InputRef],
     pub(crate) params: &'a HashMap<String, Quantity>,
+    /// 計算できた文字のパラメータ(名前 → 文字)
+    pub(crate) texts: &'a HashMap<String, String>,
     pub(crate) outputs: &'a HashMap<FeatureId, Outputs>,
     /// 読むボディの付け替え(データの形 → 読む形。[`crate::BodyTable::redirects`])
     pub(crate) redirect: &'a BTreeMap<crate::BodyState, crate::BodyState>,
+    /// 出現の置き直し(読む形 → 渡す値。[`crate::Feature::instance_of`])
+    pub(crate) placed: &'a BTreeMap<crate::BodyState, Value>,
     pub(crate) kernel: &'a dyn Kernel,
     pub(crate) registry: &'a Registry,
     /// 計算している文書。誤りの文でボディ・部品を名前で指すためだけに読む
@@ -376,6 +410,11 @@ impl EvalCtx<'_> {
         if !self.is_param_declared(name) {
             return Err(EvalError::Undeclared(format!("パラメータ {name}")));
         }
+        if self.texts.contains_key(name) {
+            return Err(EvalError::Other(format!(
+                "パラメータ {name} は文字です(数の欄には使えません)"
+            )));
+        }
         // 宣言済みの入力は、再計算が評価の前に存在と成否を確かめている
         self.params
             .get(name)
@@ -391,7 +430,35 @@ impl EvalCtx<'_> {
                 return Err(EvalError::Undeclared(format!("パラメータ {name}")));
             }
         }
+        if let Some(name) = e
+            .references()
+            .into_iter()
+            .find(|n| self.texts.contains_key(n))
+        {
+            return Err(kmb_expr::ExprError::TextParam(name).into());
+        }
         Ok(e.eval(&|n| self.params.get(n).copied())?)
+    }
+
+    /// 差し込みの文字([`kmb_expr::Template`])に値を入れた文字。参照するパラメータと、数を入れる
+    /// なら文書の長さの単位([`InputRef::Units`])が宣言済みでなければならない([`template_inputs`])。
+    pub fn text(&self, template: &str) -> Result<String, EvalError> {
+        let t = kmb_expr::Template::parse(template)?;
+        for name in t.references() {
+            if !self.is_param_declared(&name) {
+                return Err(EvalError::Undeclared(format!("パラメータ {name}")));
+            }
+        }
+        if t.has_numbers(&|n| self.texts.contains_key(n))
+            && !self.declared.contains(&InputRef::Units)
+        {
+            return Err(EvalError::Undeclared("文書の長さの単位".into()));
+        }
+        let lookup = |n: &str| match self.texts.get(n) {
+            Some(s) => Some(kmb_expr::Value::Text(s.clone())),
+            None => self.params.get(n).map(|q| kmb_expr::Value::Num(*q)),
+        };
+        Ok(t.render(&lookup, self.data.properties.units)?)
     }
 
     pub fn output(&self, feature: FeatureId, slot: &str) -> Result<&Value, EvalError> {
@@ -406,6 +473,9 @@ impl EvalCtx<'_> {
             Some((f, s)) => (*f, s.as_str()),
             None => (feature, slot),
         };
+        if let Some(v) = self.placed.get(&(feature, slot.to_string())) {
+            return Ok(v);
+        }
         self.outputs
             .get(&feature)
             .and_then(|o| o.get(slot))

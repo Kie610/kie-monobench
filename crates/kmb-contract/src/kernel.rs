@@ -866,6 +866,70 @@ pub fn a_display_mesh_of_a_face_with_a_hole_stays_on_it<K: Kernel>(k: &K, q: &Ke
 
 /// カーネルの契約を、確かめごとに 1 つのテストとして並べる。
 /// `$make` はカーネルを作る関数、`$quirks` は [`KernelQuirks`] の定数(どちらも呼んだモジュールの中の名前)。
+pub fn instances_place_the_same_shape_and_fold_into_one_step<K: Kernel>(
+    k: &K,
+    q: &KernelQuirks<K>,
+) {
+    use kmb_core::kernel::{mat_mul, rotation, translation};
+    let a = k.extrude(&plate_profile(), 0.0, 10.0, "f1").unwrap();
+    let m = translation([100.0, 0.0, 0.0]);
+    let b = k.instance(a, &m).unwrap();
+    assert_eq!(k.instance_of(b), Some((a, m)));
+    assert_eq!(k.instance_of(a), None);
+    // 同じ置き方は同じ出現。動かすだけの移動も出現
+    assert_eq!(k.instance(a, &m).unwrap(), b);
+    assert_eq!(k.transform(a, &m, "").unwrap(), b);
+    // 面の名前・体積・網は元を動かした物と同じ
+    assert_eq!(face_names(k, b), face_names(k, a));
+    let (va, vb) = (k.mass(a).unwrap(), k.mass(b).unwrap());
+    assert!(
+        close(vb.volume, va.volume, 1e-6),
+        "{} vs {}",
+        vb.volume,
+        va.volume
+    );
+    assert!(close(vb.min[0], va.min[0] + 100.0, 1e-6));
+    assert_eq!(
+        k.mesh(b, 0.05).unwrap().triangles.len(),
+        k.mesh(a, 0.05).unwrap().triangles.len()
+    );
+    // 出現の出現は 1 段に畳む。戻すと元そのもの
+    let turn = rotation([0.0; 3], [0.0, 0.0, 1.0], 0.5);
+    let c = k.instance(b, &turn).unwrap();
+    let (base, cm) = k.instance_of(c).unwrap();
+    assert_eq!(base, a);
+    let want = mat_mul(&turn, &m);
+    assert!(
+        cm.iter()
+            .flatten()
+            .zip(want.iter().flatten())
+            .all(|(x, y)| close(*x, *y, 1e-12))
+    );
+    assert_eq!(k.instance(b, &translation([-100.0, 0.0, 0.0])).unwrap(), a);
+    // 鏡映も置ける(体積は同じ)。拡大は出現にしない
+    let mut mirror = kmb_core::kernel::IDENTITY;
+    mirror[0][0] = -1.0;
+    let d = k.instance(a, &mirror).unwrap();
+    assert!(close(k.mass(d).unwrap().volume, va.volume, 1e-6));
+    let mut twice = kmb_core::kernel::IDENTITY;
+    twice[0][0] = 2.0;
+    assert!(k.instance(a, &twice).is_err());
+    assert_eq!(k.instance_of(k.transform(a, &twice, "").unwrap()), None);
+    // 名前を足す移動(パターンの写し)は出現にしない
+    assert_eq!(k.instance_of(k.transform(a, &m, "@1").unwrap()), None);
+    // 出現を足し引きすると普通の形になる
+    let tool = k
+        .extrude(&rect_profile(105.0, 5.0, 10.0, 10.0, 20), 5.0, 10.01, "f2")
+        .unwrap();
+    let cut = k.boolean(BooleanOp::Subtract, b, tool).unwrap();
+    assert_eq!(k.instance_of(cut), None);
+    // 出現が生きている間は元も残す
+    k.retain(&[b].into_iter().collect());
+    assert_eq!((q.shape_count)(k), 2);
+    assert_eq!(k.instance_of(b), Some((a, m)));
+    assert!(k.mass(a).is_ok());
+}
+
 #[macro_export]
 macro_rules! kernel_contract_tests {
     ($make:ident, $quirks:ident) => {
@@ -882,6 +946,7 @@ macro_rules! kernel_contract_tests {
             revolve_rejects_crossing_the_axis,
             transform_mesh_step_and_retain,
             transform_refuses_a_matrix_that_is_not_a_placement,
+            instances_place_the_same_shape_and_fold_into_one_step,
             straight_edges_between_planes_know_if_they_are_convex,
             edges_know_whether_they_are_corners_or_smooth_seams,
             a_step_written_by_us_reads_back_as_a_mesh_body,

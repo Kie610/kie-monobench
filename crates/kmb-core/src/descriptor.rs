@@ -73,6 +73,9 @@ pub enum FieldKind {
     Bool,
     /// 自由な文字列(例: 材料の名前)。空にすると項目を消す
     Text,
+    /// 差し込みの文字([`kmb_expr::Template`]。`M3-{長さ}`)。画面・CLI・MCP は文字の欄と同じに出し、
+    /// 値は差し込みの文字として確かめる。単位は持たない
+    Template,
     /// ファイルのパス(例: ポストのプラグイン)。AI(MCP)から来た値は、許したフォルダの中に限る
     File,
     /// 決まった値から選ぶ
@@ -478,6 +481,11 @@ impl Field {
 
     pub fn text(key: &str, label: &str) -> Self {
         Self::new(key, label, FieldKind::Text)
+    }
+
+    /// 差し込みの文字の欄([`FieldKind::Template`])。
+    pub fn template(key: &str, label: &str) -> Self {
+        Self::new(key, label, FieldKind::Template)
     }
 
     /// ファイルのパスの欄([`FieldKind::File`])。

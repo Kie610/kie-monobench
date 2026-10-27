@@ -556,6 +556,7 @@ impl Workspace {
                     Some(kmb_core::ParamStatus::Ok { value }) => {
                         o["value"] = json!(value.to_string())
                     }
+                    Some(kmb_core::ParamStatus::Text { value }) => o["value"] = json!(value),
                     Some(kmb_core::ParamStatus::Error { message }) => o["error"] = json!(message),
                     None => {}
                 }
