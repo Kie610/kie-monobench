@@ -245,3 +245,99 @@ fn the_revolve_action_declares_faces_and_uses_the_same_axis_gesture() {
     assert_eq!(r.source, Source::Faces);
     assert_eq!(r.profile, None);
 }
+
+#[test]
+fn face_revolves_match_the_existing_sketch_revolution_geometry() {
+    let k = TestKernel::new();
+    for hole in [false, true] {
+        let (mut b, f) = disk(hole);
+        let r = b.feature(
+            REVOLVE,
+            "面を回す",
+            Revolve {
+                source: Source::Faces,
+                faces: vec![face(f, "start")],
+                axis: Axis::OriginX,
+                ..Default::default()
+            },
+        );
+        let mut doc = b.finish("輪郭と面の比較");
+        let face_volume = mass(&mut doc, &*k, r);
+        let report = doc.recompute(&registry(), &*k);
+        let sketch = doc
+            .data()
+            .features
+            .iter()
+            .find(|entry| entry.type_id == kmb_sketch::SKETCH)
+            .unwrap();
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(sketch.id) else {
+            panic!();
+        };
+        let profile = kmb_sketch::profile_value(&outputs["profile"]).unwrap();
+        let shape = k
+            .revolve(
+                &profile,
+                [0.0; 3],
+                [1.0, 0.0, 0.0],
+                std::f64::consts::TAU,
+                "control",
+            )
+            .unwrap();
+        let sketch_volume = k.mass(shape).unwrap().volume;
+        let expected = 2.0 * std::f64::consts::PI.powi(2) * 5.0 * if hole { 3.0 } else { 4.0 };
+        eprintln!(
+            "circle hole={hole}, face={face_volume}, sketch={sketch_volume}, expected={expected}"
+        );
+        assert!(
+            (face_volume - sketch_volume).abs() < 1e-3,
+            "face={face_volume}, sketch={sketch_volume}"
+        );
+    }
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(SketchPlane::Xy);
+    let o = s.fixed_point(0.0, 0.0);
+    s.rectangle(o, "10 mm", "4 mm", [0.0, 0.0, 10.0, 4.0]);
+    let sk = b.feature(kmb_sketch::SKETCH, "長方形", s.build());
+    let f = b.feature(
+        EXTRUDE,
+        "板",
+        Extrude {
+            profile: Some(sk),
+            distance: "3 mm".into(),
+            ..Default::default()
+        },
+    );
+    let r = b.feature(
+        REVOLVE,
+        "面を回す",
+        Revolve {
+            source: Source::Faces,
+            faces: vec![face(f, "start")],
+            axis: Axis::OriginX,
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("長方形と面の比較");
+    let face_volume = mass(&mut doc, &*k, r);
+    let report = doc.recompute(&registry(), &*k);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(sk) else {
+        panic!();
+    };
+    let profile = kmb_sketch::profile_value(&outputs["profile"]).unwrap();
+    let shape = k
+        .revolve(
+            &profile,
+            [0.0; 3],
+            [1.0, 0.0, 0.0],
+            std::f64::consts::TAU,
+            "control",
+        )
+        .unwrap();
+    let sketch_volume = k.mass(shape).unwrap().volume;
+    let expected = std::f64::consts::PI * 16.0 * 10.0;
+    eprintln!("rectangle face={face_volume}, sketch={sketch_volume}, expected={expected}");
+    assert!(
+        (face_volume - sketch_volume).abs() < 1e-3,
+        "face={face_volume}, sketch={sketch_volume}"
+    );
+}
