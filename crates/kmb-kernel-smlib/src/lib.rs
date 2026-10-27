@@ -823,6 +823,25 @@ impl Kernel for SmlibKernel {
         Ok(h)
     }
 
+    fn loft_to_point(
+        &self,
+        sections: &[Profile],
+        point: P3,
+        at_start: bool,
+        rails: &[k::PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let (outer, holes) = hollow(sections).map_err(KernelError::Failed)?;
+        if !holes.is_empty() {
+            return Err(KernelError::Failed(
+                "点へのロフトには穴の無い輪郭を選んでください".into(),
+            ));
+        }
+        let surfaces = skin::loft_to_point(&outer, point, at_start, rails, tag)
+            .map_err(KernelError::Failed)?;
+        self.skin_solid(surfaces, tag, "点へのロフト")
+    }
+
     fn boolean(
         &self,
         op: BooleanOp,

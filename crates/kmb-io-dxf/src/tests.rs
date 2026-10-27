@@ -7,6 +7,306 @@ use kmb_core::kernel::{P2, Plane, Segment};
 use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4, PI, TAU};
 
+fn inserted_test_sketch(bytes: &[u8]) -> Sketch {
+    inserted_test_result(bytes, serde_json::Value::Null).0
+}
+
+fn inserted_test_result(bytes: &[u8], args: serde_json::Value) -> (Sketch, String) {
+    use kmb_core::{
+        Context, DocumentData, Extensions, NullKernel, Outcome, RecomputeReport, Registry,
+    };
+    use std::sync::Arc;
+    let path = std::env::temp_dir().join(format!(
+        "dxf-upgrade-{}-{}.dxf",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::write(&path, bytes).unwrap();
+    let data = DocumentData::default();
+    let report = RecomputeReport::default();
+    let registry = Registry::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let mut cx = Context::new(&data, &report, &registry, &kernel);
+    cx.file = Some(&path);
+    cx.args = &args;
+    let result = Extensions(vec![Arc::new(DxfCommands)]).run(INSERT_DXF, &cx);
+    std::fs::remove_file(&path).unwrap();
+    let Outcome::Change { edits, label } = result.unwrap() else {
+        panic!("スケッチの挿入")
+    };
+    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
+        panic!("新しいスケッチ")
+    };
+    (serde_json::from_value(data.clone()).unwrap(), label)
+}
+
+#[test]
+fn dxf_cleaning_can_be_disabled_and_reports_its_counts() {
+    let bytes = line_dxf(&[
+        ([0., 0.], [1., 0.]),
+        ([1., 0.], [0., 0.]),
+        ([1.005, 0.], [1., 1.]),
+    ]);
+    let (clean, label) = inserted_test_result(bytes.as_bytes(), serde_json::json!({}));
+    assert_eq!(
+        clean
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Line { .. }))
+            .count(),
+        2
+    );
+    assert!(
+        label.contains("重複を 1 本除去") && label.contains("端点を 1 組接続"),
+        "{label}"
+    );
+    let (raw, label) = inserted_test_result(bytes.as_bytes(), serde_json::json!({"cleanup":false}));
+    assert_eq!(
+        raw.entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Line { .. }))
+            .count(),
+        3
+    );
+    assert_eq!(label, "DXF を挿入");
+}
+
+#[test]
+fn cleanup_keeps_short_details_and_does_not_chain_endpoint_moves() {
+    let shapes = vec![
+        Shape::Line {
+            a: [0., 0.],
+            b: [1., 0.],
+        },
+        Shape::Line {
+            a: [1.005, 0.],
+            b: [1.005, 1.],
+        },
+        Shape::Line {
+            a: [1.015, 0.],
+            b: [2., 1.],
+        },
+    ];
+    let cleaned = clean(&shapes, 0.01).unwrap();
+    assert_eq!(cleaned.joined, 1);
+    assert_eq!(cleaned.shapes[2], shapes[2]);
+    let short = vec![
+        Shape::Line {
+            a: [0., 0.],
+            b: [0.005, 0.],
+        },
+        Shape::Line {
+            a: [0., 0.],
+            b: [0., 1.],
+        },
+    ];
+    assert_eq!(clean(&short, 0.01).unwrap().shapes, short);
+    for tol in [0., -1., f64::NAN, f64::INFINITY, 2.] {
+        assert!(clean(&shapes, tol).is_err());
+    }
+}
+
+#[test]
+fn cleaning_connects_free_curve_ends_using_the_sketch_approximation() {
+    let shapes = vec![
+        Shape::Bezier {
+            p: [[0., 0.], [0.3, 0.], [0.7, 0.], [1., 0.]],
+        },
+        Shape::Line {
+            a: [1.005, 0.],
+            b: [1., 1.],
+        },
+    ];
+    let cleaned = clean(&shapes, 0.01).unwrap();
+    assert_eq!(cleaned.joined, 1);
+    assert_eq!(
+        cleaned.shapes,
+        vec![
+            Shape::Line {
+                a: [0., 0.],
+                b: [1., 0.]
+            },
+            Shape::Line {
+                a: [1., 0.],
+                b: [1., 1.]
+            }
+        ]
+    );
+}
+
+#[test]
+fn cleaning_does_not_treat_a_full_arc_as_an_open_endpoint() {
+    let shapes = vec![
+        Shape::Arc {
+            center: [0., 0.],
+            radius: 1.,
+            start: 0.,
+            end: TAU,
+        },
+        Shape::Line {
+            a: [1.005, 0.],
+            b: [2., 0.],
+        },
+    ];
+    let cleaned = clean(&shapes, 0.01).unwrap();
+    assert_eq!(cleaned.joined, 0);
+    assert_eq!(cleaned.shapes, shapes);
+}
+
+fn line_dxf(lines: &[(P2, P2)]) -> String {
+    let mut text = "0\nSECTION\n2\nENTITIES\n".to_string();
+    for (a, b) in lines {
+        text.push_str(&format!(
+            "0\nLINE\n10\n{}\n20\n{}\n11\n{}\n21\n{}\n",
+            a[0], a[1], b[0], b[1]
+        ));
+    }
+    text.push_str("0\nENDSEC\n0\nEOF\n");
+    text
+}
+
+#[test]
+fn dxf_upgrade_merges_reversed_and_partly_overlapping_lines() {
+    let sketch = inserted_test_sketch(
+        line_dxf(&[
+            ([0., 0.], [10., 0.]),
+            ([10., 0.], [0., 0.]),
+            ([5., 0.], [15., 0.]),
+        ])
+        .as_bytes(),
+    );
+    let lines: Vec<_> = sketch
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Line { .. }))
+        .collect();
+    assert_eq!(lines.len(), 1, "重複と重なった部分は一本にする");
+    let points: Vec<_> = sketch
+        .entities
+        .iter()
+        .filter_map(|e| {
+            if let Entity::Point { x, y, .. } = e {
+                Some([*x, *y])
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(points.contains(&[0., 0.]) && points.contains(&[15., 0.]));
+}
+
+#[test]
+fn dxf_upgrade_closes_only_endpoint_gaps_within_tolerance() {
+    let sketch = inserted_test_sketch(
+        line_dxf(&[
+            ([0., 0.], [1., 0.]),
+            ([1.005, 0.], [1., 1.]),
+            ([1.03, 1.], [2., 1.]),
+        ])
+        .as_bytes(),
+    );
+    let lines: Vec<_> = sketch
+        .entities
+        .iter()
+        .filter_map(|e| {
+            if let Entity::Line { a, b, .. } = e {
+                Some((*a, *b))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(lines[0].1, lines[1].0, "0.005 mm の隙間を閉じる");
+    assert_ne!(lines[1].1, lines[2].0, "0.03 mm の隙間は残す");
+}
+
+#[test]
+fn dxf_upgrade_binary_insertion_matches_ascii() {
+    let text = line_dxf(&[([1.25, 2.5], [4.5, 8.75])]);
+    let binary = binary_dxf(&text, true);
+    let ascii = inserted_test_sketch(text.as_bytes());
+    let read = inserted_test_sketch(&binary);
+    assert_eq!(ascii.entities, read.entities);
+}
+
+fn binary_dxf(text: &str, modern: bool) -> Vec<u8> {
+    let mut binary = b"AutoCAD Binary DXF\r\n\x1a\0".to_vec();
+    let lines: Vec<_> = text.lines().collect();
+    for pair in lines.as_chunks::<2>().0 {
+        let code: u16 = pair[0].trim().parse().unwrap();
+        if modern {
+            binary.extend(code.to_le_bytes());
+        } else if code < 255 {
+            binary.push(code as u8);
+        } else {
+            binary.push(255);
+            binary.extend(code.to_le_bytes());
+        }
+        if (10..60).contains(&code) {
+            binary.extend(pair[1].parse::<f64>().unwrap().to_le_bytes());
+        } else if (60..80).contains(&code) || (270..290).contains(&code) {
+            binary.extend(pair[1].parse::<i16>().unwrap().to_le_bytes());
+        } else {
+            binary.extend(pair[1].as_bytes());
+            binary.push(0);
+        }
+    }
+    binary
+}
+
+#[test]
+fn binary_code_widths_and_truncated_values_are_checked() {
+    let sketch = sample_sketch();
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    let ascii = from_dxf(&text).unwrap();
+    for modern in [true, false] {
+        assert_eq!(
+            from_dxf_bytes(&binary_dxf(&text, modern)).unwrap().shapes,
+            ascii.shapes
+        );
+    }
+    let binary = binary_dxf(&line_dxf(&[([0., 0.], [1., 1.])]), true);
+    for length in 0..binary.len() {
+        assert!(
+            from_dxf_bytes(&binary[..length]).is_err(),
+            "途中で切れた {length} バイト"
+        );
+    }
+}
+
+#[test]
+fn dxf_upgrade_writes_r2000_handles_and_subclasses() {
+    let sketch = sample_sketch();
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    assert!(text.contains("AC1015"), "R2000 の版を書く");
+    assert!(
+        text.contains("AcDbSymbolTableRecord")
+            && text.contains("AcDbEntity")
+            && text.contains("AcDbLine")
+    );
+    let lines: Vec<_> = text.lines().collect();
+    let handles: Vec<_> = lines
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .filter(|p| p[0].trim() == "5")
+        .map(|p| p[1])
+        .collect();
+    assert!(!handles.is_empty());
+    assert_eq!(
+        handles.len(),
+        handles
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+    );
+    assert_eq!(from_dxf(&text).unwrap().shapes.len(), 7);
+}
+
 fn close(a: f64, b: f64, tol: f64) -> bool {
     (a - b).abs() <= tol
 }
@@ -89,7 +389,7 @@ fn dxf_round_trip_keeps_shapes_and_closes_regions() {
     let s = sample_sketch();
     let sol = solved(&s);
     let text = to_dxf(&s, &sol, &DxfOptions::default());
-    assert!(text.contains("AC1009") && text.contains("$INSUNITS"));
+    assert!(text.contains("AC1015") && text.contains("$INSUNITS"));
     assert!(
         !text.contains("CONSTRUCTION\n 10"),
         "補助線は既定で書かない"
