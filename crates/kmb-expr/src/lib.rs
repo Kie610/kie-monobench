@@ -5,15 +5,20 @@
 //! (`PI/4 rad`、`1/2 in`)。大かっこで囲んだ単位は直前の 1 つだけに掛かる
 //! (`1/2 [in]` は 1 ÷ 2 in、`(1/2) [in]` は 12.7 mm)。単位を書かない数値は無次元として扱う。
 //! 定数は `PI`・`E`、関数の引数は `pow(a; b)` のように `;` でも区切れる。
+//! 文字の中に値を入れる差し込みの文字は [`Template`](`M3-{長さ}`)。
 
 mod ast;
 mod lexer;
 mod parser;
 mod quantity;
+mod template;
 mod units;
 
 pub use ast::{BinOp, Expr};
 pub use quantity::{Dim, MAX_ANGLE_DEG, MAX_LENGTH_MM, Quantity};
+pub use template::{
+    Template, Value, escape_template, format_number, inline_in_template, rename_in_template,
+};
 pub use units::{LengthUnit, display_unit, set_display_unit};
 
 use std::fmt;
@@ -38,6 +43,10 @@ pub enum ExprError {
         right: Dim,
     },
     Domain(String),
+    /// 数の式の中に文字のパラメータを書いた(名前)
+    TextParam(String),
+    /// 差し込みの文字の誤り(文はそのまま見せる)
+    Text(String),
 }
 
 impl fmt::Display for ExprError {
@@ -62,6 +71,8 @@ impl fmt::Display for ExprError {
                 write!(f, "単位の次元が合いません: {left} {op} {right}")
             }
             ExprError::Domain(m) => write!(f, "値の範囲の誤り: {m}"),
+            ExprError::TextParam(n) => write!(f, "文字のパラメータ {n} は計算に使えません"),
+            ExprError::Text(m) => write!(f, "{m}"),
         }
     }
 }
