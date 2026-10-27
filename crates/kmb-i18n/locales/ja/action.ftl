@@ -289,7 +289,7 @@ action-render-turntable-tip = ボディのまわりを 1 周する動画にす�
 ## 解析
 
 action-study-cancel = 中止
-action-study-cancel-tip = 計算をやめる(流れは、ここまでのコマを結果に残す)
+action-study-cancel-tip = 計算をやめる(流れと時間で変わる熱は、ここまでのコマを結果に残す)
 action-study-run = 実行
 action-study-run-tip = 選んだ研究を解く。研究は自動では解きません。条件や形を変えると結果に「古い」が付きます
 

@@ -288,7 +288,7 @@ action-render-turntable-tip = Make a video going once around the bodies. The fil
 ## Simulation
 
 action-study-cancel = Cancel
-action-study-cancel-tip = Stop solving (for flow, the frames so far are kept in the results)
+action-study-cancel-tip = Stop solving (for flow and time-varying heat, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
 
