@@ -300,7 +300,7 @@ pub(crate) fn others_popup(
         }
         match o {
             Other::Entity(id) => {
-                editor.selection.insert(id);
+                editor.select(id);
             }
             Other::Region(k) => {
                 if !editor.regions.contains(&k) {

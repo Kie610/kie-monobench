@@ -304,10 +304,10 @@ pub(super) fn act(
                     // ボディの辺や角は選ぶだけでは写さない(網羅版 G10)。寸法や拘束に
                     // 使った時に写す(パネルの操作は lib.rs、道具は prune が残す)
                     if !(toggle && editor.selection.remove(&h.entity)) {
-                        editor.selection.insert(h.entity);
+                        editor.select(h.entity);
                     }
                 } else if !(toggle && editor.selection.remove(&h.entity)) {
-                    editor.selection.insert(h.entity);
+                    editor.select(h.entity);
                 }
             }
             None => {

@@ -1595,7 +1595,11 @@ impl FeatureEditor for SketchEditor {
                 .map(to_value);
         }
         let name = id.strip_prefix("c:")?;
-        let sel = constraints_ui::selected(&self.editor, &sketch);
+        let sel = if name == "等しい" {
+            constraints_ui::selected_in_order(&self.editor, &sketch)
+        } else {
+            constraints_ui::selected(&self.editor, &sketch)
+        };
         // 図形の固定・図形どうしの対称・ポリゴンは、選んであればすぐ付ける
         let values = dimension_values(host, &sketch);
         if let Some(out) = constraint_tool::try_multi(

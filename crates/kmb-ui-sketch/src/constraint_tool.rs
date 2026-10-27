@@ -63,6 +63,13 @@ fn patterns(name: &str) -> &'static [(&'static [Kind], &'static str)] {
 const FIX_SHAPE: &str = "固定(図形)";
 const SYM_SHAPES: &str = "対称(図形)";
 const POLYGON: &str = "ポリゴン";
+const EQUAL: &str = "等しい";
+
+/// 等しい長さか半径として比べられる、同じ種類だけの選び。
+fn equal_kinds(have: &[Kind]) -> bool {
+    matches!(have.first(), Some(Kind::Line | Kind::Round))
+        && have.iter().all(|k| Some(k) == have.first())
+}
 
 /// 図形の固定・図形どうしの対称・ポリゴンを、いくつかの拘束(と補助の円)で付ける。
 /// 付けられなければ `false`(スケッチは変えない)。`last` は道具で最後に押した要素(図形どうしの
@@ -86,6 +93,15 @@ pub(crate) fn apply_multi(
         (p[0] - q[0]).hypot(p[1] - q[1])
     }
     match as_name {
+        EQUAL => {
+            if sel.len() < 2 || !usable(EQUAL, s, sel) {
+                return false;
+            }
+            for b in &sel[1..] {
+                s.add_constraint(K::Equal { a: sel[0], b: *b });
+            }
+            true
+        }
         FIX_SHAPE => {
             // 円は円そのものの固定で大きさも止まる(半径の寸法は足さない。余分になるため)
             let before = s.constraints.len();
@@ -258,12 +274,18 @@ pub(crate) fn accepts(name: &str, sketch: &Sketch, sel: &[EntityId], id: EntityI
     };
     let mut have = kinds(sketch, sel);
     have.push(k);
+    if name == EQUAL {
+        return have.len() == sel.len() + 1 && equal_kinds(&have);
+    }
     patterns(name).iter().any(|(want, _)| fits(&have, want))
 }
 
 /// 選んだ要素のうち、拘束 `name` の組の途中として使えるもの(道具を始める時に残す選び)。
 pub(crate) fn usable(name: &str, sketch: &Sketch, sel: &[EntityId]) -> bool {
     let have = kinds(sketch, sel);
+    if name == EQUAL {
+        return have.len() == sel.len() && (have.is_empty() || equal_kinds(&have));
+    }
     have.len() == sel.len() && patterns(name).iter().any(|(want, _)| fits(&have, want))
 }
 
@@ -320,6 +342,9 @@ const MENU: [&str; 7] = [
 /// 一致は、点と線分なら線上、点と円なら円周上になる。
 pub(crate) fn fitting(sketch: &Sketch, sel: &[EntityId]) -> Vec<(&'static str, &'static str)> {
     let have = kinds(sketch, sel);
+    if have.len() == sel.len() && have.len() > 2 && equal_kinds(&have) {
+        return vec![(EQUAL, EQUAL)];
+    }
     if have.len() != sel.len() || have.len() != 2 {
         return Vec::new();
     }
@@ -343,6 +368,16 @@ pub(crate) fn apply_selected(
     values: Option<&DimValues>,
     sel: &[EntityId],
 ) -> Option<Sketch> {
+    if name == EQUAL && sel.len() > 2 {
+        let mut ordered = constraints_ui::selected_in_order(editor, sketch);
+        ordered.retain(|id| sel.contains(id));
+        for id in sel {
+            if !ordered.contains(id) {
+                ordered.push(*id);
+            }
+        }
+        return try_multi(name, editor, sketch, sol, values, &ordered, None).flatten();
+    }
     let Some((label, k)) = complete(name, editor, sketch, sol, sel) else {
         editor.notice = Some(format!("{name}を付けられません"));
         return None;
@@ -408,7 +443,7 @@ pub(crate) fn pick(
         editor.selection.clear();
         return None;
     };
-    let sel: Vec<EntityId> = editor.selection.iter().copied().collect();
+    let sel = if name == EQUAL { constraints_ui::selected_in_order(editor, sketch) } else { constraints_ui::selected(editor, sketch) };
     if !accepts(name, sketch, &sel, id) {
         editor.notice = Some(format!(
             "{name}には使えない要素です({})",
@@ -420,9 +455,9 @@ pub(crate) fn pick(
         return None;
     }
     if !editor.selection.remove(&id) {
-        editor.selection.insert(id);
+        editor.select(id);
     }
-    let sel: Vec<EntityId> = editor.selection.iter().copied().collect();
+    let sel = if name == EQUAL { constraints_ui::selected_in_order(editor, sketch) } else { constraints_ui::selected(editor, sketch) };
     if let Some(out) = try_multi(name, editor, sketch, sol, values, &sel, Some(id)) {
         return out;
     }
@@ -462,18 +497,27 @@ pub(crate) fn try_multi(
     sel: &[EntityId],
     last: Option<EntityId>,
 ) -> Option<Option<Sketch>> {
-    // いくつかの拘束で付ける組(図形の固定・図形どうしの対称・ポリゴン)
+    // いくつかの拘束で付ける組は、ひとまとめにして過剰・矛盾を調べる。
     let have = kinds(sketch, sel);
-    if let Some((_, as_name)) = patterns(name)
+    let as_name = if name == EQUAL && sel.len() >= 2 {
+        if !usable(name, sketch, sel) {
+            editor.notice = Some("等しい: 線分だけか、円・円弧だけを 2 つ以上選んでください".into());
+            return Some(None);
+        }
+        Some(EQUAL)
+    } else {
+        patterns(name)
         .iter()
         .find(|(want, _)| want.len() == have.len() && fits(&have, want))
-        && [FIX_SHAPE, SYM_SHAPES, POLYGON].contains(as_name)
-    {
+        .map(|(_, as_name)| *as_name)
+        .filter(|n| [FIX_SHAPE, SYM_SHAPES, POLYGON].contains(n))
+    };
+    if let Some(as_name) = as_name {
         editor.selection.clear();
         let mut s = sketch.clone();
         s.adopt_solution(sol);
         if !apply_multi(as_name, &mut s, sol, sel, last) {
-            editor.notice = Some(match *as_name {
+            editor.notice = Some(match as_name {
                 POLYGON => "ポリゴンにできません: 線分だけで閉じた輪の 1 本を押してください".into(),
                 _ => format!("{as_name}を付けられません"),
             });
@@ -492,7 +536,7 @@ pub(crate) fn try_multi(
         // 図形の固定は右クリックの「固定する」と同じく調べずに付ける(固定した図形の水平などは
         // 余分になるが、固定を外せば戻る)
         if let Some(v) = values
-            && *as_name != FIX_SHAPE
+            && as_name != FIX_SHAPE
             && bad(&s, v)
             && !bad(sketch, v)
         {
@@ -526,5 +570,122 @@ mod tests {
         assert!(!fits(&[L, L], &[P, L]));
         assert!(fits(&[P, L], &[P, P, L]));
         assert!(!fits(&[R], &[P, L]));
+    }
+
+    fn apply_equal(s: &Sketch, ids: &[EntityId]) -> (Option<Sketch>, Editor) {
+        let v = kmb_sketch::dimension_values(s, &|_| None).unwrap();
+        let sol = kmb_sketch::solve(s, &v).unwrap();
+        let mut editor = Editor::default();
+        let out = try_multi(EQUAL, &mut editor, s, &sol, Some(&v), ids, None).flatten();
+        (out, editor)
+    }
+
+    fn three_lines() -> (Sketch, Vec<EntityId>) {
+        let mut s = Sketch::default();
+        let ids = (0..3).map(|i| {
+            let a = s.add_point(10.0, i as f64 * 20.0);
+            let b = s.add_point(20.0 + i as f64 * 5.0, i as f64 * 20.0);
+            s.add_line(a, b)
+        }).collect();
+        (s, ids)
+    }
+
+    #[test]
+    fn equal_three_lines_uses_the_first_pick_and_solves_all_lengths() {
+        use kmb_sketch::ConstraintKind as K;
+        let (mut s, ids) = three_lines();
+        s.add_constraint(K::Length { line: ids[2], value: "20 mm".into() });
+        let mut editor = Editor::default();
+        for id in [ids[2], ids[0], ids[1]] {
+            editor.select(id);
+        }
+        let sel = constraints_ui::selected_in_order(&editor, &s);
+        assert_eq!(sel, [ids[2], ids[0], ids[1]]);
+        assert!(usable(EQUAL, &s, &sel));
+        assert!(accepts(EQUAL, &s, &sel[..2], sel[2]));
+        let (out, _) = apply_equal(&s, &sel);
+        let out = out.unwrap();
+        let pairs: Vec<_> = out.constraints.iter().filter_map(|c| match c.kind {
+            K::Equal { a, b } => Some((a, b)),
+            _ => None,
+        }).collect();
+        assert_eq!(pairs, [(ids[2], ids[0]), (ids[2], ids[1])]);
+        let v = kmb_sketch::dimension_values(&out, &|_| None).unwrap();
+        let sol = kmb_sketch::solve(&out, &v).unwrap();
+        assert!(!matches!(sol.status, kmb_sketch::SolveStatus::OverConstrained { .. } | kmb_sketch::SolveStatus::Inconsistent { .. }));
+        for id in ids {
+            let (p, q) = crate::annot::line_ends(&out, &sol, id).unwrap();
+            assert!(((q[0] - p[0]).hypot(q[1] - p[1]) - 20.0).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn equal_three_circles_and_a_mixed_circle_arc_selection_solve_radii() {
+        use kmb_sketch::ConstraintKind as K;
+        for arc in [false, true] {
+            let mut s = Sketch::default();
+            let mut ids = Vec::new();
+            for i in 0..3 {
+                let x = i as f64 * 30.0;
+                let c = s.add_point(x, 20.0);
+                let id = if arc && i == 2 {
+                    let a = s.add_point(x + 8.0, 20.0);
+                    let b = s.add_point(x, 28.0);
+                    s.add_arc(c, a, b)
+                } else {
+                    s.add_circle(c, 5.0 + i as f64)
+                };
+                ids.push(id);
+            }
+            s.add_constraint(K::Radius { circle: ids[0], value: "5 mm".into() });
+            let (out, _) = apply_equal(&s, &ids);
+            let out = out.unwrap();
+            assert_eq!(out.constraints.iter().filter(|c| matches!(c.kind, K::Equal { .. })).count(), 2);
+            let v = kmb_sketch::dimension_values(&out, &|_| None).unwrap();
+            let sol = kmb_sketch::solve(&out, &v).unwrap();
+            for id in ids {
+                assert!((kmb_sketch::radius(&out, &sol, id).unwrap() - 5.0).abs() < 1e-6);
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_and_overconstrained_equal_selections_are_rejected_atomically() {
+        use kmb_sketch::ConstraintKind as K;
+        let (mut s, ids) = three_lines();
+        let c = s.add_point(50.0, 50.0);
+        let circle = s.add_circle(c, 5.0);
+        let (out, editor) = apply_equal(&s, &[ids[0], circle, ids[1]]);
+        assert!(out.is_none());
+        assert!(editor.notice.unwrap().contains("線分だけ"));
+        assert!(!usable(EQUAL, &s, &[ids[0], circle]));
+        assert!(!accepts(EQUAL, &s, &[ids[0], ids[1]], circle));
+        s.add_constraint(K::Equal { a: ids[0], b: ids[1] });
+        let (out, editor) = apply_equal(&s, &ids);
+        assert!(out.is_none());
+        assert!(editor.notice.unwrap().contains("過剰"));
+        assert_eq!(s.constraints.len(), 1);
+        // 寸法どうしが矛盾する場合も、付けられる組だけを部分的に残さない。
+        s.constraints.clear();
+        for (id, value) in [(ids[0], "10 mm"), (ids[1], "15 mm")] {
+            s.add_constraint(K::Length { line: id, value: value.into() });
+        }
+        assert!(apply_equal(&s, &ids).0.is_none());
+    }
+
+    #[test]
+    fn multi_equal_is_available_from_the_context_menu() {
+        let (s, ids) = three_lines();
+        assert_eq!(fitting(&s, &ids), [(EQUAL, EQUAL)]);
+        let sol = kmb_sketch::solve(&s, &Default::default()).unwrap();
+        let mut editor = Editor::default();
+        let out = apply_selected(EQUAL, &mut editor, &s, &sol, Some(&Default::default()), &ids).unwrap();
+        assert_eq!(out.constraints.len(), 2);
+        assert!(hint(EQUAL, &editor).contains("2 つ以上"));
+        editor.select(ids[2]);
+        editor.select(ids[0]);
+        editor.selection.remove(&ids[2]);
+        editor.select(ids[2]);
+        assert_eq!(constraints_ui::selected_in_order(&editor, &s), [ids[0], ids[2]]);
     }
 }

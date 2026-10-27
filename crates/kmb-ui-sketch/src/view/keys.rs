@@ -282,7 +282,7 @@ pub(super) fn keys(
                 editor.selection.clear();
                 editor.regions.clear();
                 editor.picked_constraint = None;
-                editor.selection.insert(h.entity);
+                editor.select(h.entity);
             }
         }
         editor.menu = Some(crate::menu::Context {
