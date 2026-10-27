@@ -4,7 +4,8 @@
 //!
 //! 長さは、カーネルの読み手がファイルの単位(inch・m など)から mm に直す。単位を読めない・
 //! 混ざっている時は、ファイルの数を mm とみなして読み、機能に注意を出す(大きさが違って見えたら
-//! ここを見れば分かるように)。
+//! ここを見れば分かるように)。単位を見る前に読み込んだ機能(`units` の印が無い)は、開き直しても
+//! 前と同じ大きさ(ファイルの数を mm とみなす)で読み、注意を出す(前の文書の形を黙って変えない)。
 
 use kmb_cad::kernel_err;
 use kmb_cad::{parse, solid};
@@ -34,6 +35,10 @@ pub struct ImportStep {
     /// 書いた CAD が Z を上にして書いた(JC の STEP)。読み込んだ後に立てるかを聞かない(U12)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upright: bool,
+    /// ファイルの長さの単位を見て mm に直して読む。新しく読み込む時に付ける。印の無い前の文書の
+    /// 機能は、単位を見ずに読んでいた時と同じ大きさで読む
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub units: bool,
 }
 
 /// STEP ファイルの字を読む。UTF-8(頭の BOM は外す)でなければ Shift_JIS(日本の CAD は名前を
@@ -82,6 +87,7 @@ impl ImportStep {
             upright: written_by_jc(&step),
             step,
             stand_up: false,
+            units: true,
         })
     }
 }
@@ -93,6 +99,26 @@ impl Feature for ImportStep {
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let mut body = ctx.kernel().import_step(&self.step).map_err(kernel_err)?;
+        let unit = kmb_format::step::length_unit(&self.step);
+        let mut warnings = Vec::new();
+        if !self.units && unit.mm != 1.0 {
+            // カーネルは単位を見て mm に直すので、前の読み方(ファイルの数をそのまま mm)の大きさへ戻す
+            let s = 1.0 / unit.mm;
+            let shrink = [
+                [s, 0.0, 0.0, 0.0],
+                [0.0, s, 0.0, 0.0],
+                [0.0, 0.0, s, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ];
+            body = ctx
+                .kernel()
+                .transform(body, &shrink, "")
+                .map_err(kernel_err)?;
+            warnings.push(format!(
+                "長さの単位を見る前に読み込んだので、前と同じくファイルの数を mm として読みました(ファイルの単位は {})。読み込み直すと正しい大きさになります",
+                unit.name
+            ));
+        }
         if self.stand_up {
             body = ctx
                 .kernel()
@@ -101,17 +127,15 @@ impl Feature for ImportStep {
                 .map_err(kernel_err)?;
         }
         let mut out: Outputs = [("body".to_string(), Value::Shape(body))].into();
-        let mut warnings = Vec::new();
         let surfaces = kmb_format::step::open_shells_beside_solids(&self.step);
         if surfaces > 0 {
             warnings.push(format!(
                 "STEP の面だけのボディ {surfaces} 個(公差の補助の面など)は読まず、立体だけを読みました"
             ));
         }
-        let unit = kmb_format::step::length_unit(&self.step);
         match unit.warning {
             Some(w) => warnings.push(w),
-            None if unit.mm != 1.0 => {
+            None if self.units && unit.mm != 1.0 => {
                 log::info!("STEP の長さの単位 {} を mm に直して読みました", unit.name);
             }
             None => {}
@@ -225,5 +249,24 @@ mod text_tests {
         // どちらでもない字は 1 バイト 1 字で読み、形の所(ASCII)は変えない
         let odd = [head.as_bytes(), &[0x81, 0x7f], tail.as_bytes()].concat();
         assert!(decode_text(&odd).ends_with(tail));
+    }
+}
+
+#[cfg(test)]
+mod unit_mark_tests {
+    use super::*;
+
+    #[test]
+    fn a_new_import_reads_the_file_units_and_keeps_the_mark_through_json() {
+        let dir = std::env::temp_dir().join(format!("kmb-import-step-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("箱.step");
+        std::fs::write(&path, "ISO-10303-21;\nDATA;\nENDSEC;\n").unwrap();
+        let data = ImportStep::from_file(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(data.units);
+        let json = serde_json::to_value(&data).unwrap();
+        assert_eq!(json["units"], true);
+        assert_eq!(serde_json::from_value::<ImportStep>(json).unwrap(), data);
     }
 }
