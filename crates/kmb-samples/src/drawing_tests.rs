@@ -339,3 +339,299 @@ fn first_angle_and_in_plane_rotation_follow_named_axes() {
         "{size:?}"
     );
 }
+
+#[test]
+fn occurrence_lines_keep_their_placement_and_body_keys_after_source_changes() {
+    use kmb_core::{
+        EvalCtx, EvalError, Feature, FeatureEntry, FeatureId, InputRef, Outputs, Value,
+    };
+    use kmb_interchange::drawing::LineKey;
+
+    #[derive(serde::Deserialize)]
+    struct PlacedBody {
+        source: FeatureId,
+    }
+    impl Feature for PlacedBody {
+        fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+            Ok(vec![kmb_cad::output(self.source, "body")])
+        }
+        fn instance_of(&self) -> Option<InputRef> {
+            Some(kmb_cad::output(self.source, "body"))
+        }
+        fn evaluate(&self, cx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+            let source = kmb_cad::body_of(cx, self.source)?;
+            let shape = cx
+                .kernel()
+                .instance(source, &kmb_core::kernel::translation([55., 0., 3.]))
+                .map_err(kmb_cad::kernel_err)?;
+            Ok([("body".into(), Value::Shape(shape))].into())
+        }
+    }
+    let mut m = kmb_bundle::modules();
+    std::sync::Arc::get_mut(&mut m.registry).unwrap().register(
+        "test.drawing_occurrence@1",
+        |value| {
+            serde_json::from_value::<PlacedBody>(value.clone())
+                .map(|f| Box::new(f) as Box<dyn Feature>)
+                .map_err(|e| EvalError::InvalidData(e.to_string()))
+        },
+    );
+    let mut doc = crate::drawing_box_document();
+    let source = doc
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == kmb_cad_extrude::EXTRUDE)
+        .unwrap()
+        .id;
+    let occurrence = doc.alloc_feature_id();
+    let moved = doc.alloc_feature_id();
+    let entry = |id, type_id: &str, data| FeatureEntry {
+        id,
+        type_id: type_id.into(),
+        name: "図面のボディ".into(),
+        data,
+        suppressed: false,
+        pin_bodies: false,
+    };
+    doc.apply(Transaction::new(
+        "出現と元の移動",
+        vec![
+            Op::InsertFeature {
+                index: None,
+                entry: entry(
+                    occurrence,
+                    "test.drawing_occurrence@1",
+                    serde_json::json!({"source":source}),
+                ),
+            },
+            Op::InsertFeature {
+                index: None,
+                entry: entry(
+                    moved,
+                    "solid.move@1",
+                    serde_json::json!({"body":source,"x":"10 mm"}),
+                ),
+            },
+        ],
+    ))
+    .unwrap();
+    edit(&mut doc, |d| {
+        d.sheets[0].views.truncate(3);
+        if let ViewKind::Base { source, .. } = &mut d.sheets[0].views[0].kind {
+            *source = Source::Bodies {
+                bodies: vec![occurrence],
+            };
+        }
+    });
+    let read = |doc: &mut Document| {
+        let report = doc.recompute(&m.registry, m.kernel.as_ref());
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        sheet_picture_with_lines(
+            &Context::new(doc.data(), &report, &m.registry, &m.kernel),
+            "sheet",
+        )
+        .unwrap()
+    };
+    let (p, lines) = read(&mut doc);
+    assert!(p.problems.iter().all(|p| p.warning), "{:?}", p.problems);
+    assert_eq!(bounds(&strokes(&p, "front")), [40., 10.]);
+    let lower_left = |p: &SheetPicture| {
+        strokes(p, "front")
+            .iter()
+            .flat_map(|p| match p {
+                Path::Line { a, b } => vec![*a, *b],
+                Path::Poly { points } => points.clone(),
+                _ => panic!("箱の線"),
+            })
+            .fold([f64::INFINITY; 2], |lo, q| {
+                [lo[0].min(q[0]), lo[1].min(q[1])]
+            })
+    };
+    assert_eq!(lower_left(&p), [105., 63.]);
+    assert!(!lines["front"].is_empty());
+    assert!(
+        lines["front"]
+            .iter()
+            .all(|line| { matches!(&line.key, LineKey::Edge { key } if key.body == occurrence) })
+    );
+    let keys =
+        |lines: &std::collections::BTreeMap<String, Vec<kmb_interchange::drawing::ViewLine>>| {
+            lines["front"]
+                .iter()
+                .map(|line| line.key.clone())
+                .collect::<Vec<_>>()
+        };
+    let width = doc
+        .data()
+        .params
+        .iter()
+        .find(|p| p.name == "width")
+        .unwrap()
+        .id;
+    doc.apply(Transaction::new(
+        "元の幅を変更",
+        vec![Op::SetParamExpr {
+            id: width,
+            expr: "45 mm".into(),
+        }],
+    ))
+    .unwrap();
+    let (q, updated) = read(&mut doc);
+    assert_eq!(bounds(&strokes(&q, "front")), [45., 10.]);
+    assert_eq!(lower_left(&q), [105., 63.]);
+    assert_eq!(keys(&lines), keys(&updated));
+    assert_eq!(q, read(&mut doc).0);
+    edit(&mut doc, |d| {
+        if let ViewKind::Base { source: s, .. } = &mut d.sheets[0].views[0].kind {
+            *s = Source::Bodies {
+                bodies: vec![source],
+            };
+        }
+    });
+    let (p, lines) = read(&mut doc);
+    assert_eq!(lower_left(&p), [60., 60.]);
+    assert_eq!(bounds(&strokes(&p, "front")), [45., 10.]);
+    assert!(
+        lines["front"]
+            .iter()
+            .all(|line| { matches!(&line.key, LineKey::Edge { key } if key.body == source) })
+    );
+}
+
+#[test]
+fn drawing_commands_build_edit_export_and_delete_without_changing_the_model() {
+    let m = modules();
+    let mut doc = crate::drawing_box_document();
+    let report = doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let features = doc.data().features.clone();
+    let run = |doc: &mut Document, id: &str, args: serde_json::Value| {
+        let report = doc.recompute(&m.registry, m.kernel.as_ref());
+        let mut cx = Context::new(doc.data(), &report, &m.registry, &m.kernel);
+        cx.args = &args;
+        m.extensions.run(id, &cx)
+    };
+    let change = |doc: &mut Document, outcome| {
+        let kmb_core::Outcome::Change { label, edits } = outcome else {
+            panic!("図面の区画を変更する")
+        };
+        doc.apply_edits(&label, edits).unwrap();
+    };
+    for (id, args) in [
+        (
+            "drawing.add_sheet",
+            serde_json::json!({"id":"commands","name":"操作の図面"}),
+        ),
+        (
+            "drawing.base_view",
+            serde_json::json!({"sheet":"commands","id":"base","orientation":"front","at":[50,60]}),
+        ),
+        (
+            "drawing.projected_view",
+            serde_json::json!({"sheet":"commands","id":"projected","parent":"base","side":"top","at":[60,0]}),
+        ),
+        (
+            "drawing.section_view",
+            serde_json::json!({"sheet":"commands","id":"cut","parent":"base","line":[[20,-5],[20,25]],"letter":"A","at":[120,0]}),
+        ),
+        (
+            "drawing.detail_view",
+            serde_json::json!({"sheet":"commands","id":"enlarged","parent":"base","center":[20,10],"radius":"8 mm","detail_scale":{"num":2,"den":1},"letter":"B","at":[200,140]}),
+        ),
+        (
+            "drawing.move_view",
+            serde_json::json!({"sheet":"commands","id":"base","at":[65,40]}),
+        ),
+        (
+            "drawing.set_view",
+            serde_json::json!({"sheet":"commands","id":"base","scale":{"num":1,"den":2},"options":{"hidden":true}}),
+        ),
+    ] {
+        let outcome = run(&mut doc, id, args).unwrap();
+        change(&mut doc, outcome);
+    }
+    let before_failed = doc.to_json();
+    for (id, args) in [
+        (
+            "drawing.projected_view",
+            serde_json::json!({"sheet":"commands","id":"broken","parent":"missing","side":"right"}),
+        ),
+        (
+            "drawing.move_view",
+            serde_json::json!({"sheet":"commands","id":"base","at":[0,0],"unknown":true}),
+        ),
+        (
+            "drawing.delete",
+            serde_json::json!({"sheet":"commands","id":"base"}),
+        ),
+    ] {
+        assert!(run(&mut doc, id, args).is_err(), "{id}");
+        assert_eq!(doc.to_json(), before_failed);
+    }
+    let kmb_core::Outcome::File { contents, .. } = run(
+        &mut doc,
+        "drawing.picture",
+        serde_json::json!({"sheet":"commands"}),
+    )
+    .unwrap() else {
+        panic!("図面の JSON を返す")
+    };
+    let picture: SheetPicture = serde_json::from_slice(&contents).unwrap();
+    assert!(picture.problems.is_empty(), "{:?}", picture.problems);
+    let report = doc.recompute(&m.registry, m.kernel.as_ref());
+    let (_, lines) = sheet_picture_with_lines(
+        &Context::new(doc.data(), &report, &m.registry, &m.kernel),
+        "commands",
+    )
+    .unwrap();
+    // 切断線や詳細の円を含まず、形の辺だけで尺度を測る。
+    let model_paths = lines["base"]
+        .iter()
+        .map(|line| &line.path)
+        .collect::<Vec<_>>();
+    assert_eq!(bounds(&model_paths), [20., 5.]);
+    assert!(
+        picture
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Hatch { owner, .. } if owner == "cut"))
+    );
+    assert!(
+        picture
+            .items
+            .iter()
+            .any(|item| matches!(item, Item::Stroke { owner, .. } if owner == "enlarged"))
+    );
+    assert_eq!(
+        serde_json::from_slice::<SheetPicture>(&serde_json::to_vec(&picture).unwrap()).unwrap(),
+        picture
+    );
+    for id in ["enlarged", "cut", "projected", "base", "commands"] {
+        let outcome = run(
+            &mut doc,
+            "drawing.delete",
+            serde_json::json!({"sheet":"commands","id":id}),
+        )
+        .unwrap();
+        change(&mut doc, outcome);
+    }
+    assert!(
+        !doc.data()
+            .section::<Drawings>()
+            .unwrap()
+            .sheets
+            .iter()
+            .any(|s| s.id == "commands")
+    );
+    assert_eq!(doc.data().features, features);
+    doc.undo();
+    assert!(
+        doc.data()
+            .section::<Drawings>()
+            .unwrap()
+            .sheets
+            .iter()
+            .any(|s| s.id == "commands")
+    );
+}
