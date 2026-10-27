@@ -11,8 +11,16 @@ use std::time::Instant;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum ParamStatus {
-    Ok { value: Quantity },
-    Error { message: String },
+    Ok {
+        value: Quantity,
+    },
+    /// 計算できた文字のパラメータ([`crate::ParamUnit::Text`])の値
+    Text {
+        value: String,
+    },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -161,6 +169,17 @@ impl RecomputeReport {
         out
     }
 
+    /// 計算できた文字のパラメータの値(名前 → 文字)。
+    pub fn text_values(&self) -> HashMap<&str, &str> {
+        let mut out = HashMap::new();
+        for p in &self.params {
+            if let ParamStatus::Text { value } = &p.status {
+                out.entry(p.name.as_str()).or_insert(value.as_str());
+            }
+        }
+        out
+    }
+
     pub fn feature(&self, id: FeatureId) -> Option<&FeatureStatus> {
         self.features.iter().find(|f| f.id == id).map(|f| &f.status)
     }
@@ -183,6 +202,8 @@ pub struct Cache {
     entries: HashMap<FeatureId, Vec<(u64, Outputs, f64, Aliases)>>,
     /// 結果のほかに、カーネルに残させる形状(画面がまだ出している前の形。M27)
     held: HashSet<ShapeHandle>,
+    /// 前の再計算が出現の最後の形として置いた形(結果に入るがキャッシュに無い)
+    placed: HashSet<ShapeHandle>,
 }
 
 impl Cache {
@@ -217,6 +238,7 @@ impl Cache {
                 _ => None,
             })
             .chain(self.held.iter().copied())
+            .chain(self.placed.iter().copied())
             .collect()
     }
 
@@ -353,6 +375,13 @@ pub(crate) fn run(
             ok_params.entry(name.clone()).or_insert(*value);
         }
     }
+    let ok_texts: HashMap<String, String> = params
+        .iter()
+        .filter_map(|p| match &p.status {
+            ParamStatus::Text { value } => Some((p.name.clone(), value.clone())),
+            _ => None,
+        })
+        .collect();
 
     let position: HashMap<FeatureId, usize> = data
         .features
@@ -367,6 +396,7 @@ pub(crate) fn run(
     let active = data.active_len();
     let bodies = crate::BodyTable::build(data, registry);
     let mut aliases = crate::FaceAliases::default();
+    let mut placing = crate::occurrence::Placing::new(&bodies);
 
     // 別のスレッドで計算を待つ機能(互いに依存しない、形を作らない種類)。依存する機能か、
     // 形を作る機能が来たら、先に計算し終える(結果は機能の順に並べるので、順に計算した時と同じ)
@@ -385,8 +415,10 @@ pub(crate) fn run(
         let t = Instant::now();
         // 同時に計算できる種類なら、組み立てて入力を調べる(待っている機能を使うなら、先に済ませる)
         // (組み立てや入力で誤る・panic する時は、1 つずつの計算に任せて誤りを記録する)
+        // (出現のある文書は、出現の値を渡すので 1 つずつ計算する)
         let concurrent = (i < active
             && !entry.suppressed
+            && !placing.active()
             && registry.has_mark(&entry.type_id, crate::CONCURRENT))
         .then(|| {
             catch_unwind(AssertUnwindSafe(|| {
@@ -409,7 +441,7 @@ pub(crate) fn run(
             inputs.iter().any(|input| {
                 let f = match input {
                     InputRef::Output { feature, .. } => *feature,
-                    InputRef::Param { .. } => return false,
+                    InputRef::Param { .. } | InputRef::Units => return false,
                 };
                 pending.iter().any(|j| j.id == f)
             })
@@ -422,6 +454,7 @@ pub(crate) fn run(
                 &bodies,
                 kernel,
                 &ok_params,
+                &ok_texts,
                 cache,
                 &mut outputs,
                 &mut features,
@@ -498,6 +531,37 @@ pub(crate) fn run(
                     Ok(v) => v,
                     Err(e) => return error(e.to_string()),
                 };
+                let own = feature.instance_of();
+                let placed = match placing.inputs(
+                    kernel,
+                    data,
+                    &bodies,
+                    entry.id,
+                    i,
+                    &inputs,
+                    own.as_ref(),
+                    &outputs,
+                ) {
+                    Ok(p) => p,
+                    Err(st) => return st,
+                };
+                let source = own.and_then(|o| match bodies.resolve(entry.id, &o) {
+                    InputRef::Output { feature, slot } => Some((feature, slot)),
+                    _ => None,
+                });
+                let mut after = |out: &Outputs| {
+                    placing.after(
+                        kernel,
+                        data,
+                        registry,
+                        &bodies,
+                        entry.id,
+                        &placed,
+                        source.clone(),
+                        &outputs,
+                        out,
+                    )
+                };
                 let mut hasher = DefaultHasher::new();
                 entry.type_id.hash(&mut hasher);
                 entry.data.to_string().hash(&mut hasher);
@@ -515,11 +579,15 @@ pub(crate) fn run(
                         return st;
                     }
                 }
+                crate::occurrence::Placing::hash(kernel, &placed, &mut hasher);
                 let key = hasher.finish();
                 if let Some((out, ms, pairs)) = cache.get(entry.id, key) {
                     reused += 1;
                     times.insert(entry.id, ms);
                     aliases.extend(pairs);
+                    if let Err(m) = after(out) {
+                        return error(m);
+                    }
                     return FeatureStatus::Ok {
                         outputs: out.clone(),
                         reused: true,
@@ -529,8 +597,10 @@ pub(crate) fn run(
                     id: entry.id,
                     declared: &inputs,
                     params: &ok_params,
+                    texts: &ok_texts,
                     outputs: &outputs,
                     redirect: bodies.redirects(entry.id),
+                    placed: &placed,
                     kernel,
                     registry,
                     data,
@@ -544,6 +614,9 @@ pub(crate) fn run(
                         let pairs = shorten_names(kernel, entry.id, &mut out, &aliases);
                         aliases.extend(&pairs);
                         cache.insert(entry.id, key, out.clone(), ms, pairs);
+                        if let Err(m) = after(&out) {
+                            return error(m);
+                        }
                         FeatureStatus::Ok {
                             outputs: out,
                             reused: false,
@@ -569,6 +642,7 @@ pub(crate) fn run(
         &bodies,
         kernel,
         &ok_params,
+        &ok_texts,
         cache,
         &mut outputs,
         &mut features,
@@ -576,6 +650,7 @@ pub(crate) fn run(
         &mut aliases,
     );
     cache.entries.retain(|id, _| position.contains_key(id));
+    cache.placed = placing.finish(kernel, data, &bodies, &mut outputs, &mut features);
     pin_warnings(data, &bodies, &mut features);
 
     let report = RecomputeReport {
@@ -767,6 +842,7 @@ fn run_jobs(
     bodies: &crate::BodyTable,
     kernel: &dyn Kernel,
     params: &HashMap<String, Quantity>,
+    texts: &HashMap<String, String>,
     cache: &mut Cache,
     outputs: &mut HashMap<FeatureId, Outputs>,
     features: &mut [FeatureResult],
@@ -792,8 +868,10 @@ fn run_jobs(
                 id: job.id,
                 declared: &declared,
                 params,
+                texts,
                 outputs: ready,
                 redirect: bodies.redirects(job.id),
+                placed: &Default::default(),
                 kernel,
                 registry,
                 data,
@@ -991,7 +1069,16 @@ fn check_input(
                     hash_json(value, hasher);
                     Ok(())
                 }
+                Some(ParamStatus::Text { value }) => {
+                    name.hash(hasher);
+                    value.hash(hasher);
+                    Ok(())
+                }
             }
+        }
+        InputRef::Units => {
+            hash_json(&data.properties.units, hasher);
+            Ok(())
         }
         InputRef::Output { feature, slot } => {
             let out = upstream(*feature)?;
@@ -1037,25 +1124,30 @@ pub fn model_params(
 }
 
 /// パラメータ(利用者のものと、機能が持つモデルのもの)を、1 つの名前の空間で依存順に
-/// 評価する。循環しているもの、名前が重なったもの(後の方)は誤りにする。
+/// 評価する。循環しているもの、名前が重なったもの(後の方)は誤りにする。文字のパラメータ
+/// ([`crate::ParamUnit::Text`])は差し込みの文字として、数は文書の長さの単位で文字にする。
 fn eval_params(
     data: &DocumentData,
     model: &[(FeatureId, crate::ModelParam)],
 ) -> (Vec<ParamResult>, Vec<ModelParamResult>) {
     // 利用者のパラメータが先、モデルのパラメータが後。利用者のものは、数だけの式に単位を補う
     let completed: Vec<String> = data.params.iter().map(|p| p.completed_expr()).collect();
-    let exprs: Vec<(&str, &str)> = data
+    let entries: Vec<Entry> = data
         .params
         .iter()
         .zip(&completed)
-        .map(|(p, e)| (p.name.as_str(), e.as_str()))
-        .chain(
-            model
-                .iter()
-                .map(|(_, p)| (p.name.as_str(), p.expr.as_str())),
-        )
+        .map(|(p, e)| Entry {
+            name: &p.name,
+            src: e,
+            text: p.unit == crate::ParamUnit::Text,
+        })
+        .chain(model.iter().map(|(_, p)| Entry {
+            name: &p.name,
+            src: &p.expr,
+            text: false,
+        }))
         .collect();
-    let mut status = eval_exprs(&exprs).into_iter();
+    let mut status = eval_entries(&entries, data.properties.units).into_iter();
     let user = data
         .params
         .iter()
@@ -1092,6 +1184,40 @@ fn eval_params(
 /// 循環しているもの、名前が前のものと重なったものは誤りにする。画面が、直したスケッチの
 /// 寸法が循環しないかを置く前に確かめるのにも使う。
 pub fn eval_exprs(exprs: &[(&str, &str)]) -> Vec<ParamStatus> {
+    let entries: Vec<Entry> = exprs
+        .iter()
+        .map(|(name, src)| Entry {
+            name,
+            src,
+            text: false,
+        })
+        .collect();
+    eval_entries(&entries, kmb_expr::LengthUnit::Mm)
+}
+
+/// 計算するパラメータ 1 つ。`text` なら `src` は差し込みの文字。
+struct Entry<'a> {
+    name: &'a str,
+    src: &'a str,
+    text: bool,
+}
+
+/// 式か差し込みの文字を読んだもの。
+enum Parsed {
+    Num(kmb_expr::Expr),
+    Text(kmb_expr::Template),
+}
+
+impl Parsed {
+    fn references(&self) -> Vec<String> {
+        match self {
+            Parsed::Num(e) => e.references(),
+            Parsed::Text(t) => t.references(),
+        }
+    }
+}
+
+fn eval_entries(exprs: &[Entry], unit: kmb_expr::LengthUnit) -> Vec<ParamStatus> {
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
         New,
@@ -1101,53 +1227,66 @@ pub fn eval_exprs(exprs: &[(&str, &str)]) -> Vec<ParamStatus> {
     let mut index: HashMap<&str, usize> = HashMap::new();
     let mut status: Vec<Option<ParamStatus>> = vec![None; exprs.len()];
     let mut marks = vec![Mark::New; exprs.len()];
-    for (i, (name, _)) in exprs.iter().enumerate() {
-        if index.contains_key(name) {
+    for (i, e) in exprs.iter().enumerate() {
+        if index.contains_key(e.name) {
             status[i] = Some(ParamStatus::Error {
-                message: format!("同じ名前のパラメータがあります: {name}"),
+                message: format!("同じ名前のパラメータがあります: {}", e.name),
             });
             marks[i] = Mark::Done;
         } else {
-            index.insert(name, i);
+            index.insert(e.name, i);
         }
     }
 
-    fn visit(
-        i: usize,
-        exprs: &[(&str, &str)],
-        index: &HashMap<&str, usize>,
-        marks: &mut [Mark],
-        status: &mut [Option<ParamStatus>],
-    ) {
-        if marks[i] == Mark::Done {
+    struct Walk<'a, 'b> {
+        exprs: &'b [Entry<'a>],
+        index: &'b HashMap<&'a str, usize>,
+        marks: &'b mut [Mark],
+        status: &'b mut [Option<ParamStatus>],
+        unit: kmb_expr::LengthUnit,
+    }
+
+    fn visit(i: usize, w: &mut Walk) {
+        if w.marks[i] == Mark::Done {
             return;
         }
-        if marks[i] == Mark::Visiting {
-            status[i] = Some(ParamStatus::Error {
+        if w.marks[i] == Mark::Visiting {
+            w.status[i] = Some(ParamStatus::Error {
                 message: "参照が循環しています".into(),
             });
             return;
         }
-        marks[i] = Mark::Visiting;
-        let result = match kmb_expr::parse(exprs[i].1) {
+        w.marks[i] = Mark::Visiting;
+        let entry = &w.exprs[i];
+        let parsed = if entry.text {
+            kmb_expr::Template::parse(entry.src).map(Parsed::Text)
+        } else {
+            kmb_expr::parse(entry.src).map(Parsed::Num)
+        };
+        let result = match parsed {
             Err(e) => ParamStatus::Error {
                 message: e.to_string(),
             },
-            Ok(expr) => {
+            Ok(parsed) => {
                 let mut failed = None;
-                for name in expr.references() {
-                    match index.get(name.as_str()) {
+                for name in parsed.references() {
+                    match w.index.get(name.as_str()) {
                         None => {
                             failed = Some(format!("未定義の名前: {name}"));
                             break;
                         }
                         Some(&j) => {
-                            visit(j, exprs, index, marks, status);
-                            if marks[j] == Mark::Visiting {
+                            // 数の式は文字のパラメータを読めない(差し込みの文字だけが読む)
+                            if w.exprs[j].text && matches!(parsed, Parsed::Num(_)) {
+                                failed = Some(kmb_expr::ExprError::TextParam(name).to_string());
+                                break;
+                            }
+                            visit(j, w);
+                            if w.marks[j] == Mark::Visiting {
                                 failed = Some("参照が循環しています".into());
                                 break;
                             }
-                            if let Some(ParamStatus::Error { .. }) = status[j] {
+                            if let Some(ParamStatus::Error { .. }) = w.status[j] {
                                 failed = Some(format!("依存先 {name} が誤りです"));
                                 break;
                             }
@@ -1157,30 +1296,54 @@ pub fn eval_exprs(exprs: &[(&str, &str)]) -> Vec<ParamStatus> {
                 match failed {
                     Some(message) => ParamStatus::Error { message },
                     None => {
-                        let lookup = |n: &str| match index.get(n).and_then(|&j| status[j].as_ref())
-                        {
-                            Some(ParamStatus::Ok { value }) => Some(*value),
-                            _ => None,
+                        let status = &*w.status;
+                        let index = w.index;
+                        let value = |n: &str| index.get(n).and_then(|&j| status[j].as_ref());
+                        let evaluated = match &parsed {
+                            Parsed::Num(e) => e
+                                .eval(&|n| match value(n) {
+                                    Some(ParamStatus::Ok { value }) => Some(*value),
+                                    _ => None,
+                                })
+                                .map(|value| ParamStatus::Ok { value }),
+                            Parsed::Text(t) => t
+                                .render(
+                                    &|n| match value(n) {
+                                        Some(ParamStatus::Ok { value }) => {
+                                            Some(kmb_expr::Value::Num(*value))
+                                        }
+                                        Some(ParamStatus::Text { value }) => {
+                                            Some(kmb_expr::Value::Text(value.clone()))
+                                        }
+                                        _ => None,
+                                    },
+                                    w.unit,
+                                )
+                                .map(|value| ParamStatus::Text { value }),
                         };
-                        match expr.eval(&lookup) {
-                            Ok(value) => ParamStatus::Ok { value },
-                            Err(e) => ParamStatus::Error {
-                                message: e.to_string(),
-                            },
-                        }
+                        evaluated.unwrap_or_else(|e| ParamStatus::Error {
+                            message: e.to_string(),
+                        })
                     }
                 }
             }
         };
-        marks[i] = Mark::Done;
+        w.marks[i] = Mark::Done;
         // 循環の検出で先に誤りが入っていれば、それを残す
-        if status[i].is_none() {
-            status[i] = Some(result);
+        if w.status[i].is_none() {
+            w.status[i] = Some(result);
         }
     }
 
+    let mut walk = Walk {
+        exprs,
+        index: &index,
+        marks: &mut marks,
+        status: &mut status,
+        unit,
+    };
     for i in 0..exprs.len() {
-        visit(i, exprs, &index, &mut marks, &mut status);
+        visit(i, &mut walk);
     }
     status
         .into_iter()
@@ -1249,7 +1412,12 @@ pub fn visible_bodies_before(
             && let Ok(inputs) = f.inputs()
         {
             let keeps = f.keeps();
+            // 出現は元を読むだけ(元は見えるボディに残る)
+            let own = f.instance_of();
             for i in inputs {
+                if own.as_ref() == Some(&i) {
+                    continue;
+                }
                 if let InputRef::Output { feature, slot } = report.bodies.resolve(r.id, &i)
                     && slot == "body"
                     && !keeps.contains(&feature)
@@ -1380,17 +1548,18 @@ fn reads_body(
         .unwrap_or_default()
         .into_iter()
         .find(|i| matches!(i, InputRef::Output { slot, .. } if slot == "body"))?;
-    if feature.keeps().contains(&i_feature(&raw)) {
+    // 元を残す機能の写しと、出現は新しいボディ
+    if feature.keeps().contains(&i_feature(&raw)) || feature.instance_of().is_some() {
         return None;
     }
     Some(i_feature(&bodies.resolve(f.id, &raw)))
 }
 
-/// 入力の機能(パラメータなら番号 0。ボディの入力にだけ使う)。
+/// 入力の機能(パラメータ・単位なら番号 0。ボディの入力にだけ使う)。
 fn i_feature(i: &InputRef) -> FeatureId {
     match i {
         InputRef::Output { feature, .. } => *feature,
-        InputRef::Param { .. } => FeatureId(0),
+        InputRef::Param { .. } | InputRef::Units => FeatureId(0),
     }
 }
 

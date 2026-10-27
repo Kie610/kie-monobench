@@ -102,6 +102,8 @@ pub struct SmlibKernel {
     step_import: Option<Box<dyn Kernel>>,
     /// 読み込んだ形: こちらの番号 → 任せたカーネルの番号
     imported: Mutex<HashMap<u64, ShapeHandle>>,
+    /// 出現の表([`Kernel::instance`])。出現は写して動かした形を持つ(B-rep は共有しない)
+    instances: Mutex<k::Instances>,
 }
 
 impl Drop for SmlibKernel {
@@ -217,6 +219,36 @@ impl SmlibKernel {
     }
 
     /// 読み込んだ形なら、任せたカーネルとその中の番号。
+    /// 形を行列で写して動かした複製(面の名前の末尾に `suffix` を足す)。
+    fn moved_copy(
+        &self,
+        shape: ShapeHandle,
+        m: &k::Matrix4,
+        suffix: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        if let Some(why) = k::placement_problem(m) {
+            return Err(KernelError::Failed(why.into()));
+        }
+        if let Some((k, inner)) = self.imported(shape) {
+            let h = k.transform(inner, m, suffix)?;
+            return Ok(self.adopt_imported(h));
+        }
+        let _g = ffi::lock();
+        let mut s = self.lock();
+        let (mut brep, names) = {
+            let src = s.get(shape)?;
+            let names: Vec<String> = src.names.iter().map(|n| format!("{n}{suffix}")).collect();
+            (src.brep.copy().map_err(failed("形状の複製"))?, names)
+        };
+        brep.transform(m).map_err(failed("移動"))?;
+        // 移動で面の並びは変わらない(面の数で確かめる)
+        let count = brep.faces(0).map_err(failed("面の列挙"))?.len();
+        if count != names.len() {
+            return Err(KernelError::Failed("移動で面の数が変わりました".into()));
+        }
+        s.put(brep, names)
+    }
+
     fn imported(&self, h: ShapeHandle) -> Option<(&dyn Kernel, ShapeHandle)> {
         let inner = *self
             .imported
@@ -823,6 +855,25 @@ impl Kernel for SmlibKernel {
         Ok(h)
     }
 
+    fn loft_to_point(
+        &self,
+        sections: &[Profile],
+        point: P3,
+        at_start: bool,
+        rails: &[k::PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let (outer, holes) = hollow(sections).map_err(KernelError::Failed)?;
+        if !holes.is_empty() {
+            return Err(KernelError::Failed(
+                "点へのロフトには穴の無い輪郭を選んでください".into(),
+            ));
+        }
+        let surfaces = skin::loft_to_point(&outer, point, at_start, rails, tag)
+            .map_err(KernelError::Failed)?;
+        self.skin_solid(surfaces, tag, "点へのロフト")
+    }
+
     fn boolean(
         &self,
         op: BooleanOp,
@@ -905,27 +956,21 @@ impl Kernel for SmlibKernel {
         m: &k::Matrix4,
         suffix: &str,
     ) -> Result<ShapeHandle, KernelError> {
-        if let Some(why) = k::placement_problem(m) {
-            return Err(KernelError::Failed(why.into()));
+        if suffix.is_empty() && k::is_rigid(m) {
+            return self.instance(shape, m);
         }
-        if let Some((k, inner)) = self.imported(shape) {
-            let h = k.transform(inner, m, suffix)?;
-            return Ok(self.adopt_imported(h));
-        }
-        let _g = ffi::lock();
-        let mut s = self.lock();
-        let (mut brep, names) = {
-            let src = s.get(shape)?;
-            let names: Vec<String> = src.names.iter().map(|n| format!("{n}{suffix}")).collect();
-            (src.brep.copy().map_err(failed("形状の複製"))?, names)
-        };
-        brep.transform(m).map_err(failed("移動"))?;
-        // 移動で面の並びは変わらない(面の数で確かめる)
-        let count = brep.faces(0).map_err(failed("面の列挙"))?.len();
-        if count != names.len() {
-            return Err(KernelError::Failed("移動で面の数が変わりました".into()));
-        }
-        s.put(brep, names)
+        self.moved_copy(shape, m, suffix)
+    }
+
+    fn instance(&self, shape: ShapeHandle, m: &k::Matrix4) -> Result<ShapeHandle, KernelError> {
+        k::place_instance(&self.instances, shape, m, |b, m| self.moved_copy(b, m, ""))
+    }
+
+    fn instance_of(&self, shape: ShapeHandle) -> Option<(ShapeHandle, k::Matrix4)> {
+        self.instances
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .of(shape)
     }
 
     fn extrude_faces(
@@ -1656,6 +1701,11 @@ impl Kernel for SmlibKernel {
     }
 
     fn retain(&self, live: &HashSet<ShapeHandle>) {
+        let live = &self
+            .instances
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(live);
         {
             let mut imported = self.imported.lock().unwrap_or_else(|e| e.into_inner());
             imported.retain(|id, _| live.contains(&ShapeHandle(*id)));

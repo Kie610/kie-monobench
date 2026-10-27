@@ -469,6 +469,21 @@ impl Workspace {
             })
             .collect();
         self.cur.scene.set_face_looks(faces);
+        // ねじの陰影(ねじ・ねじ穴の機能の印を、そのボディの最後の機能へ)
+        let mut threads = kmb_ui_view3d::view3d::ThreadMarks::new();
+        for f in data.features.iter().filter(|f| !f.suppressed) {
+            let Some(marks) = self
+                .output(f.id, kmb_interchange::THREAD_MARKS_OUTPUT)
+                .and_then(<kmb_interchange::ThreadMarks as kmb_core::Payload>::from_value)
+            else {
+                continue;
+            };
+            let root = kmb_core::body_root(data, &self.win.registry, f.id);
+            if let Some(&(last, _)) = roots.iter().find(|r| r.1 == root) {
+                threads.entry(last).or_default().extend(marks.marks);
+            }
+        }
+        self.cur.scene.set_thread_marks(threads);
         self.cur.scene.set_lamps(kmb_render::lamp::lamps_of(
             self.decor_outputs(kmb_look::decor::LAMP),
         ));

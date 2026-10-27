@@ -63,6 +63,7 @@ pub fn register(reg: &mut Registry) {
 
 mod adopted_failure_tests;
 mod adopted_io_tests;
+mod adopted_reference_tests;
 mod adopted_shape_tests;
 mod adopted_sketch_tests;
 mod asm_tests;
@@ -72,6 +73,7 @@ mod extrude_revolve_hole_tests;
 mod face_edit_tests;
 mod face_extrude_tests;
 mod face_name_tests;
+mod face_revolve_tests;
 mod fastener_tests;
 mod fillet_material_tests;
 mod fillet_rows_tests;
@@ -80,8 +82,10 @@ mod hole_tests;
 mod link_tests;
 mod modify_tests;
 mod multi_pick_tests;
+mod occurrence_tests;
 mod origin_tests;
 mod pattern_tests;
+mod point_loft_tests;
 mod segment_tests;
 mod shell_tests;
 mod sweep_loft_tests;

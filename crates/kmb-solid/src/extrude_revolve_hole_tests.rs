@@ -147,7 +147,7 @@ fn a_tapered_extrude_narrows_toward_its_end() {
 /// ZX 平面の長方形(世界の x 10〜15、z 0〜8)を、世界の z 軸(スケッチの X 軸)まわりに回す。
 fn ring(direction: Direction, angle: &str, angle2: Option<&str>) -> Revolve {
     Revolve {
-        profile: kmb_core::FeatureId(0),
+        profile: Some(kmb_core::FeatureId(0)),
         regions: Vec::new(),
         axis: Axis::SketchX,
         angle: angle.into(),
@@ -157,6 +157,7 @@ fn ring(direction: Direction, angle: &str, angle2: Option<&str>) -> Revolve {
         angle2: angle2.map(String::from),
         extent: RevolveExtent::Angle,
         to_face: None,
+        ..Default::default()
     }
 }
 
@@ -167,7 +168,14 @@ fn a_revolve_turns_both_ways_symmetric_or_by_two_angles() {
     let run = |r: Revolve| {
         let mut b = DocBuilder::new();
         let s = rect_sketch(&mut b, SketchPlane::Zx, 0.0, 10.0, 8.0, 5.0);
-        b.feature(REVOLVE, "輪", Revolve { profile: s, ..r });
+        b.feature(
+            REVOLVE,
+            "輪",
+            Revolve {
+                profile: Some(s),
+                ..r
+            },
+        );
         let mut doc = b.finish("回転");
         final_mass(&mut doc, &k)
     };
@@ -234,7 +242,7 @@ fn a_revolve_stops_at_a_face_that_holds_its_axis() {
         REVOLVE,
         "面までの輪",
         Revolve {
-            profile: s2,
+            profile: Some(s2),
             operation: Operation::Join,
             target: Some(block2),
             extent: RevolveExtent::ToFace,
@@ -434,7 +442,7 @@ fn a_revolve_and_an_extrude_can_stop_at_a_vertex() {
                     REVOLVE,
                     "頂点までの輪",
                     Revolve {
-                        profile: s,
+                        profile: Some(s),
                         operation: Operation::Join,
                         target: Some(block),
                         extent: RevolveExtent::ToFace,
