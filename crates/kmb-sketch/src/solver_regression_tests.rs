@@ -79,6 +79,34 @@ fn an_inconsistent_pattern_explains_constraint_kinds_counts_and_pattern_size() {
 }
 
 #[test]
+fn a_pattern_diagnostic_includes_circle_radii_in_its_size() {
+    use crate::{DistanceType, PatternAxis, PatternDirection, RectangularPattern};
+    let mut s = Sketch::default();
+    let center = s.add_point(0.0, 0.0);
+    let circle = s.add_circle(center, 5.0);
+    let direction = |angle, count| PatternDirection {
+        axis: PatternAxis::Angle(angle),
+        count,
+        distance: 20.0,
+        distance_type: DistanceType::Spacing,
+        symmetric: false,
+    };
+    s.add_rectangular_pattern(RectangularPattern {
+        entities: vec![circle],
+        directions: [direction(0.0, 3), direction(std::f64::consts::FRAC_PI_2, 2)],
+        suppressed: vec![],
+    })
+    .unwrap();
+    let mut solution = solve(&s, &Default::default()).unwrap();
+    solution.status = SolveStatus::Inconsistent {
+        conflicting: vec![],
+    };
+    let reason = inconsistency_reason(&s, &solution).unwrap();
+    assert!(reason.contains("矩形 3×2"), "{reason}");
+    assert!(reason.contains("範囲 50.000×30.000 mm"), "{reason}");
+}
+
+#[test]
 fn a_sketch_follows_a_projected_edge_that_moves_far_away() {
     let mut s = Sketch::default();
     let source = ProjectionSource::Edge {
