@@ -503,3 +503,58 @@ fn the_3d_mouse_turns_like_the_orbit_and_zooms_to_the_pivot() {
     assert!(z.is_view(-60.0, 30.0));
     assert!(Nav::default().is_none() && !Nav::default().turns());
 }
+
+#[test]
+fn the_grid_fades_out_far_away_instead_of_ending_in_a_line() {
+    // 10-27 v3: 透視で低く見ると、格子の端が地平線の手前で横一線に切れて見えていた
+    let colors = Colors::from_look(Palette {
+        dark: false,
+        canvas: Color32::WHITE,
+        ink: Color32::BLACK,
+        ink2: Color32::GRAY,
+        ink3: Color32::GRAY,
+        err: Color32::RED,
+        warn: Color32::YELLOW,
+        design: Color32::BLUE,
+        cam: Color32::GREEN,
+        shade3: Color32::GRAY,
+        accent: Color32::BLUE,
+        inks: crate::Inks::LIGHT,
+    });
+    let g = Guides {
+        grid: true,
+        axes: false,
+    };
+    let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+    let mut cam = Camera {
+        zoom: 4.0,
+        perspective: true,
+        ..Default::default()
+    };
+    cam.set_view(-60.0, 10.0);
+    let eye = cam.eye_position(rect).unwrap();
+    let dist = cam.distance(rect).unwrap();
+    let (mut near, mut far, mut lines) = (0u8, 0u8, 0usize);
+    guide_segments(&cam, rect, &colors, g, &mut |a, b, c| {
+        lines += 1;
+        let d = (0..3)
+            .map(|i| ((a[i] + b[i]) * 0.5 - eye[i]).powi(2))
+            .sum::<f32>()
+            .sqrt();
+        if d < dist {
+            near = near.max(c.a());
+        } else if d > 4.0 * dist {
+            far = far.max(c.a());
+        }
+    });
+    assert_eq!(near, 255, "手前の格子は薄めない");
+    assert!(far < 40, "遠くの格子が濃い: {far}");
+    assert!(lines < 20_000, "{lines}");
+    // 描かなくなる角度の近くでは、全体が薄くなっている(急に消えない)
+    cam.set_view(-60.0, 5.0);
+    let mut most = 0u8;
+    guide_segments(&cam, rect, &colors, g, &mut |_, _, c| {
+        most = most.max(c.a())
+    });
+    assert!(most < 40, "{most}");
+}
