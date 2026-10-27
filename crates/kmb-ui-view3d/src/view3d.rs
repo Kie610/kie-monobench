@@ -13,6 +13,7 @@ mod look;
 mod pick_wait_tests;
 mod raster;
 mod scene;
+mod threads;
 #[cfg(test)]
 mod turn_tests;
 
@@ -21,6 +22,7 @@ pub use hit::*;
 pub use look::*;
 pub use raster::*;
 pub use scene::*;
+pub use threads::{THREAD_TILT, thread_bands};
 
 /// 選んだ面。
 pub type Pick = kmb_core::FacePick;
