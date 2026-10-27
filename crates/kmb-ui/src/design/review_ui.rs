@@ -40,7 +40,8 @@ impl Workspace {
         let w = self.win.words();
         let mut s = format!("{name}({}): {}", h.title(&w), h.message(&w));
         if let Some(raw) = self.raw_text(id) {
-            s += &format!("\n元の文: {raw}");
+            s += "\n";
+            s += &self.win.t_with("review-raw-line", &[("raw", raw.into())]);
         }
         s
     }
@@ -101,7 +102,7 @@ impl Workspace {
                             let title = if health.is_problem() {
                                 health.title(&words)
                             } else {
-                                "今は計算できています".to_string()
+                                words.t("review-ok")
                             };
                             ui.label(egui::RichText::new(title).strong().color(accent));
                             ui.label(egui::RichText::new(&f.name).strong());
@@ -109,8 +110,8 @@ impl Workspace {
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
                                     if ui
-                                        .small_button("閉じる")
-                                        .on_hover_text("Esc でも閉じる")
+                                        .small_button(words.t("review-close"))
+                                        .on_hover_text(words.t("review-close-tip"))
                                         .clicked()
                                     {
                                         close = true;
@@ -137,13 +138,16 @@ impl Workspace {
                                 });
                             if let Some(n) = &upstream_name {
                                 ui.label(
-                                    egui::RichText::new(format!("止めている機能: {n}"))
-                                        .color(l.pal.ink2),
+                                    egui::RichText::new(words.t_with(
+                                        "review-blocked-by",
+                                        &[("name", n.as_str().into())],
+                                    ))
+                                    .color(l.pal.ink2),
                                 );
                             }
                             ui.add_space(4.0);
                             ui.label(
-                                egui::RichText::new("直し方の例")
+                                egui::RichText::new(words.t("review-fixes"))
                                     .size(crate::theme::fs(11.0))
                                     .color(l.pal.ink2),
                             );
@@ -157,7 +161,7 @@ impl Workspace {
                             if let Some(raw) = &raw {
                                 // 内部の言葉を残した元の文(不具合の報告に使う)
                                 egui::CollapsingHeader::new(
-                                    egui::RichText::new("元の文")
+                                    egui::RichText::new(words.t("review-raw"))
                                         .size(crate::theme::fs(11.0))
                                         .color(l.pal.ink3),
                                 )
@@ -176,31 +180,39 @@ impl Workspace {
                             }
                         } else {
                             ui.label(
-                                egui::RichText::new("この機能に注意やエラーはありません")
-                                    .color(l.pal.ink2),
+                                egui::RichText::new(words.t("review-no-problem")).color(l.pal.ink2),
                             );
                         }
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
                             if ui
-                                .add_enabled(!self.is_editing(id), egui::Button::new("編集"))
+                                .add_enabled(
+                                    !self.is_editing(id),
+                                    egui::Button::new(words.t("review-edit")),
+                                )
                                 .clicked()
                             {
                                 edit = true;
                             }
                             if ui
-                                .add_enabled(health.is_problem(), egui::Button::new("文を写す"))
-                                .on_hover_text("機能の名前と知らせの文(元の文も)をクリップボードへ")
+                                .add_enabled(
+                                    health.is_problem(),
+                                    egui::Button::new(words.t("review-copy")),
+                                )
+                                .on_hover_text(words.t("review-copy-tip"))
                                 .clicked()
                             {
                                 copy = true;
                             }
-                            if upstream.is_some() && ui.button("原因のフィーチャを選ぶ").clicked()
+                            if upstream.is_some()
+                                && ui.button(words.t("review-pick-cause")).clicked()
                             {
                                 pick_up = true;
                             }
                             if copied {
-                                ui.label(egui::RichText::new("写しました").color(l.ws()));
+                                ui.label(
+                                    egui::RichText::new(words.t("review-copied")).color(l.ws()),
+                                );
                             }
                         });
                     });
@@ -242,14 +254,13 @@ impl Workspace {
         let warnings = problems.len() - errors;
         let worst = problems[0].1.clone();
         let l = self.win.look;
-        let mut text = Vec::new();
-        if errors > 0 {
-            text.push(format!("エラー {errors}"));
-        }
-        if warnings > 0 {
-            text.push(format!("注意 {warnings}"));
-        }
-        let text = text.join("・");
+        let text = self.win.t_with(
+            "review-badge",
+            &[("errors", errors.into()), ("warnings", warnings.into())],
+        );
+        let tip = self
+            .win
+            .t_with("review-badge-tip", &[("badge", text.as_str().into())]);
         let screen = ui.ctx().content_rect();
         let offset = egui::vec2(
             rect.right() - screen.right() - 10.0,
@@ -288,9 +299,7 @@ impl Workspace {
                     galley,
                     worst.color(&l),
                 );
-                let resp = resp.on_hover_text(format!(
-                    "{text} があります。押すと確かめる窓が開き、もう一度押すと次の機能へ進む"
-                ));
+                let resp = resp.on_hover_text(tip.as_str());
                 if resp.clicked() {
                     clicked = true;
                 }

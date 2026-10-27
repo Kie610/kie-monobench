@@ -530,18 +530,23 @@ impl Workspace {
 
     /// 表示の「効果」(材質の質感と環境の光)。表示のメニューと設定の窓で使う。
     pub(crate) fn effects_items(&mut self, ui: &mut egui::Ui) {
-        ui.checkbox(&mut self.win.layout.effects.materials, "材質の質感")
-            .on_hover_text(
-                "外観・物理材料を付けたボディを、材質の見た目で描く(木目、金属の映り込み、つや)。\
-                 レンダリングの作業空間では、いつも全部のボディをこの描き方にする",
-            );
+        let (name, tip) = (
+            self.win.t("view-materials"),
+            self.win.t("view-materials-tip"),
+        );
+        ui.checkbox(&mut self.win.layout.effects.materials, name)
+            .on_hover_text(tip);
+        // 光の名前は鍵(`studio_dark`)の `_` を `-` にした ID で引く
+        let envs: Vec<(String, String)> = kmb_render::EnvKind::ALL
+            .iter()
+            .map(|e| {
+                let id = format!("view-env-{}", e.key().replace('_', "-"));
+                (e.key().to_string(), self.win.t(&id))
+            })
+            .collect();
         ui.add_enabled_ui(self.win.layout.effects.materials, |ui| {
-            for e in kmb_render::EnvKind::ALL {
-                ui.radio_value(
-                    &mut self.win.layout.effects.env,
-                    e.key().to_string(),
-                    e.label(),
-                );
+            for (key, name) in envs {
+                ui.radio_value(&mut self.win.layout.effects.env, key, name);
             }
         });
     }
