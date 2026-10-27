@@ -596,6 +596,20 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("ロフト".into()))
     }
 
+    /// 閉じた輪郭の断面を、端の点 `point` へつなぐ。`at_start` なら点を最初に置く。
+    /// 点の側には端面を作らず、側面は輪郭の区間の名前を使う。
+    fn loft_to_point(
+        &self,
+        sections: &[Profile],
+        point: P3,
+        at_start: bool,
+        rails: &[PlanarPath],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (sections, point, at_start, rails, tag);
+        Err(KernelError::Unsupported("点へのロフト".into()))
+    }
+
     /// 丸めの面 `faces`(名前)を消し、両側の面を延ばして鋭い辺に戻す。残る面の名前はそのまま、つなぎ直した面は `{tag}:healed` と名付ける。
     /// 丸めでない面は断る。
     fn remove_blend_faces(

@@ -636,8 +636,18 @@ fn module_actions_are_listed_and_run_like_on_the_screen() {
     let r = s.export("each.stl", None, None, None, true).unwrap();
     assert!(root.join("each-ボディ1.stl").exists(), "{r}");
     assert!(!root.join("each.stl").exists());
+    s.export("part.obj", None, None, None, false).unwrap();
+    let obj = std::fs::read_to_string(root.join("part.obj")).unwrap();
+    assert!(obj.lines().any(|line| line.starts_with("o ")), "{obj}");
+    assert!(obj.lines().any(|line| line.starts_with("v ")), "{obj}");
+    assert!(obj.lines().any(|line| line.starts_with("vn ")), "{obj}");
     assert!(
-        s.export("part.obj", None, None, None, false)
+        obj.lines()
+            .any(|line| line.starts_with("f ") && line.contains("//")),
+        "{obj}"
+    );
+    assert!(
+        s.export("part.no-such-format", None, None, None, false)
             .unwrap_err()
             .message
             .contains(".stl")

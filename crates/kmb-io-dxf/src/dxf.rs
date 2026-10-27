@@ -1,7 +1,6 @@
-//! DXF の書き出しと読み込み(ASCII だけ)。
+//! DXF の書き出しと読み込み。
 //!
-//! 書き出しは R12(AC1009)の最小の形(HEADER・TABLES・ENTITIES)。R12 はハンドルも
-//! オブジェクトの辞書も要らないので、短く書けて、ほとんどの CAD が読める。
+//! 書き出しは R2000(AC1015)。幾何は共通の書き手を使い、R2000 のハンドルと所有関係を補う。
 //! 単位は mm として `$INSUNITS = 4` と `$MEASUREMENT = 1` を書く。
 
 use kmb_core::kernel::{P2, Segment, arc_sweep};
@@ -108,7 +107,7 @@ pub fn to_dxf(sketch: &Sketch, sol: &Solution, opts: &DxfOptions) -> String {
     for p in &points {
         o.point(&opts.layer, *p);
     }
-    o.finish()
+    crate::r2000::upgrade(&o.finish())
 }
 
 fn segment_finite(s: &Segment) -> bool {
@@ -248,7 +247,7 @@ const MAX_WORK: usize = 4_000_000;
 pub fn from_dxf(text: &str) -> Result<Imported, String> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     if text.starts_with("AutoCAD Binary DXF") {
-        return Err("バイナリの DXF は読めません(ASCII で保存してください)".into());
+        return crate::from_dxf_bytes(text.as_bytes());
     }
     let lines: Vec<&str> = text.lines().collect();
     let mut pairs: Vec<(i32, &str)> = Vec::with_capacity(lines.len() / 2);
@@ -271,6 +270,10 @@ pub fn from_dxf(text: &str) -> Result<Imported, String> {
         }
         pairs.push((code, ch[1].trim()));
     }
+    from_pairs(&pairs)
+}
+
+pub(crate) fn from_pairs(pairs: &[(i32, &str)]) -> Result<Imported, String> {
     if !pairs.iter().any(|p| p.0 == 0 && p.1 == "SECTION") {
         return Err("DXF ではありません(SECTION がない)".into());
     }
@@ -301,7 +304,7 @@ pub fn from_dxf(text: &str) -> Result<Imported, String> {
                 }
             }
             "ENTITIES" => {
-                let (e, j) = read_entities(&pairs, i);
+                let (e, j) = read_entities(pairs, i);
                 entities.extend(e);
                 i = j;
             }
@@ -317,7 +320,7 @@ pub fn from_dxf(text: &str) -> Result<Imported, String> {
                         i += 1;
                     }
                     let head = &pairs[start..i];
-                    let (ents, j) = read_entities(&pairs, i);
+                    let (ents, j) = read_entities(pairs, i);
                     i = j;
                     // ENDBLK とその組を飛ばす
                     if i < pairs.len() && pairs[i] == (0, "ENDBLK") {

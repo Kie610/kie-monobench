@@ -33,7 +33,7 @@ fn sphere_from(outer: f64, inner: f64) -> Document {
         REVOLVE,
         "球",
         Revolve {
-            profile: s,
+            profile: Some(s),
             regions: Vec::new(),
             axis: Axis::SketchX,
             angle: "360 deg".into(),
@@ -43,6 +43,7 @@ fn sphere_from(outer: f64, inner: f64) -> Document {
             angle2: None,
             extent: RevolveExtent::Angle,
             to_face: None,
+            ..Default::default()
         },
     );
     b.finish("球")
