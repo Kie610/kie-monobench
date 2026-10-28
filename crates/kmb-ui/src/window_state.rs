@@ -75,6 +75,8 @@ pub(crate) struct WinState {
     pub(crate) renderer_note: Option<String>,
     /// 3D マウスの読み手(画面のアプリが渡す。無ければ使わない)
     pub(crate) mouse3d: Option<kmb_ui_mouse3d::Mouse3d>,
+    /// 録画向けの操作の表示。文書には残さない。
+    pub(crate) keycast: crate::keycast::Keycast,
     /// 最後に描いた 3D のビューの枠(名前付きの視点を取り出す・戻すのに使う)
     pub(crate) view_rect: egui::Rect,
     /// `view_rect` を描いた時に並びに置いていた部品(出し入れで 3D のビューの片側が動いた時に、

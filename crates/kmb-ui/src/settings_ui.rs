@@ -39,6 +39,7 @@ pub(crate) enum Sec {
     Appearance,
     Mouse,
     Keys,
+    Keycast,
     Autosave,
     /// 読み込み(STEP を立てるか聞く)
     Import,
@@ -83,6 +84,10 @@ fn sec_words(s: &Sec) -> (&'static str, &'static str) {
         Sec::Keys => (
             "キーの割り当て",
             "キー ショートカット 割り当て 付け替え 既定に戻す",
+        ),
+        Sec::Keycast => (
+            "操作の表示",
+            "操作の表示 押したキー キー マウス 3D マウス 録画 動画 解説 画面に出す",
         ),
         Sec::Autosave => ("自動保存", "保存 間隔 分 写し 落ちた 戻す"),
         Sec::Import => ("読み込み", "STEP 読み込む 立てる Y が上 Z が上 向き"),
@@ -161,7 +166,7 @@ pub(crate) fn pages(
             Tab::General,
             "general/input",
             "settings-page-input",
-            vec![Sec::Mouse, Sec::Keys],
+            vec![Sec::Mouse, Sec::Keys, Sec::Keycast],
         ),
         page(
             Tab::General,
@@ -315,7 +320,14 @@ impl Workspace {
                     egui::TextEdit::singleline(&mut self.settings.query)
                         .hint_text(search_hint.as_str())
                         .desired_width(f32::INFINITY),
-                );
+                )
+                .widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::TextEdit,
+                        true,
+                        search_hint.as_str(),
+                    )
+                });
                 let query = self.settings.query.trim().to_string();
                 // 探している間は、当たった節を頁をまたいで並べる
                 let shown: Vec<(&Page, Vec<&Sec>)> = if query.is_empty() {
@@ -447,6 +459,13 @@ impl Workspace {
                 let (t, w) = sec_words(s);
                 hits(query, &format!("{t} {w}")) || !self.key_rows(query).is_empty()
             }
+            Sec::Keycast => {
+                let (t, w) = sec_words(s);
+                hits(
+                    query,
+                    &format!("{t} {w} {}", self.win.t("settings-keycast-title")),
+                )
+            }
             _ => {
                 let (t, w) = sec_words(s);
                 hits(query, &format!("{t} {w}"))
@@ -469,6 +488,7 @@ impl Workspace {
                     .iter()
                     .find(|g| &g.id == id)
                     .map_or(id.clone(), |g| g.label.clone()),
+                Sec::Keycast => self.win.t("settings-keycast-title"),
                 _ => sec_words(s).0.to_string(),
             });
         }
@@ -476,6 +496,7 @@ impl Workspace {
             Sec::Appearance => self.appearance_settings(ui),
             Sec::Mouse => self.mouse_settings(ui),
             Sec::Keys => self.key_settings(ui, query),
+            Sec::Keycast => self.keycast_settings(ui),
             Sec::Autosave => self.autosave_settings(ui),
             Sec::Units => self.units_settings(ui),
             Sec::NewDoc => self.new_doc_settings(ui),
@@ -679,7 +700,7 @@ impl Workspace {
                 ui.end_row();
                 for i in rows {
                     let r = &KEYS[i];
-                    ui.label(r.text);
+                    ui.label(keys::row_text(ui.ctx(), r));
                     let label = if self.settings.key_capture == Some(i) {
                         "キーを押す…".to_string()
                     } else {

@@ -22,6 +22,7 @@ mod frame_ui;
 mod gesture;
 mod help_ui;
 mod icons;
+mod keycast;
 pub mod keys;
 pub mod layout;
 mod live_ui;
@@ -281,6 +282,7 @@ impl Workspace {
                 safe_mode: false,
                 renderer_note: None,
                 mouse3d: None,
+                keycast: Default::default(),
                 view_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
                 view_panes: None,
                 history: Vec::new(),
@@ -614,6 +616,7 @@ impl Workspace {
         }
         set_doc_scope(ui.ctx(), self.tab_uid());
         self.feed_mouse3d(ui.ctx());
+        self.take_keycast(ui.ctx());
         // 編集器が Tab を使っている(描いている途中の寸法の欄): 画面の欄へ入力を移さない
         let ctx = ui.ctx();
         if ctx
@@ -828,6 +831,7 @@ impl Workspace {
                 ui.push_id(("doc_tab", self.tab_uid()), |ui| self.dock_ui(ui));
             });
         self.window_edges(ui);
+        self.show_keycast(&ctx);
         self.settle_auto_open();
         self.save_layout_if_changed(&ctx);
         self.save_doc_view_if_changed(&ctx);

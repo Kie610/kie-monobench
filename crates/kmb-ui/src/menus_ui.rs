@@ -1090,6 +1090,9 @@ impl Workspace {
             )
             .clicked()
             {
+                if let Some(name) = self.keycast_fixed_name(&kmb_i18n::action_id(&a.id), &a.label) {
+                    crate::keycast::command_name(ui.ctx(), name, false);
+                }
                 self.start_action(&a.id);
                 done = true;
             }
@@ -1116,6 +1119,7 @@ impl Workspace {
             .on_hover_text("点・辺・面をクリックして、距離・角度・径・面積を測る")
             .clicked()
         {
+            crate::keycast::command_name(ui.ctx(), measure.into(), false);
             self.toggle_measure();
             done = true;
         }
@@ -1131,6 +1135,7 @@ impl Workspace {
             .on_hover_text("Home。全体を収め、部品の中心で回す")
             .clicked()
         {
+            crate::keycast::command_name(ui.ctx(), "全体表示".into(), false);
             self.cur.camera.refit();
             done = true;
         }

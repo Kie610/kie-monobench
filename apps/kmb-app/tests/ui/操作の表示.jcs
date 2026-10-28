@@ -1,0 +1,49 @@
+# 設定の部品から表示を入れ、画面と同じ入力の道でキーの札を確かめる。
+#! sample part
+
+key Ctrl+,
+click "マウスとキー"
+type ~"設定を探す" "操作の表示"
+click "押したキーとマウスを画面に出す(録画・解説向け)"
+expect "コマンドの名前も出す" exists
+key Ctrl+,
+key F8
+expect "操作の表示: F8" exists
+
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z 取り消す" exists
+click "押し出し"
+expect "操作の表示: マウス 押し出し" exists
+key Escape
+click "表示"
+click "ワイヤフレーム"
+expect "操作の表示: マウス ワイヤフレーム" exists
+key Escape
+click "表示"
+click "シェーディング、エッジ表示のみ"
+key Escape
+pick f8:end
+rclick ~"選んだ面:"
+click "全体表示"#2
+expect "操作の表示: マウス 全体表示" exists
+key Escape
+
+# 表示の言語も画面の部品で替え、固定の働きの名前が英語になることを確かめる。
+key Ctrl+,
+type ~"設定を探す" ""
+click "画面"
+click "表示の言語"
+click "English"
+type ~"Search settings" "Input Display"
+expect "Show keys and mouse buttons on screen (for recordings and tutorials)" exists
+key Ctrl+,
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z Undo" exists
+click "Extrude"
+expect "操作の表示: マウス Extrude" exists
+key Escape
+
+click "Display"
+click "Orthographic"
+expect "操作の表示: マウス Orthographic" exists
+key Escape
