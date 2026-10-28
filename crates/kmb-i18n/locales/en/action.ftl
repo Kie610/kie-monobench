@@ -103,6 +103,7 @@ action-cad-import-step = Import STEP…
 action-cad-import-step-tip = Import a part made in another CAD program. Add holes and pockets to it and use it for machining and measuring
 action-cad-loft = Loft
 action-cad-loft-tip = Press, then click the sections (profiles drawn on different planes) in the order to join them, and pick guide rail lines (or press Enter if none)
+action-cad-loft-point = Reselect End Point
 action-cad-measure = Measure Volume
 action-cad-measure-tip = Volume, surface area and bounding box of the selected body (or the last body)
 action-cad-mirror-on-face = Mirror on This Face

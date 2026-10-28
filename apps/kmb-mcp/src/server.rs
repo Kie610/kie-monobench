@@ -744,7 +744,7 @@ tools! {
     fn measure(s, a: MeasureArg) edit => s.measure(&a.targets, a.basis.as_deref());
     "残ったボディの絵(PNG)。画面の 3D のビューの明るい見た目で、平行投影で全体が入るように描く(格子・寸法・スケッチは描かない)。view で向き、faces・edges で topology の面と辺を目立たせる。説明に 1 mm の画素数(px_per_mm)。out で PNG を書き出す"
     fn screenshot(s, a: ScreenshotArg) picture => s.screenshot(&a);
-    "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
+    "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・OBJ の .obj・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
     fn export(s, a: ExportArg) edit => s.export(&a.path, a.action.as_deref(), a.view.as_ref(), a.tolerance, a.each);
     "セットアップの G-code を作る(既定は Carvera Air、post で WASM のポストのプラグインも使える)"
     fn gcode(s, a: GcodeArg) edit => s.gcode(a.setup, a.out.as_deref(), a.post.as_deref());

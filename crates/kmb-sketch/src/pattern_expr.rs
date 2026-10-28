@@ -64,9 +64,10 @@ impl PatternExpressions {
     }
 
     pub(crate) fn fields(&self) -> Vec<DimExpr<'_>> {
-        let field = |expr, angle, count_max, signed| DimExpr {
+        let field = |label, expr, angle, count_max, signed| DimExpr {
             id: ConstraintId(0),
             name: None,
+            label: Some(label),
             expr,
             angle,
             count_max,
@@ -74,18 +75,18 @@ impl PatternExpressions {
         };
         match self {
             Self::Circular { count, angle } => vec![
-                field(count.as_str(), false, Some(360), false),
-                field(angle.as_str(), true, None, true),
+                field("パターンの数", count.as_str(), false, Some(360), false),
+                field("パターンの角度", angle.as_str(), true, None, true),
             ],
             Self::Rectangular { directions } => directions
                 .iter()
                 .flat_map(|d| {
                     let mut v = vec![
-                        field(d.count.as_str(), false, Some(200), false),
-                        field(d.distance.as_str(), false, None, true),
+                        field("パターンの数", d.count.as_str(), false, Some(200), false),
+                        field("パターンの距離", d.distance.as_str(), false, None, true),
                     ];
                     if let Some(a) = &d.angle {
-                        v.push(field(a.as_str(), true, None, true));
+                        v.push(field("パターンの向き", a.as_str(), true, None, true));
                     }
                     v
                 })

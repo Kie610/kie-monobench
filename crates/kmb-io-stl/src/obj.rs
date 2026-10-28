@@ -1,5 +1,6 @@
 //! ボディの名前と三角形の網を OBJ に書く。色と材料のファイルは作らない。
 
+use crate::threemf::num;
 use kmb_core::{LengthUnit, Mesh};
 use std::io::{self, Write};
 
@@ -27,7 +28,7 @@ pub fn write_obj<W: Write>(
         };
         for point in &welded.positions {
             let p = point.map(|v| f64::from(v) / unit.mm());
-            writeln!(writer, "v {} {} {}", p[0], p[1], p[2])?;
+            writeln!(writer, "v {} {} {}", num(p[0]), num(p[1]), num(p[2]))?;
         }
         for triangle in &welded.triangles {
             let n = crate::facet_normal(&welded, triangle);
@@ -72,6 +73,29 @@ mod tests {
         assert!(text.contains("o 四面体\n"));
         assert!(text.contains("vn 0 0 -1\nf 1//1 2//1 3//1"));
         assert!(!text.contains("mtllib"));
+    }
+
+    #[test]
+    fn vertex_coordinates_use_at_most_six_decimal_places_after_unit_conversion() {
+        let mut mesh = crate::tests::tetra();
+        mesh.positions[0] = [12.3, -1.2345678, -0.00000001];
+        let mut out = Vec::new();
+        write_obj(&[("形".into(), mesh)], LengthUnit::Mm, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(
+            text.lines().find(|l| l.starts_with("v ")),
+            Some("v 12.3 -1.234568 0")
+        );
+
+        let mut mesh = crate::tests::tetra();
+        mesh.positions[0] = [25.4, 12.7, -0.000001];
+        let mut out = Vec::new();
+        write_obj(&[("形".into(), mesh)], LengthUnit::In, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(
+            text.lines().find(|l| l.starts_with("v ")),
+            Some("v 1 0.5 0")
+        );
     }
 
     #[test]
