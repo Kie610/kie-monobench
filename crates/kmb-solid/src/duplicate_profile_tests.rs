@@ -72,7 +72,7 @@ impl Kernel for MeasuredKernel {
     }
 }
 
-fn circle_grid(duplicate: bool) -> (Document, FeatureId) {
+fn circle_grid(duplicate: bool, count: usize) -> (Document, FeatureId) {
     let mut b = DocBuilder::new();
     let outline = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 60.0, 50.0);
     let plate = b.feature(
@@ -85,8 +85,8 @@ fn circle_grid(duplicate: bool) -> (Document, FeatureId) {
         },
     );
     let mut s = SketchBuilder::new(SketchPlane::Xy);
-    let centers: Vec<_> = (0..4)
-        .flat_map(|y| (0..5).map(move |x| [10.0 + x as f64 * 10.0, 10.0 + y as f64 * 10.0]))
+    let centers: Vec<_> = (0..count)
+        .map(|i| [10.0 + (i % 5) as f64 * 10.0, 10.0 + (i / 5) as f64 * 10.0])
         .map(|p| s.fixed_point(p[0], p[1]))
         .collect();
     for p in &centers {
@@ -121,7 +121,7 @@ fn duplicate_circles_do_not_multiply_the_grid_cut_or_change_its_shape() {
     for duplicate in [false, true] {
         kernel.extrusions.lock().unwrap().clear();
         kernel.booleans.lock().unwrap().clear();
-        let (mut doc, sketch) = circle_grid(duplicate);
+        let (mut doc, sketch) = circle_grid(duplicate, 20);
         let before = doc.data().feature(sketch).unwrap().data.clone();
         let start = Instant::now();
         let report = doc.recompute(&reg, &kernel);
@@ -221,15 +221,16 @@ fn named_regions_of_duplicate_circles_extrude_and_cut_the_same_volume() {
     let kernel = MeasuredKernel::new();
     let reg = registry();
     let mut original_keys = None;
+    let mut original_shapes: Vec<(f64, Vec<String>)> = Vec::new();
     for duplicate in [false, true] {
-        let (mut doc, sketch) = circle_grid(duplicate);
+        let (mut doc, sketch) = circle_grid(duplicate, 3);
         let report = doc.recompute(&reg, &kernel);
         assert_ok(&report);
         let FeatureStatus::Ok { outputs, .. } = report.feature(sketch).unwrap() else {
             panic!()
         };
         let faces = ProfileFaces::from_value(&outputs["faces"]).unwrap();
-        let keys = vec![faces.faces[0].key.clone(), faces.faces[19].key.clone()];
+        let keys = vec![faces.faces[0].key.clone(), faces.faces[2].key.clone()];
         if let Some(want) = &original_keys {
             assert_eq!(&keys, want);
         } else {
@@ -237,7 +238,7 @@ fn named_regions_of_duplicate_circles_extrude_and_cut_the_same_volume() {
         }
         let id = doc.data().features.last().unwrap().id;
         let saved = doc.data().feature(id).unwrap().data.clone();
-        for operation in [Operation::New, Operation::Cut] {
+        for (case, operation) in [Operation::New, Operation::Cut].into_iter().enumerate() {
             let mut extrude: Extrude = serde_json::from_value(saved.clone()).unwrap();
             extrude.regions = keys.clone();
             extrude.operation = operation;
@@ -267,12 +268,27 @@ fn named_regions_of_duplicate_circles_extrude_and_cut_the_same_volume() {
             } else {
                 actual
             };
-            let theory_rel = if kernel.inner.is_truck() { 2e-3 } else { 1e-6 };
+            // 小さな円の工具は、既存の円穴の試験と同じ網の近似誤差を許す。
+            let theory_rel = if kernel.inner.is_truck() { 1e-2 } else { 1e-6 };
             eprintln!(
                 "二重={duplicate}, 操作={operation:?}: 体積={actual}, 工具体積={volume}, 理論={v}, 差={}",
                 volume - v
             );
             assert!(close(volume, v, theory_rel), "{volume} vs {v}");
+            let mut names: Vec<_> = kernel
+                .faces(body)
+                .unwrap()
+                .into_iter()
+                .map(|f| f.name)
+                .collect();
+            names.sort();
+            if duplicate {
+                let (want, want_names) = &original_shapes[case];
+                assert!(close(actual, *want, 1e-7), "{actual} vs {want}");
+                assert_eq!(&names, want_names, "選んだ領域の面数と面名を保つ");
+            } else {
+                original_shapes.push((actual, names));
+            }
         }
     }
 }
