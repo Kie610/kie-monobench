@@ -148,4 +148,15 @@ fn untranslated_field_languages_use_english() {
     for lang in [Lang::En, Lang::ZhHans, Lang::ZhHant, Lang::Ko] {
         assert_eq!(c.text(lang, id), "Distance");
     }
+    let english_fields = FILES
+        .iter()
+        .find(|(lang, area, _)| *lang == Lang::En && *area == "field")
+        .unwrap()
+        .2;
+    for id in ids(english_fields) {
+        for lang in [Lang::ZhHans, Lang::ZhHant, Lang::Ko] {
+            assert!(!c.has(lang, id), "{} の {id} は未訳", lang.code());
+            assert_eq!(c.text(lang, id), c.text(Lang::En, id));
+        }
+    }
 }

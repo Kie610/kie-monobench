@@ -1,4 +1,4 @@
-# 편집 패널 필드. 주석을 해제하고 번역하면 영어 대신 표시합니다。
+# 편집 패널 필드. 주석을 해제하고 번역하면 영어 대신 표시합니다.
 
 # field-asm-constraint-rows = Face Pairs
 # field-asm-constraint-rows-a = Component 1 Faces
@@ -1748,10 +1748,19 @@
 # field-fea-thermal-convs-faces = Faces
 # field-fea-thermal-convs-value = Heat Transfer Coefficient (W/(m²·K))
 # field-fea-thermal-convs-value-help = Typical values: 5–10 for still air, 20–100 with a fan.
+# field-fea-thermal-end = End Time (s)
+# field-fea-thermal-frames = Number of Frames
+# field-fea-thermal-frames-help = Blank means 50. Enter an integer from 2 to 200. A frame at time zero is also included.
 # field-fea-thermal-heats = Heat Input Faces
 # field-fea-thermal-heats-faces = Faces
+# field-fea-thermal-heats-from = Start Time (s)
+# field-fea-thermal-heats-from-help = Only used for transient heat transfer. Blank means 0.
+# field-fea-thermal-heats-until = Stop Time (s)
+# field-fea-thermal-heats-until-help = Only used for transient heat transfer. Blank uses the end time.
 # field-fea-thermal-heats-value = Heat Input (W, Entire Face)
 # field-fea-thermal-heats-value-help = Total heat input over the face, for example heat from an LED or motor driver.
+# field-fea-thermal-initial = Initial Temperature (°C)
+# field-fea-thermal-initial-help = Blank uses the ambient temperature.
 # field-fea-thermal-material = Material
 # field-fea-thermal-material-help = Elastic modulus, strength and thermal conductivity are typical estimates and vary by material grade.
 # field-fea-thermal-plane = Section
@@ -1763,6 +1772,7 @@
 # field-fea-thermal-temps = Prescribed Temperature Faces
 # field-fea-thermal-temps-faces = Faces
 # field-fea-thermal-temps-value = Temperature (°C)
+# field-fea-thermal-time = Time
 # field-fea-topology-at = Section Position
 # field-fea-topology-at-help = Coordinate along the section normal. Blank uses the body center. Changing it does not recompute the model.
 # field-fea-topology-fixed = Fixed Faces
@@ -1976,7 +1986,7 @@
 # field-solid-hole-fit-help = Clearance-hole diameter using ISO 273 close, medium or coarse fit.
 # field-solid-hole-kind = Hole Type
 # field-solid-hole-size = Size
-# field-solid-hole-size-help = Select a coarse-pitch nominal size or enter a thread such as M6x0.75 or M16. Custom entry is for threaded holes; clearance holes use the listed sizes.
+# field-solid-hole-size-help = Select a nominal size or enter M6x0.75, 1/4-20 UNC, G1/4 or Rp1/4. Clearance holes only accept the listed metric coarse-pitch sizes.
 # field-solid-hole-sketch = Point Sketch
 # field-solid-hole-tap = Thread Type
 # field-solid-hole-tap-help = Does not model thread geometry. Uses the table diameter and stores thread attributes.

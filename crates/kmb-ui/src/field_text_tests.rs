@@ -3,7 +3,7 @@
 use crate::*;
 use kmb_core::{Field, FieldKind};
 use kmb_i18n::{Catalog, Lang};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[test]
 fn every_descriptor_field_has_texts_matching_its_module() {
@@ -52,6 +52,73 @@ fn every_descriptor_field_has_texts_matching_its_module() {
         wrong.is_empty(),
         "日本語の欄の文言を記述子とそろえる:\n{}",
         wrong.join("\n")
+    );
+}
+
+fn descriptor_field_ids() -> BTreeSet<String> {
+    fn collect(kind: &str, fields: &[Field], parent: &str, ids: &mut BTreeSet<String>) {
+        for field in fields {
+            let key = if parent.is_empty() {
+                field.key.clone()
+            } else {
+                format!("{parent}.{}", field.key)
+            };
+            let id = kmb_i18n::field_id(kind, &key);
+            if !field.label.is_empty() {
+                ids.insert(id.clone());
+            }
+            if !field.help.is_empty() {
+                ids.insert(format!("{id}-help"));
+            }
+            if let FieldKind::Rows { fields } = &field.kind {
+                collect(kind, fields, &key, ids);
+            }
+        }
+    }
+    let mut ids = BTreeSet::new();
+    for descriptor in kmb_bundle::registry().descriptors() {
+        collect(&descriptor.type_id, &descriptor.fields, "", &mut ids);
+    }
+    assert!(!ids.is_empty());
+    ids
+}
+
+fn unknown_field_ids(ftl: &str, expected: &BTreeSet<String>) -> Vec<String> {
+    ftl.lines()
+        .map(str::trim)
+        .map(|line| line.strip_prefix("# ").unwrap_or(line))
+        .filter_map(|line| line.split_once('='))
+        .map(|(id, _)| id.trim())
+        .filter(|id| id.starts_with("field-") && !expected.contains(*id))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+#[test]
+fn every_dictionary_field_belongs_to_a_descriptor() {
+    let expected = descriptor_field_ids();
+    for (lang, _, ftl) in kmb_i18n::FILES
+        .iter()
+        .filter(|(_, area, _)| *area == "field")
+    {
+        let unknown = unknown_field_ids(ftl, &expected);
+        assert!(
+            unknown.is_empty(),
+            "{} の記述子に無い欄: {unknown:?}",
+            lang.code()
+        );
+    }
+}
+
+#[test]
+fn dictionary_check_detects_fields_and_help_without_descriptors() {
+    let expected = BTreeSet::from(["field-known-row-value".into()]);
+    let ftl = "# Translation notes\nfield-known-row-value = Value\nfield-removed-value = Removed\n# field-removed-value-help = Remove this stub too\n";
+    assert_eq!(
+        unknown_field_ids(ftl, &expected),
+        ["field-removed-value", "field-removed-value-help"]
     );
 }
 
