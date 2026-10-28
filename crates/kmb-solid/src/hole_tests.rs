@@ -383,10 +383,14 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
     }
 }
 
-fn legacy_thread_recess_volume(kind: &str, name: &str) -> f64 {
+fn legacy_thread_recess_volume(
+    kind: &str,
+    name: &str,
+    countersink_diameter: Option<f64>,
+    k: &TestKernel,
+) -> (f64, kmb_interchange::HoleInfo) {
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
     use kmb_sketch::SketchPlane;
-    let k = TestKernel::new();
     let mut b = DocBuilder::new();
     let sketch = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 100.0, 80.0);
     let plate = b.feature(
@@ -401,25 +405,35 @@ fn legacy_thread_recess_volume(kind: &str, name: &str) -> f64 {
     let mut points = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
     let point = points.fixed_point(50.0, 40.0);
     let sketch = b.feature(kmb_sketch::SKETCH, "穴の位置", points.build());
-    b.feature(
-        "solid.hole@1",
-        "既定の径の穴",
-        serde_json::json!({
-            "target":plate.0,"sketch":sketch.0,"points":[point.0],
-            "kind":kind,"tap":"tapped","size":name,"depth":"40 mm"
-        }),
-    );
+    let mut hole = serde_json::json!({
+        "target":plate.0,"sketch":sketch.0,"points":[point.0],
+        "kind":kind,"tap":"tapped","size":name,"depth":"40 mm"
+    });
+    if let Some(diameter) = countersink_diameter {
+        hole["countersink_diameter"] = serde_json::json!(format!("{diameter} mm"));
+        hole["countersink_angle"] = serde_json::json!("90 deg");
+    }
+    b.feature("solid.hole@1", "既定の径の穴", hole);
     let mut doc = kmb_core::Document::from_json(&b.finish("保存した穴").to_json()).unwrap();
     let reg = registry();
-    let report = doc.recompute(&reg, &*k);
+    let report = doc.recompute(&reg, &**k);
     assert_ok(&report);
     let bodies = visible_bodies(doc.data(), &reg, &report);
     assert_eq!(bodies.len(), 1);
-    k.mass(bodies[0].1).unwrap().volume
+    let last = report.features.last().unwrap();
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &last.status else {
+        panic!("{:?}", last.status);
+    };
+    let info = <kmb_interchange::HoleInfo as kmb_core::Payload>::from_value(
+        &outputs[kmb_interchange::HOLE_OUTPUT],
+    )
+    .unwrap();
+    (k.mass(bodies[0].1).unwrap().volume, info)
 }
 
 #[test]
 fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
+    let k = TestKernel::new();
     for (name, diameter) in [
         ("M14", 12.0),
         ("M16", 14.0),
@@ -429,7 +443,8 @@ fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
     ] {
         let r = diameter / 2.0;
         let removed = cyl(r, 40.0) + cyl(diameter * 0.9, diameter) - cyl(r, diameter);
-        let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("counterbore", name);
+        let actual =
+            100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("counterbore", name, None, &k).0;
         assert!(
             (actual - removed).abs() < 0.01,
             "{name}: {actual} vs {removed}"
@@ -439,19 +454,27 @@ fn legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth() {
 
 #[test]
 fn legacy_thread_countersink_keeps_the_omitted_diameter() {
-    for (name, diameter) in [
-        ("M14", 12.0),
-        ("M16", 14.0),
-        ("M20", 17.5),
-        ("M24", 21.0),
-        ("M30", 26.5),
+    let k = TestKernel::new();
+    // 保存した省略値は、同じカーネルで固定寸法を明示した穴と同じ形になる。
+    for (name, diameter, countersink) in [
+        ("M14", 12.0, 24.0),
+        ("M16", 14.0, 28.0),
+        ("M20", 17.5, 35.0),
+        ("M24", 21.0, 42.0),
+        ("M30", 26.5, 53.0),
     ] {
-        let r = diameter / 2.0;
-        let removed = cyl(r, 40.0 - r) + cone(diameter, r, r);
-        let actual = 100.0 * 80.0 * 60.0 - legacy_thread_recess_volume("countersink", name);
+        let (actual, info) = legacy_thread_recess_volume("countersink", name, None, &k);
+        let (expected, _) = legacy_thread_recess_volume("countersink", name, Some(countersink), &k);
+        assert!((info.diameter - diameter).abs() < 1e-9, "{name}: {info:?}");
+        let (actual_diameter, angle) = info.countersink.unwrap();
+        assert!((actual_diameter - countersink).abs() < 1e-9, "{name}");
+        assert!((angle - 90f64.to_radians()).abs() < 1e-9, "{name}");
+        eprintln!(
+            "{name}: omitted volume {actual}, explicit volume {expected}, diameter {actual_diameter}, angle {angle}"
+        );
         assert!(
-            (actual - removed).abs() < 0.01,
-            "{name}: {actual} vs {removed}"
+            (actual - expected).abs() < 0.01,
+            "{name}: {actual} vs {expected}"
         );
     }
 }
