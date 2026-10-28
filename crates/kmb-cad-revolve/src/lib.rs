@@ -10,6 +10,11 @@ use serde_json::json;
 
 pub const REVOLVE: &str = "solid.revolve@1";
 
+mod redundant;
+
+/// 回転で使う、網による輪郭の近似の許容差(mm)。
+const FACE_MESH_TOLERANCE: f64 = 0.001;
+
 /// 回転軸。スケッチの座標軸、原点の X・Y・Z 軸か、スケッチの 2 点を通る直線。`Auto` は輪郭から
 /// 決める([`auto_axis`])。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -206,8 +211,13 @@ impl Revolve {
     fn profiles(&self, ctx: &EvalCtx<'_>) -> Result<(Vec<k::Profile>, Vec<String>), EvalError> {
         if self.source == Source::Faces {
             let (feature, names) = self.face_source()?;
-            let groups = kmb_cad::face_profiles(ctx.kernel(), body_of(ctx, feature)?, &names)
-                .map_err(EvalError::InvalidData)?;
+            let groups = kmb_cad::face_profiles_with_tolerance(
+                ctx.kernel(),
+                body_of(ctx, feature)?,
+                &names,
+                FACE_MESH_TOLERANCE,
+            )
+            .map_err(EvalError::InvalidData)?;
             let mut warnings = Vec::new();
             let mut profiles = Vec::new();
             for group in groups {
@@ -434,6 +444,11 @@ impl Feature for Revolve {
             .into_iter()
             .map(|profile| self.recipe(ctx, profile))
             .collect::<Result<Vec<_>, _>>()?;
+        let parts = if self.source == Source::Faces {
+            redundant::remove_contained(parts)
+        } else {
+            parts
+        };
         let recipe = if parts.len() == 1 {
             parts.into_iter().next().unwrap()
         } else {
@@ -880,7 +895,16 @@ fn revolve_to_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
 
 /// 選んだ面かスケッチの領域を、作る操作と手順で同じように読む。
 fn chosen_source(cx: &Context<'_>) -> Result<(Revolve, k::Profile), String> {
-    if cx.arg("faces").is_some() || (cx.arg("regions").is_none() && !cx.picked_faces().is_empty()) {
+    if cx.arg("profile").is_some() && cx.arg("faces").is_some() {
+        return Err(
+            "輪郭と面は同時に指定できません。profile と faces のどちらかを選んでください".into(),
+        );
+    }
+    if cx.arg("faces").is_some()
+        || (cx.arg("profile").is_none()
+            && cx.arg("regions").is_none()
+            && !cx.picked_faces().is_empty())
+    {
         let faces = match cx.arg("faces") {
             Some(v) => Field::info("faces", "").refs(&json!({"faces": v})),
             None => cx
@@ -898,7 +922,12 @@ fn chosen_source(cx: &Context<'_>) -> Result<(Revolve, k::Profile), String> {
         let Some(kmb_core::Value::Shape(h)) = cx.output(feature, "body") else {
             return Err("回す面のボディがありません".into());
         };
-        let groups = kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)?;
+        let groups = kmb_cad::face_profiles_with_tolerance(
+            cx.kernel.as_ref(),
+            *h,
+            &names,
+            FACE_MESH_TOLERANCE,
+        )?;
         let p = groups
             .into_iter()
             .next()
@@ -1200,10 +1229,15 @@ impl Extension for RevolveCommands {
             let Some(kmb_core::Value::Shape(h)) = cx.output(f, "body") else {
                 return None;
             };
-            kmb_cad::face_profiles(cx.kernel.as_ref(), *h, &names)
-                .ok()?
-                .first()
-                .map(|g| g.profile.profile.plane)
+            kmb_cad::face_profiles_with_tolerance(
+                cx.kernel.as_ref(),
+                *h,
+                &names,
+                FACE_MESH_TOLERANCE,
+            )
+            .ok()?
+            .first()
+            .map(|g| g.profile.profile.plane)
         };
         let choices = axis_step_choices(cx, a.id, a.revolve.sketch_source(), plane, false);
         Some(vec![Handle {
@@ -1221,6 +1255,22 @@ pub fn module() -> kmb_core::Module {
 #[cfg(test)]
 mod face_source_tests {
     use super::*;
+
+    /// 確かめること: 輪郭と面を同時に指定しても、片方を黙って捨てない。
+    #[test]
+    fn revolve_profile_and_faces_cannot_be_given_together() {
+        let mut doc = kmb_core::Document::new();
+        let reg = Registry::new();
+        let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(k::NullKernel);
+        let report = doc.recompute(&reg, kernel.as_ref());
+        let args = json!({"profile":2,"faces":{"kind":"face","feature":1,"face":"top"}});
+        let cx = Context {
+            args: &args,
+            ..Context::new(doc.data(), &report, &reg, &kernel)
+        };
+        let error = chosen_source(&cx).unwrap_err();
+        assert!(error.contains("同時"), "{error}");
+    }
 
     #[test]
     fn face_arguments_enable_revolve_without_a_sketch() {

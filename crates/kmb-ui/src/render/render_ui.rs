@@ -534,8 +534,11 @@ impl Workspace {
             self.win.t("view-materials"),
             self.win.t("view-materials-tip"),
         );
-        ui.checkbox(&mut self.win.layout.effects.materials, name)
-            .on_hover_text(tip);
+        crate::keycast::command_response(
+            ui.checkbox(&mut self.win.layout.effects.materials, &name),
+            name,
+        )
+        .on_hover_text(tip);
         // 光の名前は鍵(`studio_dark`)の `_` を `-` にした ID で引く
         let envs: Vec<(String, String)> = kmb_render::EnvKind::ALL
             .iter()
@@ -546,7 +549,10 @@ impl Workspace {
             .collect();
         ui.add_enabled_ui(self.win.layout.effects.materials, |ui| {
             for (key, name) in envs {
-                ui.radio_value(&mut self.win.layout.effects.env, key, name);
+                crate::keycast::command_response(
+                    ui.radio_value(&mut self.win.layout.effects.env, key, &name),
+                    name,
+                );
             }
         });
     }

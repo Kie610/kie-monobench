@@ -4,7 +4,7 @@
 feature-solid-hole = Hole
 feature-solid-hole-tip = Drill a hole at every lone sketch point (points not used by lines or circles)
 feature-solid-thread = Thread
-feature-solid-thread-tip = Add a thread to a cylindrical face. Choose cosmetic attributes or a modeled thread
+feature-solid-thread-tip = Add a metric, unified or parallel pipe thread to a cylindrical face. Choose cosmetic attributes or modeled thread geometry
 feature-solid-shell = Shell
 feature-solid-shell-tip = Hollow out a solid into a shell. Selected faces are removed to open it; selecting a body makes a closed cavity inside
 feature-solid-boolean = Combine
@@ -38,7 +38,7 @@ feature-solid-circular-pattern-tip = Repeat a feature's shape around an axis
 feature-fea-static = Static Stress
 feature-fea-static-tip = Add fixed faces and loads to see stress, displacement and safety factor in color (a linear, small-deformation estimate)
 feature-fea-thermal = Thermal
-feature-fea-thermal-tip = Add faces with set temperatures, faces where heat comes in and faces losing heat to the air to see the steady-state temperature distribution in color
+feature-fea-thermal-tip = Add faces with set temperatures, faces where heat comes in and faces losing heat to the air to see steady-state or time-varying temperature distributions in color
 feature-fea-modal = Modal Frequencies
 feature-fea-modal-tip = Add fixed faces to see the frequencies it vibrates at easily (resonance) and the mode shapes. Compare them with the spindle speed (about 170–400 Hz)
 feature-fea-topology = Lightweight Shape Guide

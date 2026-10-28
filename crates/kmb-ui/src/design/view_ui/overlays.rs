@@ -371,24 +371,41 @@ impl Workspace {
                         .weak()
                         .size(crate::theme::fs(11.0)),
                 );
-                ui.checkbox(&mut self.win.layout.data_open, data)
-                    .on_hover_text(data_tip);
-                ui.checkbox(&mut self.win.layout.browser_open, browser);
+                crate::keycast::command_response(
+                    ui.checkbox(&mut self.win.layout.data_open, &data),
+                    data,
+                )
+                .on_hover_text(data_tip);
+                crate::keycast::command_response(
+                    ui.checkbox(&mut self.win.layout.browser_open, &browser),
+                    browser,
+                );
                 // レンダリングと解析では下の帯を出さない(dock_ui の Pane::in_space)
                 let here = crate::dock_ui::Pane::Timeline.in_space(self.win.layout.space);
-                ui.add_enabled(
-                    here,
-                    egui::Checkbox::new(&mut self.win.layout.timeline_open, timeline),
+                crate::keycast::command_response(
+                    ui.add_enabled(
+                        here,
+                        egui::Checkbox::new(&mut self.win.layout.timeline_open, &timeline),
+                    ),
+                    timeline,
                 )
                 .on_disabled_hover_text(timeline_off);
-                ui.checkbox(&mut self.win.layout.panel_always, always)
-                    .on_hover_text(always_tip);
-                ui.checkbox(&mut self.win.layout.commands_open, commands)
-                    .on_hover_text(commands_tip);
-                if ui
-                    .add_enabled(!self.dock_is_default(), egui::Button::new(reset))
-                    .on_hover_text(reset_tip)
-                    .clicked()
+                crate::keycast::command_response(
+                    ui.checkbox(&mut self.win.layout.panel_always, &always),
+                    always,
+                )
+                .on_hover_text(always_tip);
+                crate::keycast::command_response(
+                    ui.checkbox(&mut self.win.layout.commands_open, &commands),
+                    commands,
+                )
+                .on_hover_text(commands_tip);
+                if crate::keycast::command_response(
+                    ui.add_enabled(!self.dock_is_default(), egui::Button::new(&reset)),
+                    reset,
+                )
+                .on_hover_text(reset_tip)
+                .clicked()
                 {
                     self.reset_dock();
                     ui.close();
@@ -476,11 +493,11 @@ impl Workspace {
             t("view-see-through"),
             t("view-see-through-tip"),
         );
-        ui.checkbox(&mut self.win.layout.grid, grid)
+        crate::keycast::command_response(ui.checkbox(&mut self.win.layout.grid, &grid), grid)
             .on_hover_text(grid_tip);
-        ui.checkbox(&mut self.win.layout.origin, origin)
+        crate::keycast::command_response(ui.checkbox(&mut self.win.layout.origin, &origin), origin)
             .on_hover_text(origin_tip);
-        ui.checkbox(&mut self.win.layout.see_through, see)
+        crate::keycast::command_response(ui.checkbox(&mut self.win.layout.see_through, &see), see)
             .on_hover_text(see_tip);
         ui.separator();
         head(ui, self.win.t("view-effects"));
@@ -491,7 +508,10 @@ impl Workspace {
     pub(crate) fn shading_items(&mut self, ui: &mut egui::Ui) {
         for s in crate::Shading::ALL {
             let name = self.win.t(shading_id(s));
-            ui.radio_value(&mut self.win.layout.shading, s, name);
+            crate::keycast::command_response(
+                ui.radio_value(&mut self.win.layout.shading, s, &name),
+                name,
+            );
         }
     }
 
@@ -500,8 +520,11 @@ impl Workspace {
         for p in crate::Projection::ALL {
             let id = projection_id(p);
             let (name, tip) = (self.win.t(id), self.win.t(&format!("{id}-tip")));
-            ui.radio_value(&mut self.win.layout.projection, p, name)
-                .on_hover_text(tip);
+            crate::keycast::command_response(
+                ui.radio_value(&mut self.win.layout.projection, p, &name),
+                name,
+            )
+            .on_hover_text(tip);
         }
     }
 }

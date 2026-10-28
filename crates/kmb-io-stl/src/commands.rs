@@ -237,7 +237,13 @@ fn obj(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         crate::write_obj(b, unit, &mut out).map_err(|e| e.to_string())?;
         Ok::<_, String>(out)
     };
-    let info = json!({"bodies": bodies.len(), "triangles": bodies.iter().map(|(_, m)| m.triangles.len()).sum::<usize>(), "unit": unit.name(), "warnings": warnings});
+    let triangles: usize = bodies.iter().map(|(_, m)| m.triangles.len()).sum();
+    let info = json!({"bodies": bodies.len(), "triangles": triangles, "unit": unit.name(), "warnings": warnings});
+    log::info!(
+        "OBJ を書き出す: ボディ {} 個、三角形 {triangles} 個、単位 {}",
+        bodies.len(),
+        unit.name()
+    );
     if each(cx, EXPORT_OBJ) {
         let files = bodies
             .iter()
@@ -483,6 +489,73 @@ mod sheet_tests {
             Ok(format!("bodies {}", shapes.len()))
         }
     }
+    #[test]
+    fn obj_omits_sheets_before_counting_logged_bodies_and_triangles() {
+        struct Logger(std::sync::Mutex<Vec<String>>);
+        impl log::Log for Logger {
+            fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+                true
+            }
+            fn log(&self, record: &log::Record<'_>) {
+                self.0.lock().unwrap().push(record.args().to_string());
+            }
+            fn flush(&self) {}
+        }
+        static LOGGER: Logger = Logger(std::sync::Mutex::new(Vec::new()));
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Info);
+        let mut data = kmb_core::DocumentData::default();
+        let mut report = kmb_core::RecomputeReport::default();
+        for n in 1..=2 {
+            let id = FeatureId(n);
+            data.body_names.insert(id, format!("ボディ{n}"));
+            report.features.push(kmb_core::FeatureResult {
+                id,
+                name: format!("形{n}"),
+                status: kmb_core::FeatureStatus::Ok {
+                    outputs: [("body".into(), Value::Shape(ShapeHandle(n)))].into(),
+                    reused: false,
+                },
+            });
+        }
+        let registry = kmb_core::Registry::new();
+        let kernel: std::sync::Arc<dyn Kernel> = std::sync::Arc::new(Bodies);
+        for each in [false, true] {
+            LOGGER.0.lock().unwrap().clear();
+            let args = json!({"each":each, "unit":"cm"});
+            let cx = Context {
+                args: &args,
+                ..Context::new(&data, &report, &registry, &kernel)
+            };
+            let (info, files) = match obj(&cx).unwrap() {
+                Outcome::File { info, contents, .. } => (info, vec![(String::new(), contents)]),
+                Outcome::Files { info, files } => (info, files),
+                _ => panic!("OBJ の書き出しの結果"),
+            };
+            assert_eq!(info["bodies"], 1);
+            assert_eq!(info["triangles"], 1);
+            assert_eq!(info["unit"], "cm");
+            assert_eq!(
+                info["warnings"],
+                json!(["面のボディ 1 個は書き出しませんでした(厚みを付けると書き出せます)"])
+            );
+            assert_eq!(files.len(), 1);
+            let text = std::str::from_utf8(&files[0].1).unwrap();
+            assert_eq!(
+                text.lines().filter(|line| line.starts_with("o ")).count(),
+                1
+            );
+            assert_eq!(
+                text.lines().filter(|line| line.starts_with("f ")).count(),
+                1
+            );
+            assert!(!text.contains("ボディ2"));
+            assert!(LOGGER.0.lock().unwrap().iter().any(|line| {
+                line == "OBJ を書き出す: ボディ 1 個、三角形 1 個、単位 cm"
+            }));
+        }
+    }
+
     #[test]
     fn mesh_export_paths_omit_sheets_and_report_the_count_while_step_keeps_them() {
         let mut reg = kmb_core::Registry::new();

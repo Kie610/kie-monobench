@@ -51,6 +51,9 @@ pub struct Hole {
     pub countersink_diameter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub countersink_angle: Option<String>,
+    /// ザグリ・皿の省略値に、追加した呼びも含む表を使う。省略は保存された既定の読み方。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub standard_recesses: bool,
     /// 止まり穴の底(貫通では使わない)
     #[serde(default, skip_serializing_if = "is_default")]
     pub tip: Tip,
@@ -140,6 +143,7 @@ impl Hole {
             counterbore_depth: None,
             countersink_diameter: None,
             countersink_angle: None,
+            standard_recesses: true,
             tip: Tip::Flat,
             tip_angle: None,
             tap: Tap::Simple,
@@ -288,7 +292,7 @@ impl Hole {
             .unwrap_or(DEFAULT_SIZE)
     }
 
-    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は表(M2〜M12 並目)に無い呼びも、ねじの表にあれば
+    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は通し穴の表に無い呼びも、ねじの表にあれば
     /// 打って使える(例: `M6x0.75`、`M16`)。通し穴は通し穴・ザグリ・皿の径が要るので表の呼びだけ。
     fn thread(&self) -> Result<Option<(thread::Size, Option<&'static ThreadSize>)>, EvalError> {
         if self.tap == Tap::Simple {
@@ -304,14 +308,19 @@ impl Hole {
         };
         let size = thread::parse_size(name).ok_or_else(|| {
             EvalError::InvalidData(format!(
-                "ネジのサイズ {name} は読めません(表の {} を選ぶか、M6x0.75・M16 のように打ってください)",
-                table()
+                "ネジのサイズ {name} は読めません。{}",
+                thread::unknown_size(name)
             ))
         })?;
-        let row = size
-            .coarse
+        if self.tap == Tap::Tapped && self.form == thread::Form::Modeled {
+            thread::validate_modeled_size(size).map_err(EvalError::InvalidData)?;
+        }
+        let row = (size.family == thread::Family::Metric && size.coarse)
             .then(|| THREADS.iter().find(|t| (t.major - size.major).abs() < 1e-9))
-            .flatten();
+            .flatten()
+            .filter(|row| {
+                self.tap != Tap::Tapped || self.standard_recesses || shape::v1_thread_row(row)
+            });
         if row.is_none() && self.tap == Tap::Clearance {
             return Err(EvalError::InvalidData(format!(
                 "通し穴の径は表の {} だけです({name} はネジ穴にするか、径を決めた穴にしてください)",
@@ -758,18 +767,25 @@ pub(crate) const DEFAULT_SIZE: &str = "M3";
 
 /// 穴の設定欄(欄で指定する穴と、面に穴の作っている途中のパネルで同じものを使う)。
 pub fn hole_fields() -> Vec<Field> {
-    // よく使う M3 を最初(既定)にし、M4 から M12、最後に M2・M2.5 を並べる
-    let mut sizes: Vec<&str> = THREADS.iter().map(|t| t.name).collect();
-    let first = sizes.iter().position(|s| *s == DEFAULT_SIZE).unwrap_or(0);
+    // 通し穴にも使えるメートル並目を M3 から並べ、ほかの族のねじ穴の呼びを続ける。
+    let mut sizes: Vec<String> = THREADS.iter().map(|t| t.name.to_string()).collect();
+    let first = sizes.iter().position(|s| s == DEFAULT_SIZE).unwrap_or(0);
     sizes.rotate_left(first);
+    sizes.extend(
+        thread::sizes()
+            .into_iter()
+            .filter(|s| s.family != thread::Family::Metric)
+            .map(|s| s.name()),
+    );
+    let names: Vec<&str> = sizes.iter().map(String::as_str).collect();
     let mut fields = vec![
         Field::choice("kind", "穴のタイプ", KINDS),
         Field::choice("tap", "ねじ穴のタイプ", TAPS)
             .help("径を表から決める。ねじ穴はねじ山を属性のみか形を作るか選べる"),
         Field::text("size", "サイズ")
-            .suggest(&sizes)
+            .suggest(&names)
             .unless("tap", "simple")
-            .help("一覧の呼び(並目)を選ぶか、M6x0.75(細目)・M16 のように打つ(ネジ穴だけ。通し穴は一覧の呼び)"),
+            .help("呼びを選ぶか、M6x0.75・1/4-20 UNC・G1/4・Rp1/4 のように打つ。通し穴はメートル並目の表の呼びだけ"),
         Field::choice("fit", "はめあい", FITS)
             .only("tap", "clearance", "simple")
             .help("通し穴の径(ISO 273 の精・中・粗)"),
@@ -830,9 +846,11 @@ pub fn register(reg: &mut Registry) {
     for f in hole_fields() {
         d = d.field(f);
     }
-    reg.register_described(d.template(json!({"diameter": "5 mm"})), |d| {
-        Ok(Box::new(parse::<Hole>(d)?))
-    });
+    reg.register_described(
+        d.create_defaults(json!({"standard_recesses": true}))
+            .template(json!({"diameter": "5 mm", "standard_recesses": true})),
+        |d| Ok(Box::new(parse::<Hole>(d)?)),
+    );
     thread::register(reg);
 }
 
@@ -919,6 +937,7 @@ fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         "target": pick.feature.0,
         "sketch": {"$new": 0},
         "diameter": format!("{} mm", round(dia)),
+        "standard_recesses": true,
     });
     // 深さ(省けば貫通)
     if let Some(d) = cx.arg_f64("depth")? {

@@ -90,6 +90,8 @@ fn modeled_threads_keep_large_fine_long_and_print_clearance_shafts_closed() {
     for (diameter, major, pitch, height, clearance, size) in [
         (8.0, 8.0, 1.25, 20.0, 0.0, "M8"),
         (36.0, 36.0, 4.0, 40.0, 0.0, "M36"),
+        (24.0, 24.0, 3.0, 9.0, 0.0, "M24"),
+        (6.35, 6.35, 1.27, 3.81, 0.0, "1/4-20 UNC"),
         (8.0, 8.0, 0.75, 80.0, 0.0, "M8x0.75"),
         (7.8, 8.0, 1.25, 20.0, 0.2, "M8"),
     ] {
