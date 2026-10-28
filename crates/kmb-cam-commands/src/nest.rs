@@ -213,10 +213,19 @@ fn create(cx: &Context<'_>, machine: &kmb_post::MachineProfile) -> Result<Outcom
             data: serde_json::to_value(crate::ToolLibrary::starter()).expect("JSON にできる"),
         });
     }
+    let mut data = serde_json::to_value(setup).expect("JSON にできる");
+    if let Some(descriptor) = cx.registry.descriptor(crate::SETUP) {
+        // 作成時だけ、画面が後から消す不使用の欄を宣言に従って取り除く。
+        for field in &descriptor.fields {
+            if !field.applies(&data) && field.get(&data).is_some() {
+                field.set(&mut data, None);
+            }
+        }
+    }
     edits.push(Edit::Insert {
         type_id: crate::SETUP.into(),
         name: "板への配置".into(),
-        data: serde_json::to_value(setup).expect("JSON にできる"),
+        data,
     });
     Ok(Outcome::Change {
         label: "板への配置を作る".into(),

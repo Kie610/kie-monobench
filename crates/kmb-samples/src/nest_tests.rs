@@ -40,8 +40,15 @@ fn nesting_commands_use_numeric_defaults_and_convert_declared_length_units() {
             panic!("配置の作成は取り消せる変更を返す");
         };
         doc.apply_edits(&label, edits).unwrap();
-        let setup: Setup =
-            serde_json::from_value(doc.data().features.last().unwrap().data.clone()).unwrap();
+        let data = &doc.data().features.last().unwrap().data;
+        for field in &m.registry.descriptor(SETUP).unwrap().fields {
+            assert!(
+                field.applies(data) || field.get(data).is_none(),
+                "作成直後に画面が不要な欄を消して別の変更を作らない: {}",
+                field.key
+            );
+        }
+        let setup: Setup = serde_json::from_value(data.clone()).unwrap();
         let nest = setup.nest.unwrap();
         assert_eq!(nest.edge, edge);
         assert_eq!(nest.spacing, spacing);

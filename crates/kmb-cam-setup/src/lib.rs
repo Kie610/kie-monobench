@@ -1214,7 +1214,7 @@ fn register_with(reg: &mut Registry, lib: kmb_post::machines::MachineLibrary) {
             .field(Field::choice("nest.sheet","板の大きさの取り方",&[("stock","ストック"),("machine","機械の作業範囲")]).only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.edge","縁の余白").length().only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.spacing","部品の間").length().only("nest.method","boxes|shapes",""))
-            .field(Field::expr("nest.grid","格子の目").length().only("nest.method","shapes",""))
+            .field(Field::expr("nest.grid","格子の目").length().help("形どおりに並べる時に使う。外形の箱に切り替えても値を残す").only("nest.method","boxes|shapes",""))
             .field(Field::number("nest.max_sheets","板の枚数の上限").only("nest.method","boxes|shapes",""))
             .field(Field::choice("nest.output","区画の書き出し",&[("files","板ごとのファイル"),("stops","止めを入れた 1 ファイル")]).only("nest.method","boxes|shapes",""))
             .field(Field::rows("nest.parts","配置する部品",vec![

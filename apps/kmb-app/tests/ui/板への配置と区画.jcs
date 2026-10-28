@@ -27,7 +27,7 @@ expect "格子の目" exists
 type "格子の目" 2
 expect "格子の目" = "2 mm"
 select "並べ方" "外形の箱"
-expect "格子の目" missing
+expect "格子の目" = "2 mm"
 select "区画の書き出し" "止めを入れた 1 ファイル"
 expect "区画の書き出し" = "止めを入れた 1 ファイル"
 click "button:~OK"
