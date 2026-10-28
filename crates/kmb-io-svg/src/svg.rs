@@ -10,6 +10,81 @@ use std::collections::HashMap;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
 const PX_MM: f64 = 25.4 / 96.0;
+// 接続の許容差より十分大きく、加工用の図面とその曲線の細分を扱える大きさに限る。
+const MIN_SIZE_MM: f64 = 1e-5;
+const MAX_SIZE_MM: f64 = 1e6;
+const TOO_LARGE: &str = "SVG の倍率が大きすぎます。形を 1000000 mm 以下にしてください";
+const TOO_SMALL: &str = "SVG の倍率が小さすぎます。形を 0.00001 mm 以上にしてください";
+const ZERO_SIZE: &str = "SVG の形の大きさが 0 です。長さのある線か曲線を指定してください";
+const BAD_SCALE: &str = "SVG の倍率が正しくありません。有限で正の倍率を指定してください";
+
+fn positive(value: f64) -> Result<f64, String> {
+    if !value.is_finite() || value <= 0.0 {
+        return Err(BAD_SCALE.into());
+    }
+    Ok(value)
+}
+
+fn size_mm(value: f64) -> Result<f64, String> {
+    positive(value)?;
+    if value > MAX_SIZE_MM {
+        return Err(TOO_LARGE.into());
+    }
+    if value < MIN_SIZE_MM {
+        return Err(TOO_SMALL.into());
+    }
+    Ok(value)
+}
+
+/// 積のオーバーフローと、点・線へ潰れる変換を、形を変換する前に止める。
+fn check_transform(m: &Affine) -> Result<(), String> {
+    if m.0.iter().any(|v| !v.is_finite()) {
+        return Err(BAD_SCALE.into());
+    }
+    let [a, b, c, d, ..] = m.0;
+    let norm = a.abs().max(b.abs()).max(c.abs()).max(d.abs());
+    if norm == 0.0 || (a / norm * (d / norm) - b / norm * (c / norm)) == 0.0 {
+        return Err(TOO_SMALL.into());
+    }
+    Ok(())
+}
+
+/// 曲線の細分より先に、制御点の包みと楕円全体の箱で過大な入力を止める。
+fn check_shape(s: &Shape) -> Result<(), String> {
+    if !s.is_finite() {
+        return Err(BAD_SCALE.into());
+    }
+    let point = |p: P2| {
+        if p.iter().any(|v| !v.is_finite() || v.abs() > MAX_SIZE_MM) {
+            Err(TOO_LARGE.to_string())
+        } else {
+            Ok(())
+        }
+    };
+    let ellipse = |center: P2, x: P2, y: P2| {
+        let extent = [x[0].hypot(y[0]), x[1].hypot(y[1])];
+        point([center[0] - extent[0], center[1] - extent[1]])?;
+        point([center[0] + extent[0], center[1] + extent[1]])
+    };
+    match s {
+        Shape::Line { a, b } => {
+            point(*a)?;
+            point(*b)
+        }
+        Shape::Point { p } => point(*p),
+        Shape::Circle { center, radius } | Shape::Arc { center, radius, .. } => {
+            ellipse(*center, [*radius, 0.0], [0.0, *radius])
+        }
+        Shape::Ellipse {
+            center,
+            major,
+            ratio,
+            ..
+        } => ellipse(*center, *major, [-major[1] * ratio, major[0] * ratio]),
+        Shape::Bezier { p } => p.iter().try_for_each(|p| point(*p)),
+        Shape::BSpline { control, .. } => control.iter().try_for_each(|p| point(*p)),
+    }
+}
 
 /// 開始タグ・終了タグ
 enum Tag<'a> {
@@ -325,15 +400,25 @@ fn length_user(s: Option<&str>) -> f64 {
 }
 
 /// transform 属性を読む
-fn parse_transform(s: &str) -> Affine {
+fn parse_transform(s: &str) -> Result<Affine, String> {
     let mut m = Affine::IDENTITY;
     let mut rest = s;
-    while let Some(open) = rest.find('(') {
-        let name = rest[..open].trim_matches(|c: char| c.is_whitespace() || c == ',');
-        let Some(close) = rest[open..].find(')') else {
-            break;
+    while !rest.trim().is_empty() {
+        let Some(open) = rest.find('(') else {
+            return Ok(Affine::IDENTITY);
         };
-        let args = numbers(&rest[open + 1..open + close]);
+        let name = rest[..open].trim_matches(|c: char| c.is_whitespace() || c == ',');
+        // 知らない関数は引数を評価せず、この属性全体を無効にする。
+        if !matches!(
+            name,
+            "matrix" | "translate" | "scale" | "rotate" | "skewX" | "skewY"
+        ) {
+            return Ok(Affine::IDENTITY);
+        }
+        let Some(close) = rest[open..].find(')') else {
+            return Ok(Affine::IDENTITY);
+        };
+        let args = transform_numbers(&rest[open + 1..open + close])?;
         rest = &rest[open + close + 1..];
         let a = |k: usize| args.get(k).copied();
         let t = match (name, args.len()) {
@@ -346,15 +431,47 @@ fn parse_transform(s: &str) -> Affine {
                 .then_after(&Affine::translate(-args[1], -args[2])),
             ("skewX", 1) => Affine([1.0, 0.0, args[0].to_radians().tan(), 1.0, 0.0, 0.0]),
             ("skewY", 1) => Affine([1.0, args[0].to_radians().tan(), 0.0, 1.0, 0.0, 0.0]),
-            // 読めない変換があれば、変換全体を無効にする(SVG の決まり)
-            _ => return Affine::IDENTITY,
+            _ => return Ok(Affine::IDENTITY),
         };
+        check_transform(&t)?;
         m = m.then_after(&t);
+        check_transform(&m)?;
     }
-    m
+    Ok(m)
 }
 
-/// SVG の楕円弧(端点の形)を中心の形にする(W3C SVG 1.1 実装の注記 F.6.5・F.6.6)
+/// 数でない引数は変換を無効にし、非有限の数は入力の誤りにする。
+fn transform_numbers(s: &str) -> Result<Vec<f64>, String> {
+    let mut lexer = Lexer::new(s);
+    let mut values = Vec::new();
+    while !lexer.at_end() {
+        let start = lexer.i;
+        let Some(value) = lexer.number() else {
+            let token = s[start..]
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .next()
+                .unwrap_or_default();
+            if lexer.i != start || token.parse::<f64>().is_ok_and(|v| !v.is_finite()) {
+                return Err(BAD_SCALE.into());
+            }
+            return Ok(Vec::new());
+        };
+        values.push(value);
+    }
+    Ok(values)
+}
+
+/// 倍率の数は途中まで読んで既定値へ置き換えず、全部を確かめる。
+fn scale_numbers(s: &str) -> Result<Vec<f64>, String> {
+    let mut lexer = Lexer::new(s);
+    let mut values = Vec::new();
+    while !lexer.at_end() {
+        values.push(lexer.number().ok_or(BAD_SCALE)?);
+    }
+    Ok(values)
+}
+
+/// SVG の楕円弧(端点・半径・向きの形)を、中心と軸の形にする。
 #[allow(clippy::too_many_arguments)]
 fn svg_arc(
     p1: P2,
@@ -551,12 +668,33 @@ fn parse_path(d: &str) -> Vec<Shape> {
 }
 
 /// 根の svg の、利用者単位から mm(y 上向き)への変換
-fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Affine {
-    let w = attr("width").and_then(|s| length_mm(&s));
-    let h = attr("height").and_then(|s| length_mm(&s));
-    let vb = attr("viewBox")
-        .map(|s| numbers(&s))
-        .filter(|v| v.len() == 4 && v[2] > 0.0 && v[3] > 0.0);
+fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Result<Affine, String> {
+    let length = |key| -> Result<Option<f64>, String> {
+        let Some(text) = attr(key) else {
+            return Ok(None);
+        };
+        let text = text.trim();
+        let (number, unit) = ["px", "mm", "cm", "in", "pt", "pc", "q", "Q"]
+            .iter()
+            .find_map(|unit| text.strip_suffix(unit).map(|number| (number, *unit)))
+            .unwrap_or((text, ""));
+        // 相対単位や auto は用紙の寸法に使わず、viewBox から大きさを決める。
+        // 数として読める値の非有限・0・負・過大は、指定なしへ置き換えない。
+        let Ok(value) = number.trim().parse::<f64>() else {
+            return Ok(None);
+        };
+        size_mm(value * unit_mm(unit).expect("絶対単位だけを選ぶ")).map(Some)
+    };
+    let w = length("width")?;
+    let h = length("height")?;
+    let vb = attr("viewBox").map(|s| scale_numbers(&s)).transpose()?;
+    if let Some(v) = &vb {
+        if v.len() != 4 {
+            return Err(BAD_SCALE.into());
+        }
+        positive(v[2])?;
+        positive(v[3])?;
+    }
     let (m, height) = match vb {
         Some(v) => {
             let (minx, miny, vw, vh) = (v[0], v[1], v[2], v[3]);
@@ -566,6 +704,8 @@ fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Affine {
                 (None, Some(h)) => (h * vw / vh, h),
                 (None, None) => (vw * PX_MM, vh * PX_MM),
             };
+            size_mm(w)?;
+            size_mm(h)?;
             let par = attr("preserveAspectRatio").unwrap_or_default();
             let mut words = par.split_whitespace();
             let align = words.next().unwrap_or("xMidYMid");
@@ -603,7 +743,9 @@ fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Affine {
         None => (Affine::scale(PX_MM, PX_MM), h),
     };
     // y を反転する。高さが分かれば紙の下の端を y = 0 にする
-    Affine([1.0, 0.0, 0.0, -1.0, 0.0, height.unwrap_or(0.0)]).then_after(&m)
+    let m = Affine([1.0, 0.0, 0.0, -1.0, 0.0, height.unwrap_or(0.0)]).then_after(&m);
+    check_transform(&m)?;
+    Ok(m)
 }
 
 /// 描かない入れ物(中の要素は参照されて初めて描かれる)
@@ -641,6 +783,7 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
     let mut skipped: HashMap<String, usize> = HashMap::new();
     let mut stack: Vec<Frame> = Vec::new();
     let mut root: Option<Affine> = None;
+    let mut has_geometry = false;
     for tag in tags(text) {
         let (name, attrs, empty) = match tag {
             Tag::End(name) => {
@@ -667,7 +810,7 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
             (Some(f), _) => Some(f.m),
             (None, Some(r)) => Some(r),
             (None, None) if local == "svg" => {
-                let r = root_transform(&attr);
+                let r = root_transform(&attr)?;
                 root = Some(r);
                 Some(r)
             }
@@ -681,29 +824,31 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
             || HIDDEN.contains(&local)
             || attr("display").is_some_and(|d| d.trim() == "none");
         let mut m = base;
-        if let Some(t) = attr("transform") {
-            m = m.then_after(&parse_transform(&t));
-        }
-        // 入れ子の svg は x・y だけずらす
-        if local == "svg" && parent.is_some() {
-            m = m.then_after(&Affine::translate(
-                length_user(attr("x").as_deref()),
-                length_user(attr("y").as_deref()),
-            ));
-        }
         if !hidden {
+            if let Some(t) = attr("transform") {
+                m = m.then_after(&parse_transform(&t)?);
+            }
+            // 入れ子の svg は x・y だけずらす。
+            if local == "svg" && parent.is_some() {
+                m = m.then_after(&Affine::translate(
+                    length_user(attr("x").as_deref()),
+                    length_user(attr("y").as_deref()),
+                ));
+            }
+            check_transform(&m)?;
             if UNSUPPORTED.contains(&local) {
                 *skipped.entry(local.to_string()).or_default() += 1;
                 hidden = true;
             } else {
                 let num = |k: &str| length_user(attr(k).as_deref());
-                let local_shapes = element_shapes(local, &attr, &num);
-                shapes.extend(
-                    local_shapes
-                        .iter()
-                        .map(|s| transform_shape(s, &m))
-                        .filter(Shape::is_finite),
-                );
+                if let Some(local_shapes) = element_shapes(local, &attr, &num) {
+                    has_geometry = true;
+                    for shape in &local_shapes {
+                        let shape = transform_shape(shape, &m);
+                        check_shape(&shape)?;
+                        shapes.push(shape);
+                    }
+                }
             }
         }
         if !empty {
@@ -713,7 +858,17 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
     if root.is_none() {
         return Err("SVG ではありません(svg 要素がない)".into());
     }
-    Ok(Imported::new(shapes, skipped))
+    let imported = Imported::new(shapes, skipped);
+    if let Some((lo, hi)) = imported.bounds {
+        let size = (hi[0] - lo[0]).max(hi[1] - lo[1]);
+        if size == 0.0 {
+            return Err(ZERO_SIZE.into());
+        }
+        size_mm(size)?;
+    } else if has_geometry {
+        return Err(ZERO_SIZE.into());
+    }
+    Ok(imported)
 }
 
 /// 要素 1 つの形(利用者単位)
@@ -721,7 +876,7 @@ fn element_shapes(
     local: &str,
     attr: &dyn Fn(&str) -> Option<String>,
     num: &dyn Fn(&str) -> f64,
-) -> Vec<Shape> {
+) -> Option<Vec<Shape>> {
     let mut out = Vec::new();
     match local {
         "path" => {
@@ -775,7 +930,7 @@ fn element_shapes(
         "rect" => {
             let (x, y, w, h) = (num("x"), num("y"), num("width"), num("height"));
             if !(w > 0.0 && h > 0.0) {
-                return out;
+                return Some(out);
             }
             let (ax, ay) = (attr("rx"), attr("ry"));
             let (mut rx, mut ry) = (num("rx"), num("ry"));
@@ -814,7 +969,7 @@ fn element_shapes(
                 }
             }
         }
-        _ => {}
+        _ => return None,
     }
-    out
+    Some(out)
 }

@@ -380,6 +380,14 @@ impl Workspace {
             open = false;
         }
         if let Some(id) = run {
+            if let Some(name) = self
+                .commands()
+                .into_iter()
+                .find(|c| c.id == id)
+                .and_then(|c| self.keycast_command_name(&c))
+            {
+                crate::keycast::command_name(ctx, name, false);
+            }
             self.run_command(id);
         } else if open {
             self.search.text = Some(q);

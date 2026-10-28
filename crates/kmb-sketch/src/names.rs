@@ -13,12 +13,30 @@ use std::collections::{BTreeMap, HashMap};
 pub struct DimExpr<'a> {
     pub id: ConstraintId,
     pub name: Option<&'a str>,
+    /// 誤りに出す欄名。式から参照できる名前とは別に持つ。
+    pub label: Option<&'a str>,
     pub expr: &'a str,
     pub angle: bool,
     /// 個数は単位を付けず、整数と上限を確かめる。
     pub count_max: Option<usize>,
     /// パターンの距離は負で向きを反転できる。
     pub signed: bool,
+}
+
+impl DimExpr<'_> {
+    fn description(&self) -> String {
+        self.label
+            .map_or_else(|| dimension_description(self.id, self.name), str::to_string)
+    }
+
+    pub(crate) fn checked(&self, q: Quantity) -> Result<f64, String> {
+        checked_value(&self.description(), self.expr, q, self.angle, self.signed)
+    }
+}
+
+fn dimension_description(id: ConstraintId, name: Option<&str>) -> String {
+    let who = name.map_or_else(|| id.to_string(), str::to_string);
+    format!("{who} の寸法")
 }
 
 /// 寸法の式を計算する。同じスケッチの寸法の名前はその場で解き(循環は誤り)、ほかの名前は
@@ -53,8 +71,9 @@ pub fn eval_dims(
             return Err(format!("寸法 {who} の参照が循環しています"));
         }
         visiting[i] = true;
+        let description = d.description();
         let e =
-            kmb_core::parse_expr(d.expr).map_err(|e| format!("{who} の寸法 `{}`: {e}", d.expr))?;
+            kmb_core::parse_expr(d.expr).map_err(|e| format!("{description} `{}`: {e}", d.expr))?;
         for r in e.references() {
             if let Some(&j) = local.get(r.as_str()) {
                 visit(j, dims, local, lookup, done, visiting)?;
@@ -66,7 +85,7 @@ pub fn eval_dims(
         };
         let q = e
             .eval(&get)
-            .map_err(|e| format!("{who} の寸法 `{}`: {e}", d.expr))?;
+            .map_err(|e| format!("{description} `{}`: {e}", d.expr))?;
         let q = match (q.dim.is_none() && d.count_max.is_none(), d.angle) {
             (true, true) => Quantity::deg(q.value),
             (true, false) => Quantity::mm(q.value),
@@ -95,7 +114,16 @@ pub fn checked(
     angle: bool,
     signed: bool,
 ) -> Result<f64, String> {
-    let who = name.map_or_else(|| id.to_string(), str::to_string);
+    checked_value(&dimension_description(id, name), src, q, angle, signed)
+}
+
+fn checked_value(
+    description: &str,
+    src: &str,
+    q: Quantity,
+    angle: bool,
+    signed: bool,
+) -> Result<f64, String> {
     let (want, unit) = if angle {
         (Dim::ANGLE, "角度")
     } else {
@@ -103,15 +131,15 @@ pub fn checked(
     };
     if q.dim != want {
         return Err(format!(
-            "{who} の寸法 `{src}` は{unit}の単位が必要です(値: {q})"
+            "{description} `{src}` は{unit}の単位が必要です(値: {q})"
         ));
     }
     if !angle && !signed && q.value < 0.0 {
-        return Err(format!("{who} の寸法 `{src}` が負です"));
+        return Err(format!("{description} `{src}` が負です"));
     }
-    // 桁違いの寸法は解く前に止める(壊れたファイルや AI の打ち込み。10-24 k12)
+    // 桁違いの寸法は解く前に止める(壊れたファイルや AI の打ち込み)。
     if let Some(why) = q.size_problem() {
-        return Err(format!("{who} の寸法 `{src}` が{why}"));
+        return Err(format!("{description} `{src}` が{why}"));
     }
     Ok(q.value)
 }
@@ -277,6 +305,7 @@ pub fn dim_exprs<'a, C: DimConstraint>(
             Some(DimExpr {
                 id: c.id(),
                 name: names.get(&c.id()).map(String::as_str),
+                label: None,
                 expr: c.value()?,
                 angle: c.is_angle(),
                 count_max: None,
