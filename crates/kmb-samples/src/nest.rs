@@ -31,7 +31,8 @@ pub fn nesting_boxes_document(two_sheets:bool)->Document {
     let mut parts=Vec::new();
     for (i,(w,h,count)) in [(36.0,24.0,3),(28.0,20.0,2),(22.0,18.0,2),(18.0,14.0,3),(14.0,10.0,2)].into_iter().enumerate() {
         let mut s=SketchBuilder::xy();let corner=s.fixed_point(0.0,0.0);
-        s.rectangle(corner,if i==0 { "部品の幅" } else { &format!("{w} mm") },&format!("{h} mm"),[0.0,0.0,w,h]);
+        let width=if i==0 { "部品の幅".into() } else { format!("{w} mm") };
+        s.rectangle(corner,&width,&format!("{h} mm"),[0.0,0.0,w,h]);
         let body=extrude(&mut b,&format!("部品 {}",i+1),s);
         parts.push(NestPart { body,count,up:Default::default(),rotate:NestRotate::Free });
     }
