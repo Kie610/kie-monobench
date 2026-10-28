@@ -610,6 +610,100 @@ fn ui_script(name: &str) {
     }
 }
 
+/// 確かめること: 設定の部品から入れた操作表示を、暗明とビューの幅・字の倍率で比べる。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に操作の表示の前後の写真を書く"]
+fn write_keycast_screens() {
+    let dir = std::env::var("JC_SCREENS_OUT").expect("写真の出力先");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (theme, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        for (width, text_scale) in [(1280.0, 1.0), (1280.0, 2.5), (1920.0, 1.0), (1920.0, 2.5)] {
+            let mut ws = Workspace::new(
+                kmb_samples::reference_document(),
+                None,
+                kmb_bundle::modules(),
+            );
+            ws.layout_mut().brightness = brightness;
+            ws.layout_mut().appearance.text_scale = text_scale;
+            let mut screen = Screen::sized(ws, Some([width, 1000.0]));
+            let stem = format!(
+                "keycast-{theme}-{}-{}",
+                width as u32,
+                (text_scale * 100.0) as u32
+            );
+            screen.write(&dir, &format!("{stem}-before"));
+            let script = r#"key Ctrl+,
+click "マウスとキー"
+type ~"設定を探す" "操作の表示"
+shot settings-before
+click "押したキーとマウスを画面に出す(録画・解説向け)"
+expect "コマンドの名前も出す" exists
+shot settings-after
+key Ctrl+,
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z 取り消す" exists
+"#;
+            let batch = screen.h.state_mut().run_script(script).unwrap();
+            let start = std::time::Instant::now();
+            loop {
+                screen.h.step();
+                if let Some(shot) = screen.h.state_mut().take_shot() {
+                    screen.write(&dir, &format!("{stem}-{shot}"));
+                }
+                if let Some(result) = screen.h.state_mut().script_result(batch) {
+                    assert!(result.ok, "{}", result.report());
+                    break;
+                }
+                assert!(start.elapsed().as_secs() < 60, "設定の部品が揃わない");
+            }
+            // 画面へ送るポインターの入力で、押して引いている最中のマウスも撮る。
+            let pos = egui::pos2(width * 0.6, 550.0);
+            screen.h.hover_at(pos);
+            screen.h.drag_at(pos);
+            screen.h.step();
+            screen.h.hover_at(pos + egui::vec2(10.0, 0.0));
+            screen.h.step();
+            // 偽機器の軸は実時間で戻るので、写真を描く直前に報告を渡してつなぐ。
+            let ws = std::mem::replace(
+                screen.h.state_mut(),
+                Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules()),
+            );
+            let device = kmb_ui_mouse3d::Mouse3d::fake();
+            device.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
+            *screen.h.state_mut() = ws.with_mouse3d(device);
+            // 実際のキー入力を最後の描画フレームへ送り、押したままの札を撮る。
+            screen
+                .h
+                .input_mut()
+                .events
+                .push(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+            screen.h.input_mut().events.push(egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::CTRL,
+            });
+            // 行が増えた後の領域の大きさが揃ってから、下端を合わせた写真を描く。
+            screen.h.step();
+            screen.write(&dir, &format!("{stem}-after"));
+            assert!(
+                screen
+                    .h
+                    .query_by_label("操作の表示: Ctrl+Z 取り消す")
+                    .is_some()
+            );
+            assert!(screen.h.query_by_label("操作の表示: マウス 左").is_some());
+            assert!(screen.h.query_by_label("ドラッグ").is_some());
+            assert!(screen.h.query_by_label("ひねる").is_some());
+            screen.h.drop_at(pos + egui::vec2(10.0, 0.0));
+        }
+    }
+}
+
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
 fn write_screens() {

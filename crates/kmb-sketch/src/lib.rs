@@ -458,7 +458,7 @@ pub fn dimension_values(
             }
             q.value
         } else {
-            names::checked(d.id, d.name, d.expr, q, d.angle, d.signed)?
+            d.checked(q)?
         };
         values.insert(d.id, v);
     }

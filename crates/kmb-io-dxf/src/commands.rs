@@ -20,9 +20,10 @@ fn insert_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })?;
     let mut read = crate::from_dxf_bytes(&bytes)?;
     let cleanup = cx.arg("cleanup").and_then(|v| v.as_bool()).unwrap_or(true);
+    let tolerance = cx.arg_f64("cleanup_tolerance")?.unwrap_or(0.01);
+    crate::clean::validate_tolerance(tolerance)?;
     let mut counts = None;
     if cleanup {
-        let tolerance = cx.arg_f64("cleanup_tolerance")?.unwrap_or(0.01);
         let clean = crate::clean(&read.shapes, tolerance)?;
         counts = Some((clean.removed, clean.joined));
         read.bounds = kmb_sketch::shapes_bounds(&clean.shapes);
@@ -42,7 +43,8 @@ fn export_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         .output(id, "sketch")
         .and_then(kmb_sketch::solution_of)
         .ok_or("スケッチを計算できていないので書き出せません")?;
-    let text = crate::to_dxf(&sketch, &sol, &crate::DxfOptions::default());
+    let text = crate::to_dxf(&sketch, &sol, &crate::DxfOptions::default())
+        .map_err(|e| kmb_core::Problem::new(kmb_core::ProblemKind::Compute, e))?;
     let name = cx
         .data
         .feature(id)
@@ -55,7 +57,7 @@ fn export_dxf(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
 }
 
 impl Extension for DxfCommands {
-    /// 画面の並びは前と同じ(挿入はスケッチの平面の再定義より前、保存は文字の分解の後)。
+    /// 挿入はスケッチの平面の再定義より前、保存は文字の分解の後に並ぶ。
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let sketch = kmb_sketch::selected_sketch(cx).is_some();
         vec![
