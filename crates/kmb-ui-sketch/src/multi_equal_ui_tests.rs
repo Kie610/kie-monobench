@@ -140,3 +140,56 @@ fn a_named_line_tool_snaps_only_the_clicked_opposite_point() {
         );
     }
 }
+
+#[test]
+fn a_named_equal_button_clears_mixed_picks_and_starts_the_tool() {
+    let mut sketch = Sketch::default();
+    let a = sketch.add_point(0.0, 0.0);
+    let b = sketch.add_point(10.0, 0.0);
+    let line = sketch.add_line(a, b);
+    let center = sketch.add_point(30.0, 20.0);
+    let circle = sketch.add_circle(center, 5.0);
+    let before = sketch.clone();
+    let mut h = fixture(sketch);
+    for p in [[5.0, 0.0], [35.0, 20.0]] {
+        crate::menu::tests::click_with(&mut h, p, egui::Modifiers::SHIFT);
+    }
+    assert_eq!(
+        editor(h.state_mut()).editor.selection,
+        [line, circle].into_iter().collect()
+    );
+    script(&mut h, include_str!("../tests/ui/multi-equal.jcs"));
+    let e = &editor(h.state_mut()).editor;
+    assert_eq!(e.tool, crate::view::Tool::Constraint("等しい"));
+    assert!(e.selection.is_empty());
+    assert!(e.selection_order.is_empty());
+    assert!(e.notice.is_none());
+    assert_eq!(current_sketch(h.state()), before);
+}
+
+#[test]
+fn a_named_equal_button_names_the_constraint_that_already_decides_two_lines() {
+    let mut sketch = Sketch::default();
+    let mut lines = Vec::new();
+    for y in [0.0, 20.0] {
+        let a = sketch.add_point(0.0, y);
+        let b = sketch.add_point(10.0, y);
+        lines.push(sketch.add_line(a, b));
+    }
+    let equal = sketch.add_constraint(K::Equal {
+        a: lines[0],
+        b: lines[1],
+    });
+    let reason = kmb_sketch::describe(sketch.constraints.iter().find(|c| c.id == equal).unwrap());
+    let expected =
+        format!("等しい: {reason} で既に決まっているので付けません(付けると過剰な拘束になります)");
+    let before = sketch.clone();
+    let mut h = fixture(sketch);
+    for p in [[5.0, 0.0], [5.0, 20.0]] {
+        crate::menu::tests::click_with(&mut h, p, egui::Modifiers::SHIFT);
+    }
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 2);
+    script(&mut h, include_str!("../tests/ui/multi-equal.jcs"));
+    assert_eq!(h.state().message(), Some(expected.as_str()));
+    assert_eq!(current_sketch(h.state()), before);
+}

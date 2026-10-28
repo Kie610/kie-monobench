@@ -365,6 +365,12 @@ impl Editor {
             + self.spline_pts.len()
     }
 
+    /// 選びとクリックの順を一緒に外す。
+    pub(crate) fn clear_selection(&mut self) {
+        self.selection.clear();
+        self.selection_order.clear();
+    }
+
     /// クリックの順を残して要素を選ぶ。外した要素を選び直すと末尾になる。
     pub(crate) fn select(&mut self, id: EntityId) {
         self.selection_order.retain(|p| self.selection.contains(p));

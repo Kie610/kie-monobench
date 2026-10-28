@@ -437,7 +437,7 @@ pub(crate) fn selection_action(
     match action {
         "delete" => {
             s.remove_entities(&sel);
-            editor.selection.clear();
+            editor.clear_selection();
         }
         "construction" => {
             for id in &sel {
@@ -953,7 +953,7 @@ fn dimension_tool(
             {
                 c.reference = true;
             }
-            editor.selection.clear();
+            editor.clear_selection();
             editor.dim_kind = None;
             editor.dim_text.clear();
             editor.dim_error = None;

@@ -1678,7 +1678,7 @@ impl FeatureEditor for SketchEditor {
                 // 組の途中になる選びは残し、そうでなければ外す
                 let tool = constraint_tool::tool_of(name)?;
                 if !constraint_tool::usable(name, &sketch, &sel) {
-                    self.editor.selection.clear();
+                    self.editor.clear_selection();
                 }
                 self.editor.set_tool(tool);
                 None

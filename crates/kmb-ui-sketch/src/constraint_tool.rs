@@ -440,7 +440,7 @@ pub(crate) fn pick(
     editor.notice = None;
     let Some(id) = id else {
         // 何もない所: 選びをやめて最初から
-        editor.selection.clear();
+        editor.clear_selection();
         return None;
     };
     let sel = if name == EQUAL {
@@ -470,7 +470,7 @@ pub(crate) fn pick(
         return out;
     }
     let (label, k) = complete(name, editor, sketch, sol, &sel)?;
-    editor.selection.clear();
+    editor.clear_selection();
     if let Some(v) = values
         && let Some(by) = kmb_sketch::redundant_with(sketch, v, &k)
     {
@@ -507,11 +507,9 @@ pub(crate) fn try_multi(
 ) -> Option<Option<Sketch>> {
     // いくつかの拘束で付ける組は、ひとまとめにして過剰・矛盾を調べる。
     let have = kinds(sketch, sel);
-    let as_name = if name == EQUAL && sel.len() >= 2 {
+    let as_name = if name == EQUAL && sel.len() > 2 {
         if !usable(name, sketch, sel) {
-            editor.notice =
-                Some("等しい: 線分だけか、円・円弧だけを 2 つ以上選んでください".into());
-            return Some(None);
+            return None;
         }
         Some(EQUAL)
     } else {
@@ -522,7 +520,7 @@ pub(crate) fn try_multi(
             .filter(|n| [FIX_SHAPE, SYM_SHAPES, POLYGON].contains(n))
     };
     if let Some(as_name) = as_name {
-        editor.selection.clear();
+        editor.clear_selection();
         let mut s = sketch.clone();
         s.adopt_solution(sol);
         if !apply_multi(as_name, &mut s, sol, sel, last) {
@@ -688,7 +686,7 @@ mod tests {
         let circle = s.add_circle(c, 5.0);
         let (out, editor) = apply_equal(&s, &[ids[0], circle, ids[1]]);
         assert!(out.is_none());
-        assert!(editor.notice.unwrap().contains("線分だけ"));
+        assert!(editor.notice.is_none());
         assert!(!usable(EQUAL, &s, &[ids[0], circle]));
         assert!(!accepts(EQUAL, &s, &[ids[0], ids[1]], circle));
         s.add_constraint(K::Equal {
@@ -708,6 +706,20 @@ mod tests {
             });
         }
         assert!(apply_equal(&s, &ids).0.is_none());
+    }
+
+    #[test]
+    fn clearing_picks_drops_click_order_before_a_bulk_selection() {
+        let (s, ids) = three_lines();
+        let sol = kmb_sketch::solve(&s, &Default::default()).unwrap();
+        let mut editor = Editor::default();
+        editor.select(ids[2]);
+        editor.select(ids[0]);
+        assert!(pick(EQUAL, &mut editor, &s, &sol, None, None).is_none());
+        assert!(editor.selection.is_empty());
+        assert!(editor.selection_order.is_empty());
+        editor.selection.extend(ids.iter().copied());
+        assert_eq!(constraints_ui::selected_in_order(&editor, &s), ids);
     }
 
     #[test]

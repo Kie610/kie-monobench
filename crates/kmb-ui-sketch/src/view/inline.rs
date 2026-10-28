@@ -295,7 +295,7 @@ pub(crate) fn others_popup(
     editor.others_hover = hover;
     if let Some(o) = chosen {
         if !ui.input(|i| i.modifiers.shift || i.modifiers.command) {
-            editor.selection.clear();
+            editor.clear_selection();
             editor.regions.clear();
         }
         match o {
