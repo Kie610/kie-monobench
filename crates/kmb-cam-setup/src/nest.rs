@@ -367,10 +367,12 @@ pub fn pack(input: &PackInput) -> PackOutput {
         if pending.is_empty() { break; }
         let mut sheet=NestSheet { index,size:input.sheet,utilization:0.0,parts:Vec::new() };
         let mut free=vec![Rect { x:input.edge,y:input.edge,w:available[0]+input.spacing,h:available[1]+input.spacing }];
-        let d=(input.spacing/out.grid).ceil() as usize+1;
-        let mut occupied=(input.method==NestMethod::Shapes).then(||Bits::new(
+        let mut occupied=(input.method==NestMethod::Shapes).then(|| {
+            let d=(input.spacing/out.grid).ceil() as usize+1;
+            Bits::new(
             (available[0].max(0.0)/out.grid).ceil() as usize+1+2*d,
-            (available[1].max(0.0)/out.grid).ceil() as usize+1+2*d));
+            (available[1].max(0.0)/out.grid).ceil() as usize+1+2*d)
+        });
         pending.retain(|&(part,instance)| {
             let p=&input.parts[part];
             let mut choices=Vec::new();

@@ -91,6 +91,15 @@ impl SetupPaths {
         out.info.sections = None;
         out.info.stock_min = [sec.stock_min[0]+sec.shift[0],sec.stock_min[1]+sec.shift[1],sec.stock_min[2]];
         out.info.stock_max = [sec.stock_max[0]+sec.shift[0],sec.stock_max[1]+sec.shift[1],sec.stock_max[2]];
+        let mut window=sec.clone();
+        if sections.kind==kmb_cam_setup::sections::SectionKind::Sheets {
+            let radius=self.paths.iter().map(|p|p.tool.radius()).fold(0.0,f64::max);
+            // 板の外で工具が材料に届かない区間は、仮想配置の空間だけを通る。
+            for axis in 0..2 {
+                window.cut.min[axis]=window.cut.min[axis].max(sec.stock_min[axis]-radius);
+                window.cut.max[axis]=window.cut.max[axis].min(sec.stock_max[axis]+radius);
+            }
+        }
         for (i,tp) in out.paths.iter_mut().enumerate() {
             if self.sources.get(i).is_some_and(|s|s.section_fixed) { continue; }
             let entry=self.sources.get(i).and_then(|s|s.section_entry);
@@ -98,7 +107,7 @@ impl SetupPaths {
                 ramp_angle:entry.map_or(kmb_cam_setup::DEFAULT_ENTRY_DEG.to_radians(),|e|e.angle),
                 plunge:entry.map_or_else(||self.sources.get(i).and_then(|s|s.cutting.as_ref()).map_or_else(||tp.tool.cutting().plunge,|c|c.plunge),|e|e.plunge_feed),
                 ramp_feed:entry.map(|e|e.ramp_feed) };
-            let (mut clipped,warnings)=kmb_cam_setup::clip_to_section(tp,sec,&opts);
+            let (mut clipped,warnings)=kmb_cam_setup::clip_to_section(tp,&window,&opts);
             if kmb_cam_setup::avoid(&mut clipped,&self.info.keep_out)>0 {
                 out.part.push("区画へ移した経路が固定具を避けるため、固定具の下に材料が残ります".into());
             }
