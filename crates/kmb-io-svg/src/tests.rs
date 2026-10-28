@@ -393,11 +393,11 @@ fn svg_scale_rejects_nested_growth() {
 
 #[test]
 fn svg_scale_rejects_tiny_and_negative_values() {
-    for value in ["1e-12", "-1"] {
-        assert_bad_svg_scale(&format!(
-            r#"<svg><path transform="scale({value})" d="M0 0 L10 10"/></svg>"#
-        ));
-    }
+    assert_bad_svg_scale(r#"<svg><path transform="scale(1e-12)" d="M0 0 L10 10"/></svg>"#);
+    assert_eq!(
+        svg_transform_line("scale(-1)").shapes,
+        svg_transform_line("matrix(-1 0 0 -1 0 0)").shapes
+    );
 }
 
 #[test]
@@ -422,9 +422,10 @@ fn svg_scale_checks_page_dimensions_and_complete_transform_arguments() {
     }
     for transform in [
         "scale(1 NaN)",
-        "scale(1,-1)",
+        "scale(1,NaN,3)",
+        "scale(1,inf,3)",
+        "scale(1,1e999,3)",
         "scale(1,0)",
-        "scale(1) wrong",
         "matrix(0 0 0 1 0 0)",
         "translate(inf 0)",
     ] {
@@ -432,6 +433,14 @@ fn svg_scale_checks_page_dimensions_and_complete_transform_arguments() {
             r#"<svg><path transform="{transform}" d="M0 0 L10 10"/></svg>"#
         ));
     }
+    assert_eq!(
+        svg_transform_line("scale(1,-1)").shapes,
+        svg_transform_line("matrix(1 0 0 -1 0 0)").shapes
+    );
+    assert_eq!(
+        svg_transform_line("scale(1) wrong").shapes,
+        svg_transform_line("").shapes
+    );
 }
 
 #[test]
@@ -497,6 +506,121 @@ fn svg_scale_error_is_a_typed_input_problem_without_document_changes() {
 
 fn svg_compatibility_line(attributes: &str, content: &str) -> String {
     format!(r#"<svg {attributes} viewBox="0 0 96 48">{content}<path d="M0 0 L96 48"/></svg>"#)
+}
+
+fn svg_transform_line(transform: &str) -> Imported {
+    from_svg(&format!(
+        r#"<svg width="100mm" height="100mm" viewBox="0 0 100 100">
+          <g transform="translate(30,40)">
+            <path transform="{transform}" d="M1 2 L5 8"/>
+            <path d="M10 10 L20 20"/>
+          </g>
+        </svg>"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn review_svg_transform_negative_x_scale_matches_matrix() {
+    let result = svg_transform_line("scale(-1,1)");
+    let expected = svg_transform_line("matrix(-1 0 0 1 0 0)");
+    assert_eq!(result.shapes, expected.shapes);
+    assert_eq!(result.bounds, expected.bounds);
+    assert_eq!(
+        result.shapes[0],
+        Shape::Line {
+            a: [29.0, 58.0],
+            b: [25.0, 52.0]
+        }
+    );
+}
+
+#[test]
+fn review_svg_transform_negative_y_scale_is_a_reflection() {
+    let result = svg_transform_line("scale(1,-1)");
+    assert_eq!(
+        result.shapes[0],
+        Shape::Line {
+            a: [31.0, 62.0],
+            b: [35.0, 68.0]
+        }
+    );
+    assert_eq!(result.shapes[1], svg_transform_line("").shapes[1]);
+}
+
+#[test]
+fn review_svg_transform_single_negative_scale_reflects_both_axes() {
+    let result = svg_transform_line("scale(-2)");
+    assert_eq!(
+        result.shapes[0],
+        Shape::Line {
+            a: [28.0, 64.0],
+            b: [20.0, 76.0]
+        }
+    );
+    assert_eq!(result.shapes[1], svg_transform_line("").shapes[1]);
+}
+
+#[test]
+fn review_svg_transform_unknown_function_keeps_the_element() {
+    let result = svg_transform_line("foo(1)");
+    let expected = svg_transform_line("");
+    assert_eq!(result.shapes, expected.shapes);
+    assert_eq!(result.bounds, expected.bounds);
+}
+
+#[test]
+fn review_svg_transform_unknown_function_does_not_evaluate_nan() {
+    let result = svg_transform_line("foo(NaN)");
+    assert_eq!(result.shapes, svg_transform_line("").shapes);
+}
+
+#[test]
+fn review_svg_transform_unknown_function_does_not_evaluate_infinity() {
+    let result = svg_transform_line("foo(inf)");
+    assert_eq!(result.shapes, svg_transform_line("").shapes);
+}
+
+#[test]
+fn review_svg_transform_wrong_arity_keeps_the_element() {
+    let result = svg_transform_line("scale(1,2,3)");
+    let expected = svg_transform_line("");
+    assert_eq!(result.shapes, expected.shapes);
+    assert_eq!(result.bounds, expected.bounds);
+}
+
+#[test]
+fn review_svg_transform_unknown_function_discards_the_whole_attribute() {
+    let result = svg_transform_line("translate(7,9) foo(1) scale(2)");
+    let expected = svg_transform_line("");
+    assert_eq!(result.shapes, expected.shapes);
+    assert_eq!(result.bounds, expected.bounds);
+}
+
+#[test]
+fn review_svg_transform_wrong_arity_discards_the_whole_attribute() {
+    let result = svg_transform_line("translate(7,9) scale(1,2,3) rotate(90)");
+    let expected = svg_transform_line("");
+    assert_eq!(result.shapes, expected.shapes);
+    assert_eq!(result.bounds, expected.bounds);
+}
+
+#[test]
+fn review_svg_transform_unreadable_argument_keeps_the_element() {
+    let result = svg_transform_line("scale(foo)");
+    assert_eq!(result.shapes, svg_transform_line("").shapes);
+}
+
+#[test]
+fn review_svg_transform_unreadable_argument_discards_the_whole_attribute() {
+    let result = svg_transform_line("translate(7,9) scale(foo) rotate(90)");
+    assert_eq!(result.shapes, svg_transform_line("").shapes);
+}
+
+#[test]
+fn review_svg_transform_trailing_text_keeps_the_element() {
+    let result = svg_transform_line("scale(1) wrong");
+    assert_eq!(result.shapes, svg_transform_line("").shapes);
 }
 
 #[test]

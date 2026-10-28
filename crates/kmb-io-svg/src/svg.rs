@@ -404,31 +404,61 @@ fn parse_transform(s: &str) -> Result<Affine, String> {
     let mut m = Affine::IDENTITY;
     let mut rest = s;
     while !rest.trim().is_empty() {
-        let open = rest.find('(').ok_or(BAD_SCALE)?;
+        let Some(open) = rest.find('(') else {
+            return Ok(Affine::IDENTITY);
+        };
         let name = rest[..open].trim_matches(|c: char| c.is_whitespace() || c == ',');
-        let close = rest[open..].find(')').ok_or(BAD_SCALE)?;
-        let args = scale_numbers(&rest[open + 1..open + close])?;
+        // 知らない関数は引数を評価せず、この属性全体を無効にする。
+        if !matches!(
+            name,
+            "matrix" | "translate" | "scale" | "rotate" | "skewX" | "skewY"
+        ) {
+            return Ok(Affine::IDENTITY);
+        }
+        let Some(close) = rest[open..].find(')') else {
+            return Ok(Affine::IDENTITY);
+        };
+        let args = transform_numbers(&rest[open + 1..open + close])?;
         rest = &rest[open + close + 1..];
         let a = |k: usize| args.get(k).copied();
         let t = match (name, args.len()) {
             ("matrix", 6) => Affine([args[0], args[1], args[2], args[3], args[4], args[5]]),
             ("translate", 1 | 2) => Affine::translate(args[0], a(1).unwrap_or(0.0)),
-            ("scale", 1 | 2) => {
-                Affine::scale(positive(args[0])?, positive(a(1).unwrap_or(args[0]))?)
-            }
+            ("scale", 1 | 2) => Affine::scale(args[0], a(1).unwrap_or(args[0])),
             ("rotate", 1) => Affine::rotate(args[0].to_radians()),
             ("rotate", 3) => Affine::translate(args[1], args[2])
                 .then_after(&Affine::rotate(args[0].to_radians()))
                 .then_after(&Affine::translate(-args[1], -args[2])),
             ("skewX", 1) => Affine([1.0, 0.0, args[0].to_radians().tan(), 1.0, 0.0, 0.0]),
             ("skewY", 1) => Affine([1.0, args[0].to_radians().tan(), 0.0, 1.0, 0.0, 0.0]),
-            _ => return Err(BAD_SCALE.into()),
+            _ => return Ok(Affine::IDENTITY),
         };
         check_transform(&t)?;
         m = m.then_after(&t);
         check_transform(&m)?;
     }
     Ok(m)
+}
+
+/// 数でない引数は変換を無効にし、非有限の数は入力の誤りにする。
+fn transform_numbers(s: &str) -> Result<Vec<f64>, String> {
+    let mut lexer = Lexer::new(s);
+    let mut values = Vec::new();
+    while !lexer.at_end() {
+        let start = lexer.i;
+        let Some(value) = lexer.number() else {
+            let token = s[start..]
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .next()
+                .unwrap_or_default();
+            if lexer.i != start || token.parse::<f64>().is_ok_and(|v| !v.is_finite()) {
+                return Err(BAD_SCALE.into());
+            }
+            return Ok(Vec::new());
+        };
+        values.push(value);
+    }
+    Ok(values)
 }
 
 /// 倍率の数は途中まで読んで既定値へ置き換えず、全部を確かめる。
