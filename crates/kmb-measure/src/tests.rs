@@ -462,3 +462,66 @@ fn two_edges_sharing_a_corner_report_the_obtuse_angle() {
     let rep = compare(&e1, &apart, Basis::Center, true);
     assert_eq!(row(&rep, "角度"), "60.00°");
 }
+
+/// 同じ部品を何百個置いても、網にするのは元の形 1 回だけ。出現の網は元の網を行列で動かした物で、
+/// 鏡に映して置いた出現は三角形の向きを裏返して表を外へ保つ。
+#[test]
+fn occurrences_reuse_the_mesh_of_their_source() {
+    use kmb_core::kernel::{Matrix4, translation};
+    struct Placed {
+        made: std::sync::atomic::AtomicUsize,
+    }
+    fn place(h: ShapeHandle) -> Matrix4 {
+        if h.0 == 999 {
+            let mut m = translation([0.0, 0.0, 0.0]);
+            m[0][0] = -1.0;
+            return m;
+        }
+        translation([h.0 as f64 * 20.0, 0.0, 0.0])
+    }
+    impl Kernel for Placed {
+        fn name(&self) -> &str {
+            "placed-test"
+        }
+        fn instance_of(&self, h: ShapeHandle) -> Option<(ShapeHandle, Matrix4)> {
+            (h.0 > 1).then(|| (ShapeHandle(1), place(h)))
+        }
+        fn mesh(&self, h: ShapeHandle, _: f64) -> Result<Mesh, kmb_core::KernelError> {
+            self.made.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let m = Mesh {
+                positions: vec![[0., 0., 0.], [10., 0., 0.], [0., 10., 0.]],
+                normals: vec![[0., 0., 1.]; 3],
+                triangles: vec![[0, 1, 2]],
+                triangle_faces: vec![0],
+                face_names: vec!["上".into()],
+                edges: vec![vec![[0., 0., 0.], [10., 0., 0.]]],
+            };
+            Ok(match self.instance_of(h) {
+                Some((_, p)) => placed_mesh(&m, &p),
+                None => m,
+            })
+        }
+    }
+    let k = Placed {
+        made: Default::default(),
+    };
+    let bodies: Vec<(FeatureId, ShapeHandle)> = (1..=400)
+        .chain([999])
+        .map(|i| (FeatureId(i), ShapeHandle(i)))
+        .collect();
+    let out = meshes(&k, &bodies);
+    assert_eq!(out.len(), 401);
+    assert_eq!(
+        k.made.load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "元の形だけ網にする"
+    );
+    let (_, third) = &out[2];
+    assert_eq!(third.positions[1], [70.0, 0.0, 0.0]);
+    assert_eq!(third.edges[0][0], [60.0, 0.0, 0.0]);
+    assert_eq!(third.face_names, ["上"]);
+    let (_, mirrored) = &out[400];
+    assert_eq!(mirrored.positions[1], [-10.0, 0.0, 0.0]);
+    assert_eq!(mirrored.triangles, [[0, 2, 1]], "鏡に映したら向きを裏返す");
+    assert_eq!(mirrored.normals[0], [0.0, 0.0, 1.0]);
+}

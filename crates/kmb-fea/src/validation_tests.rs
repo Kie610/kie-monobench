@@ -1,4 +1,4 @@
-//! 既知の解と比べる検算(docs/verify.md、調査 構造と熱の解析.md 5.4 節)。箱の検算に加えて、
+//! 既知の解と比べる検算(docs/verify.md)。箱の検算に加えて、
 //! 曲面の例(厚肉の円筒の内圧・中空の円筒の熱・丸棒の片持ち梁の共振)を理論と比べる。
 
 use crate::amg::rigid_modes;
@@ -541,4 +541,262 @@ fn displayed_von_mises_matches_saint_venant_between_the_nodes() {
         // この試験は、前の塗り方(節点のミーゼス応力を補間)の誤差を見分けられる
         assert!(old > 3.0 * max, "{what}: {old} / {max}");
     }
+}
+
+pub(crate) fn transient_case() -> crate::thermal::TransientInput {
+    crate::thermal::TransientInput {
+        thermal: ThermalInput {
+            k: 1000.0,
+            temps: vec![],
+            heats: vec![],
+            convs: vec![],
+            rest_h: Some(100.0),
+            ambient: 20.0,
+        },
+        density: 1.0,
+        cp: 1000.0,
+        end: 10.0,
+        frames: 150,
+        initial: 100.0,
+        heat_times: vec![],
+    }
+}
+
+/// 確かめること: ビオ数が小さい立方体の全節点を、時定数とその 3 倍で理論と比べる。
+#[test]
+fn transient_lumped_capacity_matches_exponential_cooling() {
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let i = transient_case();
+    let tau = 0.001 * 8.0 / (100.0e-6 * 24.0);
+    assert!(100.0e-6 * (8.0 / 24.0) / (i.thermal.k / 1000.0) < 0.01);
+    let out = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    assert_eq!(out.frames.len(), i.frames + 1);
+    for (frame, multiple) in [(50, 1.0), (150, 3.0)] {
+        near(out.frames[frame].time, multiple * tau, 1e-12, "コマの時刻");
+        let want = 20.0 + 80.0 * (-multiple).exp();
+        let worst = out.frames[frame]
+            .t
+            .iter()
+            .copied()
+            .max_by(|a, b| (a - want).abs().total_cmp(&(b - want).abs()))
+            .unwrap();
+        near(worst, want, 0.01, "集中熱容量の温度の最大誤差");
+    }
+    assert!(out.steps >= i.frames);
+}
+
+// erfc を区間積分で求め、熱の解き方と独立した値で比べる。
+fn thermal_erfc(x: f64) -> f64 {
+    let n = 2000;
+    let dx = x / n as f64;
+    let sum: f64 = (0..=n)
+        .map(|j| {
+            let weight = if j == 0 || j == n {
+                1.0
+            } else if j % 2 == 0 {
+                2.0
+            } else {
+                4.0
+            };
+            weight * (-(j as f64 * dx).powi(2)).exp()
+        })
+        .sum();
+    1.0 - 2.0 / std::f64::consts::PI.sqrt() * dx * sum / 3.0
+}
+
+/// 確かめること: 断熱した長い棒の局所温度、後退オイラーの時間刻みの一次収束。
+#[test]
+fn transient_bar_matches_erfc_and_halving_the_step_reduces_error() {
+    let p = prepared(&box_mesh([20.0, 1.0, 1.0]), 0.5);
+    let mut i = transient_case();
+    i.thermal.k = 1.0;
+    i.thermal.rest_h = None;
+    i.thermal.temps = vec![(names(&["x0"]), 100.0)];
+    i.thermal.ambient = 0.0;
+    i.initial = 0.0;
+    i.end = 10.0;
+    i.frames = 2;
+    let coarse = crate::thermal::solve_transient_fixed(&p, &i, 0.5);
+    let fine = crate::thermal::solve_transient_fixed(&p, &i, 0.25);
+    let adaptive = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    for x in [2.0, 4.0] {
+        let want = 100.0 * thermal_erfc(x / (2.0 * i.end.sqrt()));
+        let sample = |out: &crate::thermal::TransientOutput| {
+            mean_over(
+                &p,
+                |v| (v[0] - x).abs() < 1e-9,
+                |n| out.frames.last().unwrap().t[n],
+            )
+        };
+        let a = sample(&coarse);
+        let b = sample(&fine);
+        near(b, want, 0.02, "棒の温度");
+        near(sample(&adaptive), want, 0.02, "自動刻みの棒の温度");
+        let ratio = (b - want).abs() / (a - want).abs();
+        eprintln!("x={x}: 粗い刻み {a:.8}、細かい刻み {b:.8}、理論 {want:.8}、誤差の比 {ratio:.6}");
+        assert!(
+            (0.3..0.75).contains(&ratio),
+            "x={x}: 誤差の比 {ratio}、粗 {a}、細 {b}、理論 {want}"
+        );
+    }
+}
+
+/// 確かめること: 十分長い時刻で定常の全節点の温度に近づき、固定温度を毎刻み守る。
+#[test]
+fn transient_converges_to_the_steady_solution() {
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    i.thermal.temps = vec![(names(&["x0"]), 100.0), (names(&["x1"]), 20.0)];
+    i.thermal.rest_h = None;
+    i.end = 1.0;
+    i.frames = 50;
+    i.initial = 20.0;
+    let steady = solve_thermal(&p, &i.thermal).unwrap();
+    let out = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    for (&got, &want) in out.frames.last().unwrap().t.iter().zip(&steady.t) {
+        near(got, want, 0.001, "定常への収束");
+    }
+    for f in &out.frames {
+        for (n, x) in p
+            .mesh
+            .points
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| x[0] == 0.0)
+        {
+            assert!((f.t[n] - 100.0).abs() < 1e-8, "{x:?}");
+        }
+    }
+    assert!(out.coarse);
+}
+
+/// 確かめること: コマ間の加熱の開始と終了で刻みを切り、終了後は冷却の理論に戻る。
+#[test]
+fn transient_heat_interval_ends_in_exponential_cooling() {
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    let all = names(&["x0", "x1", "y0", "y1", "z0", "z1"]);
+    i.thermal.convs = vec![(all, 100.0)];
+    i.thermal.rest_h = None;
+    i.thermal.heats = vec![(names(&["x0"]), 0.24)];
+    i.initial = 20.0;
+    let tau = 0.001 * 8.0 / (100.0e-6 * 24.0);
+    let from = 0.313 * tau;
+    let until = 1.017 * tau;
+    i.heat_times = vec![crate::thermal::HeatTime { from, until }];
+    let out = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    for f in out.frames.iter().filter(|f| f.time > until + tau) {
+        let want =
+            20.0 + 100.0 * (1.0 - (-(until - from) / tau).exp()) * (-(f.time - until) / tau).exp();
+        let worst =
+            f.t.iter()
+                .copied()
+                .max_by(|a, b| (a - want).abs().total_cmp(&(b - want).abs()))
+                .unwrap();
+        near(worst, want, 0.01, "加熱終了後の温度の最大誤差");
+    }
+    assert!(
+        out.frames
+            .iter()
+            .filter(|f| f.time < from)
+            .all(|f| f.t.iter().all(|t| (t - 20.0).abs() < 1e-7))
+    );
+}
+
+/// 確かめること: 断熱の一定温度を保ち、途中で止めても完了したコマを返す。
+#[test]
+fn transient_insulated_body_and_cancel_keep_completed_frames() {
+    use std::cell::Cell;
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    i.thermal.rest_h = None;
+    i.frames = 10;
+    let fraction = Cell::new(0.0);
+    let out =
+        crate::thermal::solve_transient(&p, &i, &|| fraction.get() >= 0.35, &|f| fraction.set(f))
+            .unwrap();
+    assert!(out.cancelled);
+    assert_eq!(out.frames.len(), 5);
+    assert_eq!(out.frames.last().unwrap().time, 4.0);
+    assert!(
+        out.frames
+            .iter()
+            .all(|f| f.t.iter().all(|t| (t - 100.0).abs() < 1e-6))
+    );
+}
+
+/// 確かめること: 時間が空の古い文書は、時刻の欄があっても定常の温度が変わらない。
+#[test]
+fn transient_empty_time_preserves_old_document_results() {
+    crate::study::tests::old_thermal_document_keeps_steady_results();
+}
+
+/// 確かめること: 同じ面の重なった加熱行を加算し、切り替え前後の全熱量を保存する。
+#[test]
+fn transient_overlapping_heat_rows_conserve_energy() {
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    i.thermal.rest_h = None;
+    i.thermal.heats = vec![(names(&["x0"]), 0.008), (names(&["x0"]), 0.016)];
+    i.heat_times = vec![
+        crate::thermal::HeatTime {
+            from: 0.53,
+            until: 2.07,
+        },
+        crate::thermal::HeatTime {
+            from: 1.03,
+            until: 3.41,
+        },
+    ];
+    i.initial = 20.0;
+    i.end = 4.0;
+    i.frames = 8;
+    let out = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    let mass = assemble(&p.mesh, 1, |e| Some(tet10::mass(&p.mesh.tet_points(e))));
+    for f in &out.frames {
+        let mut weighted = vec![0.0; f.t.len()];
+        mass.mul(
+            &f.t.iter().map(|t| t - i.initial).collect::<Vec<_>>(),
+            &mut weighted,
+        );
+        let energy = weighted.iter().sum::<f64>() * i.density * 1e-6 * i.cp;
+        let want: f64 = i
+            .heat_times
+            .iter()
+            .zip(&i.thermal.heats)
+            .map(|(h, (_, watts))| watts * (f.time.min(h.until) - h.from).max(0.0))
+            .sum();
+        assert!(
+            (energy - want).abs() < 1e-8,
+            "{} s: 熱量 {energy} J と {want} J",
+            f.time
+        );
+        assert_eq!(f.to_air, 0.0);
+    }
+}
+
+/// 確かめること: 網から決まる下限より短いコマと加熱の時刻を守り、急変の注記を残す。
+#[test]
+fn transient_events_and_frames_below_the_mesh_step_floor_report_coarse_change() {
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    i.thermal.k = 1.0;
+    i.thermal.rest_h = Some(1e9);
+    i.thermal.heats = vec![(names(&["x0"]), 0.0)];
+    i.heat_times = vec![crate::thermal::HeatTime {
+        from: 0.0017,
+        until: 0.0031,
+    }];
+    i.end = 0.01;
+    i.frames = 2;
+    let floor = i.density * 1e-6 * i.cp * p.mesh.stats.h.powi(2) / (6.0 * i.thermal.k / 1000.0);
+    assert!(floor > i.end / i.frames as f64);
+    let out = crate::thermal::solve_transient(&p, &i, &|| false, &|_| {}).unwrap();
+    assert_eq!(
+        out.frames.iter().map(|f| f.time).collect::<Vec<_>>(),
+        vec![0.0, 0.005, 0.01]
+    );
+    assert!(out.min_step < 0.0015);
+    assert!(out.coarse);
+    assert!(out.frames.iter().all(|f| f.t.iter().all(|t| t.is_finite())));
 }

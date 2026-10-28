@@ -4,6 +4,8 @@
 
 feature-solid-hole = 穴
 feature-solid-hole-tip = スケッチの単独の点(線や円に使っていない点)すべてに穴をあける
+feature-solid-thread = ねじ
+feature-solid-thread-tip = 円筒の面にメートル・ユニファイ・管用平行ねじを付ける(形のねじ山は作らず、呼びとピッチを属性として残す)
 feature-solid-shell = シェル
 feature-solid-shell-tip = 立体をくり抜いて殻にする。選んだ面は取り除いて開け、ボディを選ぶと中を空洞にする
 feature-solid-boolean = ブーリアン
@@ -37,7 +39,7 @@ feature-solid-circular-pattern-tip = 機能の形を軸まわりに並べる
 feature-fea-static = 静的応力
 feature-fea-static-tip = 固定する面と荷重を付けて、応力・変位・安全率を色で見る(線形・小変形の目安)
 feature-fea-thermal = 熱
-feature-fea-thermal-tip = 温度を決める面・熱が入る面・空気へ逃げる面を付けて、定常の温度の分布を色で見る
+feature-fea-thermal-tip = 温度を決める面・熱が入る面・空気へ逃げる面を付けて、定常や時間で変わる温度の分布を色で見る
 feature-fea-modal = 固有振動
 feature-fea-modal-tip = 固定する面を付けて、揺れやすい周波数(共振)と揺れの形を見る。主軸の回転(約 170〜400 Hz)と比べる
 feature-fea-topology = 軽い形の参考
@@ -48,7 +50,5 @@ feature-flow-section = 2D の流れ
 feature-flow-section-tip = ボディを断面で切り、まわりの流れ(速さ・圧力・渦)と抗力を見る(格子ボルツマン法)
 feature-flow-volume = 3D の流れ
 feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)
-
-# 図面は用紙の区画に保存する。
 feature-solid-surface-patch = 面を張る
 feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る

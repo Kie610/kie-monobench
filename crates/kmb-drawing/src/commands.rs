@@ -72,7 +72,7 @@ fn args(id: &str) -> Vec<Arg> {
                 Arg::text("label", "ビューの名前"),
                 Arg::value(
                     "scale",
-                    "尺度 {num, den}。詳細ビューは detail_scale で指定する",
+                    "尺度 {num, den}。詳細ビューの作成時は detail_scale で指定する",
                 ),
                 Arg::value(
                     "at",
@@ -114,7 +114,7 @@ fn args(id: &str) -> Vec<Arg> {
             .required(),
         ),
         "drawing.set_view" => a.extend([
-            Arg::value("scale", "尺度 {num,den}"),
+            Arg::value("scale", "尺度 {num,den}。詳細ビューは詳細の尺度を変える"),
             Arg::value("options", "hidden と tangent の表示指定"),
         ]),
         _ => {}
