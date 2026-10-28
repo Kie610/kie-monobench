@@ -1342,7 +1342,11 @@ mod tests {
         let all = truck_targets(&None, &w);
         assert_eq!(
             all,
-            [("kmb-solid", None), ("kmb-samples", Some("hole_tests::")), ("kmb-samples", Some("nest_tests::"))]
+            [
+                ("kmb-solid", None),
+                ("kmb-samples", Some("hole_tests::")),
+                ("kmb-samples", Some("nest_tests::"))
+            ]
         );
         assert_eq!(
             truck_filter(&all),

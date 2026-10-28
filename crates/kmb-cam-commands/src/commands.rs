@@ -829,7 +829,9 @@ impl CamCommands {
     /// G-code の書き出し。
     fn gcode(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
-        if s.info.sections.is_some() { return self.section_files(cx,&s); }
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         let (g, post) = self.gcode_text(cx, &s)?;
         let minutes: f64 = s
             .paths
@@ -850,14 +852,29 @@ impl CamCommands {
         })
     }
 
-    pub(crate) fn section_files(&self, cx: &Context<'_>, s: &crate::SetupPaths) -> Result<Outcome,kmb_core::Problem> {
-        let (files,post)=self.with_post(cx,s.info.machine_profile(),|post,m|kmb_cam_program::gcode_files(s,post,m))?;
-        let info=json!({"setup":s.setup.0,"post":post,"sections":files.len()});
-        let mut files:Vec<_>=files.into_iter().map(|(name,text)|(name,text.into_bytes())).collect();
-        if files.len()==1 {
-            let (suffix,contents)=files.remove(0);
-            Ok(Outcome::File { suffix,contents,info })
-        } else { Ok(Outcome::Files { files,info }) }
+    pub(crate) fn section_files(
+        &self,
+        cx: &Context<'_>,
+        s: &crate::SetupPaths,
+    ) -> Result<Outcome, kmb_core::Problem> {
+        let (files, post) = self.with_post(cx, s.info.machine_profile(), |post, m| {
+            kmb_cam_program::gcode_files(s, post, m)
+        })?;
+        let info = json!({"setup":s.setup.0,"post":post,"sections":files.len()});
+        let mut files: Vec<_> = files
+            .into_iter()
+            .map(|(name, text)| (name, text.into_bytes()))
+            .collect();
+        if files.len() == 1 {
+            let (suffix, contents) = files.remove(0);
+            Ok(Outcome::File {
+                suffix,
+                contents,
+                info,
+            })
+        } else {
+            Ok(Outcome::Files { files, info })
+        }
     }
 
     fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
@@ -925,7 +942,11 @@ impl CamCommands {
                 .filter(|s| s.failed.is_empty() && !s.paths.is_empty())
             {
                 if s.info.sections.is_some() {
-                    *s=self.with_post(cx,s.info.machine_profile(),|post,m|kmb_cam_program::with_section_gcode_paths(s,post,m))?.0;
+                    *s = self
+                        .with_post(cx, s.info.machine_profile(), |post, m| {
+                            kmb_cam_program::with_section_gcode_paths(s, post, m)
+                        })?
+                        .0;
                 } else {
                     let (g, _) = self.gcode_text(cx, s)?;
                     *s = crate::with_gcode_paths(s, &g)?;
@@ -1453,7 +1474,7 @@ impl Extension for CamCommands {
             None => self.machine().bed,
         };
         crate::fixtures::handles(id, cx, info.as_ref(), bed.as_ref())
-            .or_else(||crate::nest::handles(id,cx))
+            .or_else(|| crate::nest::handles(id, cx))
             .or_else(|| crate::setup_ops::handles(id, cx, info.as_ref(), bed.as_ref()))
             .or_else(|| crate::entry::handles(id, cx, info.as_ref(), &self.strategies))
             .or_else(|| crate::chains::handles(id, cx, info.as_ref(), &self.strategies))
@@ -1480,7 +1501,9 @@ impl Extension for CamCommands {
         if let Some(r) = crate::picks::run(id, cx, &self.strategies) {
             return Some(r);
         }
-        if let Some(r)=crate::nest::run(id,cx,&self.machine()) { return Some(r); }
+        if let Some(r) = crate::nest::run(id, cx, &self.machine()) {
+            return Some(r);
+        }
         if let Some(r) = crate::tool_order::run(id, cx, &self.strategies) {
             return Some(r);
         }
@@ -1532,11 +1555,16 @@ impl Extension for CamCommands {
             EXPORT_GCODE_AS => need_setup().and_then(|s| self.gcode(cx, s)),
             VIEW_GCODE => need_setup().and_then(|s| {
                 let paths = self.setup_paths(cx, s)?;
-                let name=paths.name.clone();
-                let preview=if paths.info.sections.is_some() {
-                    let (body,_) = self.gcode_text(cx,&paths)?;
-                    Outcome::Text { title:format!("G-code: {name}"),body }
-                } else { self.gcode(cx,s)? };
+                let name = paths.name.clone();
+                let preview = if paths.info.sections.is_some() {
+                    let (body, _) = self.gcode_text(cx, &paths)?;
+                    Outcome::Text {
+                        title: format!("G-code: {name}"),
+                        body,
+                    }
+                } else {
+                    self.gcode(cx, s)?
+                };
                 match preview {
                     Outcome::File { contents, .. } => {
                         let body = String::from_utf8_lossy(&contents).into_owned();
@@ -1614,9 +1642,16 @@ impl Extension for CamCommands {
             height_planes(&s.info, &h, &mut o.planes);
         }
         let i = &s.info;
-        if o.shape.is_none() && i.sections.is_some()
-            && let Ok(mesh)=i.part_mesh(cx.kernel.as_ref()) {
-            o.shape=Some(Arc::new(kmb_core::OverlayShape { key:crate::nest::overlay_key(i,s.print()),label:"板への配置".into(),mesh,..Default::default() }));
+        if o.shape.is_none()
+            && i.sections.is_some()
+            && let Ok(mesh) = i.part_mesh(cx.kernel.as_ref())
+        {
+            o.shape = Some(Arc::new(kmb_core::OverlayShape {
+                key: crate::nest::overlay_key(i, s.print()),
+                label: "板への配置".into(),
+                mesh,
+                ..Default::default()
+            }));
         }
         // 最後のシミュレーションの食い込みと削り残し(経路が変わっていなければ)。
         // 印は最後の形のものなので、途中の形を出している時は出さない
@@ -1639,14 +1674,22 @@ impl Extension for CamCommands {
             return out;
         }
         out.extend(later_design(cx, id));
-        out.extend(crate::nest::unplaced_notes(cx,id));
+        out.extend(crate::nest::unplaced_notes(cx, id));
         let Ok(s) = self.setup_paths(cx, id) else {
             return out;
         };
         let m = &self.machine_for(&s.info);
         let i = &s.info;
         for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
-            let size = i.sections.as_ref().map_or(i.stock_max[k]-i.stock_min[k],|s|s.list.iter().map(|s|s.stock_max[k]-s.stock_min[k]).fold(0.0,f64::max));
+            let size = i
+                .sections
+                .as_ref()
+                .map_or(i.stock_max[k] - i.stock_min[k], |s| {
+                    s.list
+                        .iter()
+                        .map(|s| s.stock_max[k] - s.stock_min[k])
+                        .fold(0.0, f64::max)
+                });
             if size > m.travel[k] {
                 out.push(format!(
                     "ストックの {axis} の大きさ {size:.1} mm が {} の作業範囲 {} mm を超えています",
@@ -1662,8 +1705,12 @@ impl Extension for CamCommands {
             };
             let checks = match self.post_for(m) {
                 Ok(post) => match &s.info.sections {
-                    Some(sections)=>sections.list.iter().flat_map(|sec|post.check(&s.section(sec.index).program(),m)).collect(),
-                    None=>post.check(&s.program(),m),
+                    Some(sections) => sections
+                        .list
+                        .iter()
+                        .flat_map(|sec| post.check(&s.section(sec.index).program(), m))
+                        .collect(),
+                    None => post.check(&s.program(), m),
                 },
                 Err(e) => vec![kmb_post::Diagnostic {
                     severity: kmb_post::Severity::Error,
@@ -1850,10 +1897,17 @@ fn frame_lines(machine: &MachineProfile, i: &crate::SetupInfo, o: &mut Overlay) 
             [0, 1, 2].map(|k| p[k].max(q[k])),
         )
     };
-    let stocks:Vec<_>=i.sections.as_ref().map_or_else(||vec![(i.stock_min,i.stock_max)],|s|s.list.iter().map(|s|(s.stock_min,s.stock_max)).collect());
-    for (min,max) in stocks {
-        let (lo,hi)=box_of(min,max);
-        o.boxes.push((lo,hi,BoxKind::new(kmb_interchange::ink::boxes::WORK,"ストック")));
+    let stocks: Vec<_> = i.sections.as_ref().map_or_else(
+        || vec![(i.stock_min, i.stock_max)],
+        |s| s.list.iter().map(|s| (s.stock_min, s.stock_max)).collect(),
+    );
+    for (min, max) in stocks {
+        let (lo, hi) = box_of(min, max);
+        o.boxes.push((
+            lo,
+            hi,
+            BoxKind::new(kmb_interchange::ink::boxes::WORK, "ストック"),
+        ));
     }
     o.points.push(i.to_world([0.0; 3]));
     // 置き方の回転の逆で、作業座標系の軸 k は世界座標で行列の k 行目の向き

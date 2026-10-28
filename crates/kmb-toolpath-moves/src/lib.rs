@@ -8,8 +8,8 @@
 //! 加工の機能の形(セットアップ・工具ライブラリ・欄の並び)は kmb-cam-setup が持ち、ここは
 //! 動きだけを作る。kmb-cam-setup はここの名前を同じ名前で再公開する。
 
-mod entry;
 pub mod clip;
+mod entry;
 pub mod link;
 mod moves;
 

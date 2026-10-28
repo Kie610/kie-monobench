@@ -261,7 +261,9 @@ impl CamCommands {
             .into());
         }
         let s = self.setup_paths(cx, setup)?.only(&ids)?;
-        if s.info.sections.is_some() { return self.section_files(cx,&s); }
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         let (g, post) = self.gcode_text(cx, &s)?;
         let names: Vec<String> = s.paths.iter().map(|p| file_part(&p.name)).collect();
         let tools = s.program().tools().iter().map(|t| t.number).collect();
@@ -305,7 +307,9 @@ impl CamCommands {
     fn export_by_tool(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let setup = self.target_setup(cx)?;
         let (mut s, before, after) = self.setup_paths(cx, setup)?.by_tool()?;
-        if s.info.sections.is_some() { return self.section_files(cx,&s); }
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         s.name = format!("{}。工具交換 {before} → {after} 回", s.name);
         let (g, post) = self.gcode_text(cx, &s)?;
         let tools = s.program().tools().iter().map(|t| t.number).collect();

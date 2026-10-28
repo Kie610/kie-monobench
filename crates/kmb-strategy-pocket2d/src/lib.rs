@@ -872,8 +872,8 @@ impl Feature for Pocket {
         };
         let input = p.input(ctx.feature_id(), params, Default::default());
         let out = plan(&input);
-        let mut outputs=p.finish_plan(self.base.setup,out)?;
-        kmb_cam_setup::sections::add_entry(&mut outputs,&p.info,entry_plan);
+        let mut outputs = p.finish_plan(self.base.setup, out)?;
+        kmb_cam_setup::sections::add_entry(&mut outputs, &p.info, entry_plan);
         Ok(outputs)
     }
 

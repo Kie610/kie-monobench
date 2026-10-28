@@ -40,13 +40,13 @@ pub use floor::{
     leave_fields, leaves, min_radius_field, opt_length, profile_areas, round_corners,
     unreachable_area, wall_top,
 };
+pub use kmb_toolpath_moves::clip::{ClipOpts, clip_to_section};
 pub use kmb_toolpath_moves::{
     DEFAULT_ENTRY_DEG, ENTRY_AREA, EntryArea, EntryKind, EntryOpts, EntryPlan, FinishOpts,
     FinishPlan, Lap, LeadOpts, LeadShape, Leads, add_entry_area, entry_area_of, entry_fields,
     feed_value, finish_fields, finish_offsets, helix_moves, helix_start, lap_start,
     lead_shape_fields, leads, start_after, start_at, walk_moves, zigzag_moves,
 };
-pub use kmb_toolpath_moves::clip::{ClipOpts, clip_to_section};
 pub use kmb_toolpath_moves::{
     LeadArcs, approach, free_on_left, lead_arcs, length, lift_over_tabs, lift_over_tabs_shaped,
     loop_length, loop_moves, ramp_moves, retract, start_mid_line, start_near, tab_centers,
@@ -894,7 +894,9 @@ impl Feature for Setup {
         if let Some(n) = &self.nest {
             for p in &n.parts {
                 let r = output(p.body, "body");
-                if !v.contains(&r) { v.push(r); }
+                if !v.contains(&r) {
+                    v.push(r);
+                }
             }
         }
         if self.stock.mode == StockMode::Body
@@ -994,13 +996,24 @@ impl Feature for Setup {
                 "網の許容差は {lo} mm 以上 {hi} mm 以下にしてください"
             )));
         }
-        let nested = self.nest.as_ref().map(|n| nest::prepare(ctx, self, n, tolerance, &machine)).transpose()?;
-        if let Some(n)=&nested && n.bodies.is_empty() {
+        let nested = self
+            .nest
+            .as_ref()
+            .map(|n| nest::prepare(ctx, self, n, tolerance, &machine))
+            .transpose()?;
+        if let Some(n) = &nested
+            && n.bodies.is_empty()
+        {
             // 配置の診断は残し、配置されていない元のボディを加工の材料として渡さない。
-            let mut out=Outputs::new();n.write_outputs(&mut out);
-            let mut warnings=n.layout.warnings.clone();
-            warnings.push("配置できる部品がありません。板の寸法・余白・部品の向きを確かめてください".into());
-            warnings.extend(wcs_warning);warnings.extend(warnings_pre);add_warnings(&mut out,warnings);
+            let mut out = Outputs::new();
+            n.write_outputs(&mut out);
+            let mut warnings = n.layout.warnings.clone();
+            warnings.push(
+                "配置できる部品がありません。板の寸法・余白・部品の向きを確かめてください".into(),
+            );
+            warnings.extend(wcs_warning);
+            warnings.extend(warnings_pre);
+            add_warnings(&mut out, warnings);
             return Ok(out);
         }
         let (body, more) = match &nested {
@@ -1048,7 +1061,9 @@ impl Feature for Setup {
         } else {
             self.stock_box(ctx, pmin, pmax)?
         };
-        let origin_max = nested.as_ref().map_or(smax, |n| [n.size[0], n.size[1], n.thickness]);
+        let origin_max = nested
+            .as_ref()
+            .map_or(smax, |n| [n.size[0], n.size[1], n.thickness]);
         let origin = match self.origin_at {
             Some(OriginAt::Stock { at }) => {
                 [0, 1, 2].map(|i| smin[i] + (origin_max[i] - smin[i]) * at[i])
@@ -1063,7 +1078,10 @@ impl Feature for Setup {
                     Origin::FrontRight => (origin_max[0], smin[1]),
                     Origin::BackLeft => (smin[0], origin_max[1]),
                     Origin::BackRight => (origin_max[0], origin_max[1]),
-                    Origin::Center => ((smin[0] + origin_max[0]) / 2.0, (smin[1] + origin_max[1]) / 2.0),
+                    Origin::Center => (
+                        (smin[0] + origin_max[0]) / 2.0,
+                        (smin[1] + origin_max[1]) / 2.0,
+                    ),
                 };
                 let oz = match self.origin_z {
                     OriginZ::Top => smax[2],

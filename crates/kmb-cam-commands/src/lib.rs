@@ -26,12 +26,12 @@
 //!
 //! 加工の機能はタイムラインで形状の後に並び、形状の寸法を変えると経路も作り直される。
 
+pub use kmb_cam_setup::nest::{Nest, NestMethod, NestPart, NestRotate, SheetFrom};
 pub use kmb_cam_setup::{
     AirCuts, Fixture, Flip, HeightFrom, HeightsOutput, MANUAL_NC, ManualKind, ManualNc, MirrorAxis,
     OpBase, Origin, OriginZ, PATTERN, Pattern, PatternKind, SETUP, Setup, SetupInfo, Stock,
     StockMode, heights_of, toolpath_of,
 };
-pub use kmb_cam_setup::nest::{Nest,NestMethod,NestPart,NestRotate,SheetFrom};
 pub use kmb_cam_tool::{self as tool, TOOLS, TOOLS_V1, Tool, ToolKind, ToolLibrary};
 pub use kmb_post::{MachineProfile, Post};
 pub use kmb_sim::{HeadPart, MachineHit, MachineKind, MachineShape, SimOptions, SimReport, ZMap};
