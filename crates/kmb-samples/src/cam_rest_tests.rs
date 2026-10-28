@@ -665,8 +665,132 @@ fn adding_a_tool_preserves_the_auto_tab_placed_from_the_entry_corner() {
         cx.output(added.id, kmb_cam_setup::TAB_PATHS).unwrap(),
     )
     .unwrap();
-    assert_eq!(inherited.paths, vec![moved]);
+    assert_eq!(inherited.paths, vec![moved.clone()]);
     assert_eq!(inherited.source_radius, Some(2.75));
+    c.tabs = 6;
+    c.tab_points = vec![moved.pts[0]];
+    c.tab_width = "0.125 in".into();
+    c.tab_height = "2 mm".into();
+    set_data(&mut cam.part.doc, wall, json(&c));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+    let inherited = <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+        cx.output(added.id, kmb_cam_setup::TAB_PATHS).unwrap(),
+    )
+    .unwrap();
+    let settings = inherited.tabs.as_ref().unwrap();
+    assert_eq!(settings.count, 6);
+    assert_eq!(settings.points, c.tab_points);
+    assert!((settings.width - 3.175).abs() < 1e-9);
+    assert_eq!(settings.height, 2.0);
+    assert_eq!(added.data["tabs"], 1, "写した欄の値ではなく元の出力を読む");
+    let restored: kmb_cam_setup::TabPaths = serde_json::from_value(json(&inherited)).unwrap();
+    assert_eq!(restored.source_radius, Some(2.75));
+    c.tabs = 0;
+    c.tab_points.clear();
+    set_data(&mut cam.part.doc, wall, json(&c));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+    let cleared = <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+        cx.output(added.id, kmb_cam_setup::TAB_PATHS).unwrap(),
+    )
+    .unwrap()
+    .tabs
+    .unwrap();
+    assert_eq!(
+        cleared.count, 0,
+        "元の明示的なタブ無しが写した 1 個より優先する"
+    );
+    assert!(cleared.points.is_empty());
+}
+
+// 確かめること: タブ無しで工具を足してから元に 6 個置いても、元の出力へ追従する。
+#[test]
+fn adding_tabs_to_an_initially_untabbed_source_updates_the_added_tool() {
+    let mut cam = reference_cam();
+    let mut c = rest_contour_on_pocket(&cam);
+    c.base.tool = 1;
+    c.rest_tool = None;
+    c.tabs = 0;
+    c.tab_points.clear();
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    let wall = insert_op(&mut cam, CONTOUR, "後でタブを置く輪郭", json(&c));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}3"),
+        wall,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    let m = modules();
+    let before = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(before.error_count(), 0, "{:?}", before.features);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &before, &m.registry, &m.kernel);
+    let original = <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+        cx.output(wall, kmb_cam_setup::TAB_PATHS).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(original.tabs.unwrap().count, 0);
+    let initial_tabs = cx
+        .output(added.id, kmb_cam_setup::TAB_PATHS)
+        .and_then(<kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value)
+        .and_then(|p| p.tabs);
+    c.tabs = 6;
+    set_data(&mut cam.part.doc, wall, json(&c));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+    let current_tabs = cx
+        .output(added.id, kmb_cam_setup::TAB_PATHS)
+        .and_then(<kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value)
+        .and_then(|p| p.tabs);
+    assert_eq!(
+        current_tabs.as_ref().map(|t| t.count),
+        Some(6),
+        "元のタブ 0→6 が追加した工具へ伝わらない"
+    );
+    assert_eq!(initial_tabs.unwrap().count, 0, "タブ無しの出力も明示する");
+    let inherited: Contour = serde_json::from_value(added.data).unwrap();
+    assert_eq!(inherited.rest_tab_source, Some(wall));
+    assert_eq!(inherited.tabs, 0, "写した設定はタブ無しのまま");
+}
+
+// 確かめること: 元参照とタブの無い取残しからも次の細い工具を足せる。
+#[test]
+fn an_untabbed_legacy_rest_supplies_its_next_tool() {
+    let mut cam = reference_cam();
+    let mut one = ToolLibrary::starter().get(3).unwrap().clone();
+    one.number = 9;
+    one.name = "平 1 mm".into();
+    one.diameter = 1.0;
+    add_tool(&mut cam, one);
+    let mut c = rest_contour_on_pocket(&cam);
+    c.tabs = 0;
+    c.tab_points.clear();
+    let rest = insert_op(&mut cam, CONTOUR, "タブ無しの旧取残し", json(&c));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}9"),
+        rest,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+    let inherited = <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+        cx.output(added.id, kmb_cam_setup::TAB_PATHS).unwrap(),
+    )
+    .unwrap();
+    assert!(!inherited.paths.is_empty());
+    let settings = inherited.tabs.unwrap();
+    assert_eq!(settings.count, 0);
+    assert!(settings.points.is_empty());
+    assert_eq!(added.data["rest_tab_source"], json(&rest));
 }
 
 // 確かめること: 元参照を持たない取残し加工も、次の工具へタブの実配置を渡せる。
