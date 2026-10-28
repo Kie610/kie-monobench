@@ -752,7 +752,7 @@ pub fn register(reg: &mut Registry) {
     reg.register_described(
         solid(THREAD, "ねじ")
             .icon("thread")
-            .hint("円筒の面にメートルねじを付ける(形のねじ山は作らず、呼びとピッチを属性として残す)")
+            .hint("円筒の面にメートル・ユニファイ・管用平行ねじを付ける(形のねじ山は作らず、呼びとピッチを属性として残す)")
             .aliases("ねじ ネジ thread タップ おねじ めねじ")
             .field(Field::output("target", "対象", "body"))
             .field(Field::info("face", "円筒の面"))
@@ -886,7 +886,7 @@ impl Extension for ThreadCommands {
                 .menu("作成")
                 .icon("thread")
                 .aliases("ねじ ネジ thread タップ おねじ めねじ")
-                .hint("押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いメートルねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める")
+                .hint("押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める")
                 // 作成の一覧に出し、帯の前には出さない。
                 .at(&[Place::Menu])
                 .disabled_if(none.then_some("ボディがありません")),
