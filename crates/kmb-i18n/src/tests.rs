@@ -126,9 +126,18 @@ fn os_locale_and_setting_values() {
 
 #[test]
 fn field_ids_use_the_feature_kind_and_the_full_field_path() {
-    assert_eq!(field_id("solid.extrude@1", "start_offset"), "field-solid-extrude-start-offset");
-    assert_eq!(field_id("solid.edge@2", "edges.radius"), "field-solid-edge-edges-radius");
-    assert_ne!(field_id("solid.edge@1", "radius"), field_id("solid.edge@1", "edges.radius"));
+    assert_eq!(
+        field_id("solid.extrude@1", "start_offset"),
+        "field-solid-extrude-start-offset"
+    );
+    assert_eq!(
+        field_id("solid.edge@2", "edges.radius"),
+        "field-solid-edge-edges-radius"
+    );
+    assert_ne!(
+        field_id("solid.edge@1", "radius"),
+        field_id("solid.edge@1", "edges.radius")
+    );
 }
 
 #[test]

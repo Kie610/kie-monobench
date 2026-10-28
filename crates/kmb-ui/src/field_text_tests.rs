@@ -7,19 +7,34 @@ use std::collections::BTreeMap;
 
 #[test]
 fn every_descriptor_field_has_texts_matching_its_module() {
-    fn check(texts: &Catalog, kind: &str, fields: &[Field], parent: &str, seen: &mut BTreeMap<String, String>, wrong: &mut Vec<String>) {
+    fn check(
+        texts: &Catalog,
+        kind: &str,
+        fields: &[Field],
+        parent: &str,
+        seen: &mut BTreeMap<String, String>,
+        wrong: &mut Vec<String>,
+    ) {
         for f in fields {
-            let key = if parent.is_empty() { f.key.clone() } else { format!("{parent}.{}", f.key) };
+            let key = if parent.is_empty() {
+                f.key.clone()
+            } else {
+                format!("{parent}.{}", f.key)
+            };
             let id = kmb_i18n::field_id(kind, &key);
             for (id, original) in [(id.clone(), &f.label), (format!("{id}-help"), &f.help)] {
-                if original.is_empty() { continue; }
+                if original.is_empty() {
+                    continue;
+                }
                 if let Some(other) = seen.insert(id.clone(), original.clone()) {
                     assert_eq!(other, *original, "意味の違う欄で ID {id} が重なっている");
                 }
                 if !texts.has(Lang::Ja, &id) || texts.text(Lang::Ja, &id) != *original {
                     wrong.push(format!("{id} = {original}"));
                 }
-                if !texts.has(Lang::En, &id) { wrong.push(format!("英語に {id} が無い")); }
+                if !texts.has(Lang::En, &id) {
+                    wrong.push(format!("英語に {id} が無い"));
+                }
             }
             if let FieldKind::Rows { fields } = &f.kind {
                 check(texts, kind, fields, &key, seen, wrong);
@@ -33,7 +48,11 @@ fn every_descriptor_field_has_texts_matching_its_module() {
         check(&texts, &d.type_id, &d.fields, "", &mut seen, &mut wrong);
     }
     assert!(!seen.is_empty());
-    assert!(wrong.is_empty(), "日本語の欄の文言を記述子とそろえる:\n{}", wrong.join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "日本語の欄の文言を記述子とそろえる:\n{}",
+        wrong.join("\n")
+    );
 }
 
 #[test]
@@ -48,7 +67,12 @@ fn custom_field_api_uses_shared_words_and_keeps_unknown_defaults() {
         assert_eq!(translated.label, name);
         assert_eq!(translated.key, f.key);
         assert_eq!(translated.kind, f.kind);
-        assert_eq!(translated.help, ws.win.texts.text(ws.win.lang(), "field-solid-extrude-distance-help"));
+        assert_eq!(
+            translated.help,
+            ws.win
+                .texts
+                .text(ws.win.lang(), "field-solid-extrude-distance-help")
+        );
         let unknown = Field::text("plugin_value", "独自の欄").help("独自の説明");
         assert_eq!(translated_field(&ctx, "plugin.custom@1", &unknown), unknown);
     }
@@ -60,18 +84,31 @@ fn row_fields_share_their_column_translation_without_changing_metadata() {
     let mut ws = Workspace::new(kmb_samples::sample_document(), None, kmb_bundle::modules());
     let original = ws.win.registry.descriptor("solid.fillet@1").unwrap();
     let rows = original.fields.iter().find(|f| f.key == "rows").unwrap();
-    let FieldKind::Rows { fields } = &rows.kind else { panic!("辺と半径は行の欄") };
+    let FieldKind::Rows { fields } = &rows.kind else {
+        panic!("辺と半径は行の欄")
+    };
     let radius = fields.iter().find(|f| f.key == "radius").unwrap();
     for (lang, label) in [("en", "Radius"), ("ko", "Radius"), ("ja", "半径")] {
         ws.win.layout.appearance.language = lang.into();
         ws.win.words().share(&ctx);
         let translated = translated_field(&ctx, &original.type_id, rows);
-        let FieldKind::Rows { fields: translated_columns } = &translated.kind else {
+        let FieldKind::Rows {
+            fields: translated_columns,
+        } = &translated.kind
+        else {
             panic!("訳しても行の欄を保つ")
         };
-        let column = translated_columns.iter().find(|f| f.key == "radius").unwrap();
+        let column = translated_columns
+            .iter()
+            .find(|f| f.key == "radius")
+            .unwrap();
         assert_eq!(column.label, label);
-        assert_eq!(column.help, ws.win.texts.text(ws.win.lang(), "field-solid-fillet-rows-radius-help"));
+        assert_eq!(
+            column.help,
+            ws.win
+                .texts
+                .text(ws.win.lang(), "field-solid-fillet-rows-radius-help")
+        );
         for index in [0, 3] {
             let row_field = rows.row_field(index, radius);
             let translated_row = translated_field(&ctx, &original.type_id, &row_field);
@@ -83,5 +120,12 @@ fn row_fields_share_their_column_translation_without_changing_metadata() {
             assert_eq!(restored, row_field, "訳は保存先・単位・条件を変えない");
         }
     }
-    assert_eq!(ws.win.registry.descriptor(&original.type_id).unwrap().fields, original.fields);
+    assert_eq!(
+        ws.win
+            .registry
+            .descriptor(&original.type_id)
+            .unwrap()
+            .fields,
+        original.fields
+    );
 }

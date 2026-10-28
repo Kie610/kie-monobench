@@ -883,11 +883,11 @@ pub(crate) fn action_row(ui: &mut egui::Ui, a: &kmb_core::Action, keys: &str) ->
 }
 
 #[cfg(test)]
+mod field_text_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod toolbar_tests;
-#[cfg(test)]
-mod field_text_tests;
 
 #[cfg(test)]
 mod screen_fixes_tests;

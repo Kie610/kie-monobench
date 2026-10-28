@@ -19,7 +19,11 @@ pub(crate) fn translate(words: &Words, type_id: &str, field: &Field, parent: &st
         format!("{parent}.{}", field.key)
     };
     // 行番号は保存先の位置で、文言は同じ列の全行で共用する。
-    let path = key.split('.').filter(|s| s.parse::<usize>().is_err()).collect::<Vec<_>>().join(".");
+    let path = key
+        .split('.')
+        .filter(|s| s.parse::<usize>().is_err())
+        .collect::<Vec<_>>()
+        .join(".");
     let id = kmb_i18n::field_id(type_id, &path);
     if !field.label.is_empty() {
         field.label = words.find(&id).unwrap_or(field.label);

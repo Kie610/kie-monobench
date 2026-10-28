@@ -1,7 +1,8 @@
 # English と日本語の切り替えが、押し出しの編集パネルの欄にすぐ反映される。
 #! sample part
 
-dclick "button:板"
+rclick "button:板"
+click "フィーチャを編集"
 expect "距離"
 expect "プロファイル"
 shot 日本語の編集パネル
