@@ -1,6 +1,6 @@
 //! 板への配置の作成と部品の編集。すべて文書のセットアップのデータを返す。
 
-use crate::commands::{selected_setup, setup_of};
+use crate::commands::{picked_setup, selected_setup, setup_of};
 use crate::{Setup, StockMode};
 use kmb_cam_setup::nest::{Nest, NestMethod, NestPart, NestRotate, SheetFrom};
 use kmb_core::{Action, Arg, Context, Edit, FeatureId, Outcome, Payload, Place, Problem, Value};
@@ -28,6 +28,7 @@ pub fn actions(cx: &Context<'_>) -> Vec<Action> {
     let nested = selected_setup(cx)
         .and_then(|id| setup_of(cx, id))
         .is_some_and(|s| s.nest.is_some());
+    let panel = nested && picked_setup(cx).is_some();
     let part = || Arg::integer("part", "部品の番号(1 から)").required();
     vec![
         Action::new(CREATE, "板への配置", "cam")
@@ -82,13 +83,21 @@ pub fn actions(cx: &Context<'_>) -> Vec<Action> {
             .hint("板への配置に、別のボディを部品として足す")
             .arg(Arg::feature("body", "足すボディ").required())
             .arg(Arg::integer("count", "個数").default(1))
-            .at(&[Place::Menu, Place::Panel])
+            .at(if panel {
+                &[Place::Menu, Place::Panel]
+            } else {
+                &[Place::Menu]
+            })
             .disabled_if((!nested).then_some("板への配置のセットアップを選んでください")),
         Action::new(REMOVE_PART, "配置する部品を外す", "cam")
             .menu("セットアップ")
             .hint("板への配置から、指定した番号の部品を外す")
             .arg(part())
-            .at(&[Place::Menu, Place::Panel])
+            .at(if panel {
+                &[Place::Menu, Place::Panel]
+            } else {
+                &[Place::Menu]
+            })
             .disabled_if((!nested).then_some("板への配置のセットアップを選んでください")),
         Action::new(SET_PART, "配置する部品を直す", "cam")
             .menu("セットアップ")

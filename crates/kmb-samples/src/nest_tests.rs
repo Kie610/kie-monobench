@@ -32,6 +32,14 @@ fn nesting_commands_use_numeric_defaults_and_convert_declared_length_units() {
             args: &args,
             ..kmb_core::Context::new(doc.data(), &report, &m.registry, &m.kernel)
         };
+        assert!(
+            m.extensions
+                .actions(&cx)
+                .iter()
+                .filter(|a| a.id.starts_with("cam.nest."))
+                .all(|a| !a.is_at(kmb_core::Place::Panel)),
+            "配置以外の編集パネルに配置のボタンを出さない"
+        );
         let kmb_core::Outcome::Change { label, edits } = m
             .extensions
             .run("cam.nest.create", &cx)
@@ -56,9 +64,38 @@ fn nesting_commands_use_numeric_defaults_and_convert_declared_length_units() {
         assert_eq!(setup.stock.width, "100 mm");
         assert_eq!(setup.stock.depth, "100 mm");
         assert_eq!(setup.stock.height, "20 mm");
-        assert_eq!(
-            doc.recompute(&m.registry, m.kernel.as_ref()).error_count(),
-            0
+        let report = doc.recompute(&m.registry, m.kernel.as_ref());
+        assert_eq!(report.error_count(), 0);
+        let cx = kmb_core::Context {
+            selected: Some(doc.data().features.last().unwrap().id),
+            ..kmb_core::Context::new(doc.data(), &report, &m.registry, &m.kernel)
+        };
+        for id in ["cam.nest.add_part", "cam.nest.remove_part"] {
+            assert!(
+                m.extensions
+                    .actions(&cx)
+                    .iter()
+                    .any(|a| a.id == id && a.is_at(kmb_core::Place::Panel))
+            );
+        }
+        let kmb_core::Outcome::Change { label, edits } =
+            m.extensions.run("cam.add.contour", &cx).unwrap()
+        else {
+            panic!("加工を足す変更");
+        };
+        let mut probe = kmb_core::Document::from_json(&doc.to_json()).unwrap();
+        probe.apply_edits(&label, edits).unwrap();
+        let cx = kmb_core::Context {
+            selected: Some(probe.data().features.last().unwrap().id),
+            ..kmb_core::Context::new(probe.data(), &report, &m.registry, &m.kernel)
+        };
+        assert!(
+            m.extensions
+                .actions(&cx)
+                .iter()
+                .filter(|a| a.id.starts_with("cam.nest."))
+                .all(|a| !a.is_at(kmb_core::Place::Panel)),
+            "配置配下の加工の欄にも部品編集のボタンを混ぜない"
         );
         assert!(doc.undo());
         // 割り当てた ID は取り消し後にも再利用しない。
