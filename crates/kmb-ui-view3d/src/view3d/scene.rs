@@ -6,6 +6,8 @@ use super::*;
 pub struct SceneBody {
     pub feature: FeatureId,
     pub mesh: Mesh,
+    /// 面のボディは裏からも描く。測定用の網は片面のまま保つ。
+    pub two_sided: bool,
     pub(super) edges: Vec<[[f32; 3]; 2]>,
     /// 面ごとの決まった色(`mesh.face_names` の順。`None` と足りない面はボディの色)
     pub colors: Vec<Option<Color32>>,
@@ -20,6 +22,8 @@ pub struct SceneBody {
     pub(super) bvh: std::sync::Arc<PickTree>,
     /// アニメーションで動かしている時の、動かす前の網と動き([`Scene::set_poses`])
     rest: Option<(Mesh, kmb_core::kernel::Matrix4)>,
+    /// ねじの陰影の帯に切る前の網(ねじのあるボディだけ。[`Scene::set_thread_marks`])
+    plain: Option<Mesh>,
 }
 
 #[derive(Default)]
@@ -55,7 +59,12 @@ pub struct Scene {
     glow: Option<(std::collections::BTreeSet<FeatureId>, Color32, u8)>,
     /// 文書の点光源とスポットライト(写実の見た目とキャンバス内レンダリングで照らす)
     pub(super) lamps: Vec<kmb_render::lamp::Lamp>,
+    /// ねじの陰影の印(ボディの最後の機能 → 印。網を作り直しても掛け直す)
+    threads: ThreadMarks,
 }
+
+/// ボディ(最後の機能)ごとの、ねじの陰影の印。
+pub type ThreadMarks = std::collections::BTreeMap<FeatureId, Vec<kmb_interchange::ThreadMark>>;
 
 /// ボディ(最後の機能)ごとの、面の名前 → 面の外観の材質。
 pub type FaceLooks =
@@ -243,7 +252,27 @@ impl Scene {
             return false;
         }
         self.set(bodies, build_meshes_at(kernel, bodies, self.tolerance()));
+        self.set_body_kinds(kernel);
         true
+    }
+
+    /// 作った網のボディの種類を反映する。裏側の三角形を測定用の網へ混ぜない。
+    pub fn set_body_kinds(&mut self, kernel: &dyn Kernel) {
+        let mut changed = false;
+        for b in self.bodies.iter_mut().chain(&mut self.stowed) {
+            let two_sided = self
+                .key
+                .iter()
+                .find(|(f, _)| *f == b.feature)
+                .is_some_and(|(_, h)| {
+                    kernel.body_kind(*h).ok() == Some(kmb_core::kernel::BodyKind::Sheet)
+                });
+            changed |= b.two_sided != two_sided;
+            b.two_sided = two_sided;
+        }
+        if changed {
+            self.sort_hidden();
+        }
     }
 
     /// 網の細かさ(mm)。
@@ -260,6 +289,7 @@ impl Scene {
         let bodies = self.key.clone();
         log::info!("網の細かさを {tolerance} mm にして作り直す");
         self.set(&bodies, build_meshes_at(kernel, &bodies, tolerance));
+        self.set_body_kinds(kernel);
         true
     }
 
@@ -279,8 +309,13 @@ impl Scene {
         self.stowed.clear();
         self.bodies = meshes
             .into_iter()
-            .map(|(feature, mesh)| SceneBody {
+            .map(|(feature, mesh)| {
+                let (mesh, plain) = banded(mesh, self.threads.get(&feature));
+                (feature, mesh, plain)
+            })
+            .map(|(feature, mesh, plain)| SceneBody {
                 feature,
+                two_sided: false,
                 edges: feature_edges(&mesh),
                 look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
                 face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
@@ -289,6 +324,7 @@ impl Scene {
                 tint: self.body_colors.get(&feature).copied(),
                 bvh: Default::default(),
                 rest: None,
+                plain,
             })
             .collect();
         self.apply_poses();
@@ -342,6 +378,43 @@ impl Scene {
             b.face_looks = fit_face_looks(self.face_looks.get(&b.feature), &b.mesh);
             b.bvh = Default::default();
         }
+    }
+
+    /// ねじの陰影の印を替える(ボディの最後の機能 → 印)。印の替わったボディだけ網を帯に切り直す。
+    /// 変わったら真。
+    pub fn set_thread_marks(&mut self, marks: ThreadMarks) -> bool {
+        if self.threads == marks {
+            return false;
+        }
+        for b in self.bodies.iter_mut().chain(self.stowed.iter_mut()) {
+            if self.threads.get(&b.feature) == marks.get(&b.feature) {
+                continue;
+            }
+            // 帯に切る前の網(動かしていれば動かす前の網)から切り直し、動きは後で掛け直す
+            let rest = b.rest.take().map(|(m, _)| m);
+            let base = match (b.plain.take(), rest) {
+                (Some(p), _) => p,
+                (None, Some(r)) => r,
+                (None, None) => std::mem::take(&mut b.mesh),
+            };
+            let (mesh, plain) = banded(base, marks.get(&b.feature));
+            b.mesh = mesh;
+            b.plain = plain;
+            b.edges = feature_edges(&b.mesh);
+            b.look = self
+                .body_looks
+                .get(&b.feature)
+                .map(|l| fit_look(l, &b.mesh));
+            b.face_looks = fit_face_looks(self.face_looks.get(&b.feature), &b.mesh);
+            b.bvh = Default::default();
+        }
+        self.threads = marks;
+        self.apply_poses();
+        for b in &self.bodies {
+            b.prepare_bvh();
+        }
+        self.sort_hidden();
+        true
     }
 
     /// アニメーションで動かしているか。
@@ -732,6 +805,9 @@ pub(super) fn fit_look(l: &kmb_render::Look, mesh: &Mesh) -> kmb_render::Look {
 #[derive(Default)]
 pub(super) struct PickTree {
     pub(super) tree: std::sync::OnceLock<crate::pick_bvh::Bvh>,
+    /// 網の点を囲む箱(視線が通らないボディは木を作らずに飛ばす。同じ部品を何百個置いても、
+    /// 初めて拾う時に全部の木を作らない)
+    pub(super) bounds: std::sync::OnceLock<([f32; 3], [f32; 3])>,
     pub(super) started: std::sync::atomic::AtomicBool,
 }
 
@@ -761,6 +837,20 @@ impl SceneBody {
 
     /// 視線と交わる三角形ごとに `hit` を呼ぶ(木が出来ていれば木を通し、無ければ全部調べる)。
     pub(super) fn ray(&self, o: [f32; 3], d: [f32; 3], t_min: f32, hit: impl FnMut(u32, f32)) {
+        let (min, max) = *self.bvh.bounds.get_or_init(|| {
+            self.mesh.positions.iter().fold(
+                ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]),
+                |(lo, hi), p| {
+                    (
+                        [0, 1, 2].map(|k| lo[k].min(p[k])),
+                        [0, 1, 2].map(|k| hi[k].max(p[k])),
+                    )
+                },
+            )
+        });
+        if !crate::pick_bvh::ray_hits_box(min, max, o, d, t_min) {
+            return;
+        }
         match self.bvh() {
             Some(t) => t.ray(&self.mesh, o, d, t_min, hit),
             None => crate::pick_bvh::Bvh::ray_all(&self.mesh, o, d, t_min, hit),
@@ -790,6 +880,14 @@ impl SceneBody {
     }
 }
 
+/// ねじの印 `marks` の円筒を帯に切った網と、切る前の網(切った時だけ)。
+fn banded(mesh: Mesh, marks: Option<&Vec<kmb_interchange::ThreadMark>>) -> (Mesh, Option<Mesh>) {
+    match marks.and_then(|m| super::thread_bands(&mesh, m)) {
+        Some(b) => (b, Some(mesh)),
+        None => (mesh, None),
+    }
+}
+
 pub(super) fn build_bvh(m: &Mesh) -> crate::pick_bvh::Bvh {
     let started = std::time::Instant::now();
     let b = crate::pick_bvh::Bvh::build(m);
@@ -815,13 +913,7 @@ pub fn build_meshes_at(
     bodies: &[(FeatureId, ShapeHandle)],
     tolerance: f64,
 ) -> Vec<(FeatureId, Mesh)> {
-    if (tolerance - kmb_measure::MESH_TOLERANCE).abs() < 1e-12 {
-        return build_meshes(kernel, bodies);
-    }
-    bodies
-        .iter()
-        .filter_map(|(f, h)| Some((*f, kernel.mesh(*h, tolerance).ok()?)))
-        .collect()
+    kmb_measure::meshes_at(kernel, bodies, tolerance)
 }
 
 /// 測る計算は、表示しているボディの網で測る。
@@ -840,4 +932,93 @@ pub(super) fn feature_edges(m: &Mesh) -> Vec<[[f32; 3]; 2]> {
         .iter()
         .flat_map(|l| l.windows(2).map(|w| [w[0], w[1]]))
         .collect()
+}
+
+#[cfg(test)]
+mod sheet_tests {
+    use super::*;
+    #[test]
+    fn sheet_back_is_visible_without_doubling_the_measurement_mesh() {
+        struct SheetKernel;
+        impl Kernel for SheetKernel {
+            fn name(&self) -> &str {
+                "sheet-test"
+            }
+            fn body_kind(
+                &self,
+                _: ShapeHandle,
+            ) -> Result<kmb_core::kernel::BodyKind, kmb_core::KernelError> {
+                Ok(kmb_core::kernel::BodyKind::Sheet)
+            }
+        }
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [10., 0., 0.], [10., 10., 0.], [0., 10., 0.]],
+            normals: vec![[0., 0., 1.]; 4],
+            triangles: vec![[0, 1, 2], [0, 2, 3]],
+            triangle_faces: vec![0, 0],
+            face_names: vec!["face".into()],
+            edges: vec![],
+        };
+        let mut scene = Scene::default();
+        scene.set(
+            &[(FeatureId(1), ShapeHandle(1))],
+            vec![(FeatureId(1), mesh)],
+        );
+        let white = Color32::WHITE;
+        let colors = Colors::from_look(Palette {
+            dark: true,
+            canvas: Color32::BLACK,
+            ink: white,
+            ink2: white,
+            ink3: white,
+            err: white,
+            warn: white,
+            design: white,
+            cam: white,
+            shade3: white,
+            accent: white,
+            inks: Inks::DARK,
+        });
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(128., 128.));
+        let mut cam = Camera::default();
+        cam.set_view(0., -90.);
+        cam.fit_box([0., 0., 0.], [10., 10., 0.], rect);
+        let draw = |scene: &Scene| {
+            render_guided(
+                scene,
+                &cam,
+                [128, 128],
+                1.,
+                &[],
+                None,
+                &colors,
+                Shading::Shaded,
+                Guides {
+                    grid: false,
+                    axes: false,
+                },
+                &[],
+                &Behind::default(),
+            )
+        };
+        let before = draw(&scene);
+        scene.set_body_kinds(&SheetKernel);
+        assert!(scene.bodies[0].two_sided);
+        let after = draw(&scene);
+        assert!(
+            before
+                .pixels
+                .iter()
+                .zip(&after.pixels)
+                .filter(|(a, b)| a != b)
+                .count()
+                > 1000,
+            "裏面の面積が見える"
+        );
+        assert_eq!(
+            scene.bodies[0].mesh.triangles.len(),
+            2,
+            "測定の面積は片面のまま"
+        );
+    }
 }

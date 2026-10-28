@@ -46,10 +46,69 @@ impl Meshes for Vec<(FeatureId, Mesh)> {
 
 /// 表示用の網を作る([`MESH_TOLERANCE`])。網にできないボディは飛ばす。別のスレッドからも呼べる。
 pub fn meshes(kernel: &dyn Kernel, bodies: &[(FeatureId, ShapeHandle)]) -> Vec<(FeatureId, Mesh)> {
+    meshes_at(kernel, bodies, MESH_TOLERANCE)
+}
+
+/// 表示用の網を、許容差 `tolerance`(mm)で作る。同じ部品を置いた出現は、元の形の網を 1 回だけ
+/// 作って出現の行列で動かす(出現ごとに写した形を網にしない。何百個置いても網を作るのは元の数だけ)。
+pub fn meshes_at(
+    kernel: &dyn Kernel,
+    bodies: &[(FeatureId, ShapeHandle)],
+    tolerance: f64,
+) -> Vec<(FeatureId, Mesh)> {
+    let placed: Vec<Option<(ShapeHandle, kmb_core::kernel::Matrix4)>> =
+        bodies.iter().map(|(_, h)| kernel.instance_of(*h)).collect();
+    // 元の形の網(出現の元になっている形だけ。元のボディ自身も表示していれば同じ網を使う)
+    let mut sources: std::collections::HashMap<ShapeHandle, Option<Mesh>> =
+        placed.iter().flatten().map(|(of, _)| (*of, None)).collect();
+    for (of, mesh) in sources.iter_mut() {
+        *mesh = kernel.mesh(*of, tolerance).ok();
+    }
     bodies
         .iter()
-        .filter_map(|(f, h)| Some((*f, kernel.mesh(*h, MESH_TOLERANCE).ok()?)))
+        .zip(placed)
+        .filter_map(|((f, h), placed)| {
+            let mesh = match (placed, sources.get(h)) {
+                (Some((of, m)), _) => match sources.get(&of) {
+                    Some(Some(src)) => placed_mesh(src, &m),
+                    _ => kernel.mesh(*h, tolerance).ok()?,
+                },
+                (None, Some(Some(src))) => src.clone(),
+                (None, _) => kernel.mesh(*h, tolerance).ok()?,
+            };
+            Some((*f, mesh))
+        })
         .collect()
+}
+
+/// 網 `mesh` を行列 `m`(剛体と鏡映)で動かした網。鏡映なら三角形の向きを裏返して表を外へ保つ。
+pub fn placed_mesh(mesh: &Mesh, m: &kmb_core::kernel::Matrix4) -> Mesh {
+    let point = |q: &[f32; 3]| {
+        let r = kmb_core::kernel::transform_point(m, q.map(f64::from));
+        r.map(|v| v as f32)
+    };
+    let normal = |q: &[f32; 3]| {
+        let d = q.map(f64::from);
+        [0, 1, 2].map(|i| (m[i][0] * d[0] + m[i][1] * d[1] + m[i][2] * d[2]) as f32)
+    };
+    let rows = [0, 1, 2].map(|i| [m[i][0], m[i][1], m[i][2]]);
+    let mirrored = dot(rows[0], cross(rows[1], rows[2])) < 0.0;
+    Mesh {
+        positions: mesh.positions.iter().map(point).collect(),
+        normals: mesh.normals.iter().map(normal).collect(),
+        triangles: if mirrored {
+            mesh.triangles.iter().map(|t| [t[0], t[2], t[1]]).collect()
+        } else {
+            mesh.triangles.clone()
+        },
+        triangle_faces: mesh.triangle_faces.clone(),
+        face_names: mesh.face_names.clone(),
+        edges: mesh
+            .edges
+            .iter()
+            .map(|e| e.iter().map(point).collect())
+            .collect(),
+    }
 }
 
 /// 選んだもの(画面の網の中の位置で指す。網を作り直したら選び直す)。

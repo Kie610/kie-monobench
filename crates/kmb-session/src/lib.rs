@@ -34,7 +34,9 @@ pub mod roots;
 pub mod run_args;
 pub mod startup;
 pub mod tidy;
-pub use headless::{After, BodyMass, Handled, Headless, Picks, Polled, Ran, Recomputed, Settled};
+pub use headless::{
+    After, BodyMass, Handled, Headless, Picks, Polled, Ran, Recomputed, Settled, SheetFacts,
+};
 
 use kmb_core::Document;
 use serde::{Deserialize, Serialize};

@@ -649,6 +649,9 @@ impl Workspace {
                         ParamStatus::Ok { value } => {
                             ui.label(self.shown(*value));
                         }
+                        ParamStatus::Text { value } => {
+                            ui.label(value);
+                        }
                         ParamStatus::Error { message } => reason_label(ui, err, message),
                     }
                     ui.end_row();

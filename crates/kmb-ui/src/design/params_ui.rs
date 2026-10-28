@@ -162,6 +162,7 @@ impl Workspace {
                     let value = match self.cur.work.report().params.iter().find(|r| r.id == p.id) {
                         Some(r) => match &r.status {
                             ParamStatus::Ok { value } => egui::RichText::new(self.shown(*value)),
+                            ParamStatus::Text { value } => egui::RichText::new(value),
                             ParamStatus::Error { .. } => egui::RichText::new("誤り").color(err),
                         },
                         None => egui::RichText::new(""),
@@ -297,11 +298,22 @@ impl Workspace {
             };
             if !self.set_param_expr(id, &expr) {
                 // 式を読めなければ読み取りの理由だけ(「式 `…` の誤り:」の繰り返しを省く)
-                let why = kmb_core::parse_expr(&expr)
-                    .err()
-                    .map(|e| e.to_string())
-                    .or_else(|| self.win.message.clone())
-                    .unwrap_or_else(|| "式を読めません".into());
+                let text = self
+                    .cur
+                    .work
+                    .doc()
+                    .data()
+                    .params
+                    .iter()
+                    .any(|p| p.id == id && p.unit == kmb_core::ParamUnit::Text);
+                let why = if text {
+                    kmb_core::Template::parse(&expr).err()
+                } else {
+                    kmb_core::parse_expr(&expr).err()
+                }
+                .map(|e| e.to_string())
+                .or_else(|| self.win.message.clone())
+                .unwrap_or_else(|| "式を読めません".into());
                 ui.data_mut(|d| d.insert_temp(failed_id(id), why));
             } else {
                 ui.data_mut(|d| d.remove::<String>(failed_id(id)));
@@ -543,6 +555,9 @@ impl Workspace {
                             ParamStatus::Ok { value } => {
                                 ui.label(self.shown(*value));
                             }
+                            ParamStatus::Text { value } => {
+                                ui.label(value);
+                            }
                             ParamStatus::Error { message } => reason_label(ui, err, message),
                         }
                         users_cell(
@@ -595,6 +610,9 @@ impl Workspace {
                     match &p.status {
                         ParamStatus::Ok { value } => {
                             ui.label(self.shown(*value));
+                        }
+                        ParamStatus::Text { value } => {
+                            ui.label(value);
                         }
                         ParamStatus::Error { message } => reason_label(ui, err, message),
                     }

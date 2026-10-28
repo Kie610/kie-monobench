@@ -2,12 +2,15 @@
 //! 自分で読み、SMLib の面(平面・円筒・円すい・球・円環・B スプライン)を辺の曲線で切り抜いて縫い、
 //! 足し引き・穴・フィレットに使える立体にする(ffi::step_solid)。
 //!
-//! 読むのは形だけ(色・名前・アセンブリの置き方は読まない)。長さは truck の読み込みと同じく、
-//! ファイルの数をそのまま mm として使う(単位を見ない)。角度の単位(円すいの半頂角)は見る。
+//! 読むのは形だけ(色・名前・アセンブリの置き方は読まない)。長さはファイルの単位
+//! (`kmb_format::step::length_unit`。inch・m など)から mm に直し、点と半径に掛ける。読めない単位は
+//! ファイルの数を mm とみなす(注意は読み込みの機能が出す)。角度の単位(円すいの半頂角)も見る。
 //! 対応していない曲面や曲線があれば理由を返し、呼ぶ側が今までの読み方(網)に戻す。
 //!
 //! 面の名前は truck の読み込みと同じ `step{殻の番号}:f{殻の中の面の番号}`(殻は CLOSED_SHELL・
 //! OPEN_SHELL を番号の順に数える)。前に読み込んだ文書の加工や測る道具が面を名前で指しているため。
+//! 閉じた殻と一緒に置かれた OPEN_SHELL(面だけのボディ。公差の補助の面など)は立体に入れずに飛ばす
+//! (番号は数える)。殻が OPEN_SHELL だけの時は立体にできないので理由を返す。
 
 use kmb_core::kernel::{self as k, P3};
 use std::collections::HashMap;
@@ -49,6 +52,16 @@ struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    /// 誤りの場所(何行目か)。
+    fn at(&self, i: usize) -> String {
+        let line = self.s[..i.min(self.s.len())]
+            .iter()
+            .filter(|&&c| c == b'\n')
+            .count()
+            + 1;
+        format!("{line} 行目")
+    }
+
     fn ws(&mut self) {
         loop {
             while self.i < self.s.len() && self.s[self.i].is_ascii_whitespace() {
@@ -75,7 +88,11 @@ impl<'a> Lexer<'a> {
             self.i += 1;
             Ok(())
         } else {
-            Err(format!("{} 文字目に「{}」がありません", self.i, c as char))
+            Err(format!(
+                "{}に「{}」がありません",
+                self.at(self.i),
+                c as char
+            ))
         }
     }
 
@@ -99,7 +116,7 @@ impl<'a> Lexer<'a> {
         }
         let t = std::str::from_utf8(&self.s[st..self.i]).unwrap_or("");
         t.parse::<f64>()
-            .map_err(|_| format!("{st} 文字目の数「{t}」を読めません"))
+            .map_err(|_| format!("{}の数「{t}」を読めません", self.at(st)))
     }
 
     fn params(&mut self) -> Result<Vec<P>, String> {
@@ -117,7 +134,7 @@ impl<'a> Lexer<'a> {
                     self.i += 1;
                     return Ok(out);
                 }
-                _ => return Err(format!("{} 文字目で引数の並びが閉じていません", self.i)),
+                _ => return Err(format!("{}で引数の並びが閉じていません", self.at(self.i))),
             }
         }
     }
@@ -174,14 +191,18 @@ impl<'a> Lexer<'a> {
                 self.word();
                 Ok(P::Typed(self.params()?))
             }
-            c => Err(format!("{} 文字目の「{}」を読めません", self.i, c as char)),
+            c => Err(format!(
+                "{}の「{}」を読めません",
+                self.at(self.i),
+                c as char
+            )),
         }
     }
 
     fn record(&mut self) -> Result<Rec, String> {
         let name = self.word();
         if name.is_empty() {
-            return Err(format!("{} 文字目に実体の名前がありません", self.i));
+            return Err(format!("{}に実体の名前がありません", self.at(self.i)));
         }
         Ok(Rec {
             name,
@@ -230,8 +251,8 @@ fn parse(text: &str) -> Result<HashMap<u64, Inst>, String> {
         }
         if lx.word() != "ENDSEC" {
             return Err(format!(
-                "{} 文字目で DATA の節が ENDSEC で終わっていません",
-                lx.i
+                "{}で DATA の節が ENDSEC で終わっていません",
+                lx.at(lx.i)
             ));
         }
         at = lx.i;
@@ -325,6 +346,8 @@ struct Data {
     recs: HashMap<u64, Inst>,
     /// 角度の単位をラジアンに直す倍率
     angle: f64,
+    /// 長さの単位を mm に直す倍率
+    len: f64,
 }
 
 fn num(p: &P) -> Result<f64, String> {
@@ -410,7 +433,12 @@ impl Data {
     }
 
     fn point(&self, id: u64) -> Result<P3, String> {
-        self.triple(id, "CARTESIAN_POINT")
+        Ok(k::scale(self.triple(id, "CARTESIAN_POINT")?, self.len))
+    }
+
+    /// 長さの数(半径など)を mm にする。
+    fn length(&self, p: &P) -> Result<f64, String> {
+        Ok(num(p)? * self.len)
     }
 
     fn direction(&self, id: u64) -> Result<P3, String> {
@@ -450,10 +478,16 @@ impl Data {
         let f = || self.frame(rid(arg(r, 1)?)?);
         Ok(match r.name.as_str() {
             "PLANE" => Surf::Plane(f()?),
-            "CYLINDRICAL_SURFACE" => Surf::Cylinder(f()?, num(arg(r, 2)?)?),
-            "CONICAL_SURFACE" => Surf::Cone(f()?, num(arg(r, 2)?)?, num(arg(r, 3)?)? * self.angle),
-            "SPHERICAL_SURFACE" => Surf::Sphere(f()?, num(arg(r, 2)?)?),
-            "TOROIDAL_SURFACE" => Surf::Torus(f()?, num(arg(r, 2)?)?, num(arg(r, 3)?)?),
+            "CYLINDRICAL_SURFACE" => Surf::Cylinder(f()?, self.length(arg(r, 2)?)?),
+            "CONICAL_SURFACE" => Surf::Cone(
+                f()?,
+                self.length(arg(r, 2)?)?,
+                num(arg(r, 3)?)? * self.angle,
+            ),
+            "SPHERICAL_SURFACE" => Surf::Sphere(f()?, self.length(arg(r, 2)?)?),
+            "TOROIDAL_SURFACE" => {
+                Surf::Torus(f()?, self.length(arg(r, 2)?)?, self.length(arg(r, 3)?)?)
+            }
             other => return Err(format!("曲面 {other}(#{id})には対応していません")),
         })
     }
@@ -525,11 +559,11 @@ impl Data {
                 self.direction(rid(arg(v, 1)?)?)?;
                 Curve::Line
             }
-            "CIRCLE" => Curve::Circle(self.frame(rid(arg(r, 1)?)?)?, num(arg(r, 2)?)?),
+            "CIRCLE" => Curve::Circle(self.frame(rid(arg(r, 1)?)?)?, self.length(arg(r, 2)?)?),
             "ELLIPSE" => Curve::Ellipse(
                 self.frame(rid(arg(r, 1)?)?)?,
-                num(arg(r, 2)?)?,
-                num(arg(r, 3)?)?,
+                self.length(arg(r, 2)?)?,
+                self.length(arg(r, 3)?)?,
             ),
             // 面の上の曲線は 3D の曲線だけを使う
             "SURFACE_CURVE" | "SEAM_CURVE" | "INTERSECTION_CURVE" => {
@@ -947,6 +981,21 @@ pub(crate) struct Model {
     pub voids: Vec<String>,
 }
 
+/// 殻が 1 つも無い時の理由。網だけの形(三角形の面)なら、そう書く。
+fn no_shell(recs: &HashMap<u64, Inst>) -> String {
+    let tessellated = recs.values().any(|i| match i {
+        Inst::Simple(r) => {
+            r.name.starts_with("TESSELLATED_") || r.name.starts_with("TRIANGULATED_")
+        }
+        Inst::Complex(_) => false,
+    });
+    if tessellated {
+        "STEP の形が三角形の網(TESSELLATED_SOLID など)だけで、面(B-rep)がありません".into()
+    } else {
+        "STEP に形(殻)がありません".into()
+    }
+}
+
 /// STEP を読み、殻ごとの面を返す。
 pub(crate) fn read(text: &str) -> Result<Model, String> {
     let recs = parse(text)?;
@@ -961,6 +1010,7 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
     let data = Data {
         recs,
         angle: if degrees { PI / 180.0 } else { 1.0 },
+        len: kmb_format::step::length_unit(text).mm,
     };
     let mut shells: Vec<u64> = data
         .recs
@@ -970,8 +1020,13 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
         .collect();
     shells.sort();
     if shells.is_empty() {
-        return Err("STEP に形(殻)がありません".into());
+        return Err(no_shell(&data.recs));
     }
+    // 立体と一緒に置かれた面だけのボディ(OPEN_SHELL。公差の補助の面など)は立体に入れない
+    // (読み込みの機能が注意を出す)。殻の番号は飛ばさずに数え、面の名前を網の読み手とそろえる
+    let solid = shells
+        .iter()
+        .any(|id| matches!(data.recs.get(id), Some(Inst::Simple(r)) if r.name == "CLOSED_SHELL"));
     let mut voids = Vec::new();
     for i in data.recs.values() {
         if let Inst::Simple(r) = i
@@ -994,6 +1049,9 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
     for (n, sid) in shells.iter().enumerate() {
         let s = data.rec(*sid)?;
         if s.name == "OPEN_SHELL" {
+            if solid {
+                continue;
+            }
             return Err("閉じていない殻(OPEN_SHELL)は立体にできません".into());
         }
         for (i, f) in list(arg(s, 1)?)?.iter().enumerate() {

@@ -20,6 +20,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 mod motion_tests;
+mod occurrence_tests;
 
 /// 長方形 `[x, y, w, h]` を高さ `t` に押し出し、`z` だけ上げた箱。最後の機能を返す。
 fn block(b: &mut DocBuilder, name: &str, [x, y, w, h]: [f64; 4], t: f64, z: f64) -> FeatureId {
@@ -51,6 +52,26 @@ struct Bench {
 }
 
 impl Bench {
+    /// SMLib で計算する文書 `doc`(まだ計算しない)。
+    fn new(doc: Document) -> Self {
+        Bench {
+            doc,
+            k: Arc::new(SmlibKernel::new()),
+            report: Default::default(),
+            reg: registry(),
+        }
+    }
+
+    /// ボディ `root` の今の形。
+    fn shape(&self, root: FeatureId) -> kmb_core::ShapeHandle {
+        let data = self.doc.data();
+        visible_bodies(data, &self.reg, &self.report)
+            .into_iter()
+            .find(|(id, _)| body_root(data, &self.reg, *id) == root)
+            .expect("見えているボディ")
+            .1
+    }
+
     fn recompute(&mut self) {
         self.report = self.doc.recompute(&self.reg, &*self.k);
         assert_ok(&self.report);
@@ -58,12 +79,7 @@ impl Bench {
 
     /// ボディ `root` の今の外形の箱。
     fn bounds(&self, root: FeatureId) -> ([f64; 3], [f64; 3]) {
-        let data = self.doc.data();
-        let (_, h) = visible_bodies(data, &self.reg, &self.report)
-            .into_iter()
-            .find(|(id, _)| body_root(data, &self.reg, *id) == root)
-            .expect("見えているボディ");
-        self.k.bounds(h).unwrap()
+        self.k.bounds(self.shape(root)).unwrap()
     }
 
     /// ジョイントの操作を、動かすボディの軸の候補と土台のボディ(なければ地面)で実行する。
@@ -1049,6 +1065,7 @@ fn interference_checks_a_step_body_that_smlib_reads_as_a_solid() {
             step: other,
             stand_up: false,
             upright: false,
+            units: true,
         },
     );
     let mut t = Bench {
@@ -1092,6 +1109,7 @@ fn interference_lists_a_shape_only_body_as_unchecked_with_the_reason() {
             step: other,
             stand_up: false,
             upright: false,
+            units: true,
         },
     );
     let _ = block_id;

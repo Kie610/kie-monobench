@@ -818,6 +818,8 @@ pub(crate) fn source(name: &str) -> Option<(&'static str, Option<(IconRole, &'st
 /// ツールバーの道具の絵は、変わる部分([`ACCENTS`])を持つか、ここにあるかのどちらか 1 つ
 /// (試験は [`crate::board::layer_gaps`] を使う。新しい道具に絵を付ける時に、役の色を付け忘れない)。
 pub(crate) const ONE_LAYER: &[&str] = &[
+    // 面を張る操作はボディの絵を共用する。
+    "body",
     // 調べる
     "measure",
     "section",

@@ -5,6 +5,18 @@ use crate::Workspace;
 use kmb_core::{FeatureEntry, FeatureId, FeatureStatus, Field, FieldKind};
 use serde_json::Value as Json;
 
+/// 条件で参照元を切り替える行は、欄を選ぶ途中も残す。削除は行の × で行う。
+/// 選ぶ欄だけの行は、共通の空行の整理を使う。
+pub(crate) fn prune_panel_rows(desc: &kmb_core::Descriptor, data: &mut Json) -> bool {
+    let conditional = |f: &Field| matches!(&f.kind,FieldKind::Rows{fields} if fields.iter().any(|s|matches!(s.kind,FieldKind::Pick{..}) && s.when.is_some()));
+    if !desc.fields.iter().any(conditional) {
+        return desc.prune_rows(data);
+    }
+    let mut plain = desc.clone();
+    plain.fields.retain(|f| !conditional(f));
+    plain.prune_rows(data)
+}
+
 /// `before` より前にあり、出力 `slot` を持つ機能。
 fn features_with(ws: &Workspace, before: FeatureId, slot: &str) -> Vec<(FeatureId, String)> {
     let mut out = Vec::new();
@@ -382,8 +394,9 @@ fn value_ui(
                     out_of_range(ws, s, data, &typed_expr(ws, f, &cur, t))
                         .map(|why| format!("{} は{why}なので入れられません", t.trim()))
                 };
+                let beside = if f.step.is_some() { STEP_WIDTH } else { 0.0 };
                 let (mut new, focused) =
-                    expr_field_reserving(ui, key, &cur, focus, hint, 0.0, &check);
+                    expr_field_reserving(ui, key, &cur, focus, hint, beside, &check);
                 if focus && focused {
                     ws.cur.focus_new.set(None);
                 }
@@ -399,6 +412,10 @@ fn value_ui(
                                 kmb_session::params::unit_mismatch(f.unit.as_ref(), q.dim).is_none()
                             })
                     });
+                }
+                // ▲▼ で 1 刻みずつ変えて、形の変わり方を見比べる
+                if let Some(v) = step_buttons(ui, f, &cur) {
+                    new = Some(v);
                 }
                 // パラメータ名の候補。押すと式の後ろに足す
                 let names: Vec<String> = ws
@@ -511,7 +528,14 @@ fn value_ui(
                     });
                 return;
             }
-            if let Some(v) = expr_field(ui, key, &cur) {
+            let typed = ui
+                .horizontal(|ui| {
+                    // 数の欄は ƒ を持たないので、ƒ の分に残した幅へ ▲▼ が収まる
+                    let typed = expr_field(ui, key, &cur);
+                    step_buttons(ui, f, &cur).or(typed)
+                })
+                .inner;
+            if let Some(v) = typed {
                 let v = v.trim();
                 if v.is_empty() && *optional {
                     f.set(data, None);
@@ -525,7 +549,7 @@ fn value_ui(
                 }
             }
         }
-        FieldKind::Text | FieldKind::File => {
+        FieldKind::Text | FieldKind::Template | FieldKind::File => {
             let cur = f.get(data).and_then(Json::as_str).unwrap_or("").to_string();
             ui.horizontal(|ui| {
                 if let Some(v) = expr_field(ui, key, &cur) {
@@ -1027,7 +1051,7 @@ fn descriptor_form(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry) -> O
     if !desc.hint.is_empty() {
         ui.weak(&desc.hint);
     }
-    desc.prune_rows(&mut data);
+    prune_panel_rows(&desc, &mut data);
     (data != base).then_some(data)
 }
 
@@ -1251,7 +1275,7 @@ fn rows_ui(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry, f: &Field, d
             ws.leave_rows_pick();
         }
     }
-    if let Some(p) = pick {
+    if let Some(p) = pick.filter(|p| p.when.is_none()) {
         ui.horizontal(|ui| {
             let add = ui
                 .add_enabled(!pending, egui::Button::new("+"))
@@ -1271,6 +1295,32 @@ fn rows_ui(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry, f: &Field, d
                 );
             }
         });
+    } else if ui
+        .small_button("+ 行を追加")
+        .on_hover_text("新しい行を足し、参照と値を欄で指定する")
+        .clicked()
+    {
+        let mut rows = f
+            .get(data)
+            .and_then(Json::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut row = rows
+            .last()
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Some(values) = row.as_object_mut() {
+            for field in &fields {
+                if matches!(
+                    field.kind,
+                    FieldKind::Output { .. } | FieldKind::Pick { .. }
+                ) {
+                    values.remove(&field.key);
+                }
+            }
+        }
+        rows.push(row);
+        f.set(data, Some(Json::Array(rows)));
     }
 }
 
@@ -1362,6 +1412,43 @@ fn typing_preview(
     }
     log::debug!("打っている途中の値 {text} で形を付いて来させる");
     Some(text)
+}
+
+/// ▲▼ の幅(欄の幅をこの分だけ狭める)。▲ と ▼ は 1 段の高さに上下に重ねる。
+const STEP_WIDTH: f32 = 18.0;
+
+/// 刻み([`kmb_core::Step`])のある欄の横の ▲▼。押したら新しい値を返す。式(パラメータの名前など)の
+/// 値は数に置き換えて壊さないよう、押せなくして理由を吹き出しに出す。
+fn step_buttons(ui: &mut egui::Ui, f: &Field, cur: &str) -> Option<String> {
+    let step = f.step.as_ref()?;
+    let mut out = None;
+    let h = ui.spacing().interact_size.y / 2.0;
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.spacing_mut().button_padding = egui::vec2(1.0, 0.0);
+        for (up, mark, what) in [(true, "▲", "1 つ増やす"), (false, "▼", "1 つ減らす")]
+        {
+            let next = step.next(cur, up);
+            let name = format!("{} {mark}", f.label);
+            let button = egui::Button::new(egui::RichText::new(mark).size(h * 0.7))
+                .small()
+                .min_size(egui::vec2(STEP_WIDTH - 2.0, h));
+            let r = ui.add_enabled(next.is_some(), button);
+            r.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, next.is_some(), &name)
+            });
+            let r = if cur.trim().parse::<f64>().is_err() && !cur.trim().is_empty() {
+                r.on_disabled_hover_text("式の値は ▲▼ で変えられません(数を打つと使えます)")
+            } else {
+                r.on_hover_text(what)
+            };
+            if r.clicked() {
+                log::info!("欄 {} を {mark} で {cur} から {:?} へ", f.key, next);
+                out = next;
+            }
+        }
+    });
+    out
 }
 
 /// 範囲の外のため受け付けなかった欄と理由を覚える名前(覚えるのは最後の 1 つだけ。どれかの欄を

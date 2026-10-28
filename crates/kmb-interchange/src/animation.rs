@@ -956,15 +956,7 @@ pub fn trails(
 }
 
 /// 行列の積 `a × b`(`b` を先に掛ける)。
-pub fn mul(a: &Matrix4, b: &Matrix4) -> Matrix4 {
-    let mut m = [[0.0; 4]; 4];
-    for (i, row) in m.iter_mut().enumerate() {
-        for (j, v) in row.iter_mut().enumerate() {
-            *v = (0..4).map(|t| a[i][t] * b[t][j]).sum();
-        }
-    }
-    m
-}
+pub use kmb_core::kernel::mat_mul as mul;
 
 fn near_identity(m: &Matrix4) -> bool {
     (0..4).all(|i| (0..4).all(|j| (m[i][j] - k::IDENTITY[i][j]).abs() < 1e-12))

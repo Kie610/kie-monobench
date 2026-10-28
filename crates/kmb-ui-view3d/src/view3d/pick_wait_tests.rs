@@ -71,3 +71,34 @@ fn first_pick_speed() {
         );
     }
 }
+
+/// 同じ部品を何百個も並べても、初めて拾う時に作る箱の木は視線の通るボディの分だけ(全部の木を
+/// 作って画面が止まらない)。拾う面は前と同じ。
+#[test]
+fn picking_among_many_bodies_builds_trees_only_on_the_ray() {
+    let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(800.0, 600.0));
+    let meshes: Vec<(FeatureId, Mesh)> = (0..400)
+        .map(|k| {
+            let mut m = plate(10);
+            for p in &mut m.positions {
+                p[0] += (k % 20) as f32 * 10.0;
+                p[1] += (k / 20) as f32 * 10.0;
+            }
+            (FeatureId(k + 1), m)
+        })
+        .collect();
+    let mut sc = Scene::default();
+    sc.set(&[], meshes);
+    let mut cam = Camera::default();
+    cam.set_view(0., -90.);
+    let (lo, hi) = sc.bounds();
+    cam.fit_box(lo, hi, rect);
+    let hit = pick_at(&sc, &cam, rect, rect.center() + Vec2::new(3.0, 3.0)).expect("真ん中の板");
+    let built = sc
+        .bodies
+        .iter()
+        .filter(|b| b.bvh.tree.get().is_some())
+        .count();
+    assert!(built <= 4, "木を作ったボディは {built} 個");
+    assert!(sc.bodies.iter().any(|b| b.feature == hit.feature));
+}

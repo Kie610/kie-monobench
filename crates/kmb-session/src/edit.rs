@@ -952,7 +952,7 @@ fn uses(data: &DocumentData, registry: &Registry, id: FeatureId) -> HashSet<Feat
         .into_iter()
         .filter_map(|r| match r {
             InputRef::Output { feature, .. } => Some(feature),
-            InputRef::Param { .. } => None,
+            InputRef::Param { .. } | InputRef::Units => None,
         })
         .collect()
 }
