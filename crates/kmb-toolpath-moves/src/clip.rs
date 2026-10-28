@@ -559,10 +559,13 @@ mod tests {
                 let a = pair[0].to();
                 let b = pair[1].to();
                 let length = match pair[1] {
-                    Move::Linear { feed, .. } if feed == 80.0 => (b[0] - a[0]).hypot(b[1] - a[1]),
+                    Move::Linear { feed: 80.0, .. } => (b[0] - a[0]).hypot(b[1] - a[1]),
                     Move::Arc {
-                        center, dir, feed, ..
-                    } if feed == 80.0 => {
+                        center,
+                        dir,
+                        feed: 80.0,
+                        ..
+                    } => {
                         assert!(center[0].hypot(center[1]) < 1e-7);
                         (a[0] - center[0]).hypot(a[1] - center[1])
                             * kmb_toolpath::arc_sweep(a, b, center, dir).abs()

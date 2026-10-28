@@ -1117,10 +1117,10 @@ mod tests {
                 }
                 for t in triangles(&i, p) {
                     for q in t {
-                        for axis in 0..2 {
+                        for (axis, coordinate) in q.into_iter().enumerate() {
                             assert!(
-                                q[axis] >= i.edge - 1e-8
-                                    && q[axis] <= i.sheet[axis] - i.edge + 1e-8
+                                coordinate >= i.edge - 1e-8
+                                    && coordinate <= i.sheet[axis] - i.edge + 1e-8
                             );
                         }
                     }
