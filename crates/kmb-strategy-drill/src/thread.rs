@@ -366,13 +366,16 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
                 "ねじを切る円筒には、穴かボスの壁の面を選んでください",
             ));
         };
-        let b = all.iter().find(|b| b.faces.contains(face)).ok_or_else(|| {
-            invalid(format!(
+        let found = crate::holes::with_face(&all, face);
+        if found.is_empty() {
+            return Err(invalid(format!(
                 "選んだ面 {face} が、上から見てひと回りある縦の穴かボスに見つかりません(形が変わったか、円筒ではない面です)"
-            ))
-        })?;
-        if !targets.iter().any(|t| std::ptr::eq(*t, *b)) {
-            targets.push(b);
+            )));
+        }
+        for b in found {
+            if !targets.iter().any(|t| std::ptr::eq(*t, b)) {
+                targets.push(b);
+            }
         }
     }
     let tool_r = p.tool.radius();

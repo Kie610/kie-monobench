@@ -624,3 +624,154 @@ fn an_original_chamfer_face_cuts_the_rim_of_each_copy() {
         }
     }
 }
+
+fn selected_cylinder_reaches_nested_copies_only(kind: &str) {
+    use kmb_cam_tool::{ThreadForm, Tool, ToolKind, ToolLibrary};
+    use kmb_strategy_drill::{Circular, Drill, Thread};
+    let mut cam = reference_pair();
+    let reg = kmb_bundle::registry();
+    let kernel = kmb_bundle::kernel();
+    let report = cam.part.doc.recompute(&reg, kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let paths = kmb_cam_commands::setups(cam.part.doc.data(), &report, &reg);
+    let info = &paths[0].info;
+    let mesh = info.part_mesh(kernel.as_ref()).unwrap();
+    let origin = info.origin;
+    let model = kmb_cam_setup::testing::prepared(
+        &info.placed_mesh(&mesh),
+        info.stock_min,
+        info.stock_max,
+        ToolLibrary::starter().tools[0].clone(),
+    )
+    .model;
+    let same_size: Vec<_> = model
+        .bores
+        .iter()
+        .filter(|b| b.hole && (b.diameter() - 3.4).abs() < 0.05)
+        .collect();
+    let name = same_size[0].faces[0].clone();
+    let wanted: Vec<_> = same_size
+        .iter()
+        .filter(|b| b.faces.contains(&name))
+        .collect();
+    assert_eq!(wanted.len(), 2, "元の円筒の壁の名前を2つの写しが保つ");
+    assert!(same_size.len() > wanted.len(), "同径でも別名の穴は選ばない");
+    let body: Setup =
+        serde_json::from_value(cam.part.doc.data().feature(cam.setup).unwrap().data.clone())
+            .unwrap();
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(body.body) else {
+        panic!("元のボディ");
+    };
+    let kmb_core::Value::Shape(original) = outputs["body"] else {
+        panic!("元の形");
+    };
+    assert!(
+        kernel
+            .mesh(original, 0.01)
+            .unwrap()
+            .face_names
+            .contains(&name)
+    );
+    let mut library: ToolLibrary =
+        serde_json::from_value(cam.part.doc.data().feature(cam.tools).unwrap().data.clone())
+            .unwrap();
+    library.tools.push(Tool {
+        number: 8,
+        name: "ねじ切り 2 mm".into(),
+        kind: ToolKind::ThreadMill,
+        diameter: 2.0,
+        flute_length: 14.0,
+        tip_angle: 60.0,
+        shank_diameter: Some(2.0),
+        thread: Some(ThreadForm {
+            teeth: 1,
+            pitch: None,
+            neck_diameter: Some(1.0),
+        }),
+        ..library.tools[0].clone()
+    });
+    library.check().unwrap();
+    let base = kmb_cam_commands::OpBase::new(cam.setup, cam.tools, 3);
+    let data = match kind {
+        kmb_strategy_drill::DRILL => serde_json::to_value(Drill {
+            faces: vec![name],
+            same_diameter: false,
+            ..Drill::new(base)
+        })
+        .unwrap(),
+        kmb_strategy_drill::CIRCULAR => serde_json::to_value(Circular {
+            faces: vec![name],
+            same_diameter: false,
+            ..Circular::new(base)
+        })
+        .unwrap(),
+        kmb_strategy_drill::THREAD => serde_json::to_value(Thread {
+            faces: vec![kmb_core::Ref::Face {
+                feature: body.body,
+                face: name,
+            }],
+            pitch: "0.5 mm".into(),
+            ..Thread::new(kmb_cam_commands::OpBase::new(cam.setup, cam.tools, 8))
+        })
+        .unwrap(),
+        _ => unreachable!(),
+    };
+    let id = cam.part.doc.alloc_feature_id();
+    cam.part
+        .doc
+        .apply(Transaction::new(
+            "元の円筒面を指定",
+            vec![
+                Op::SetFeatureData {
+                    id: cam.tools,
+                    data: serde_json::to_value(library).unwrap(),
+                },
+                Op::InsertFeature {
+                    index: None,
+                    entry: kmb_core::FeatureEntry {
+                        id,
+                        type_id: kind.into(),
+                        name: "選んだ円筒".into(),
+                        data,
+                        suppressed: false,
+                        pin_bodies: false,
+                    },
+                },
+            ],
+        ))
+        .unwrap();
+    let report = cam.part.doc.recompute(&reg, kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let paths = kmb_cam_commands::setups(cam.part.doc.data(), &report, &reg);
+    let s = &paths[0];
+    let path = &s.paths[s.sources.iter().position(|p| p.id == id).unwrap()];
+    let hit = |c: [f64; 2], z_max: f64| {
+        path.moves.iter().any(|m| matches!(m, Move::Arc { center, to, .. } if (center[0]-(c[0]-origin[0])).hypot(center[1]-(c[1]-origin[1])) < 1e-4 && to[2] < z_max - origin[2] - 0.1))
+    };
+    assert!(
+        wanted.iter().all(|b| hit(b.center, b.z_max)),
+        "{kind}: 元の円筒面の全写しを削る。対象{} / 届いた{}",
+        wanted.len(),
+        wanted.iter().filter(|b| hit(b.center, b.z_max)).count()
+    );
+    assert_eq!(
+        same_size.iter().filter(|b| hit(b.center, b.z_max)).count(),
+        wanted.len(),
+        "同径の別の穴まで広げない"
+    );
+}
+
+#[test]
+fn a_selected_drill_wall_reaches_each_nested_copy_only() {
+    selected_cylinder_reaches_nested_copies_only(kmb_strategy_drill::DRILL);
+}
+
+#[test]
+fn a_selected_circular_wall_reaches_each_nested_copy_only() {
+    selected_cylinder_reaches_nested_copies_only(kmb_strategy_drill::CIRCULAR);
+}
+
+#[test]
+fn a_selected_thread_wall_reaches_each_nested_copy_only() {
+    selected_cylinder_reaches_nested_copies_only(kmb_strategy_drill::THREAD);
+}

@@ -299,15 +299,15 @@ impl Drill {
             return Ok(out);
         }
         for (k, f) in self.faces.iter().enumerate() {
-            let b = all
-                .iter()
-                .find(|b| b.faces.contains(f))
-                .ok_or_else(|| {
-                    invalid(format!(
-                        "選んだ面 {f} が穴の中に見つかりません(形が変わったか、穴ではない面です。穴を選び直してください)"
-                    ))
-                })?;
-            push(&mut out, hole(b, k, None));
+            let found = holes::with_face(&all, f);
+            if found.is_empty() {
+                return Err(invalid(format!(
+                    "選んだ面 {f} が穴の中に見つかりません(形が変わったか、穴ではない面です。穴を選び直してください)"
+                )));
+            }
+            for b in found {
+                push(&mut out, hole(b, k, None));
+            }
         }
         if self.same_diameter && !self.faces.is_empty() {
             let picked: Vec<f64> = out.iter().map(|t| t.bore.diameter()).collect();
