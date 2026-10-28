@@ -601,7 +601,7 @@ fn rest_tool_for(cx: &Context<'_>, rest: &[ToolKind], id: FeatureId) -> Option<u
     let now = lib.tools.iter().find(|t| t.number == p.tool)?;
     lib.tools
         .iter()
-        .filter(|t| rest.contains(&t.kind) && t.tip_radius() < now.tip_radius() - 1e-6)
+        .filter(|t| kmb_cam_setup::can_follow_tool(t, now, rest))
         .max_by(|a, b| a.tip_radius().total_cmp(&b.tip_radius()))
         .map(|t| t.number)
 }

@@ -533,18 +533,7 @@ impl Cut<'_> {
                 });
             }
         }
-        // 手で置いたタブは、この経路の近く(工具の半径まで)の物を経路の上へ寄せて使う
-        let tabs = if c.tab_points.is_empty() {
-            tab_centers(path, c.tabs)
-        } else {
-            c.tab_points
-                .iter()
-                .filter_map(|q| {
-                    let (d, at) = nearest_on(&pts, *q)?;
-                    (d <= self.p.r() + 1e-6).then_some(at)
-                })
-                .collect()
-        };
+        let tabs = tab_positions(c, path, self.p.r());
         if tabs.is_empty() {
             return;
         }
@@ -563,6 +552,24 @@ impl Cut<'_> {
         );
         tp.remap_spans(&starts);
     }
+}
+
+/// 通常の輪郭と取残しで、等間隔・手動のタブを同じ輪郭上の位置にそろえる。
+pub(super) fn tab_positions(c: &Contour, path: &Loop, radius: f64) -> Vec<P2> {
+    if c.tab_points.is_empty() {
+        return tab_centers(path, c.tabs);
+    }
+    let mut pts = path.flatten(0.05);
+    if let Some(q) = pts.first().copied() {
+        pts.push(q);
+    }
+    c.tab_points
+        .iter()
+        .filter_map(|q| {
+            let (d, at) = nearest_on(&pts, *q)?;
+            (d <= radius + 1e-6).then_some(at)
+        })
+        .collect()
 }
 
 /// 折れ線 `pts` の上で `q` に最も近い点と、その距離。

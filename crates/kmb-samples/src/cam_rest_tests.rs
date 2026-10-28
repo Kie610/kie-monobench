@@ -287,6 +287,130 @@ fn a_thinner_tool_is_added_to_the_pockets_tool_order() {
     );
 }
 
+fn rest_contour_on_pocket(cam: &crate::ReferenceCam) -> Contour {
+    let mut c: Contour = serde_json::from_value(
+        cam.part
+            .doc
+            .data()
+            .feature(cam.contour)
+            .unwrap()
+            .data
+            .clone(),
+    )
+    .unwrap();
+    c.face = Some(format!("f{}:start", cam.part.pocket.0));
+    c.side = Side::Inside;
+    c.extra_depth = "0 mm".into();
+    c.base.tool = 3;
+    c.rest_tool = Some(2);
+    c
+}
+
+// 確かめること: 面かその外周で指定した取残しの輪郭が、太い工具のポケットと同じ工具順に入る。
+#[test]
+fn a_rest_contour_follows_the_pockets_tool_order() {
+    for chain in [false, true] {
+        let mut cam = reference_cam();
+        let mut c = rest_contour_on_pocket(&cam);
+        if chain {
+            c.chains.push(kmb_strategy_contour2d::ChainRef::Face {
+                face: c.face.take().unwrap(),
+                ring: Some(0),
+            });
+        }
+        let rest = insert_op(&mut cam, CONTOUR, "隅の輪郭", json(&c));
+        let m = modules();
+        let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+        assert_eq!(report.error_count(), 0, "{:?}", report.features);
+        let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+        let summary = m.extensions.summary(&cx, rest).unwrap();
+        assert!(
+            summary.contains("工具の順番: T2") && summary.contains("▶T3"),
+            "面の外周指定={chain}: {summary}"
+        );
+        let pocket = m.extensions.summary(&cx, cam.pocket).unwrap();
+        assert!(pocket.contains("T3"), "{pocket}");
+    }
+}
+
+// 確かめること: 削る側を省いた旧形式は外側として扱い、内側のポケットの工具順につながない。
+#[test]
+fn old_contour_data_without_side_does_not_join_an_inside_pocket() {
+    let mut cam = reference_cam();
+    let mut data = json(&rest_contour_on_pocket(&cam));
+    data.as_object_mut().unwrap().remove("side");
+    let rest = insert_op(&mut cam, CONTOUR, "旧形式の輪郭", data);
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    let cx = kmb_core::Context {
+        selected: Some(rest),
+        ..kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel)
+    };
+    let actions = m.extensions.actions(&cx);
+    // 別の工具順なので T2 は「太いため使えない候補」として残る。
+    // 同じ工具順に誤って入ると、使用済みの T2 の候補そのものが消える。
+    let candidate = actions
+        .iter()
+        .find(|a| a.id == format!("{ADD_TOOL}2"))
+        .expect("外側の輪郭をポケットの工具順に含めない");
+    assert!(candidate.disabled.is_some());
+}
+
+// 確かめること: 隅の真横に置いたタブを取残しの輪郭が削らず、ほかの隅は底まで削る。
+#[test]
+fn a_rest_contour_does_not_cut_below_the_adjacent_tab() {
+    let mut cam = reference_cam();
+    let mut c = rest_contour_on_pocket(&cam);
+    let rest = insert_op(&mut cam, CONTOUR, "タブのそばの隅", json(&c));
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let original = s.paths.iter().find(|p| p.name == "タブのそばの隅").unwrap();
+    let floor = original
+        .moves
+        .iter()
+        .map(|m| m.to()[2])
+        .fold(f64::INFINITY, f64::min);
+    let corner = s.info.to_setup([9.0, 9.0, 0.0]);
+    let at = original
+        .moves
+        .iter()
+        .map(|m| m.to())
+        .filter(|p| (p[2] - floor).abs() < 1e-6)
+        .min_by(|a, b| {
+            (a[0] - corner[0])
+                .hypot(a[1] - corner[1])
+                .total_cmp(&(b[0] - corner[0]).hypot(b[1] - corner[1]))
+        })
+        .unwrap();
+    c.tab_points = vec![[at[0], at[1]]];
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    set_data(&mut cam.part.doc, rest, json(&c));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let path = s.paths.iter().find(|p| p.name == "タブのそばの隅").unwrap();
+    let radius = 0.5 + path.tool.radius();
+    let mut from = [0.0, 0.0, path.safe_z];
+    let mut elsewhere = false;
+    for movement in &path.moves {
+        if !matches!(movement, kmb_toolpath::Move::Rapid { .. }) {
+            for q in movement.points(from, 0.02) {
+                let distance = (q[0] - at[0]).hypot(q[1] - at[1]);
+                assert!(
+                    distance >= radius - 1e-6 || q[2] >= floor + 1.5 - 1e-6,
+                    "タブの内側を低く削る: {q:?}, 中心={at:?}, 距離={distance}"
+                );
+                elsewhere |= distance > radius && q[2] <= floor + 1e-6;
+            }
+        }
+        from = movement.to();
+    }
+    assert!(elsewhere, "タブ以外の隅も削らない");
+}
+
 /// V 30°(上端 3.175 mm、刃長 10 mm)と、テーパー(先 0.5 mm、片側 5°)。
 fn thin_tools() -> (Tool, Tool) {
     let base = ToolLibrary::starter().tools[1].clone();

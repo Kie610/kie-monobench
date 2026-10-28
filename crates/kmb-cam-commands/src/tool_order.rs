@@ -1,4 +1,4 @@
-//! 1 つのポケットを複数の工具で削る「工具の順番」。
+//! 同じ領域を複数の工具で削る「工具の順番」。ポケットと、その隅を削る輪郭もつなぐ。
 //!
 //! 順番の 2 本目からは、同じ面・同じセットアップの残り削り(`rest_tool` に前の工具)として並ぶ。
 //! 順番は利用者が決める(どの工具を使うかを自動で選ぶ働きは作らない。docs/避ける形.md)。
@@ -10,7 +10,7 @@
 //! 画面は、ここが出す操作を編集パネルに並べるだけ。
 //! 順番を持てる種類は、戦略の名乗り([`Strategy::tool_order`])で決まる。ここは戦略の名前を知らない。
 
-use crate::{ToolKind, ToolLibrary};
+use crate::ToolLibrary;
 use kmb_cam_setup::{OpBase, Strategy};
 use kmb_core::{Action, Context, FeatureId, Outcome, Place};
 use serde::Deserialize;
@@ -30,13 +30,60 @@ struct Step {
     sized: bool,
 }
 
-/// 削る領域の選び方(底の面の全部とスケッチ)を 1 つの文字列にする。同じなら同じ領域を削る。
-fn area_key(face: &str, faces: &[String], profile: Option<FeatureId>) -> String {
-    let mut all: Vec<&str> = std::iter::once(face)
-        .chain(faces.iter().map(String::as_str))
-        .collect();
-    all.sort();
-    format!("{}|{:?}", all.join(","), profile.map(|p| p.0))
+/// 削る領域を指す面かスケッチ。部分の番号があれば、全体とは別の領域として扱う。
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Boundary {
+    Face {
+        face: String,
+        ring: Option<usize>,
+    },
+    Sketch {
+        sketch: FeatureId,
+        chain: Option<usize>,
+    },
+}
+
+/// 面の外周と、その面を底にする加工は同じ領域として工具の順番をつなぐ。
+fn area_key(a: &Area, default_side: Option<&str>) -> String {
+    let mut faces = a.faces.clone();
+    let mut profiles = Vec::new();
+    let mut parts = Vec::new();
+    if a.chains.is_empty() {
+        faces.extend(a.face.iter().filter(|s| !s.is_empty()).cloned());
+        profiles.extend(a.profile);
+    } else {
+        faces.clear();
+        for boundary in &a.chains {
+            match boundary {
+                Boundary::Face {
+                    face,
+                    ring: Some(0),
+                } => faces.push(face.clone()),
+                Boundary::Sketch {
+                    sketch,
+                    chain: None,
+                } => profiles.push(*sketch),
+                Boundary::Face { face, ring } => parts.push(format!("face:{face:?}:{ring:?}")),
+                Boundary::Sketch { sketch, chain } => {
+                    parts.push(format!("sketch:{sketch:?}:{chain:?}"))
+                }
+            }
+        }
+    }
+    faces.sort();
+    faces.dedup();
+    profiles.sort();
+    profiles.dedup();
+    parts.sort();
+    parts.dedup();
+    // 外側と線の上を削る輪郭は、面の内側を削る加工とつながない。
+    let side = a
+        .side
+        .as_deref()
+        .or(default_side)
+        .filter(|s| *s != "inside");
+    format!("{faces:?}|{profiles:?}|{parts:?}|{side:?}")
 }
 
 /// 順番を持てる操作のデータのうち、順番に関わる欄。
@@ -45,11 +92,15 @@ struct Area {
     #[serde(flatten)]
     base: OpBase,
     #[serde(default)]
-    face: String,
+    face: Option<String>,
     #[serde(default)]
     faces: Vec<String>,
     #[serde(default)]
     profile: Option<FeatureId>,
+    #[serde(default)]
+    chains: Vec<Boundary>,
+    #[serde(default)]
+    side: Option<String>,
     #[serde(default)]
     rest_tool: Option<u32>,
     #[serde(default)]
@@ -58,14 +109,14 @@ struct Area {
 
 fn step(cx: &Context<'_>, all: &[Strategy], id: FeatureId) -> Option<Step> {
     let f = cx.data.feature(id)?;
-    if !all.iter().any(|s| s.tool_order && s.type_id == f.type_id) {
-        return None;
-    }
+    let strategy = all
+        .iter()
+        .find(|s| s.tool_order && s.type_id == f.type_id)?;
     let a: Area = serde_json::from_value(f.data.clone()).ok()?;
     Some(Step {
         id,
         setup: a.base.setup,
-        face: area_key(&a.face, &a.faces, a.profile),
+        face: area_key(&a, strategy.tool_order_default_side),
         tools: a.base.tools,
         tool: a.base.tool,
         rest: a.rest_tool,
@@ -83,7 +134,7 @@ pub fn chain(cx: &Context<'_>, all: &[Strategy], id: FeatureId) -> Vec<FeatureId
         .features
         .iter()
         .filter_map(|f| step(cx, all, f.id))
-        .filter(|s| s.setup == me.setup && s.face == me.face)
+        .filter(|s| s.setup == me.setup && s.tools == me.tools && s.face == me.face)
         .collect();
     // 最初の工具(残り削りでないもの)から、前の工具が一致するものをたどる
     for root in same.iter().filter(|s| s.rest.is_none() && !s.sized) {
@@ -148,18 +199,22 @@ pub fn actions(cx: &Context<'_>, all: &[Strategy]) -> Vec<Action> {
     let mut v = Vec::new();
     if let Some(lib) = library(cx, me.tools) {
         let last = used.last().copied().unwrap_or(me.tool);
-        let last_tip = lib
-            .tools
-            .iter()
-            .find(|t| t.number == last)
-            .map_or(f64::INFINITY, |t| t.tip_radius());
+        let previous = lib.tools.iter().find(|t| t.number == last);
+        let type_id = &cx.data.feature(sel).unwrap().type_id;
         for t in lib.tools.iter().filter(|t| !used.contains(&t.number)) {
-            let why = if !matches!(
-                t.kind,
-                ToolKind::FlatEnd | ToolKind::VBit | ToolKind::TaperEnd
-            ) {
-                Some("順番に足せるのは平・V・テーパーの工具")
-            } else if t.tip_radius() >= last_tip - 1e-6 {
+            // 元の種類が使えない工具は、同じ領域を引き継げる種類でも候補を調べる。
+            let kinds = all
+                .iter()
+                .find(|s| {
+                    (s.type_id == type_id || (s.tool_order && s.adopt.is_some()))
+                        && s.rest.contains(&t.kind)
+                })
+                .map(|s| s.rest);
+            let why = if kinds.is_none() {
+                Some("この種類の工具は、この加工の取残しに使えません")
+            } else if previous.is_some_and(|previous| {
+                !kmb_cam_setup::can_follow_tool(t, previous, kinds.unwrap())
+            }) {
                 Some("順番の最後の工具より先の細い工具だけ足せる(前の工具が削り残した所を削るため)")
             } else {
                 None

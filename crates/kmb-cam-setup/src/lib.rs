@@ -60,7 +60,9 @@ pub use plan::{
     EntryRegion, HeightRule, MachineView, Planner, SetupView, Sources, StrategyInput,
     StrategyOutput, machine_stepdown, plan_error,
 };
-pub use rest::{RestSize, is_rest_data, rest_levels, rest_plan, rest_tool, rest_tool_or_size};
+pub use rest::{
+    RestSize, can_follow_tool, is_rest_data, rest_levels, rest_plan, rest_tool, rest_tool_or_size,
+};
 pub use strategy::{
     Adopt, CUTS_FREE, FaceMenu, Make, Needs, Picks, ROUGH_GRID, Strategy, StrategyModule, fitted,
     split, to_data,

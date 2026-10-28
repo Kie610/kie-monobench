@@ -154,6 +154,9 @@ pub struct Strategy {
     pub floor_faces: bool,
     /// 工具の順番を持てるか(同じ領域の残り削りを、データの `rest_tool` で後ろに並べる)
     pub tool_order: bool,
+    /// 工具の順番で領域を比べる時の、`side` 欄を省いたデータの削る側。
+    /// 欄を持たない戦略は None。面の内側を削る領域として輪郭の内側とつなぐ。
+    pub tool_order_default_side: Option<&'static str>,
     /// 部品を切り抜くか(工具の順に並べ替える時に前へ動かさない。印 [`CUTS_FREE`])
     pub cuts_free: bool,
     /// 同じ領域の別の種類の加工のデータを、この種類にする(工具の順番で使う)
@@ -190,6 +193,7 @@ impl Strategy {
             commands: None,
             floor_faces: false,
             tool_order: false,
+            tool_order_default_side: None,
             cuts_free: false,
             adopt: None,
         }
@@ -208,6 +212,14 @@ impl Strategy {
         Strategy {
             tool_order: true,
             adopt,
+            ..self
+        }
+    }
+
+    /// `side` 欄を省いた旧形式も、戦略自身の既定の削る側で工具の順番に入れる。
+    pub fn tool_order_default_side(self, side: &'static str) -> Self {
+        Strategy {
+            tool_order_default_side: Some(side),
             ..self
         }
     }

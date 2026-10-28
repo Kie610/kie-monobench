@@ -19,7 +19,8 @@
 //! 閉じた輪郭ごとに削る(2D ポケットの残り削りと同じ見積もり。[`kmb_cam_setup::rest_plan`])。
 //! 削り残しは壁から前の工具の半径ほどの所までしかないので、今の工具の輪を壁から外へ何周か作り、
 //! 工具の円が削り残しにかかる部分だけをたどる。開いた線と「線の上」は削らない。
-//! 残り削りでは、タブ・仕上げ・横の荒取り・入りと抜けの円弧を使わない。
+//! 残り削りはタブに掛かる低い区間を削らず、工具を上げて次の区間へ移る。
+//! 仕上げ・横の荒取り・入りと抜けの円弧は使わない。
 
 use kmb_cam_geom::{Area, Loop, P2, offset_loop_outward};
 use kmb_cam_setup::{
@@ -439,6 +440,7 @@ impl Contour {
         targets: &[Target],
         (top, extra, leave): (f64, f64, f64),
         ramp: Option<f64>,
+        tab: (f64, f64),
     ) -> Result<StrategyOutput, EvalError> {
         let mut tp = p.toolpath();
         let (mut any, mut lines, mut no_depth, mut too_thick) = (false, false, false, None);
@@ -472,7 +474,7 @@ impl Contour {
                 }
             }
             .normalized();
-            let levels = rest_plan(
+            let mut levels = rest_plan(
                 &area,
                 leave,
                 big,
@@ -491,6 +493,29 @@ impl Contour {
                 && let Some(deep) = levels.iter().find(|l| l.1.is_empty())
             {
                 too_thick = Some(too_thick.map_or(top - deep.0, |d: f64| d.min(top - deep.0)));
+            }
+            if self.has_tabs() {
+                let offset = (p.r() + leave) * if tool_out { 1.0 } else { -1.0 };
+                let tabs: Vec<_> = offset_loop_outward(l, offset)
+                    .into_iter()
+                    .flat_map(|path| {
+                        let path =
+                            self.direction
+                                .apply(if tool_out { path.reversed() } else { path });
+                        cut::tab_positions(self, &path, p.r())
+                    })
+                    .collect();
+                let tab_top = (t.floor + tab.1).min(top);
+                for (z, runs) in &mut levels {
+                    if *z < tab_top {
+                        // 工具の半径も含めて線分全体を避ける。区間を別の線に分けるので、
+                        // 次の区間へは rest_levels が退避してから入る。
+                        *runs = runs
+                            .iter()
+                            .flat_map(|run| avoid_tabs(run, &tabs, tab.0 / 2.0 + p.r()))
+                            .collect();
+                    }
+                }
             }
             let levels: Vec<_> = levels.into_iter().filter(|l| !l.1.is_empty()).collect();
             rest_levels(&mut tp, &p, &levels, ramp);
@@ -522,18 +547,49 @@ impl Contour {
             p.warnings
                 .push("削る深さがない輪郭があるので、そこは削りません".into());
         }
-        if self.has_tabs() {
-            p.warnings.push(
-                "残り削りはタブの上で持ち上げません(タブのそばに隅があると、そこも底まで削ります)"
-                    .into(),
-            );
-        }
         if self.finish.is_some() || self.rough_passes > 1 || self.lead.is_some() {
             p.warnings
                 .push("残り削りでは、仕上げ代・横の荒取り・入りと抜けの円弧を使いません".into());
         }
         Ok(p.output(tp))
     }
+}
+
+/// タブの円に掛かる線分を除き、円の反対側を低い送りでつながない。
+fn avoid_tabs(run: &[P2], tabs: &[P2], radius: f64) -> Vec<Vec<P2>> {
+    if tabs.is_empty() {
+        return vec![run.to_vec()];
+    }
+    let mut out = Vec::new();
+    let mut piece = Vec::new();
+    for w in run.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let d = [b[0] - a[0], b[1] - a[1]];
+        let len2 = d[0] * d[0] + d[1] * d[1];
+        let blocked = tabs.iter().any(|c| {
+            let t = if len2 > 1e-18 {
+                (((c[0] - a[0]) * d[0] + (c[1] - a[1]) * d[1]) / len2).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            (a[0] + t * d[0] - c[0]).hypot(a[1] + t * d[1] - c[1]) <= radius + 1e-6
+        });
+        if blocked {
+            if piece.len() >= 2 {
+                out.push(std::mem::take(&mut piece));
+            }
+            piece.clear();
+        } else {
+            if piece.is_empty() {
+                piece.push(a);
+            }
+            piece.push(b);
+        }
+    }
+    if piece.len() >= 2 {
+        out.push(piece);
+    }
+    out
 }
 
 /// 面の縁 `l` の、面から離れる側(`away_out` なら輪の外)のすぐ先の高さで決める底。
@@ -600,7 +656,14 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
     } = f;
     let top = p.top(p.info.stock_max[2]);
     if let Some(big) = rest {
-        return c.rest(p, &big, &targets, (top, extra, leave), ramp);
+        return c.rest(
+            p,
+            &big,
+            &targets,
+            (top, extra, leave),
+            ramp,
+            (tab_width, tab_height),
+        );
     }
     let mut tp = p.toolpath();
     let mut notes = Notes::default();
@@ -863,7 +926,7 @@ pub fn register(reg: &mut Registry) {
                     Field::opt_integer("rest_tool", "取残し加工: 前の工具の番号").unitless().help(
                         "前に同じ輪郭を削った太い工具。その工具が届かなかった内側の隅や細い溝だけを、\
                          今の工具で削る。今の工具は平・ブルノーズ・V・テーパー。\
-                         タブ・仕上げ・横の荒取り・入りと抜けの円弧は使わない",
+                         タブに掛かる低い区間は削らず、上げて移る。仕上げ・横の荒取り・入りと抜けの円弧は使わない",
                     ),
                 ],
                 RestSize::fields().to_vec(),
@@ -922,7 +985,6 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
             })
             .order(3)
             .icon("contour")
-            // 前には出さない(Kie 2026-10-21 の画板)
             .not_front()
             .aliases("りんかく contour profile がいけい")
             .hint("面を選ぶとその外周、選ばなければ部品の外形を削る")
@@ -930,6 +992,8 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
             .entry("輪郭の、クリックした所に最も近い所から入る。らせんならそこを中心に回り、下穴ならそこで下りる")
             .tabs()
             .pick_chains()
+            .tool_order(None)
+            .tool_order_default_side("outside")
             .cuts_free()
             // 同じ種類の操作で続けるので、V・テーパーも使える
             .rest(&[ToolKind::FlatEnd, ToolKind::VBit, ToolKind::TaperEnd]),
@@ -940,6 +1004,93 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // 確かめること: 両端がタブの外でも、途中がタブを横切る送りは切り分けて残さない。
+    #[test]
+    fn a_tab_between_far_vertices_breaks_the_cut_instead_of_joining_its_ends() {
+        let runs = avoid_tabs(
+            &[[-3.0, 0.0], [-2.0, 0.0], [2.0, 0.0], [3.0, 0.0]],
+            &[[0.0, 0.0]],
+            1.0,
+        );
+        assert_eq!(
+            runs,
+            vec![vec![[-3.0, 0.0], [-2.0, 0.0]], vec![[2.0, 0.0], [3.0, 0.0]]]
+        );
+    }
+
+    // 確かめること: 文書やカーネルを使わず、JSONで渡した取残しの入力からタブを避ける同じ結果を作る。
+    #[test]
+    fn serialized_rest_input_preserves_tabs_without_a_document_or_kernel() {
+        let mesh = kmb_cam_setup::testing::mesh_of(&[(
+            "floor",
+            vec![
+                [[0.0, 0.0, 0.0], [12.0, 0.0, 0.0], [12.0, 12.0, 0.0]],
+                [[0.0, 0.0, 0.0], [12.0, 12.0, 0.0], [0.0, 12.0, 0.0]],
+            ],
+        )]);
+        let mut tool = kmb_cam_tool::ToolLibrary::starter().get(3).unwrap().clone();
+        tool.diameter = 2.0;
+        let p = kmb_cam_setup::testing::prepared(&mesh, [0.0, 0.0, 0.0], [12.0, 12.0, 3.0], tool);
+        let mut big = p.tool.clone();
+        big.diameter = 6.0;
+        let c: Contour = serde_json::from_value(serde_json::json!({
+            "setup": 1, "tools": 2, "tool": 3, "side": "inside",
+            "tab_points": [[1.0, 1.0]], "tab_width": "1 mm", "tab_height": "1.5 mm"
+        }))
+        .unwrap();
+        let params = ContourPlan {
+            c,
+            entry_plan: EntryPlan {
+                kind: EntryKind::Plunge,
+                angle: 0.0,
+                helix_r: 0.0,
+                ramp_feed: 100.0,
+                plunge_feed: 100.0,
+            },
+            ramp: None,
+            extra: 0.0,
+            leave: 0.0,
+            tab: (1.0, 1.5),
+            finish: 0.0,
+            lead: None,
+            fin: FinishPlan {
+                passes: 1,
+                feed: 100.0,
+                spring: false,
+                overlap: 0.0,
+            },
+            rough_step: 1.0,
+            targets: vec![Target {
+                shape: Shape::Closed {
+                    l: Loop::from_points(&[[0.0, 0.0], [12.0, 0.0], [12.0, 12.0], [0.0, 12.0]]),
+                    tool_out: false,
+                },
+                on: false,
+                floor: 0.0,
+                extra: false,
+            }],
+            rest: Some(big),
+        };
+        let input = p.input(FeatureId(4), &params, Default::default());
+        let restored = serde_json::from_str(&serde_json::to_string(&input).unwrap()).unwrap();
+        let out = plan(&input).unwrap();
+        assert_eq!(plan(&restored).unwrap(), out);
+        assert!(!out.toolpath.moves.is_empty());
+        let mut from = [0.0, 0.0, out.toolpath.safe_z];
+        let mut elsewhere = false;
+        for movement in &out.toolpath.moves {
+            if !matches!(movement, Move::Rapid { .. }) {
+                for q in movement.points(from, 0.02) {
+                    let d = (q[0] - 1.0).hypot(q[1] - 1.0);
+                    assert!(d >= 1.5 - 1e-6 || q[2] >= 1.5 - 1e-6, "{q:?}");
+                    elsewhere |= q[2] < 1.5;
+                }
+            }
+            from = movement.to();
+        }
+        assert!(elsewhere);
+    }
 
     #[test]
     fn old_data_reads_the_same() {
