@@ -1215,10 +1215,10 @@ fn register_with(reg: &mut Registry, lib: kmb_post::machines::MachineLibrary) {
             .field(Field::expr("nest.edge","縁の余白").length().only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.spacing","部品の間").length().only("nest.method","boxes|shapes",""))
             .field(Field::expr("nest.grid","格子の目").length().help("形どおりに並べる時に使う。外形の箱に切り替えても値を残す").only("nest.method","boxes|shapes",""))
-            .field(Field::number("nest.max_sheets","板の枚数の上限").only("nest.method","boxes|shapes",""))
+            .field(Field::number("nest.max_sheets","板の枚数の上限").unitless().only("nest.method","boxes|shapes",""))
             .field(Field::choice("nest.output","区画の書き出し",&[("files","板ごとのファイル"),("stops","止めを入れた 1 ファイル")]).only("nest.method","boxes|shapes",""))
             .field(Field::rows("nest.parts","配置する部品",vec![
-                Field::info("body","ボディ"),Field::number("count","個数"),
+                Field::info("body","ボディ"),Field::number("count","個数").unitless(),
                 Field::choice("rotate","回してよい向き",&[("free","自由"),("grain","木目をそろえる"),("fixed","固定")]),
                 Field::choice("up","上に向ける面",&[("plus_z","上面"),("minus_z","下面"),("plus_x","右の側面"),("minus_x","左の側面"),("plus_y","奥の側面"),("minus_y","手前の側面")]),
             ]).only("nest.method","boxes|shapes",""))
