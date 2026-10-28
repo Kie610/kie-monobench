@@ -575,6 +575,23 @@ mod tests {
     }
 
     #[test]
+    fn boxes_do_not_use_the_shape_grid_even_when_its_spacing_ratio_overflows() {
+        let mut i=input(vec![rectangle(1,[20.0,10.0],2)]);
+        i.spacing=1.0;
+        let expected=pack(&i);
+        assert_eq!(expected.sheets.len(),1);
+        assert!(expected.unplaced.is_empty());
+        for grid in [f64::from_bits(1),f64::MIN_POSITIVE] {
+            i.grid=grid;
+            let actual=pack(&i);
+            assert_eq!(actual.sheets,expected.sheets);
+            assert_eq!(actual.unplaced,expected.unplaced);
+            assert_eq!(actual.warnings,expected.warnings);
+            assert_boxes(&i,&actual);
+        }
+    }
+
+    #[test]
     fn empty_sheet_failure_and_sheet_limit_have_distinct_reasons() {
         let mut i=input(vec![rectangle(1,[91.0,71.0],1),rectangle(2,[90.0,70.0],2)]);
         i.max_sheets=1;
