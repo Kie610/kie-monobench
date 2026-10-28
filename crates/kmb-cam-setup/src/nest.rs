@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub const SHEET_GAP: f64 = 100.0;
 const MAX_CELLS: usize = 4_000_000;
+const FIT_TOLERANCE: f64 = 1e-9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -202,6 +203,10 @@ fn rotated_size(p: &PackPart, angle: u32) -> [f64; 2] {
     }
 }
 
+fn size_fits(size: [f64; 2], available: [f64; 2]) -> bool {
+    (0..2).all(|axis| size[axis] <= available[axis] + FIT_TOLERANCE)
+}
+
 /// 回転後の箱を原点へ寄せる。格子は回さず、この三角形から角度ごとに描く。
 pub fn rotate_point(p: [f64; 2], size: [f64; 2], angle: u32) -> [f64; 2] {
     match angle {
@@ -335,7 +340,7 @@ fn triangle_cell(t: [[f64; 2]; 3], min: [f64; 2], max: [f64; 2]) -> bool {
     })
 }
 
-fn silhouette(p: &PackPart, angle: u32, g: f64, dilation: usize) -> (Bits, f64) {
+fn silhouette(p: &PackPart, angle: u32, g: f64, dilation: usize) -> (Bits, Bits, f64) {
     let size = rotated_size(p, angle);
     let w = (size[0] / g).ceil() as usize + 1;
     let h = (size[1] / g).ceil() as usize + 1;
@@ -391,6 +396,9 @@ fn silhouette(p: &PackPart, angle: u32, g: f64, dilation: usize) -> (Bits, f64) 
     for y in 0..h {
         for x in 0..w {
             let n = u32::from(core.get(x, y) || !outside.get(x, y));
+            if n != 0 {
+                core.set(x, y);
+            }
             prefix[(y + 1) * (w + 1) + x + 1] =
                 n + prefix[y * (w + 1) + x + 1] + prefix[(y + 1) * (w + 1) + x]
                     - prefix[y * (w + 1) + x];
@@ -412,7 +420,7 @@ fn silhouette(p: &PackPart, angle: u32, g: f64, dilation: usize) -> (Bits, f64) 
             }
         }
     }
-    (padded, area)
+    (padded, core, area)
 }
 
 /// 入力の上限を超えたり有限でない値は、配置を作らず理由を返す。
@@ -477,9 +485,9 @@ pub fn pack(input: &PackInput) -> PackOutput {
     // 格子の総数を抑える。広げる分も含め、最悪の板の格子が上限内に入るまで粗くする。
     if input.method == NestMethod::Shapes {
         loop {
-            let d = (input.spacing / out.grid).ceil() + 1.0;
-            let w = (available[0].max(0.0) / out.grid).ceil() + 1.0 + 2.0 * d;
-            let h = (available[1].max(0.0) / out.grid).ceil() + 1.0 + 2.0 * d;
+            let d = (input.spacing / out.grid).ceil();
+            let w = ((available[0] + FIT_TOLERANCE).max(0.0) / out.grid).ceil() + 1.0 + 2.0 * d;
+            let h = ((available[1] + FIT_TOLERANCE).max(0.0) / out.grid).ceil() + 1.0 + 2.0 * d;
             if w * h <= MAX_CELLS as f64 {
                 break;
             }
@@ -490,10 +498,14 @@ pub fn pack(input: &PackInput) -> PackOutput {
                 .push("格子の目を粗くして板への配置を計算しました".into());
         }
     }
-    let mut masks: Vec<Vec<(u32, Bits)>> = Vec::new();
+    let dilation = if input.method == NestMethod::Shapes {
+        (input.spacing / out.grid).ceil() as usize
+    } else {
+        0
+    };
+    let mut masks: Vec<Vec<(u32, Bits, Bits)>> = Vec::new();
     let mut areas: Vec<f64> = input.parts.iter().map(|p| p.size[0] * p.size[1]).collect();
     if input.method == NestMethod::Shapes {
-        let d = (input.spacing / out.grid).ceil() as usize + 1;
         for (index, p) in input.parts.iter().enumerate() {
             let variants: Vec<_> = p
                 .rotate
@@ -501,12 +513,12 @@ pub fn pack(input: &PackInput) -> PackOutput {
                 .iter()
                 .filter_map(|&angle| {
                     let s = rotated_size(p, angle);
-                    if s[0] > available[0] || s[1] > available[1] {
+                    if !size_fits(s, available) {
                         return None;
                     }
-                    let (mask, area) = silhouette(p, angle, out.grid, d);
+                    let (mask, core, area) = silhouette(p, angle, out.grid, dilation);
                     areas[index] = area;
-                    Some((angle, mask))
+                    Some((angle, mask, core))
                 })
                 .collect();
             masks.push(variants);
@@ -525,10 +537,11 @@ pub fn pack(input: &PackInput) -> PackOutput {
     }
     pending.retain(|&(part, instance)| {
         let p = &input.parts[part];
-        let fits = p.rotate.angles(input.method).iter().any(|&a| {
-            let s = rotated_size(p, a);
-            s[0] <= available[0] + 1e-9 && s[1] <= available[1] + 1e-9
-        });
+        let fits = p
+            .rotate
+            .angles(input.method)
+            .iter()
+            .any(|&a| size_fits(rotated_size(p, a), available));
         if !fits {
             out.unplaced.push(UnplacedPart {
                 part,
@@ -555,10 +568,13 @@ pub fn pack(input: &PackInput) -> PackOutput {
             h: available[1] + input.spacing,
         }];
         let mut occupied = (input.method == NestMethod::Shapes).then(|| {
-            let d = (input.spacing / out.grid).ceil() as usize + 1;
             Bits::new(
-                (available[0].max(0.0) / out.grid).ceil() as usize + 1 + 2 * d,
-                (available[1].max(0.0) / out.grid).ceil() as usize + 1 + 2 * d,
+                ((available[0] + FIT_TOLERANCE).max(0.0) / out.grid).ceil() as usize
+                    + 1
+                    + 2 * dilation,
+                ((available[1] + FIT_TOLERANCE).max(0.0) / out.grid).ceil() as usize
+                    + 1
+                    + 2 * dilation,
             )
         });
         pending.retain(|&(part, instance)| {
@@ -569,9 +585,7 @@ pub fn pack(input: &PackInput) -> PackOutput {
                     for &angle in p.rotate.angles(input.method) {
                         let size = rotated_size(p, angle);
                         for r in &free {
-                            if size[0] + input.spacing <= r.w + 1e-9
-                                && size[1] + input.spacing <= r.h + 1e-9
-                            {
+                            if size_fits(size.map(|v| v + input.spacing), [r.w, r.h]) {
                                 choices.push((r.y, r.x, angle));
                             }
                         }
@@ -581,12 +595,14 @@ pub fn pack(input: &PackInput) -> PackOutput {
                     let occupied = occupied.as_mut().expect("形の格子");
                     'rows: for y in 0..occupied.h {
                         for x in 0..occupied.w {
-                            for (angle, mask) in &masks[part] {
+                            for (angle, mask, _) in &masks[part] {
                                 let s = rotated_size(p, *angle);
                                 if x + mask.w <= occupied.w
                                     && y + mask.h <= occupied.h
-                                    && x as f64 * out.grid + s[0] <= available[0] + 1e-9
-                                    && y as f64 * out.grid + s[1] <= available[1] + 1e-9
+                                    && size_fits(
+                                        [x as f64 * out.grid + s[0], y as f64 * out.grid + s[1]],
+                                        available,
+                                    )
                                     && occupied.fits(mask, x, y)
                                 {
                                     choices.push((
@@ -611,15 +627,16 @@ pub fn pack(input: &PackInput) -> PackOutput {
             };
             let size = rotated_size(p, angle);
             if let Some(occupied) = occupied.as_mut() {
-                let mask = &masks[part]
+                let core = &masks[part]
                     .iter()
-                    .find(|(a, _)| *a == angle)
+                    .find(|(a, _, _)| *a == angle)
                     .expect("選んだ角度")
-                    .1;
+                    .2;
+                // 膨張した候補を、同じ余白の座標へ置いた非膨張の影と比べる。
                 occupied.add(
-                    mask,
-                    ((x - input.edge) / out.grid).round() as usize,
-                    ((y - input.edge) / out.grid).round() as usize,
+                    core,
+                    ((x - input.edge) / out.grid).round() as usize + dilation,
+                    ((y - input.edge) / out.grid).round() as usize + dilation,
                 );
             } else {
                 split_free(
@@ -1082,6 +1099,67 @@ mod tests {
         };
         let signs = [side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0])];
         signs.iter().all(|s| *s >= -1e-9) || signs.iter().all(|s| *s <= 1e-9)
+    }
+
+    #[test]
+    fn shapes_keep_requested_spacing_within_two_grid_cells() {
+        for (spacing, grid) in [(8.0, 1.0), (8.1, 1.0), (8.1, 0.75)] {
+            let mut i = input(vec![rectangle(1, [10.0, 10.0], 2)]);
+            i.method = NestMethod::Shapes;
+            i.spacing = spacing;
+            i.grid = grid;
+            let out = pack(&i);
+            assert!(out.unplaced.is_empty());
+            assert_eq!(out.sheets.len(), 1);
+            let parts = &out.sheets[0].parts;
+            assert_eq!(parts.len(), 2);
+            let mut distance = f64::INFINITY;
+            for a in triangles(&i, &parts[0]) {
+                for b in triangles(&i, &parts[1]) {
+                    for x in 0..3 {
+                        for y in 0..3 {
+                            distance = distance.min(segment_distance(
+                                a[x],
+                                a[(x + 1) % 3],
+                                b[y],
+                                b[(y + 1) % 3],
+                            ));
+                        }
+                    }
+                }
+            }
+            assert!(
+                distance >= i.spacing && distance <= i.spacing + 2.0 * out.grid,
+                "部品の最短の間: {distance} mm (指定: {spacing} mm, 格子: {grid} mm)"
+            );
+        }
+    }
+
+    #[test]
+    fn shapes_use_the_same_sheet_size_tolerance_for_every_rotation() {
+        for rotate in [NestRotate::Fixed, NestRotate::Grain, NestRotate::Free] {
+            for excess in [-0.5e-9, 0.5e-9, 2.0e-9] {
+                let mut part = rectangle(1, [90.0 + excess, 70.0 + excess], 1);
+                part.rotate = rotate;
+                let mut i = input(vec![part]);
+                i.method = NestMethod::Shapes;
+                let out = pack(&i);
+                if excess <= 1e-9 {
+                    assert!(out.unplaced.is_empty(), "{rotate:?}, {excess}: {out:?}");
+                    assert_eq!(out.sheets[0].parts.len(), 1);
+                } else {
+                    assert!(out.sheets.is_empty());
+                    assert_eq!(
+                        out.unplaced,
+                        vec![UnplacedPart {
+                            part: 0,
+                            instance: 1,
+                            reason: UnplacedReason::TooBig,
+                        }]
+                    );
+                }
+            }
+        }
     }
 
     #[test]
