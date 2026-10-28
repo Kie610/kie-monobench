@@ -17,9 +17,8 @@ expect "板への配置" exists
 
 click "button:板への配置"
 run cam.nest.set_part part=1 count=3 rotate=fixed
-click ~作業空間:
-click "加工"
-dclick "button:板への配置"
+rclick "button:板への配置"
+click "フィーチャを編集"
 expect "縁の余白" = "5 mm"
 expect "部品の間" = "8 mm"
 select "並べ方" "形どおり"
@@ -32,7 +31,8 @@ select "区画の書き出し" "止めを入れた 1 ファイル"
 expect "区画の書き出し" = "止めを入れた 1 ファイル"
 click "button:~OK"
 key Escape
-dclick "button:板への配置"
+rclick "button:板への配置"
+click "フィーチャを編集"
 expect "区画の書き出し" = "止めを入れた 1 ファイル"
 key Escape
 run cam.add.contour
