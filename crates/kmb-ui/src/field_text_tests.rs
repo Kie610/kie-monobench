@@ -53,3 +53,35 @@ fn custom_field_api_uses_shared_words_and_keeps_unknown_defaults() {
         assert_eq!(translated_field(&ctx, "plugin.custom@1", &unknown), unknown);
     }
 }
+
+#[test]
+fn row_fields_share_their_column_translation_without_changing_metadata() {
+    let ctx = egui::Context::default();
+    let mut ws = Workspace::new(kmb_samples::sample_document(), None, kmb_bundle::modules());
+    let original = ws.win.registry.descriptor("solid.fillet@1").unwrap();
+    let rows = original.fields.iter().find(|f| f.key == "rows").unwrap();
+    let FieldKind::Rows { fields } = &rows.kind else { panic!("辺と半径は行の欄") };
+    let radius = fields.iter().find(|f| f.key == "radius").unwrap();
+    for (lang, label) in [("en", "Radius"), ("ko", "Radius"), ("ja", "半径")] {
+        ws.win.layout.appearance.language = lang.into();
+        ws.win.words().share(&ctx);
+        let translated = translated_field(&ctx, &original.type_id, rows);
+        let FieldKind::Rows { fields: translated_columns } = &translated.kind else {
+            panic!("訳しても行の欄を保つ")
+        };
+        let column = translated_columns.iter().find(|f| f.key == "radius").unwrap();
+        assert_eq!(column.label, label);
+        assert_eq!(column.help, ws.win.texts.text(ws.win.lang(), "field-solid-fillet-rows-radius-help"));
+        for index in [0, 3] {
+            let row_field = rows.row_field(index, radius);
+            let translated_row = translated_field(&ctx, &original.type_id, &row_field);
+            assert_eq!(translated_row.label, column.label);
+            assert_eq!(translated_row.help, column.help);
+            let mut restored = translated_row;
+            restored.label = row_field.label.clone();
+            restored.help = row_field.help.clone();
+            assert_eq!(restored, row_field, "訳は保存先・単位・条件を変えない");
+        }
+    }
+    assert_eq!(ws.win.registry.descriptor(&original.type_id).unwrap().fields, original.fields);
+}
