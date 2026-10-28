@@ -12,9 +12,21 @@ fn inserted_test_sketch(bytes: &[u8]) -> Sketch {
 }
 
 fn inserted_test_result(bytes: &[u8], args: serde_json::Value) -> (Sketch, String) {
-    use kmb_core::{
-        Context, DocumentData, Extensions, NullKernel, Outcome, RecomputeReport, Registry,
+    let result = inserted_test_outcome(bytes, args);
+    let kmb_core::Outcome::Change { edits, label } = result.unwrap() else {
+        panic!("スケッチの挿入")
     };
+    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
+        panic!("新しいスケッチ")
+    };
+    (serde_json::from_value(data.clone()).unwrap(), label)
+}
+
+fn inserted_test_outcome(
+    bytes: &[u8],
+    args: serde_json::Value,
+) -> Result<kmb_core::Outcome, kmb_core::Problem> {
+    use kmb_core::{Context, DocumentData, Extensions, NullKernel, RecomputeReport, Registry};
     use std::sync::Arc;
     let path = std::env::temp_dir().join(format!(
         "dxf-upgrade-{}-{}.dxf",
@@ -34,13 +46,65 @@ fn inserted_test_result(bytes: &[u8], args: serde_json::Value) -> (Sketch, Strin
     cx.args = &args;
     let result = Extensions(vec![Arc::new(DxfCommands)]).run(INSERT_DXF, &cx);
     std::fs::remove_file(&path).unwrap();
-    let Outcome::Change { edits, label } = result.unwrap() else {
-        panic!("スケッチの挿入")
-    };
-    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
-        panic!("新しいスケッチ")
-    };
-    (serde_json::from_value(data.clone()).unwrap(), label)
+    result
+}
+
+#[test]
+fn nearly_vertical_reversed_lines_merge_despite_coordinate_noise() {
+    let cleaned = clean(
+        &[
+            Shape::Line {
+                a: [0., 0.],
+                b: [1e-17, 1.],
+            },
+            Shape::Line {
+                a: [-1e-17, 1.],
+                b: [0., 0.],
+            },
+        ],
+        0.01,
+    )
+    .unwrap();
+    assert_eq!(cleaned.removed, 1);
+    assert_eq!(cleaned.shapes.len(), 1);
+}
+
+#[test]
+fn invalid_cleanup_tolerance_is_rejected_even_when_cleanup_is_disabled() {
+    let text = line_dxf(&[([0., 0.], [1., 1.])]);
+    for cleanup in [false, true] {
+        for tolerance in [0., -1., 0.0000005, 2.] {
+            let result = inserted_test_outcome(
+                text.as_bytes(),
+                serde_json::json!({"cleanup":cleanup,"cleanup_tolerance":tolerance}),
+            );
+            let error = result.expect_err("整理を止めても指定した許容差を確かめる");
+            assert_eq!(error.kind, kmb_core::ProblemKind::Input);
+            assert!(error.message.contains("許容差"), "{error}");
+        }
+    }
+}
+
+#[test]
+fn layer_line_breaks_are_reported_without_panicking() {
+    let sketch = sample_sketch();
+    let sol = solved(&sketch);
+    for construction in [false, true] {
+        let mut options = DxfOptions::default();
+        if construction {
+            options.construction_layer = "線\n不正な行".into();
+        } else {
+            options.layer = "線\n不正な行".into();
+        }
+        let result = std::panic::catch_unwind(|| to_dxf(&sketch, &sol, &options));
+        let error = result
+            .expect("画層名の改行をpanicにしない")
+            .expect_err("改行を含む画層名は誤りにする");
+        assert!(
+            error.contains("画層名") && error.contains("改行"),
+            "{error}"
+        );
+    }
 }
 
 #[test]
@@ -260,7 +324,7 @@ fn binary_dxf(text: &str, modern: bool) -> Vec<u8> {
 #[test]
 fn binary_code_widths_and_truncated_values_are_checked() {
     let sketch = sample_sketch();
-    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default()).unwrap();
     let ascii = from_dxf(&text).unwrap();
     for modern in [true, false] {
         assert_eq!(
@@ -280,7 +344,7 @@ fn binary_code_widths_and_truncated_values_are_checked() {
 #[test]
 fn dxf_upgrade_writes_r2000_handles_and_subclasses() {
     let sketch = sample_sketch();
-    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default());
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default()).unwrap();
     assert!(text.contains("AC1015"), "R2000 の版を書く");
     assert!(
         text.contains("AcDbSymbolTableRecord")
@@ -388,7 +452,7 @@ fn same_segment(a: &Segment, b: &Segment, tol: f64) -> bool {
 fn dxf_round_trip_keeps_shapes_and_closes_regions() {
     let s = sample_sketch();
     let sol = solved(&s);
-    let text = to_dxf(&s, &sol, &DxfOptions::default());
+    let text = to_dxf(&s, &sol, &DxfOptions::default()).unwrap();
     assert!(text.contains("AC1015") && text.contains("$INSUNITS"));
     assert!(
         !text.contains("CONSTRUCTION\n 10"),
@@ -438,7 +502,7 @@ fn dxf_construction_lines_on_their_own_layer() {
         points: true,
         ..Default::default()
     };
-    let text = to_dxf(&s, &sol, &opts);
+    let text = to_dxf(&s, &sol, &opts).unwrap();
     let imp = from_dxf(&text).unwrap();
     assert_eq!(imp.shapes.len(), 8);
     assert_eq!(
@@ -713,7 +777,7 @@ fn insert_into_existing_sketch_uses_new_ids() {
         layer: "0".into(),
         ..Default::default()
     };
-    let text = to_dxf(&s, &sol, &opts);
+    let text = to_dxf(&s, &sol, &opts).unwrap();
     // 表の名前 1 つと、画層 0・補助線の 2 つ
     assert_eq!(text.matches("\nLAYER\n").count(), 3);
     assert_eq!(from_dxf(&text).unwrap().shapes.len(), 7 + n);
@@ -761,7 +825,7 @@ proptest::proptest! {
     /// 見本を途中で切ったり 1 文字変えたりしてもパニックしない
     #[test]
     fn mutated_samples_never_panic(cut in 0usize..2000, at in 0usize..2000, ch in proptest::char::any()) {
-        let d = to_dxf(&sample_sketch(), &solved(&sample_sketch()), &DxfOptions::default());
+        let d = to_dxf(&sample_sketch(), &solved(&sample_sketch()), &DxfOptions::default()).unwrap();
         for base in [d.as_str(), SVG_PATH] {
             let mut chars: Vec<char> = base.chars().collect();
             if !chars.is_empty() {

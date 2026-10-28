@@ -19,7 +19,10 @@ mod timeline;
 mod visibility;
 pub use axis::AxisRef;
 pub use chain::{TANGENT_DEG, smooth_faces, tangent_chain, tangent_chains};
-pub use face_profile::{FaceProfile, PlaneFaces, face_profile, face_profiles};
+pub use face_profile::{
+    FaceProfile, PlaneFaces, face_profile, face_profile_with_tolerance, face_profiles,
+    face_profiles_with_tolerance,
+};
 pub use flush::{EXTENSIONS, extend_flush};
 pub use inspect::{InspectCommands, MEASURE};
 pub use visibility::SET_VISIBILITY;

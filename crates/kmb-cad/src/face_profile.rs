@@ -24,6 +24,19 @@ pub fn face_profile(
     shape: ShapeHandle,
     faces: &[String],
 ) -> Result<FaceProfile, String> {
+    face_profile_with_tolerance(kernel, shape, faces, 0.01)
+}
+
+/// 網で近似する縁の許容差(mm)を指定する。直線と円弧で読める縁の取り方は変えない。
+pub fn face_profile_with_tolerance(
+    kernel: &dyn Kernel,
+    shape: ShapeHandle,
+    faces: &[String],
+    mesh_tolerance: f64,
+) -> Result<FaceProfile, String> {
+    if !mesh_tolerance.is_finite() || mesh_tolerance <= 0.0 {
+        return Err("面の縁の許容差は正の有限の数にしてください".into());
+    }
     let first = faces.first().ok_or("押し出す面を選んでください")?;
     let infos = kernel.faces(shape).map_err(|e| e.to_string())?;
     let planar = |name: &str| {
@@ -52,14 +65,16 @@ pub fn face_profile(
         // 辺の一覧に無い縁(丸めた面との境目の円など)があると、穴が抜けた輪になる。
         // 面積が面と合わない時は、網の縁にだけある輪を足す。それでも合わなければ網の縁で作る
         let exact = edge_loops(&edges, name, &plane).and_then(|l| match area {
-            Some(a) if !covers(&l, a) => fill_missing(l, kernel, shape, name, &plane, a),
+            Some(a) if !covers(&l, a) => {
+                fill_missing(l, kernel, shape, name, &plane, a, mesh_tolerance)
+            }
             _ => Some(l),
         });
         let loops = match exact {
             Some(l) => l,
             None => {
                 approximated = true;
-                mesh_loops(kernel, shape, name, &plane)
+                mesh_loops(kernel, shape, name, &plane, mesh_tolerance)
                     .ok_or_else(|| format!("面 {name} の縁をたどれませんでした"))?
             }
         };
@@ -84,6 +99,16 @@ pub fn face_profiles(
     kernel: &dyn Kernel,
     shape: ShapeHandle,
     faces: &[String],
+) -> Result<Vec<PlaneFaces>, String> {
+    face_profiles_with_tolerance(kernel, shape, faces, 0.01)
+}
+
+/// 平面ごとに輪郭を読み、網で近似する縁には指定した許容差(mm)を使う。
+pub fn face_profiles_with_tolerance(
+    kernel: &dyn Kernel,
+    shape: ShapeHandle,
+    faces: &[String],
+    mesh_tolerance: f64,
 ) -> Result<Vec<PlaneFaces>, String> {
     if faces.is_empty() {
         return Err("押し出す面を選んでください".into());
@@ -113,7 +138,7 @@ pub fn face_profiles(
     groups
         .into_iter()
         .map(|(_, names)| {
-            let profile = face_profile(kernel, shape, &names)?;
+            let profile = face_profile_with_tolerance(kernel, shape, &names, mesh_tolerance)?;
             Ok(PlaneFaces {
                 faces: names,
                 profile,
@@ -170,8 +195,9 @@ fn fill_missing(
     face: &str,
     plane: &Plane,
     area: f64,
+    mesh_tolerance: f64,
 ) -> Option<Vec<ProfileLoop>> {
-    let mesh = mesh_loops(kernel, shape, face, plane)?;
+    let mesh = mesh_loops(kernel, shape, face, plane, mesh_tolerance)?;
     let known: Vec<(P2, f64)> = exact.iter().map(|l| shape_of(&l.polyline())).collect();
     for (k, l) in mesh.into_iter().enumerate() {
         let pts = l.polyline();
@@ -193,7 +219,7 @@ fn fill_missing(
         exact.push(if round {
             ProfileLoop {
                 edges: vec![ProfileEdge {
-                    name: format!("c{k}"),
+                    name: mesh_name("c", mesh_tolerance, k),
                     segment: Segment::Circle {
                         center: c,
                         // 網の点は円の上にあり、弦の中ほどが内側へ寄るので、点までの距離を使う
@@ -337,14 +363,24 @@ fn chain(segs: Vec<ProfileEdge>) -> Option<Vec<ProfileLoop>> {
     Some(loops)
 }
 
+// 精度が変わって区間の分割数が変わる時は、古い番号を別の区間へ付け替えない。
+fn mesh_name(kind: &str, tolerance: f64, index: usize) -> String {
+    if tolerance == 0.01 {
+        format!("{kind}{index}")
+    } else {
+        format!("{kind}{:x}_{index}", tolerance.to_bits())
+    }
+}
+
 /// 網の三角形のうち、面 `face` の 1 つの三角形にしか使われない辺(面の縁)を折れ線の輪にする。
 fn mesh_loops(
     kernel: &dyn Kernel,
     shape: ShapeHandle,
     face: &str,
     plane: &Plane,
+    mesh_tolerance: f64,
 ) -> Option<Vec<ProfileLoop>> {
-    let mesh = kernel.mesh(shape, 0.01).ok()?;
+    let mesh = kernel.mesh(shape, mesh_tolerance).ok()?;
     let fi = mesh.face_names.iter().position(|n| n == face)? as u32;
     type Key = (i64, i64, i64);
     let key = |p: [f32; 3]| -> Key {
@@ -380,7 +416,7 @@ fn mesh_loops(
         .into_iter()
         .enumerate()
         .map(|(k, (a, b, _))| ProfileEdge {
-            name: format!("m{k}"),
+            name: mesh_name("m", mesh_tolerance, k),
             segment: Segment::Line {
                 a: plane.to_local(a),
                 b: plane.to_local(b),
