@@ -25,6 +25,7 @@ mod ends;
 mod find;
 mod freeform;
 mod geom;
+mod groups;
 mod import;
 mod label;
 mod model;
@@ -83,12 +84,13 @@ pub use pattern_expr::{DirectionExpressions, PatternExpressions};
 pub use profile::{curves_of, entity_segments, faces_of, open_ends_of, profile_of};
 pub use reference::{
     ITEMS_TYPE, ItemShape, RefItem, RefShape, SketchItem, SketchItems, body_edge_refs, body_refs,
-    origin_ref, refresh_projections, sketch_items, sketch_refs,
+    origin_ref, refresh_projections, refresh_projections_with_values, sketch_items, sketch_refs,
 };
 pub use section::{SECTION_TOL, section, section_pieces, section_refs, section_segments};
 pub use silhouette::{BODY_MESH_TOL, face_under, samples as reference_samples, silhouette_refs};
 pub use solver::{
-    NO_SHAPE, SketchError, Solution, SolveStatus, redundant_with, solve, solve_dragging,
+    NO_SHAPE, SketchError, Solution, SolveStatus, inconsistency_reason, redundant_with, solve,
+    solve_dragging,
 };
 pub use tools::Spot;
 
@@ -181,6 +183,15 @@ impl Payload for Paths {
 
 impl Payload for Solution {
     const TYPE: &'static str = SOLUTION_TYPE;
+}
+
+/// 解けない時だけ付ける派生出力の説明。既存の解と保存する文書の形は変えない。
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct SolveDiagnosis(String);
+
+impl Payload for SolveDiagnosis {
+    const TYPE: &'static str = "sketch.diagnosis@1";
 }
 
 /// 出力の値から、補助線も含めた線を取り出す。
@@ -314,7 +325,8 @@ impl Feature for Sketch {
                     refs.extend(sketch_refs(&items, f, &plane));
                 }
             }
-            let lost = refresh_projections(&mut sketch, &refs);
+            let lost = refresh_projections_with_values(&mut sketch, &refs, &values)
+                .map_err(EvalError::InvalidData)?;
             if !lost.is_empty() {
                 let ids: Vec<String> = lost.iter().map(ToString::to_string).collect();
                 warnings.push(format!(
@@ -343,6 +355,9 @@ impl Feature for Sketch {
             ("items".to_string(), items.to_value()),
         ]
         .into();
+        if let Some(reason) = inconsistency_reason(sketch, &solution) {
+            out.insert("diagnosis".into(), SolveDiagnosis(reason).to_value());
+        }
         kmb_core::add_warnings(&mut out, warnings);
         Ok(out)
     }

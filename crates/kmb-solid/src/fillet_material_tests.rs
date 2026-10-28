@@ -279,3 +279,53 @@ fn a_thinner_middle_on_a_long_top_edge_keeps_the_plate() {
         assert!(v < plate_v, "半径 {r}・途中 {mid}: 体積 {v}");
     }
 }
+
+/// 円の辺でも途中の半径を変え、閉じた形と削れる体積を確かめる。
+#[test]
+fn variable_fillet_on_a_round_rim_keeps_the_cylinder() {
+    if !smlib() {
+        kmb_contract::skip!("truck は途中の半径を変える丸めを作れない");
+    }
+    use kmb_core::{
+        BlendLaw, EdgeBlend, Plane, Profile, ProfileEdge, ProfileLoop, Region, Segment,
+    };
+    let k = TestKernel::new();
+    let profile = Profile {
+        plane: Plane::XY,
+        regions: vec![Region {
+            outer: ProfileLoop {
+                edges: vec![ProfileEdge {
+                    name: "rim".into(),
+                    segment: Segment::Circle {
+                        center: [0.0, 0.0],
+                        radius: 10.0,
+                    },
+                    reversed: false,
+                }],
+            },
+            holes: vec![],
+        }],
+    };
+    let body = k.extrude(&profile, 0.0, 8.0, "cylinder").unwrap();
+    let edge = k
+        .arc_edges(body)
+        .unwrap()
+        .into_iter()
+        .find(|e| e.a[2] > 7.9)
+        .expect("上の円の辺");
+    let arc = edge.arc.unwrap();
+    let mut blend = EdgeBlend::new(edge.faces, edge.a, 1.0, false);
+    blend.law = BlendLaw::Variable {
+        start: edge.a,
+        radii: vec![(0.0, 1.0), (0.5, 0.5), (1.0, 1.0)],
+    };
+    let result = k
+        .blend_edges(body, &[blend], "fillet")
+        .expect("円の辺を丸める");
+    let removed = k.volume(body).unwrap() - k.volume(result).unwrap();
+    let max = 2.0 * PI * arc.radius * (1.0 - PI / 4.0);
+    eprintln!("円の辺: 削れた体積 {removed:.6} mm³");
+    assert!(removed > 0.0 && removed < max + 0.1, "{removed}");
+    let mesh = k.mesh(result, 0.1).unwrap();
+    assert!(!mesh.triangles.is_empty());
+}

@@ -697,6 +697,88 @@ pub fn shapes_we_make_read_back_from_step<K: Kernel>(k: &K, q: &KernelQuirks<K>)
     }
 }
 
+/// 長さの単位が inch や m の STEP は、ファイルの数を mm に直して読む(数をそのまま mm と見ると
+/// 25.4 分の 1・1000 分の 1 の大きさになる)。自分で書いた mm の STEP の単位だけを書き替えて確かめる。
+pub fn a_step_in_inch_or_metre_reads_at_its_true_size<K: Kernel>(k: &K, _: &KernelQuirks<K>) {
+    let a = k.extrude(&plate_profile(), 0.0, 10.0, "f1").unwrap();
+    let before = k.mass(a).unwrap();
+    let step = k.export_step(&[a]).unwrap();
+    let mm = "SI_UNIT(.MILLI.,.METRE.)";
+    assert_eq!(step.matches(mm).count(), 1, "mm の単位を 1 つだけ書く");
+    // inch は換算の量(25.4 mm)を添えた単位で書く。足す実体はデータの節の終わりに置く
+    let inch = step.replacen(mm, "CONVERSION_BASED_UNIT('INCH',#999001)", 1);
+    let end = inch.rfind("ENDSEC;").unwrap();
+    let inch = format!(
+        "{}#999001=LENGTH_MEASURE_WITH_UNIT(LENGTH_MEASURE(25.4),#999002);\n\
+         #999002=(LENGTH_UNIT() NAMED_UNIT(*) {mm});\n{}",
+        &inch[..end],
+        &inch[end..]
+    );
+    // m の読み方(接頭辞の無い SI 単位)は kmb-format の試験で確かめる。網で読むカーネルは m の小さな
+    // 数の網づくりが遅い(数秒)ので、ここでは cm で SI の接頭辞の掛け方を確かめる
+    for (text, scale) in [
+        (step.replace(mm, "SI_UNIT(.CENTI.,.METRE.)"), 10.0),
+        (inch, 25.4),
+    ] {
+        let b = k.import_step(&text).unwrap();
+        let after = k.mass(b).unwrap();
+        let want = before.volume * scale * scale * scale;
+        assert!(
+            close(after.volume, want, 2e-3),
+            "{scale} 倍: 体積 {} 元 {want}",
+            after.volume
+        );
+        for i in 0..3 {
+            let want = before.max[i] * scale;
+            assert!(
+                (after.max[i] - want).abs() < 1e-3 * scale,
+                "{scale} 倍: {:?}",
+                after.max
+            );
+        }
+    }
+}
+
+/// 公差つきの STEP によくある書き方: 立体と一緒に面だけのボディ(OPEN_SHELL)が置かれ、注記の実体に
+/// 空の並び `()` がある。立体だけを、面の名前を変えずに読む。形の実体が壊れていれば、誤りがその行を指す。
+pub fn a_step_with_surface_bodies_reads_only_its_solid<K: Kernel>(k: &K, _: &KernelQuirks<K>) {
+    let a = k.extrude(&plate_profile(), 0.0, 10.0, "f1").unwrap();
+    let before = k.mass(a).unwrap();
+    let step = k.export_step(&[a]).unwrap();
+    let plain = k.import_step(&step).unwrap();
+    // 面だけのボディは立体の殻の最初の面を指す(足す実体はデータの節の終わりに置く)
+    let at = step.find("CLOSED_SHELL").unwrap();
+    let face = &step[at + step[at..].find('#').unwrap() + 1..];
+    let face = &face[..face.find(|c: char| !c.is_ascii_digit()).unwrap()];
+    let end = step.rfind("ENDSEC;").unwrap();
+    let text = format!(
+        "{}#999001=OPEN_SHELL('',(#{face}));\n\
+         #999002=SHELL_BASED_SURFACE_MODEL('',(#999001));\n\
+         #999003=STYLED_ITEM('',(),#999002);\n{}",
+        &step[..end],
+        &step[end..]
+    );
+    let b = k.import_step(&text).unwrap();
+    let after = k.mass(b).unwrap();
+    assert!(
+        close(after.volume, before.volume, 1e-3),
+        "体積 {} 元 {}",
+        after.volume,
+        before.volume
+    );
+    assert_eq!(face_names(k, b), face_names(k, plain));
+    // 形の実体(点)を壊すと、誤りはその行を指す
+    let at = text.find("CARTESIAN_POINT").unwrap();
+    let arg = at + text[at..].find("',").unwrap() + 2;
+    let broken = format!("{}?{}", &text[..arg], &text[arg..]);
+    let line = text[..at].matches('\n').count() + 1;
+    let err = k.import_step(&broken).unwrap_err().to_string();
+    assert!(
+        err.contains(&format!("{line} 行目")),
+        "{line} 行目を指さない: {err}"
+    );
+}
+
 pub fn broken_step_is_an_error_not_a_panic<K: Kernel>(k: &K, _: &KernelQuirks<K>) {
     assert!(k.import_step("ISO-10303-21;\nこわれた").is_err());
     assert!(k.import_step("").is_err());
@@ -951,6 +1033,8 @@ macro_rules! kernel_contract_tests {
             edges_know_whether_they_are_corners_or_smooth_seams,
             a_step_written_by_us_reads_back_as_a_mesh_body,
             broken_step_is_an_error_not_a_panic,
+            a_step_in_inch_or_metre_reads_at_its_true_size,
+            a_step_with_surface_bodies_reads_only_its_solid,
             step_files_from_another_cad_read_with_the_same_volume,
             an_intersection_trims_corners_that_stick_out_a_little,
             a_display_mesh_of_a_face_with_a_hole_stays_on_it,

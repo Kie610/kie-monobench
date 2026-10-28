@@ -98,6 +98,11 @@ pub const DEV_KERNEL: [&str; 1] = ["kmb-solid"];
 /// 開発用の依存で、上の表に入らない今の辺。(crate, 依存先, 理由)。直したら行を消す
 /// (消し忘れると「もう無い」で落ちる)。
 const DEV_KNOWN: &[(&str, &str, &str)] = &[
+    (
+        "kmb-solid",
+        "kmb-io-stl",
+        "細い面の形を実際の STL に書き、辺の閉じ方を読む試験",
+    ),
     // 画面の写真の試験(tests/screens.rs)が、書き出した 3MF の中身を形式の crate で読んで確かめる
     ("kmb-app", "kmb-io-stl", "写真の試験が書き出した 3MF を読む"),
 ];
@@ -397,10 +402,14 @@ impl<'a> Graph<'a> {
                 }
             }
         }
-        // ソリッドの機能(kmb-cad-*)は、共通部品(kmb-cad)とコアと受け渡しの型と材料の表(kmb-look)だけを使う
+        // ソリッドの機能(kmb-cad-*)は、共通部品(kmb-cad)とコアと受け渡しの型と材料の表(kmb-look)と
+        // ファイルの形式の小部品(kmb-format。STEP の単位など、カーネルの読み手と同じ読み方をするため)だけを使う
         for &n in self.p.keys().filter(|n| n.starts_with("kmb-cad")) {
             for d in self.deps(n, false) {
-                if !matches!(d, "kmb-core" | "kmb-cad" | "kmb-interchange" | "kmb-look") {
+                if !matches!(
+                    d,
+                    "kmb-core" | "kmb-cad" | "kmb-interchange" | "kmb-look" | "kmb-format"
+                ) {
                     out.push(format!("{n} が {d} に依存している(ソリッドの機能どうし)"));
                 }
             }

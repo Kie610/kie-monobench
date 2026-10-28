@@ -92,6 +92,119 @@ impl Solution {
     }
 }
 
+/// 解けなかった拘束の種類と件数、パターンの個数と範囲。画面と出力で同じ説明を使う。
+pub fn inconsistency_reason(sketch: &Sketch, sol: &Solution) -> Option<String> {
+    let SolveStatus::Inconsistent { conflicting } = &sol.status else {
+        return None;
+    };
+    let mut kinds: BTreeMap<&str, Vec<ConstraintId>> = BTreeMap::new();
+    for id in conflicting {
+        if let Some(c) = sketch.constraints.iter().find(|c| c.id == *id) {
+            kinds
+                .entry(crate::dimension::kind_word(&c.kind))
+                .or_default()
+                .push(*id);
+        }
+    }
+    let mut text = if conflicting.is_empty() {
+        format!(
+            "満たせない内部の形の関係があります(最大残差 {:.6})",
+            sol.max_residual
+        )
+    } else {
+        let kinds = kinds
+            .into_iter()
+            .map(|(kind, ids)| {
+                let names = ids
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{kind} {}件({names})", ids.len())
+            })
+            .collect::<Vec<_>>()
+            .join("、");
+        format!("満たせない拘束 {}件: {kinds}", conflicting.len())
+    };
+    for pattern in &sketch.patterns {
+        if !sketch.constraints.iter().any(|c| {
+            !c.reference
+                && matches!(c.kind, ConstraintKind::Pattern { pattern: id } if id == pattern.id)
+        }) {
+            continue;
+        }
+        let definition = match &pattern.def {
+            crate::PatternDef::Circular(c) => format!("円形 {}個", c.count),
+            crate::PatternDef::Rectangular(r) => {
+                let count = |d: &crate::PatternDirection| {
+                    if d.symmetric {
+                        d.count.max(1).saturating_mul(2).saturating_sub(1)
+                    } else {
+                        d.count
+                    }
+                };
+                format!(
+                    "矩形 {}×{}",
+                    count(&r.directions[0]),
+                    count(&r.directions[1])
+                )
+            }
+        };
+        let ids: BTreeSet<_> = pattern
+            .def
+            .entities()
+            .iter()
+            .copied()
+            .chain(
+                pattern
+                    .copies
+                    .iter()
+                    .flat_map(|c| c.entities.iter().copied()),
+            )
+            .collect();
+        let mut shapes = Vec::new();
+        for e in sketch.entities.iter().filter(|e| ids.contains(&e.id())) {
+            if let Some(p) = sol.points.get(&e.id()) {
+                shapes.push(crate::Shape::Point { p: *p });
+            }
+            if let Some(shape) = sketch.solved_shape(sol, e.id()) {
+                shapes.extend(shape.segments(crate::curve::ARC_TOLERANCE).into_iter().map(
+                    |segment| match segment {
+                        kmb_core::Segment::Line { a, b } => crate::Shape::Line { a, b },
+                        kmb_core::Segment::Circle { center, radius } => {
+                            crate::Shape::Circle { center, radius }
+                        }
+                        kmb_core::Segment::Arc {
+                            center,
+                            radius,
+                            start,
+                            end,
+                        } => crate::Shape::Arc {
+                            center,
+                            radius,
+                            start,
+                            end,
+                        },
+                    },
+                ));
+            }
+        }
+        text.push_str(&format!(
+            "。パターン {}: {definition}、写しを含め{}個",
+            pattern.id,
+            pattern.copies.len() + 1
+        ));
+        if let Some((min, max)) = crate::shapes_bounds(&shapes) {
+            text.push_str(&format!(
+                "、範囲 {:.3}×{:.3} mm",
+                max[0] - min[0],
+                max[1] - min[1]
+            ));
+        }
+    }
+    Some(text)
+}
+
 #[derive(Clone, Copy)]
 enum Kind {
     Point,
@@ -396,6 +509,7 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
             _ => None,
         })
         .collect();
+    let mut contacts = ContactState::default();
     let mut part_rows = Vec::new();
     let mut ids = BTreeSet::new();
     for c in &sketch.constraints {
@@ -552,7 +666,14 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
             }
             K::Distance { a, b: q, .. } => {
                 let (p, q) = (b.point(o, *a)?, b.point(o, *q)?);
-                push(Residual::Dist(p, q, value()?));
+                let distance = value()?;
+                if distance == 0.0 {
+                    // 距離ゼロの解集合は x と y の両方が等しい点。ノルムの式はそこで微分できない。
+                    push(Residual::Diff(p.0, q.0));
+                    push(Residual::Diff(p.0 + 1, q.0 + 1));
+                } else {
+                    push(Residual::Dist(p, q, distance));
+                }
             }
             K::PointLineDistance { point, line, .. } => {
                 let (p, (l1, l2)) = (b.point(o, *point)?, b.line(o, *line)?);
@@ -651,10 +772,7 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
                     CurveDef::Ellipse(c, ma, mi, _) => push(Residual::OnEllipse(c, ma, mi, p)),
                     def => {
                         // 曲線のパラメータを補助の変数にして、その点と一致させる(微分できる形)
-                        let (px, py) = p.get(&x0);
-                        let t0 = def.shape(&x0).map_or(0.0, |s| s.closest([px, py]).0);
-                        let tv = x0.len();
-                        x0.push(t0);
+                        let tv = contacts.parameter(sketch, *curve, *point, &def, p, &mut x0);
                         let def = b.share(*curve, def);
                         push(Residual::OnCurve(def.clone(), tv, p, true));
                         push(Residual::OnCurve(def, tv, p, false));
@@ -668,6 +786,13 @@ fn build(sketch: &Sketch, values: &HashMap<ConstraintId, f64>) -> Result<System,
                     // 端を共有していれば、そこで向きがそろう(折り返さない)
                     push(Residual::Turn(da.clone(), at_a, db.clone(), at_b));
                     keep(Trait::TangentDot(da, at_a, db, at_b));
+                } else if let Some(id) = contacts.common(sketch, *a, *e2) {
+                    // 既に同じ点を通る拘束があるなら、その点で向きだけをそろえる。
+                    // 自由曲線は曲線上の点の補助変数を共有し、接点を二重に解かない。
+                    let point = b.point(o, id)?;
+                    let at_a = contacts.at(sketch, *a, id, &da, point, &mut x0);
+                    let at_b = contacts.at(sketch, *e2, id, &db, point, &mut x0);
+                    push(Residual::Turn(da, at_a, db, at_b));
                 } else {
                     // 触れる所を両方の曲線のパラメータ(補助の変数)で持ち、そこで点と向きがそろう
                     let (ta, tb) = closest_pair(da.shape(&x0), db.shape(&x0));
@@ -893,6 +1018,145 @@ pub(crate) fn redundant_parts(
         .collect())
 }
 
+#[derive(Default)]
+struct ExplicitContacts {
+    curves: BTreeMap<EntityId, BTreeSet<EntityId>>,
+    aliases: BTreeMap<EntityId, EntityId>,
+}
+
+impl ExplicitContacts {
+    fn canonical(&self, point: EntityId) -> EntityId {
+        self.aliases.get(&point).copied().unwrap_or(point)
+    }
+}
+
+/// 一致で結ばれた点をまとめ、硬い拘束が「曲線上」と定める点を集める。
+fn explicit_contacts(sketch: &Sketch) -> ExplicitContacts {
+    if !sketch
+        .constraints
+        .iter()
+        .any(|c| !c.reference && matches!(c.kind, ConstraintKind::TangentCurve { .. }))
+    {
+        return ExplicitContacts::default();
+    }
+    let mut groups = crate::groups::Groups::default();
+    for c in sketch.constraints.iter().filter(|c| !c.reference) {
+        if let ConstraintKind::Coincident { a, b } = c.kind {
+            groups.join([a, b]);
+        }
+    }
+    let aliases: BTreeMap<_, _> = sketch
+        .entities
+        .iter()
+        .filter_map(|e| {
+            if let Entity::Point { id, .. } = e {
+                Some((*id, groups.root(*id)))
+            } else {
+                None
+            }
+        })
+        .collect();
+    let mut curves: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
+    let mut add = |point, curve| {
+        let point = aliases.get(&point).copied().unwrap_or(point);
+        curves.entry(point).or_default().insert(curve);
+    };
+    for entity in &sketch.entities {
+        if let Some((a, b)) = entity.ends() {
+            add(a, entity.id());
+            add(b, entity.id());
+        }
+    }
+    for c in sketch.constraints.iter().filter(|c| !c.reference) {
+        match c.kind {
+            ConstraintKind::PointOnCurve { point, curve } => add(point, curve),
+            ConstraintKind::PointOnLine { point, line }
+            | ConstraintKind::Midpoint { point, line } => add(point, line),
+            ConstraintKind::PointOnCircle { point, circle } => add(point, circle),
+            _ => {}
+        }
+    }
+    ExplicitContacts { curves, aliases }
+}
+
+/// 両方の曲線を通る点が 1 つだけなら使う。複数ある時は接点を推測しない。
+fn common_contact(contacts: &ExplicitContacts, a: EntityId, b: EntityId) -> Option<EntityId> {
+    let mut found = contacts
+        .curves
+        .iter()
+        .filter(|(_, curves)| curves.contains(&a) && curves.contains(&b));
+    let (point, _) = found.next()?;
+    found.next().is_none().then_some(*point)
+}
+
+/// 曲線上の点と接線が、同じ点のパラメータを拘束の並びに関係なく共有する。
+#[derive(Default)]
+struct ContactState {
+    explicit: Option<ExplicitContacts>,
+    parameters: BTreeMap<(EntityId, EntityId), usize>,
+}
+
+impl ContactState {
+    fn explicit(&mut self, sketch: &Sketch) -> &ExplicitContacts {
+        self.explicit
+            .get_or_insert_with(|| explicit_contacts(sketch))
+    }
+
+    fn common(&mut self, sketch: &Sketch, a: EntityId, b: EntityId) -> Option<EntityId> {
+        common_contact(self.explicit(sketch), a, b)
+    }
+
+    fn parameter(
+        &mut self,
+        sketch: &Sketch,
+        curve: EntityId,
+        point: EntityId,
+        def: &CurveDef,
+        at: Pt,
+        x0: &mut Vec<f64>,
+    ) -> usize {
+        let point = self.explicit(sketch).canonical(point);
+        *self.parameters.entry((curve, point)).or_insert_with(|| {
+            let (px, py) = match sketch.entity(point) {
+                Some(Entity::Point { x, y, .. }) => (*x, *y),
+                _ => at.get(x0),
+            };
+            let t0 = def.shape(x0).map_or(0.0, |s| s.closest([px, py]).0);
+            let variable = x0.len();
+            x0.push(t0);
+            variable
+        })
+    }
+
+    fn at(
+        &mut self,
+        sketch: &Sketch,
+        curve: EntityId,
+        point: EntityId,
+        def: &CurveDef,
+        at: Pt,
+        x0: &mut Vec<f64>,
+    ) -> At {
+        if matches!(
+            def,
+            CurveDef::Line(..) | CurveDef::Circle(..) | CurveDef::Arc(..) | CurveDef::Ellipse(..)
+        ) {
+            return At::Point(at.0);
+        }
+        let explicit = self.explicit(sketch);
+        let point = explicit.canonical(point);
+        if let Some((start, end)) = sketch.entity(curve).and_then(Entity::ends) {
+            if explicit.canonical(start) == point {
+                return At::Start;
+            }
+            if explicit.canonical(end) == point {
+                return At::End;
+            }
+        }
+        At::Var(self.parameter(sketch, curve, point, def, at, x0))
+    }
+}
+
 /// 2 つの曲線のいちばん近い所のパラメータ(接する拘束の補助の変数の初めの値)。
 fn closest_pair(a: Option<Shape>, b: Option<Shape>) -> (f64, f64) {
     let (Some(a), Some(b)) = (a, b) else {
@@ -918,7 +1182,7 @@ fn closest_pair(a: Option<Shape>, b: Option<Shape>) -> (f64, f64) {
 ///
 /// 保存されている位置から一度に解いて形の性質([`Trait`])が変わったら(寸法を大きく変えて
 /// 長穴の線が交差した、円弧が裏返ったなど)、保存されている位置での残差を少しずつ 0 へ
-/// 近づけて解き直す(ニュートン・ホモトピー。方式案 3.1)。それでも保てなければ、一度に
+/// 近づけて解き直す(ニュートン・ホモトピー)。それでも保てなければ、一度に
 /// 解いた形を返す。
 pub fn solve(
     sketch: &Sketch,
@@ -927,6 +1191,81 @@ pub fn solve(
     let sys = build(sketch, values)?;
     let (x, iterations) = solve_values(&sys);
     Ok(finish(sketch, &sys, x, iterations))
+}
+
+/// 投影先の固定式の目標だけを替え、更新前の座標を初期値として使う。
+pub(crate) fn follow_projection_targets(
+    before: &Sketch,
+    after: &mut Sketch,
+    values: &HashMap<ConstraintId, f64>,
+) -> Result<(), String> {
+    let point = |sketch: &Sketch, id| match sketch.entity(id) {
+        Some(Entity::Point { x, y, .. }) => Some([*x, *y]),
+        _ => None,
+    };
+    let circle = |sketch: &Sketch, id| match sketch.entity(id) {
+        Some(Entity::Circle { radius, .. }) => Some(*radius),
+        _ => None,
+    };
+    let (projected, circles) = after.projected_parts();
+    let changed = projected
+        .iter()
+        .any(|&id| point(before, id) != point(after, id))
+        || circles
+            .iter()
+            .any(|&id| circle(before, id) != circle(after, id));
+    if !changed {
+        return Ok(());
+    }
+    let mut sys = build(before, values).map_err(|e| e.to_string())?;
+    let mut targets = BTreeMap::new();
+    for &id in &projected {
+        if let Some(p) = point(after, id)
+            && let Some(v) = sys.points.get(&id)
+        {
+            targets.insert(v.0, p[0]);
+            targets.insert(v.0 + 1, p[1]);
+        }
+    }
+    for id in &circles {
+        if let Some(radius) = circle(after, *id)
+            && let Some(&v) = sys.circles.get(id)
+        {
+            targets.insert(v, radius);
+        }
+    }
+    for (tag, residual) in &mut sys.equations {
+        if tag.is_none()
+            && let Residual::Value(v, target) = residual
+            && let Some(new) = targets.get(v)
+        {
+            *target = *new;
+        }
+    }
+    let (x, _) = solve_values_preserving(&sys).map_err(|(x, iterations)| {
+        let solution = finish(before, &sys, x, iterations);
+        inconsistency_reason(before, &solution).unwrap_or_else(|| {
+            "投影元の動きに、前の形を保って付いて行けません。拘束と寸法を見直してください".into()
+        })
+    })?;
+    // 元の点と半径は正確な投影値を残し、自由な形だけを解いた位置へ運ぶ。
+    for e in &mut after.entities {
+        match e {
+            Entity::Point { id, x: px, y: py } if !projected.contains(id) => {
+                if let Some(v) = sys.points.get(id) {
+                    *px = x[v.0];
+                    *py = x[v.0 + 1];
+                }
+            }
+            Entity::Circle { id, radius, .. } if !circles.contains(id) => {
+                if let Some(&v) = sys.circles.get(id) {
+                    *radius = x[v];
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 /// ドラッグの途中で解く。`start` は押した時の形(解いた位置を写したもの)、`to` はそこから
@@ -1147,7 +1486,6 @@ fn finish(sketch: &Sketch, sys: &System, x: Vec<f64>, iterations: usize) -> Solu
             .iter()
             .filter(|(_, r)| r.eval(&x).abs() > RESIDUAL_OK)
             .filter_map(|(id, _)| *id)
-            .chain(redundant.iter().copied())
             .collect();
         conflicting.sort();
         conflicting.dedup();
@@ -1326,3 +1664,7 @@ mod speed_tests;
 #[cfg(test)]
 #[path = "solver_check_tests.rs"]
 mod check_tests;
+
+#[cfg(test)]
+#[path = "solver_regression_tests.rs"]
+mod regression_tests;
