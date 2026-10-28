@@ -1170,7 +1170,7 @@ mod tests {
         let mesh = kmb_cam_setup::testing::mesh_of(&[]);
         let tool = kmb_cam_tool::ToolLibrary::starter().get(3).unwrap().clone();
         let p = kmb_cam_setup::testing::prepared(&mesh, [0.0; 3], [12.0, 12.0, 3.0], tool);
-        let input = p.input(FeatureId(4), &serde_json::json!({}), Default::default());
+        let input = p.input(FeatureId(4), serde_json::json!({}), Default::default());
         let planner = Planner::new(&input);
         let mut path = planner.toolpath();
         let runs = avoid_tabs(
