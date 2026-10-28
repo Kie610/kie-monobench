@@ -1778,6 +1778,8 @@ mod label_tests;
 #[cfg(test)]
 mod modify_ui_tests;
 #[cfg(test)]
+mod multi_equal_ui_tests;
+#[cfg(test)]
 mod ops_tests;
 #[cfg(test)]
 mod origin_tests;

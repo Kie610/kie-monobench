@@ -267,11 +267,9 @@ impl Augmented {
             });
             let id = match existing {
                 Some(id) if self.virtuals.contains_key(&id) => id,
-                // 既存の点に重なる場合も使える。線に使わなければ拘束は増えない。
-                Some(id) => {
-                    self.opposites.entry(id).or_insert((start, center, circle));
-                    continue;
-                }
+                // 文書の点は普通の点として拾う。既存の終点の拘束に中点を重ねると、
+                // 余分な拘束になる場合があるため、直径の自動拘束の候補にはしない。
+                Some(_) => continue,
                 None => {
                     let id = self.sketch.add_point(q[0], q[1]);
                     self.sol.points.insert(id, q);
@@ -619,6 +617,34 @@ mod tests {
     }
 
     #[test]
+    fn an_existing_opposite_point_keeps_its_circle_constraint_without_redundancy() {
+        let (mut s, _, circle, start) = diameter_base(true);
+        let end = s.add_point(-3.0, -4.0);
+        s.add_constraint(ConstraintKind::PointOnCircle { point: end, circle });
+        let aug = augmented_diameter(&s, start);
+        assert!(!aug.opposites.contains_key(&end));
+        assert_ne!(aug.kind(end), Some(Kind::Opposite));
+        let mut drawn = aug.sketch.clone();
+        let line = drawn.add_line(start, end);
+        assert!(!aug.attach_diameter(&mut drawn, line, start, end));
+        let (out, _) = aug.prune(drawn, &[]);
+        assert_eq!(out.constraints, s.constraints);
+        for old in &s.constraints {
+            assert!(out.constraints.contains(old), "既存拘束を変えない: {old:?}");
+        }
+        let values = kmb_sketch::dimension_values(&out, &|_| None).unwrap();
+        let sol = kmb_sketch::solve(&out, &values).unwrap();
+        assert!(
+            !matches!(
+                sol.status,
+                kmb_sketch::SolveStatus::OverConstrained { .. }
+                    | kmb_sketch::SolveStatus::Inconsistent { .. }
+            ),
+            "既存終点の円周上拘束を残したまま余分な拘束を付けない: {sol:?}"
+        );
+    }
+
+    #[test]
     fn a_quadrant_or_arc_start_offers_the_opposite_without_duplicate_circle_constraints() {
         for arc in [false, true] {
             let mut s = Sketch::default();
@@ -658,7 +684,14 @@ mod tests {
                 assert!(out.constraints.contains(old), "既存拘束を変えない: {old:?}");
             }
             let sol = kmb_sketch::solve(&out, &HashMap::new()).unwrap();
-            assert!(!matches!(sol.status, kmb_sketch::SolveStatus::OverConstrained { .. } | kmb_sketch::SolveStatus::Inconsistent { .. }), "{sol:?}");
+            assert!(
+                !matches!(
+                    sol.status,
+                    kmb_sketch::SolveStatus::OverConstrained { .. }
+                        | kmb_sketch::SolveStatus::Inconsistent { .. }
+                ),
+                "{sol:?}"
+            );
             let (a, b, c) = (sol.points[&start], sol.points[&end], sol.points[&center]);
             for axis in 0..2 {
                 assert!(((a[axis] + b[axis]) / 2.0 - c[axis]).abs() < 1e-6);
