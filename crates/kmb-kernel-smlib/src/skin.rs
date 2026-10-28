@@ -1364,19 +1364,28 @@ pub fn helical_sweep(
             boundary + helix.blend / 2.0,
         ]);
     }
+    const TURN_EPSILON: f64 = 1e-12;
+    // 整数回りの区切りが終端とほぼ同じなら、終端を前の面へ含める。
+    // 終端の値は保ち、丸めの幅だけの空の曲面を作らない。
+    let mut boundaries = vec![0.0];
+    boundaries.extend(
+        (1..total.ceil() as usize)
+            .map(|i| i as f64)
+            .filter(|t| total - t > TURN_EPSILON),
+    );
+    boundaries.push(total);
     let mut out = Vec::new();
-    for revolution in 0..total.ceil() as usize {
-        let from = revolution as f64;
-        let to = (from + 1.0).min(total);
-        let mut cuts = vec![from, to];
-        cuts.extend(
-            breaks
-                .iter()
-                .copied()
-                .filter(|t| *t > from + 1e-12 && *t < to - 1e-12),
-        );
+    for (revolution, interval) in boundaries.windows(2).enumerate() {
+        let (from, to) = (interval[0], interval[1]);
+        let mut cuts: Vec<f64> = breaks
+            .iter()
+            .copied()
+            .filter(|t| *t > from + TURN_EPSILON && *t < to - TURN_EPSILON)
+            .collect();
         cuts.sort_by(f64::total_cmp);
-        cuts.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
+        cuts.dedup_by(|a, b| (*a - *b).abs() < TURN_EPSILON);
+        cuts.insert(0, from);
+        cuts.push(to);
         for l in &loops {
             for edge in &l.edges {
                 let spans = edge.geo.spans(0.0, 1.0);
@@ -1872,6 +1881,46 @@ mod tests {
                 assert!(dist(a, [b[0], -b[1], b[2]]) < 1e-9, "{a:?} {b:?}");
                 assert!((a[0].hypot(a[1]) - 10.0).abs() < 0.001, "{a:?}");
             }
+        }
+    }
+
+    #[test]
+    fn helical_surfaces_preserve_near_integer_endpoints_without_empty_patches() {
+        let profile = helix_profile();
+        for (turns, expected_count) in [
+            (3.0, 3),
+            (3.0 - 1e-15, 3),
+            (3.0 + 1e-15, 3),
+            (3.25, 4),
+            (1e-13, 1),
+        ] {
+            let h = k::Helix {
+                spans: vec![k::HelixSpan { turns, pitch: 3.0 }],
+                ..helix()
+            };
+            let surfaces = helical_sweep(&profile, &h, "h").unwrap();
+            assert_eq!(surfaces.len(), expected_count, "{turns:.17}");
+            for (index, surface) in surfaces.iter().enumerate() {
+                assert!(!surface.rows.is_empty(), "{turns:.17}: {index}");
+                assert_eq!(
+                    surface.knots_u.len(),
+                    surface.rows.len() + surface.degree_u + 1
+                );
+                assert_eq!(surface.name, format!("h:side:circle:{index}"));
+                assert_eq!(
+                    surface.caps,
+                    i32::from(index == 0) | if index + 1 == surfaces.len() { 2 } else { 0 }
+                );
+            }
+            let last = surfaces.last().unwrap();
+            let point = eval(last, 1.0, 0.0);
+            let angle = turns * TAU;
+            assert!(
+                dist(
+                    point,
+                    [10.0 * angle.cos(), 10.0 * angle.sin(), 1.0 + turns * 3.0]
+                ) < 1e-9
+            );
         }
     }
 

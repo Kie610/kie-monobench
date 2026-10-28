@@ -95,6 +95,7 @@ fn modeled_threads_keep_large_fine_long_and_print_clearance_shafts_closed() {
         (8.0, 8.0, 0.75, 80.0, 0.0, "M8x0.75"),
         (7.8, 8.0, 1.25, 20.0, 0.2, "M8"),
     ] {
+        eprintln!("modeled thread: {size}, diameter={diameter}, height={height}");
         let (mut doc, target) = cylinder(diameter, height);
         let id = insert_thread(
             &mut doc,
