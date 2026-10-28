@@ -15,6 +15,65 @@ use kmb_sketch::SketchPlane;
 use serde_json::json;
 use std::sync::Arc;
 
+#[test]
+fn expanded_thread_fasteners_include_large_metric_sizes() {
+    for name in ["M14", "M16", "M20", "M24", "M30"] {
+        let size = kmb_asm::fastener::metric(name).unwrap();
+        let hole = kmb_cad_hole::thread(name).unwrap();
+        assert_eq!(
+            (size.d, size.pitch, size.tap),
+            (hole.major, hole.pitch, hole.tap_drill)
+        );
+        assert_eq!(size.clearance, hole.clearance);
+        assert!(hole.counterbore.0 > size.socket[0]);
+        assert!(hole.counterbore.1 > size.socket[1]);
+    }
+}
+
+#[test]
+fn expanded_thread_large_bolts_nuts_and_washers_make_closed_bodies() {
+    for name in ["M24", "M30"] {
+        for kind in ["socket_head", "hex_bolt", "hex_nut", "washer"] {
+            let mut b = DocBuilder::new();
+            let fastener = b.feature(
+                FASTENER,
+                "規格部品",
+                json!({
+                    "kind":kind,"size":name,"length":"40 mm",
+                    "places":[{"center":[0,0,0],"normal":[0,0,1]}]
+                }),
+            );
+            b.feature(
+                kmb_asm::fastener::FASTENER_BODY,
+                "ボディ",
+                json!({"fastener":fastener.0,"index":0}),
+            );
+            let mut doc = b.finish("大きい規格部品");
+            let reg = registry();
+            let k = SmlibKernel::new();
+            let report = doc.recompute(&reg, &k);
+            assert_ok(&report);
+            let bodies = visible_bodies(doc.data(), &reg, &report);
+            assert_eq!(bodies.len(), 1);
+            let body = bodies[0].1;
+            assert_eq!(k.check(body).unwrap(), (true, 1, 0), "{name} {kind}");
+            assert!(k.mass(body).unwrap().volume > 0.0);
+            let table = kmb_asm::fastener::metric(name).unwrap();
+            let expected_height = match kind {
+                "socket_head" => 40.0 + table.socket[1],
+                "hex_bolt" => 40.0 + table.hex_head[1],
+                "hex_nut" => table.nut[1],
+                _ => table.washer[2],
+            };
+            let (min, max) = k.bounds(body).unwrap();
+            assert!(
+                (max[2] - min[2] - expected_height).abs() < 1e-3,
+                "{name} {kind}: {min:?} {max:?}"
+            );
+        }
+    }
+}
+
 struct Bench {
     doc: Document,
     reg: kmb_core::Registry,
@@ -447,7 +506,7 @@ fn names_follow_the_jis_thread_designation() {
     assert_eq!(size_name("M10×1.5"), "M10", "並目のピッチは省く");
     assert_eq!(size_name("m3"), "M3");
     assert!(thread("M10×1.75").is_none(), "M10 に 1.75 の細目は無い");
-    assert!(thread("M24").is_none());
+    assert!(thread("M27").is_none());
     assert!(thread("M1.6").is_some() && thread("M20×1.5").is_some());
     assert_eq!(fits(Kind::HexNut, "M10×1.25", 8.75, true), Some(true));
     assert_eq!(fits(Kind::HexNut, "M10", 8.75, true), Some(true));

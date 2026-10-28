@@ -7,6 +7,9 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+expanded_thread_tapped_holes_use_all_families_and_survive_reopening = "truck の回(曲面の網による近似で M14 ねじ穴の体積が 0.183 mm³ ずれる)"
+legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth = "truck の回(曲面の網による近似で M14 ザグリの除去体積が 0.613 mm³ ずれる)"
+legacy_thread_countersink_keeps_the_omitted_diameter = "truck の回(省略寸法の皿穴のブーリアンで閉じたシェルを作れない)"
 one_curve_whole_output_is_explicit_and_refuses_an_added_second_curve = "truck の回(面のボディを作る口が未対応)"
 planar_surface_follows_dimensions_and_survives_document_round_trip = "truck の回(面のボディを作る口が未対応)"
 spatial_sketch_lines_form_a_sheet_and_invalid_wire_reference_stops = "truck の回(面のボディを作る口が未対応)"
@@ -76,6 +79,3 @@ a_loft_joins_a_square_to_a_circle_and_refuses_sections_on_one_plane = "truck の
 a_loft_of_sections_with_holes_stays_hollow = "truck の回(ロフト)"
 a_sweep_follows_its_path_and_its_dimensions = "truck の回(スイープ)"
 a_sweep_twists_and_narrows_by_its_fields = "truck の回(スイープ)"
-
-revolving_a_disk_face_keeps_the_hole_and_the_saved_reference = "truck の回(円の面の輪郭の網による近似と、回転の体積の網による誤差)"
-revolving_a_face_around_its_straight_edge_follows_dimensions = "truck の回(回転の体積を網から求めるため円柱の厳密な体積とずれる)"

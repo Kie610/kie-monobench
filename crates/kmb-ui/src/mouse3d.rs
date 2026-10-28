@@ -145,8 +145,8 @@ fn clamp(v: f32, r: &std::ops::RangeInclusive<f32>, or: f32) -> f32 {
     }
 }
 
-/// 機器の値 `axes` から、`dt` 秒分の視点の量を作る。`view_height` はビューの高さ(画素)。
-pub fn nav_of(axes: [f32; 6], s: &Mouse3dSettings, dt: f32, view_height: f32) -> Nav {
+/// 0 合わせ・遊び・曲線・軸の入り切り・反転を適用した、視点に効く軸の量。
+pub(crate) fn live_axes(axes: [f32; 6], s: &Mouse3dSettings) -> [f32; 6] {
     let dz = clamp(s.dead_zone, &DEAD_ZONE_RANGE, 0.05);
     let mut v = [0.0f32; 6];
     for i in 0..6 {
@@ -171,6 +171,12 @@ pub fn nav_of(axes: [f32; 6], s: &Mouse3dSettings, dt: f32, view_height: f32) ->
             }
         }
     }
+    v
+}
+
+/// 機器の値から、時間とビューの高さに合わせた視点の量を作る。
+pub fn nav_of(axes: [f32; 6], s: &Mouse3dSettings, dt: f32, view_height: f32) -> Nav {
+    let v = live_axes(axes, s);
     let t = clamp(s.speed, &SPEED_RANGE, 1.0) * dt.clamp(0.0, MAX_DT);
     let px = view_height.max(1.0) * t;
     // 機器の軸: 移動 X は右、Y は手前、Z は下。回転はそれぞれの軸のまわり(符号は機器による。
@@ -194,12 +200,27 @@ impl Workspace {
     /// このコマの 3D マウスの値を読み、3D のビューへ渡す(毎コマ 1 回、ビューを描く前に)。
     pub(crate) fn feed_mouse3d(&mut self, ctx: &egui::Context) {
         let Some(m) = &self.win.mouse3d else {
+            self.win
+                .keycast
+                .prepare_mouse3d(&self.win.layout.keycast, false);
             return;
         };
         // 押されたボタンは使わない時も受け取って捨てる(後でまとめて働かない)
         let snap = m.snapshot();
         let s = &self.win.layout.mouse3d;
-        let (focused, dt) = ctx.input(|i| (i.focused, i.stable_dt));
+        let (focused, dt, now) = ctx.input(|i| (i.focused, i.stable_dt, i.time));
+        self.win.keycast.prepare_mouse3d(
+            &self.win.layout.keycast,
+            s.enabled && matches!(snap.status, kmb_ui_mouse3d::Status::Connected { .. }),
+        );
+        let axes = if s.enabled && focused {
+            live_axes(snap.axes, s)
+        } else {
+            [0.0; 6]
+        };
+        self.win
+            .keycast
+            .take_mouse3d(axes, &snap.buttons_pressed, now);
         if !s.enabled || !focused {
             kmb_ui_view3d::view3d::set_nav(ctx, Nav::default());
             return;
