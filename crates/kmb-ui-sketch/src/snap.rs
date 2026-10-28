@@ -229,6 +229,10 @@ fn sol_point(sol: &Solution, id: EntityId) -> Option<[f64; 2]> {
     sol.points.get(&id).copied()
 }
 
+fn point_on_circle(c: &kmb_sketch::Constraint, point: EntityId, circle: EntityId) -> bool {
+    matches!(c.kind, ConstraintKind::PointOnCircle { point: p, circle: ring } if p == point && ring == circle)
+}
+
 impl Augmented {
     /// 円周上にある始点から、中心を通る反対側を線の終点の候補にする。
     /// 位置だけが円周に近い点は候補にしない。
@@ -266,9 +270,22 @@ impl Augmented {
                 _ => None,
             });
             let id = match existing {
-                Some(id) if self.virtuals.contains_key(&id) => id,
-                // 文書の点は普通の点として拾う。既存の終点の拘束に中点を重ねると、
-                // 余分な拘束になる場合があるため、直径の自動拘束の候補にはしない。
+                Some(id)
+                    if self.virtuals.get(&id) == Some(&Kind::Quadrant)
+                        && self.auto.get(&id).is_some_and(|auto| {
+                            !auto.is_empty()
+                                && auto.iter().all(|cid| {
+                                    self.sketch
+                                        .constraints
+                                        .iter()
+                                        .any(|c| c.id == *cid && point_on_circle(c, id, circle))
+                                })
+                        }) =>
+                {
+                    id
+                }
+                // 文書の点とほかの吸い付く先は元の拾い方を保つ。終点の拘束に中点を
+                // 重ねると、余分な拘束になる場合があるため、直径の候補にはしない。
                 Some(_) => continue,
                 None => {
                     let id = self.sketch.add_point(q[0], q[1]);
@@ -304,10 +321,8 @@ impl Augmented {
         // 始点の円周上拘束と中点で終点も円周上になる。四分点の仮の終点に付いた
         // 同じ円の自動拘束だけを除き、文書にある拘束は変えない。
         if let Some(auto) = self.auto.get(&b) {
-            s.constraints.retain(|c| {
-                !(auto.contains(&c.id)
-                    && matches!(c.kind, ConstraintKind::PointOnCircle { point, circle: ring } if point == b && ring == circle))
-            });
+            s.constraints
+                .retain(|c| !(auto.contains(&c.id) && point_on_circle(c, b, circle)));
         }
         true
     }
@@ -642,6 +657,73 @@ mod tests {
             ),
             "既存終点の円周上拘束を残したまま余分な拘束を付けない: {sol:?}"
         );
+    }
+
+    #[test]
+    fn an_origin_snap_keeps_its_role_without_a_redundant_diameter_constraint() {
+        for midpoint in [false, true] {
+            let mut s = Sketch::default();
+            let center = s.add_point(3.0, 4.0);
+            let circle = s.add_circle(center, 5.0);
+            let start = s.add_point(6.0, 8.0);
+            s.add_constraint(ConstraintKind::Fix { point: center });
+            s.add_constraint(ConstraintKind::Radius {
+                circle,
+                value: "5 mm".into(),
+            });
+            s.add_constraint(ConstraintKind::PointOnCircle {
+                point: start,
+                circle,
+            });
+            if midpoint {
+                let a = s.add_point(-1.0, 0.0);
+                let b = s.add_point(1.0, 0.0);
+                s.add_line(a, b);
+                s.add_constraint(ConstraintKind::Fix { point: a });
+                s.add_constraint(ConstraintKind::Fix { point: b });
+            }
+            let values = kmb_sketch::dimension_values(&s, &|_| None).unwrap();
+            let sol = kmb_sketch::solve(&s, &values).unwrap();
+            let refs = if midpoint {
+                vec![]
+            } else {
+                vec![kmb_sketch::origin_ref(&kmb_core::Plane::XY)]
+            };
+            let mut aug = augment(&s, &sol, &refs, ALL);
+            let kind = if midpoint {
+                Kind::Midpoint
+            } else {
+                Kind::Origin
+            };
+            let origin = *aug.virtuals.iter().find(|(_, k)| **k == kind).unwrap().0;
+            let before_auto = aug.auto.clone();
+            let before_virtuals = aug.virtuals.clone();
+            aug.add_opposites(start);
+            assert_eq!(aug.auto, before_auto);
+            assert_eq!(aug.virtuals, before_virtuals);
+            assert_eq!(aug.kind(origin), Some(kind));
+            let mut drawn = aug.sketch.clone();
+            let line = drawn.add_line(start, origin);
+            assert!(!aug.attach_diameter(&mut drawn, line, start, origin));
+            let (out, _) = aug.prune(drawn, &[]);
+            assert_eq!(
+                out.constraints.len(),
+                s.constraints.len() + usize::from(midpoint)
+            );
+            assert_eq!(out.projections.len(), usize::from(!midpoint));
+            for old in &s.constraints {
+                assert!(out.constraints.contains(old));
+            }
+            let sol = kmb_sketch::solve(&out, &values).unwrap();
+            assert!(
+                !matches!(
+                    sol.status,
+                    kmb_sketch::SolveStatus::OverConstrained { .. }
+                        | kmb_sketch::SolveStatus::Inconsistent { .. }
+                ),
+                "原点の固定に直径の中点を重ねて余分にしない: {sol:?}"
+            );
+        }
     }
 
     #[test]
