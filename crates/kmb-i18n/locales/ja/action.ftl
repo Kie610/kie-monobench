@@ -154,7 +154,7 @@ action-cad-text-on-face-tip = 平らな面を選んでから押すと、面の�
 action-cad-text-on-path = スケッチの線に文字
 action-cad-text-on-path-tip = スケッチの最初の線(補助線でもよい)に沿って文字を並べる。円なら真上に外向き
 action-cad-thread = ねじ
-action-cad-thread-tip = 押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いメートルねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める
+action-cad-thread-tip = 押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める
 action-cad-timeline-read-latest-bodies = 前の版の読み方をまとめて外す
 action-cad-timeline-read-latest-bodies-tip = 前の版の読み方で、選んだ時点のボディを読んでいる機能の全部に、最新の形を読ませる(1 回で取り消せる)
 action-cad-timeline-read-latest-body = 最新の形を読む
@@ -296,7 +296,7 @@ action-render-turntable-tip = ボディのまわりを 1 周する動画にす�
 ## 解析
 
 action-study-cancel = 中止
-action-study-cancel-tip = 計算をやめる(流れは、ここまでのコマを結果に残す)
+action-study-cancel-tip = 計算をやめる(流れと時間で変わる熱は、ここまでのコマを結果に残す)
 action-study-run = 実行
 action-study-run-tip = 選んだ研究を解く。研究は自動では解きません。条件や形を変えると結果に「古い」が付きます
 

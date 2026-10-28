@@ -377,7 +377,7 @@ impl Extension for StudyCommands {
         let mut cancel = Action::new(CANCEL, "中止", "fea")
             .menu("実行")
             .icon("x")
-            .hint("計算をやめる(流れは、ここまでのコマを結果に残す)")
+            .hint("計算をやめる(流れと時間で変わる熱は、ここまでのコマを結果に残す)")
             .aliases("ちゅうし やめる 中止 cancel stop")
             .at(&places);
         if !running {
