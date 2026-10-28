@@ -304,6 +304,10 @@ impl Bench {
     }
 
     fn fits(shaft: f64, hole: f64, from: f64, to: f64) -> Self {
+        Self::fits_in_plane(shaft, hole, from, to, Plane::XY)
+    }
+
+    fn fits_in_plane(shaft: f64, hole: f64, from: f64, to: f64, plane: Plane) -> Self {
         let mut b = Self::new();
         b.add(
             BODY,
@@ -320,7 +324,7 @@ impl Bench {
             Cylinder {
                 outer: shaft / 2.0,
                 inner: 0.0,
-                plane: Plane::XY,
+                plane,
                 from,
                 to,
             },
@@ -420,6 +424,65 @@ fn a_half_inserted_shaft_marks_only_the_inserted_length() {
         kmb_contract::skip!("truck は同じ円筒で接するブーリアンに失敗します");
     }
     check_contact(5.0, 15.0, 5.0);
+}
+
+#[test]
+fn an_equal_diameter_shaft_offset_by_half_a_millimeter_is_overlap() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!(
+            "truck は軸を横にずらした同径の軸と穴のブーリアンで単純な輪を作れません"
+        );
+    }
+    let b = Bench::fits_in_plane(
+        5.0,
+        5.0,
+        -2.0,
+        12.0,
+        Plane {
+            origin: [0.5, 0.0, 0.0],
+            ..Plane::XY
+        },
+    );
+    for coincident in [false, true] {
+        let (clashes, failed) = interferences_with(&b.cx(), coincident);
+        assert!(failed.is_empty(), "{failed:?}");
+        assert_eq!(clashes.len(), 1, "{clashes:?}");
+        let c = &clashes[0];
+        assert!(!c.touch && c.volume > TOUCH, "{c:?}");
+    }
+    let bodies = b.cx().visible_bodies();
+    let (mark, area) = contact(b.kernel.as_ref(), bodies[0].1, bodies[1].1).unwrap();
+    assert!(area <= TOUCH_AREA, "横にずれた円筒の一致する面積: {area}");
+    assert!(mark.tris.is_empty(), "横にずれた円筒を一致として塗らない");
+}
+
+#[test]
+fn an_antiparallel_equal_diameter_shaft_is_coincident() {
+    if kmb_bundle::KernelKind::from_env() == kmb_bundle::KernelKind::Truck {
+        kmb_contract::skip!("truck は反平行の同じ円筒で接するブーリアンに失敗します");
+    }
+    let b = Bench::fits_in_plane(
+        5.0,
+        5.0,
+        -2.0,
+        12.0,
+        Plane {
+            origin: [0.0, 0.0, 10.0],
+            y_axis: [0.0, -1.0, 0.0],
+            ..Plane::XY
+        },
+    );
+    let (off, failed) = interferences_with(&b.cx(), false);
+    assert!(off.is_empty(), "{off:?}");
+    assert!(failed.is_empty(), "{failed:?}");
+    let (clashes, failed) = interferences_with(&b.cx(), true);
+    assert!(failed.is_empty(), "{failed:?}");
+    assert_eq!(clashes.len(), 1, "{clashes:?}");
+    let c = &clashes[0];
+    assert!(c.touch && c.volume == 0.0, "{c:?}");
+    let want = std::f64::consts::PI * 5.0 * 10.0;
+    assert!((c.area - want).abs() < 1e-5, "{} / {want}", c.area);
+    assert!(!c.mark.tris.is_empty(), "反平行の円筒の一致する面を塗る");
 }
 
 #[test]
