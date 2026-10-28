@@ -13,6 +13,55 @@ fn layout(report: &kmb_core::RecomputeReport, id: FeatureId) -> NestLayout {
 }
 
 #[test]
+fn nesting_commands_use_numeric_defaults_and_convert_declared_length_units() {
+    let m = kmb_bundle::modules();
+    for (args, edge, spacing) in [
+        (serde_json::json!({}), "5 mm", "8 mm"),
+        (
+            serde_json::json!({"edge":"1 mm","spacing":"0.25 in"}),
+            "1 mm",
+            "6.35 mm",
+        ),
+    ] {
+        let mut doc = crate::reference_document();
+        let report = doc.recompute(&m.registry, m.kernel.as_ref());
+        let selected=doc.data().features.iter().rev().find(|f|matches!(report.feature(f.id),Some(FeatureStatus::Ok { outputs,.. }) if outputs.contains_key("body"))).unwrap().id;
+        let mut before = doc.data().clone();
+        let cx = kmb_core::Context {
+            selected: Some(selected),
+            args: &args,
+            ..kmb_core::Context::new(doc.data(), &report, &m.registry, &m.kernel)
+        };
+        let kmb_core::Outcome::Change { label, edits } = m
+            .extensions
+            .run("cam.nest.create", &cx)
+            .expect("宣言した既定と長さ")
+        else {
+            panic!("配置の作成は取り消せる変更を返す");
+        };
+        doc.apply_edits(&label, edits).unwrap();
+        let setup: Setup =
+            serde_json::from_value(doc.data().features.last().unwrap().data.clone()).unwrap();
+        let nest = setup.nest.unwrap();
+        assert_eq!(nest.edge, edge);
+        assert_eq!(nest.spacing, spacing);
+        assert_eq!(nest.grid, "1 mm");
+        assert_eq!(setup.stock.width, "100 mm");
+        assert_eq!(setup.stock.depth, "100 mm");
+        assert_eq!(setup.stock.height, "20 mm");
+        assert_eq!(
+            doc.recompute(&m.registry, m.kernel.as_ref()).error_count(),
+            0
+        );
+        assert!(doc.undo());
+        // 割り当てた ID は取り消し後にも再利用しない。
+        assert!(doc.data().next_id >= before.next_id);
+        before.next_id = doc.data().next_id;
+        assert_eq!(doc.data(), &before);
+    }
+}
+
+#[test]
 fn rectangle_samples_have_one_and_two_sheets_and_hold_named_copies() {
     let reg = kmb_bundle::registry();
     let kernel = kmb_bundle::kernel();

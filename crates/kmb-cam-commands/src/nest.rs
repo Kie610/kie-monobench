@@ -53,12 +53,12 @@ pub fn actions(cx: &Context<'_>) -> Vec<Action> {
                 )
                 .default("stock"),
             )
-            .arg(Arg::length("spacing", "部品の間").default("8 mm"))
-            .arg(Arg::length("edge", "縁の余白").default("5 mm"))
-            .arg(Arg::length("width", "板の幅").default("100 mm"))
-            .arg(Arg::length("depth", "板の奥行").default("100 mm"))
-            .arg(Arg::length("height", "板の厚さ").default("20 mm"))
-            .arg(Arg::length("grid", "形どおりの格子の目").default("1 mm"))
+            .arg(Arg::length("spacing", "部品の間").default(8.0))
+            .arg(Arg::length("edge", "縁の余白").default(5.0))
+            .arg(Arg::length("width", "板の幅").default(100.0))
+            .arg(Arg::length("depth", "板の奥行").default(100.0))
+            .arg(Arg::length("height", "板の厚さ").default(20.0))
+            .arg(Arg::length("grid", "形どおりの格子の目").default(1.0))
             .arg(Arg::integer("max_sheets", "板の枚数の上限").default(10))
             .arg(
                 Arg::choice(
