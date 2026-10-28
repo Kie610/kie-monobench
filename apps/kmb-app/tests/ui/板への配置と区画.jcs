@@ -5,7 +5,11 @@ click ~作業空間:
 click "設計"
 click "button:穴の並び"
 run cam.nest.create width=140 depth=90 height=15
+click "button:~OK"
 key Escape
+click ~作業空間:
+click "加工"
+expect "板への配置" exists
 key ctrl+z
 expect "板への配置" missing
 key ctrl+y
@@ -32,6 +36,7 @@ dclick "button:板への配置"
 expect "区画の書き出し" = "止めを入れた 1 ファイル"
 key Escape
 run cam.add.contour
+click "button:~OK"
 key Escape
 click "全体表示"
 shot 板への配置と区画
