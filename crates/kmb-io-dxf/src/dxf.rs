@@ -47,7 +47,14 @@ fn num(v: f64) -> String {
 }
 
 /// 解いたスケッチを DXF の文字列にする。ファイルに書くのは呼び出し側。
-pub fn to_dxf(sketch: &Sketch, sol: &Solution, opts: &DxfOptions) -> String {
+/// 画層名に改行があれば誤りにする。
+pub fn to_dxf(sketch: &Sketch, sol: &Solution, opts: &DxfOptions) -> Result<String, String> {
+    if [&opts.layer, &opts.construction_layer]
+        .iter()
+        .any(|name| name.contains(['\r', '\n']))
+    {
+        return Err("画層名に改行は使えません".into());
+    }
     let construction: BTreeSet<_> = sketch
         .entities
         .iter()

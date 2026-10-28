@@ -34,12 +34,18 @@ struct End {
     arc: bool,
 }
 
-/// 同じ直線の上で重なる線をまとめ、別の形の開いた端点だけを `tolerance` mm 以内でつなぐ。
-/// 端点は一度だけ組にするので、連鎖して許容差より遠くへ動かさない。
-pub fn clean(shapes: &[Shape], tolerance: f64) -> Result<Cleaned, String> {
+/// 整理の有無にかかわらず、宣言した許容差の範囲を守る。
+pub(crate) fn validate_tolerance(tolerance: f64) -> Result<(), String> {
     if !tolerance.is_finite() || !(WELD_TOL..=1.0).contains(&tolerance) {
         return Err("端点をつなぐ許容差は 0.000001〜1 mm にしてください".into());
     }
+    Ok(())
+}
+
+/// 同じ直線の上で重なる線をまとめ、別の形の開いた端点だけを `tolerance` mm 以内でつなぐ。
+/// 端点は一度だけ組にするので、連鎖して許容差より遠くへ動かさない。
+pub fn clean(shapes: &[Shape], tolerance: f64) -> Result<Cleaned, String> {
+    validate_tolerance(tolerance)?;
     // スケッチが保持できない自由曲線は、挿入と同じ mm の許容差で区間にする。
     // 近似の途中の共有点は閉じた端点として残し、曲線の両端の隙間だけをつなぐ。
     if shapes.iter().any(|s| !s.is_finite()) {
@@ -66,7 +72,7 @@ pub fn clean(shapes: &[Shape], tolerance: f64) -> Result<Cleaned, String> {
             let length = distance(*a, *b);
             if length > EPS {
                 let mut d = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
-                if d[0] < 0.0 || (d[0] == 0.0 && d[1] < 0.0) {
+                if d[0] < -EPS || (d[0].abs() <= EPS && d[1] < 0.0) {
                     d = d.map(|v| -v);
                 }
                 let offset = d[0] * a[1] - d[1] * a[0];

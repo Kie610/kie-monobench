@@ -103,6 +103,7 @@ action-cad-import-step = Import STEP…
 action-cad-import-step-tip = Import a part made in another CAD program. Add holes and pockets to it and use it for machining and measuring
 action-cad-loft = Loft
 action-cad-loft-tip = Press, then click the sections (profiles drawn on different planes) in the order to join them, and pick guide rail lines (or press Enter if none)
+action-cad-loft-point = Reselect End Point
 action-cad-measure = Measure Volume
 action-cad-measure-tip = Volume, surface area and bounding box of the selected body (or the last body)
 action-cad-mirror-on-face = Mirror on This Face
@@ -152,7 +153,7 @@ action-cad-text-on-face-tip = Select a flat face, then press to place single-lin
 action-cad-text-on-path = Text on Sketch Line
 action-cad-text-on-path-tip = Lay text along the first line of the sketch (construction lines too). On a circle it starts at the top, facing out
 action-cad-thread = Thread
-action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the metric thread size and pitch nearest the face's diameter. Edit size, length and direction in the fields, then OK or Enter
+action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the thread size and pitch nearest the face's diameter. Edit size, length and direction in the fields, then OK or Enter
 action-cad-timeline-read-latest-bodies = Read Latest Bodies Everywhere
 action-cad-timeline-read-latest-bodies-tip = Make every feature that still reads a body as it was when picked (the older reading) read the latest shape instead (one undo step)
 action-cad-timeline-read-latest-body = Read Latest Body
@@ -294,7 +295,7 @@ action-render-turntable-tip = Make a video going once around the bodies. The fil
 ## Simulation
 
 action-study-cancel = Cancel
-action-study-cancel-tip = Stop solving (for flow, the frames so far are kept in the results)
+action-study-cancel-tip = Stop solving (for flow and time-varying heat, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
 
