@@ -265,7 +265,7 @@ pub fn run(
                 }
                 _ => (f.type_id.clone(), f.data.clone()),
             };
-            make_rest(&mut d, s.tool, n);
+            make_rest(all, &type_id, last, &mut d, s.tool, n)?;
             let root = cx
                 .data
                 .feature(c[0])
@@ -283,7 +283,21 @@ pub fn run(
 
 /// 加工のデータ `d` を、前の工具 `prev` の削り残しを工具 `tool` で削るものにする。
 /// 「工具の順番に足す」と「取残し加工」の両方が使う。
-pub(crate) fn make_rest(d: &mut serde_json::Value, prev: u32, tool: u32) {
+pub(crate) fn make_rest(
+    all: &[Strategy],
+    type_id: &str,
+    source: FeatureId,
+    d: &mut serde_json::Value,
+    prev: u32,
+    tool: u32,
+) -> Result<(), kmb_core::Problem> {
+    if let Some(inherit) = all
+        .iter()
+        .find(|s| s.type_id == type_id)
+        .and_then(|s| s.rest_inherit)
+    {
+        inherit(d, source)?;
+    }
     d["tool"] = serde_json::json!(tool);
     d["rest_tool"] = serde_json::json!(prev);
     if let Some(o) = d.as_object_mut() {
@@ -298,4 +312,5 @@ pub(crate) fn make_rest(d: &mut serde_json::Value, prev: u32, tool: u32) {
             o.remove(k);
         }
     }
+    Ok(())
 }

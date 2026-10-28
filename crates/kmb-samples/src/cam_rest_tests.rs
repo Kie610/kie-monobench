@@ -411,6 +411,317 @@ fn a_rest_contour_does_not_cut_below_the_adjacent_tab() {
     assert!(elsewhere, "タブ以外の隅も削らない");
 }
 
+// 確かめること: 6 mm の工具で置いた幅 1 mm の角のタブを、工具順で足す 2 mm の工具も残す。
+#[test]
+fn adding_a_two_mm_tool_preserves_the_six_mm_tools_manual_corner_tab() {
+    let mut cam = reference_cam();
+    let mut c = rest_contour_on_pocket(&cam);
+    c.base.tool = 1;
+    c.rest_tool = None;
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    let wall = insert_op(&mut cam, CONTOUR, "太い工具の輪郭", json(&c));
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let original = s.paths.iter().find(|p| p.name == "太い工具の輪郭").unwrap();
+    assert_eq!(original.tool.diameter, 6.0);
+    let floor = original
+        .moves
+        .iter()
+        .map(|m| m.to()[2])
+        .fold(f64::INFINITY, f64::min);
+    let big_corner = s.info.to_setup([11.0, 11.0, 0.0]);
+    let at = original
+        .moves
+        .iter()
+        .map(|m| m.to())
+        .filter(|p| (p[2] - floor).abs() < 1e-6)
+        .min_by(|a, b| {
+            (a[0] - big_corner[0])
+                .hypot(a[1] - big_corner[1])
+                .total_cmp(&(b[0] - big_corner[0]).hypot(b[1] - big_corner[1]))
+        })
+        .unwrap();
+    c.tab_points = vec![[at[0], at[1]]];
+    set_data(&mut cam.part.doc, wall, json(&c));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}3"),
+        wall,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    assert_eq!(added.data["rest_tool"], 1);
+    assert_eq!(added.data["tab_points"], json(&c.tab_points));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let path = s.paths.iter().find(|p| p.name == added.name).unwrap();
+    assert_eq!(path.tool.diameter, 2.0);
+    let fine_corner = s.info.to_setup([9.0, 9.0, 0.0]);
+    assert!((at[0] - fine_corner[0]).hypot(at[1] - fine_corner[1]) > 2.0);
+    let mut from = [0.0, 0.0, path.safe_z];
+    let mut elsewhere = false;
+    for movement in &path.moves {
+        if !matches!(movement, kmb_toolpath::Move::Rapid { .. }) {
+            for q in movement.points(from, 0.02) {
+                let distance = (q[0] - fine_corner[0]).hypot(q[1] - fine_corner[1]);
+                assert!(
+                    distance >= 1.5 || q[2] >= floor + 1.5 - 1e-6,
+                    "継承したタブの角を低く削る: {q:?}, 太工具の位置={at:?}"
+                );
+                elsewhere |= distance > 5.0 && q[2] <= floor + 1e-6;
+            }
+        }
+        from = movement.to();
+    }
+    assert!(elsewhere, "ほかの隅も削らない");
+}
+
+// 確かめること: 6→2→1 mm と工具を続けても、最初に置いた角のタブを残す。
+#[test]
+fn adding_a_one_mm_tool_keeps_the_original_six_mm_manual_corner_tab() {
+    let mut cam = reference_cam();
+    let mut one = ToolLibrary::starter().get(3).unwrap().clone();
+    one.number = 9;
+    one.name = "平 1 mm".into();
+    one.diameter = 1.0;
+    add_tool(&mut cam, one);
+    let mut c = rest_contour_on_pocket(&cam);
+    c.base.tool = 1;
+    c.rest_tool = None;
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    let wall = insert_op(&mut cam, CONTOUR, "太い工具の輪郭", json(&c));
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let original = s.paths.iter().find(|p| p.name == "太い工具の輪郭").unwrap();
+    assert_eq!(original.tool.diameter, 6.0);
+    let floor = original
+        .moves
+        .iter()
+        .map(|m| m.to()[2])
+        .fold(f64::INFINITY, f64::min);
+    let big_corner = s.info.to_setup([11.0, 11.0, 0.0]);
+    let at = original
+        .moves
+        .iter()
+        .map(|m| m.to())
+        .filter(|p| (p[2] - floor).abs() < 1e-6)
+        .min_by(|a, b| {
+            (a[0] - big_corner[0])
+                .hypot(a[1] - big_corner[1])
+                .total_cmp(&(b[0] - big_corner[0]).hypot(b[1] - big_corner[1]))
+        })
+        .unwrap();
+    c.tab_points = vec![[at[0], at[1]]];
+    set_data(&mut cam.part.doc, wall, json(&c));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}3"),
+        wall,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    assert_eq!(added.data["rest_tool"], 1);
+    assert_eq!(added.data["tab_points"], json(&c.tab_points));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}9"),
+        added.id,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    assert_eq!(added.data["rest_tool"], 3);
+    assert_eq!(added.data["rest_tab_source"], json(&wall));
+    assert_eq!(added.data["tab_points"], json(&c.tab_points));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let path = s.paths.iter().find(|p| p.name == added.name).unwrap();
+    assert_eq!(path.tool.diameter, 1.0);
+    let fine_corner = s.info.to_setup([8.5, 8.5, 0.0]);
+    assert!((at[0] - fine_corner[0]).hypot(at[1] - fine_corner[1]) > 2.0);
+    let mut from = [0.0, 0.0, path.safe_z];
+    let mut elsewhere = false;
+    for movement in &path.moves {
+        if !matches!(movement, kmb_toolpath::Move::Rapid { .. }) {
+            for q in movement.points(from, 0.02) {
+                let distance = (q[0] - fine_corner[0]).hypot(q[1] - fine_corner[1]);
+                assert!(
+                    distance >= 1.0 || q[2] >= floor + 1.5 - 1e-6,
+                    "継承したタブの角を低く削る: {q:?}, 太工具の位置={at:?}"
+                );
+                elsewhere |= distance > 5.0 && q[2] <= floor + 1e-6;
+            }
+        }
+        from = movement.to();
+    }
+    assert!(elsewhere, "ほかの隅も削らない");
+}
+
+// 確かめること: 進入位置で配置が変わった自動タブも、工具順を足した後に残す。
+#[test]
+fn adding_a_tool_preserves_the_auto_tab_placed_from_the_entry_corner() {
+    let mut cam = reference_cam();
+    let mut c = rest_contour_on_pocket(&cam);
+    c.base.tool = 1;
+    c.rest_tool = None;
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    let wall = insert_op(&mut cam, CONTOUR, "自動タブの輪郭", json(&c));
+    let m = modules();
+    let tab_path = |cam: &mut crate::ReferenceCam| {
+        let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+        assert_eq!(report.error_count(), 0, "{:?}", report.features);
+        let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+        <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+            cx.output(wall, kmb_cam_setup::TAB_PATHS).unwrap(),
+        )
+        .unwrap()
+        .paths
+        .remove(0)
+    };
+    let initial = tab_path(&mut cam);
+    assert_eq!(initial.pts.len(), 5);
+    c.entry = Some(initial.pts[2]);
+    c.tabs = 1;
+    set_data(&mut cam.part.doc, wall, json(&c));
+    let original = tab_path(&mut cam);
+    let at = original.pts[2];
+    assert_eq!(at, initial.pts[0]);
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}3"),
+        wall,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    assert!(added.data.get("entry").is_none());
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let path = s.paths.iter().find(|p| p.name == added.name).unwrap();
+    let fine_corner: [f64; 2] = std::array::from_fn(|axis| {
+        let low = original
+            .pts
+            .iter()
+            .map(|q| q[axis])
+            .fold(f64::INFINITY, f64::min);
+        let high = original
+            .pts
+            .iter()
+            .map(|q| q[axis])
+            .fold(f64::NEG_INFINITY, f64::max);
+        at[axis]
+            + if at[axis] < (low + high) / 2.0 {
+                -2.0
+            } else {
+                2.0
+            }
+    });
+    let mut from = [0.0, 0.0, path.safe_z];
+    let mut elsewhere = false;
+    for movement in &path.moves {
+        if !matches!(movement, kmb_toolpath::Move::Rapid { .. }) {
+            for q in movement.points(from, 0.02) {
+                let d = (q[0] - fine_corner[0]).hypot(q[1] - fine_corner[1]);
+                assert!(
+                    d >= 1.5 || q[2] >= original.z + 1.5 - 1e-6,
+                    "元の自動タブを低く削る: {q:?}"
+                );
+                elsewhere |= d > 5.0 && q[2] <= original.z + 1e-6;
+            }
+        }
+        from = movement.to();
+    }
+    assert!(elsewhere);
+    let restored: Contour = serde_json::from_value(added.data.clone()).unwrap();
+    assert_eq!(restored.rest_tab_source, Some(wall));
+    assert_eq!(
+        serde_json::to_value(restored).unwrap()["rest_tab_source"],
+        json(&wall)
+    );
+    let mut library: ToolLibrary =
+        serde_json::from_value(cam.part.doc.data().feature(cam.tools).unwrap().data.clone())
+            .unwrap();
+    library
+        .tools
+        .iter_mut()
+        .find(|t| t.number == 1)
+        .unwrap()
+        .diameter = 5.5;
+    set_data(&mut cam.part.doc, cam.tools, json(&library));
+    let moved = tab_path(&mut cam);
+    assert_ne!(moved.pts, original.pts);
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0);
+    let cx = kmb_core::Context::new(cam.part.doc.data(), &report, &m.registry, &m.kernel);
+    let inherited = <kmb_cam_setup::TabPaths as kmb_core::Payload>::from_value(
+        cx.output(added.id, kmb_cam_setup::TAB_PATHS).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(inherited.paths, vec![moved]);
+    assert_eq!(inherited.source_radius, Some(2.75));
+}
+
+// 確かめること: 元参照を持たない取残し加工も、次の工具へタブの実配置を渡せる。
+#[test]
+fn a_legacy_rest_contour_supplies_tabs_to_its_next_tool() {
+    let mut cam = reference_cam();
+    let mut one = ToolLibrary::starter().get(3).unwrap().clone();
+    one.number = 9;
+    one.name = "平 1 mm".into();
+    one.diameter = 1.0;
+    add_tool(&mut cam, one);
+    let m = modules();
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let at = s.info.to_setup([9.0, 9.0, 0.0]);
+    let mut c = rest_contour_on_pocket(&cam);
+    c.tab_points = vec![[at[0], at[1]]];
+    c.tab_width = "1 mm".into();
+    c.tab_height = "1.5 mm".into();
+    let rest = insert_op(&mut cam, CONTOUR, "元参照のない取残し", json(&c));
+    run_cam(
+        &mut cam,
+        &format!("{ADD_TOOL}9"),
+        rest,
+        serde_json::Value::Null,
+    );
+    let added = cam.part.doc.data().features.last().unwrap().clone();
+    assert_eq!(added.data["rest_tab_source"], json(&rest));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = setups(cam.part.doc.data(), &report, &m.registry).remove(0);
+    let path = s.paths.iter().find(|p| p.name == added.name).unwrap();
+    let corner = s.info.to_setup([8.5, 8.5, 0.0]);
+    let mut from = [0.0, 0.0, path.safe_z];
+    let mut elsewhere = false;
+    for movement in &path.moves {
+        if !matches!(movement, kmb_toolpath::Move::Rapid { .. }) {
+            for q in movement.points(from, 0.02) {
+                let d = (q[0] - corner[0]).hypot(q[1] - corner[1]);
+                assert!(d >= 1.0 || q[2] >= -8.5 - 1e-6, "{q:?}");
+                elsewhere |= d > 5.0 && q[2] < -9.5;
+            }
+        }
+        from = movement.to();
+    }
+    assert!(elsewhere);
+    let mut broken: Contour = serde_json::from_value(added.data.clone()).unwrap();
+    broken.rest_tab_source = Some(cam.pocket);
+    set_data(&mut cam.part.doc, added.id, json(&broken));
+    let report = cam.part.doc.recompute(&m.registry, m.kernel.as_ref());
+    assert!(
+        matches!(report.feature(added.id), Some(FeatureStatus::Error { message }) if message.contains("tab_paths"))
+    );
+}
+
 /// V 30°(上端 3.175 mm、刃長 10 mm)と、テーパー(先 0.5 mm、片側 5°)。
 fn thin_tools() -> (Tool, Tool) {
     let base = ToolLibrary::starter().tools[1].clone();

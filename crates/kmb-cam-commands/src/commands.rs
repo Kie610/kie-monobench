@@ -753,6 +753,7 @@ fn add_rest_pocket(
     cx: &Context<'_>,
     rest: &[ToolKind],
     id: FeatureId,
+    strategies: &[Strategy],
 ) -> Result<Outcome, kmb_core::Problem> {
     let tool = rest_tool_for(cx, rest, id).ok_or("今の工具より先の細い工具がありません")?;
     let f = cx.data.feature(id).ok_or("機能がありません")?;
@@ -763,7 +764,7 @@ fn add_rest_pocket(
         .ok_or("工具がありません")?;
     let mut d = f.data.clone();
     // 「工具の順番に足す」と同じく、前の工具の切削条件の上書き・仕上げ・入る位置は写さない
-    crate::tool_order::make_rest(&mut d, prev as u32, tool);
+    crate::tool_order::make_rest(strategies, &f.type_id, f.id, &mut d, prev as u32, tool)?;
     Ok(Outcome::insert(
         "残り削りを追加",
         &f.type_id,
@@ -1507,7 +1508,7 @@ impl Extension for CamCommands {
                         .data
                         .feature(s)
                         .map_or(&[][..], |f| self.rest_of(&f.type_id));
-                    add_rest_pocket(cx, rest, s)
+                    add_rest_pocket(cx, rest, s, &self.strategies)
                 }),
             EXPORT_GCODE => need_setup().and_then(|s| self.gcode(cx, s)),
             SETUP_SHEET => need_setup().and_then(|s| self.sheet(cx, s)),

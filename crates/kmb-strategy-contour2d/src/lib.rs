@@ -157,6 +157,9 @@ pub struct Contour {
     /// 残り削り: 前に同じ輪郭を削った太い工具の番号。その工具が届かなかった隅だけを削る
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rest_tool: Option<u32>,
+    /// タブを置いた元の加工。工具をさらに細くしても元の実配置を使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest_tab_source: Option<FeatureId>,
     /// 残り削りの前の工具を直径とコーナー半径で打つ時(番号が空の時に使う)
     #[serde(flatten)]
     pub rest_size: RestSize,
@@ -440,9 +443,24 @@ impl Contour {
         targets: &[Target],
         (top, extra, leave): (f64, f64, f64),
         ramp: Option<f64>,
-        tab: (f64, f64),
+        tab: (f64, f64, Option<&TabSource>),
     ) -> Result<StrategyOutput, EvalError> {
         let mut tp = p.toolpath();
+        let mut tab_paths = tab
+            .2
+            .map_or_else(TabPaths::default, |source| source.paths.clone());
+        if self.has_tabs() {
+            tab_paths.source_radius = Some(tab.2.map_or_else(
+                || {
+                    if self.tab_points.is_empty() {
+                        p.r()
+                    } else {
+                        big.radius()
+                    }
+                },
+                |source| source.radius,
+            ));
+        }
         let (mut any, mut lines, mut no_depth, mut too_thick) = (false, false, false, None);
         for t in targets {
             let (l, tool_out) = match &t.shape {
@@ -496,15 +514,47 @@ impl Contour {
             }
             if self.has_tabs() {
                 let offset = (p.r() + leave) * if tool_out { 1.0 } else { -1.0 };
-                let tabs: Vec<_> = offset_loop_outward(l, offset)
+                let center_paths: Vec<_> = offset_loop_outward(l, offset)
                     .into_iter()
-                    .flat_map(|path| {
-                        let path =
-                            self.direction
-                                .apply(if tool_out { path.reversed() } else { path });
-                        cut::tab_positions(self, &path, p.r())
+                    .map(|path| {
+                        self.direction
+                            .apply(if tool_out { path.reversed() } else { path })
                     })
                     .collect();
+                if tab.2.is_none() {
+                    for path in &center_paths {
+                        let mut pts = path.flatten(0.05);
+                        if let Some(first) = pts.first().copied() {
+                            pts.push(first);
+                        }
+                        tab_paths.paths.push(TabPath { z: t.floor, pts });
+                    }
+                }
+                let mut tabs: Vec<_> = center_paths
+                    .iter()
+                    .flat_map(|path| cut::tab_positions(self, path, p.r()))
+                    .collect();
+                // 手で置いた位置は元工具の中心上にある。最近接投影が角の別の辺へ移っても、
+                // 元の位置と元工具が残した範囲を保守的に守る。
+                let radius = if let Some(source) = tab.2 {
+                    tabs = source
+                        .paths
+                        .paths
+                        .iter()
+                        .flat_map(|path| {
+                            let n = path.pts.len().saturating_sub(1);
+                            let ring = Loop::from_points(&path.pts[..n]);
+                            cut::tab_positions(self, &ring, source.radius)
+                        })
+                        .collect();
+                    tabs.extend(self.tab_points.iter().copied());
+                    tab.0 / 2.0 + 2.0 * source.radius + p.r()
+                } else if self.tab_points.is_empty() {
+                    tab.0 / 2.0 + p.r()
+                } else {
+                    tabs.extend(self.tab_points.iter().copied());
+                    tab.0 / 2.0 + 2.0 * big.radius() + p.r()
+                };
                 let tab_top = (t.floor + tab.1).min(top);
                 for (z, runs) in &mut levels {
                     if *z < tab_top {
@@ -512,7 +562,7 @@ impl Contour {
                         // 次の区間へは rest_levels が退避してから入る。
                         *runs = runs
                             .iter()
-                            .flat_map(|run| avoid_tabs(run, &tabs, tab.0 / 2.0 + p.r()))
+                            .flat_map(|run| avoid_tabs(run, &tabs, radius))
                             .collect();
                     }
                 }
@@ -551,7 +601,12 @@ impl Contour {
             p.warnings
                 .push("残り削りでは、仕上げ代・横の荒取り・入りと抜けの円弧を使いません".into());
         }
-        Ok(p.output(tp))
+        let mut out = p.output(tp);
+        if !tab_paths.paths.is_empty() {
+            out.extra
+                .insert(TAB_PATHS.into(), kmb_core::Payload::to_value(&tab_paths));
+        }
+        Ok(out)
     }
 }
 
@@ -611,6 +666,13 @@ fn floor_beyond(p: &Prepared, l: &Loop, away_out: bool, face_z: f64) -> Option<f
     }
 }
 
+/// 元加工から解いた、引き継ぐタブの実経路と工具の幅。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TabSource {
+    pub paths: TabPaths,
+    pub radius: f64,
+}
+
 /// ホストが解いた輪郭の値(`plan` の入力の `params`)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ContourPlan {
@@ -630,6 +692,8 @@ pub struct ContourPlan {
     targets: Vec<Target>,
     /// 残り削りの前の工具
     pub rest: Option<Tool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_source: Option<TabSource>,
 }
 
 /// 戦略の純関数: 解いた入力だけから経路を作る(文書とカーネルに触らない)。
@@ -653,6 +717,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         rough_step,
         targets,
         rest,
+        tab_source,
     } = f;
     let top = p.top(p.info.stock_max[2]);
     if let Some(big) = rest {
@@ -662,7 +727,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
             &targets,
             (top, extra, leave),
             ramp,
-            (tab_width, tab_height),
+            (tab_width, tab_height, tab_source.as_ref()),
         );
     }
     let mut tp = p.toolpath();
@@ -747,6 +812,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
     // タブを手で置く手順で見せる経路(タブの付く、最後の周の工具の中心)
     let paths = TabPaths {
         paths: tab_paths.into_inner(),
+        source_radius: None,
     };
     let mut out = p.output(tp);
     if !paths.paths.is_empty() {
@@ -759,6 +825,13 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
 impl Feature for Contour {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v = self.base.inputs()?;
+        if self.has_tabs()
+            && (self.rest_tool.is_some() || self.rest_size.rest_diameter.is_some())
+            && let Some(source) = self.rest_tab_source
+        {
+            v.push(output(source, TAB_PATHS));
+            v.push(output(source, "toolpath"));
+        }
         for c in &self.chains {
             if let ChainRef::Sketch { sketch, .. } = c {
                 v.push(output(*sketch, "curves"));
@@ -820,6 +893,27 @@ impl Feature for Contour {
         let targets = self.targets(ctx, &p, &mut skipped)?;
         p.warnings.extend(skipped);
         let rest = rest_tool_or_size(ctx, &p, self.base.tools, self.rest_tool, &self.rest_size)?;
+        let tab_source = if rest.is_some() && self.has_tabs() {
+            self.rest_tab_source
+                .map(|source| {
+                    let paths =
+                        <TabPaths as kmb_core::Payload>::from_value(ctx.output(source, TAB_PATHS)?)
+                            .ok_or_else(|| invalid("タブの元加工にタブの経路がありません"))?;
+                    let (setup, path) = kmb_cam_setup::toolpath_of(ctx.output(source, "toolpath")?)
+                        .ok_or_else(|| invalid("タブの元加工の経路が読めません"))?;
+                    if setup != self.base.setup {
+                        return Err(invalid("タブの元加工は同じセットアップにしてください"));
+                    }
+                    let radius = paths.source_radius.unwrap_or_else(|| path.tool.radius());
+                    if !radius.is_finite() || radius <= 0.0 {
+                        return Err(invalid("タブの元工具の幅が読めません"));
+                    }
+                    Ok(TabSource { paths, radius })
+                })
+                .transpose()?
+        } else {
+            None
+        };
         let params = ContourPlan {
             c: self.clone(),
             entry_plan,
@@ -833,6 +927,7 @@ impl Feature for Contour {
             rough_step,
             targets,
             rest,
+            tab_source,
         };
         let input = p.input(ctx.feature_id(), params, Default::default());
         let out = plan(&input);
@@ -980,6 +1075,7 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
                     finish_opts: Default::default(),
                     lead_opts: Default::default(),
                     rest_tool: None,
+                    rest_tab_source: None,
                     rest_size: Default::default(),
                 })
             })
@@ -996,9 +1092,18 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
             .tool_order_default_side("outside")
             .cuts_free()
             // 同じ種類の操作で続けるので、V・テーパーも使える
-            .rest(&[ToolKind::FlatEnd, ToolKind::VBit, ToolKind::TaperEnd]),
+            .rest(&[ToolKind::FlatEnd, ToolKind::VBit, ToolKind::TaperEnd])
+            .rest_inherit(inherit_tabs),
         ],
     )
+}
+
+fn inherit_tabs(data: &mut serde_json::Value, source: FeatureId) -> Result<(), String> {
+    let c: Contour = serde_json::from_value(data.clone()).map_err(|e| e.to_string())?;
+    if c.has_tabs() && c.rest_tab_source.is_none() {
+        data["rest_tab_source"] = serde_json::json!(source);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1071,6 +1176,7 @@ mod tests {
                 extra: false,
             }],
             rest: Some(big),
+            tab_source: None,
         };
         let input = p.input(FeatureId(4), &params, Default::default());
         let restored = serde_json::from_str(&serde_json::to_string(&input).unwrap()).unwrap();
@@ -1099,6 +1205,15 @@ mod tests {
         });
         let c: Contour = serde_json::from_value(v).expect("古い形のデータも読める");
         assert!(c.chains.is_empty());
+        assert!(c.rest_tab_source.is_none());
+        assert!(
+            serde_json::to_value(&c)
+                .unwrap()
+                .get("rest_tab_source")
+                .is_none()
+        );
+        let old_paths: TabPaths = serde_json::from_value(serde_json::json!({"paths": []})).unwrap();
+        assert!(old_paths.source_radius.is_none());
         assert_eq!(c.side, Side::Inside);
         assert_eq!(c.entry_opts.entry_kind, EntryKind::Auto);
     }

@@ -658,6 +658,9 @@ pub struct TabPath {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct TabPaths {
     pub paths: Vec<TabPath>,
+    /// 取残しで引き継ぐタブを残した元の工具半径。通常の輪郭は自分の経路の工具を使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_radius: Option<f64>,
 }
 
 impl kmb_core::Payload for TabPaths {

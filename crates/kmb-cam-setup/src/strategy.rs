@@ -113,6 +113,9 @@ pub type Make = fn(&dyn Picks) -> Result<serde_json::Value, String>;
 /// 使えない工具を足す時)。
 pub type Adopt = fn(&serde_json::Value) -> Result<serde_json::Value, String>;
 
+/// 工具を替えて取残しを足す時に、戦略固有の引継ぎ値を整える。
+pub type RestInherit = fn(&mut serde_json::Value, FeatureId) -> Result<(), String>;
+
 /// 1 つの加工の戦略の名乗り。
 #[derive(Clone, Copy)]
 pub struct Strategy {
@@ -138,6 +141,8 @@ pub struct Strategy {
     pub rough_grid: bool,
     /// 細い工具で残りを削る加工を足せる時、使える工具の種類
     pub rest: &'static [ToolKind],
+    /// 取残しを足す時に、戦略固有の参照を引き継ぐ。
+    pub rest_inherit: Option<RestInherit>,
     /// 既定とテンプレートに使えるか
     pub reuse: bool,
     /// ツールバーと一覧での並び(小さい順)
@@ -185,6 +190,7 @@ impl Strategy {
             entry: None,
             rough_grid: false,
             rest: &[],
+            rest_inherit: None,
             reuse: true,
             order: 0,
             make,
@@ -307,6 +313,14 @@ impl Strategy {
     pub fn rest(self, kinds: &'static [ToolKind]) -> Self {
         Strategy {
             rest: kinds,
+            ..self
+        }
+    }
+
+    /// 取残し加工を複製する共通の入口から呼ぶ、戦略固有の引継ぎ。
+    pub fn rest_inherit(self, inherit: RestInherit) -> Self {
+        Strategy {
+            rest_inherit: Some(inherit),
             ..self
         }
     }
