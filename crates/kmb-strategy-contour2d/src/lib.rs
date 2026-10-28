@@ -301,6 +301,7 @@ impl Contour {
         ctx: &EvalCtx<'_>,
         p: &Prepared,
         skipped: &mut Vec<String>,
+        nested_outlines: Option<Vec<(Loop, f64)>>,
     ) -> Result<Vec<Target>, EvalError> {
         let on = self.side == Side::On;
         let closed = |l: &Loop, tool_out: bool| {
@@ -326,37 +327,15 @@ impl Contour {
                         .map(|f| (f.area.outer.clone(), f.z))
                         .collect::<Vec<_>>()
                 }
-                None if p
-                    .info
-                    .sections
-                    .as_ref()
-                    .is_some_and(|s| s.kind == kmb_cam_setup::sections::SectionKind::Sheets) =>
-                {
-                    let mut outlines = Vec::new();
-                    for body in std::iter::once(&p.info.body).chain(&p.info.more_bodies) {
-                        let mesh = ctx
-                            .kernel()
-                            .mesh(*body, p.info.tolerance)
-                            .map_err(|e| EvalError::Kernel(e.to_string()))?;
-                        let model = kmb_cam_geom::MachiningModel::from_mesh(
-                            &p.info.placed_mesh(&mesh),
-                            p.info.origin,
-                        );
-                        outlines.push((
-                            model.outline().ok_or_else(|| {
-                                invalid("部品の外形(下向きの平らな面)が見つかりません")
-                            })?,
-                            model.min[2],
-                        ));
-                    }
-                    outlines
-                }
-                None => vec![(
-                    p.model
-                        .outline()
-                        .ok_or_else(|| invalid("部品の外形(下向きの平らな面)が見つかりません"))?,
-                    p.model.min[2],
-                )],
+                None => match nested_outlines {
+                    Some(outlines) => outlines,
+                    None => vec![(
+                        p.model.outline().ok_or_else(|| {
+                            invalid("部品の外形(下向きの平らな面)が見つかりません")
+                        })?,
+                        p.model.min[2],
+                    )],
+                },
             };
             for (outline, floor) in outlines {
                 out.push(Target {
@@ -788,7 +767,18 @@ impl Feature for Contour {
             return Err(invalid("横の荒取りの数は 50 以下にしてください"));
         }
         let mut skipped = Vec::new();
-        let targets = self.targets(ctx, &p, &mut skipped)?;
+        let nested_outlines = if self.face.is_none()
+            && self.chains.is_empty()
+            && p.info
+                .sections
+                .as_ref()
+                .is_some_and(|s| s.kind == kmb_cam_setup::sections::SectionKind::Sheets)
+        {
+            Some(p.body_outlines(ctx)?)
+        } else {
+            None
+        };
+        let targets = self.targets(ctx, &p, &mut skipped, nested_outlines)?;
         p.warnings.extend(skipped);
         let rest = rest_tool_or_size(ctx, &p, self.base.tools, self.rest_tool, &self.rest_size)?;
         let params = ContourPlan {

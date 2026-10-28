@@ -195,7 +195,7 @@ impl Rect {
 }
 
 fn rotated_size(p: &PackPart, angle: u32) -> [f64; 2] {
-    if angle % 180 == 0 {
+    if angle.is_multiple_of(180) {
         p.size
     } else {
         [p.size[1], p.size[0]]

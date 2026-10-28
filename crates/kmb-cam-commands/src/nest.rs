@@ -163,135 +163,136 @@ pub fn run(
     cx: &Context<'_>,
     machine: &kmb_post::MachineProfile,
 ) -> Option<Result<Outcome, Problem>> {
-    if ![CREATE, ADD_PART, REMOVE_PART, SET_PART].contains(&id) {
-        return None;
+    Some(match id {
+        CREATE => create(cx, machine),
+        ADD_PART | REMOVE_PART | SET_PART => edit_part(id, cx),
+        _ => return None,
+    })
+}
+
+fn create(cx: &Context<'_>, machine: &kmb_post::MachineProfile) -> Result<Outcome, Problem> {
+    let ids: Vec<FeatureId> = match cx.arg("bodies").filter(|v| !v.is_null()) {
+        Some(v) => serde_json::from_value(v.clone()).map_err(|e| Problem::from(e.to_string()))?,
+        None => selected_bodies(cx),
+    };
+    let body = *ids.first().ok_or("配置するボディを選んでください")?;
+    let parts = ids
+        .into_iter()
+        .map(|id| auto_part(cx, id, 1))
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut nest = Nest::new(parts);
+    nest.method = if cx.arg_str("method") == Some("shapes") {
+        NestMethod::Shapes
+    } else {
+        NestMethod::Boxes
+    };
+    nest.sheet = if cx.arg_str("sheet") == Some("machine") {
+        SheetFrom::Machine
+    } else {
+        SheetFrom::Stock
+    };
+    nest.edge = mm(cx, "edge", 5.0)?;
+    nest.spacing = mm(cx, "spacing", 8.0)?;
+    nest.grid = mm(cx, "grid", 1.0)?;
+    nest.max_sheets = integer(cx, "max_sheets", 10)?;
+    if cx.arg_str("output") == Some("stops") {
+        nest.output = kmb_cam_setup::sections::SectionOutput::Stops;
     }
-    Some((|| {
-        if id == CREATE {
-            let ids: Vec<FeatureId> = match cx.arg("bodies").filter(|v| !v.is_null()) {
-                Some(v) => {
-                    serde_json::from_value(v.clone()).map_err(|e| Problem::from(e.to_string()))?
-                }
-                None => selected_bodies(cx),
-            };
-            let body = *ids.first().ok_or("配置するボディを選んでください")?;
-            let parts = ids
-                .into_iter()
-                .map(|id| auto_part(cx, id, 1))
-                .collect::<Result<Vec<_>, _>>()?;
-            let mut nest = Nest::new(parts);
-            nest.method = if cx.arg_str("method") == Some("shapes") {
-                NestMethod::Shapes
-            } else {
-                NestMethod::Boxes
-            };
-            nest.sheet = if cx.arg_str("sheet") == Some("machine") {
-                SheetFrom::Machine
-            } else {
-                SheetFrom::Stock
-            };
-            nest.edge = mm(cx, "edge", 5.0)?;
-            nest.spacing = mm(cx, "spacing", 8.0)?;
-            nest.grid = mm(cx, "grid", 1.0)?;
-            nest.max_sheets = integer(cx, "max_sheets", 10)?;
-            if cx.arg_str("output") == Some("stops") {
-                nest.output = kmb_cam_setup::sections::SectionOutput::Stops;
-            }
-            let mut setup = Setup::new(body);
-            setup.set_machine(machine.clone());
-            setup.stock.mode = StockMode::Fixed;
-            setup.stock.width = mm(cx, "width", 100.0)?;
-            setup.stock.depth = mm(cx, "depth", 100.0)?;
-            setup.stock.height = mm(cx, "height", 20.0)?;
-            setup.nest = Some(nest);
-            let mut edits = Vec::new();
-            if crate::commands::last_tools(cx).is_none() {
-                edits.push(Edit::Insert {
-                    type_id: crate::TOOLS.into(),
-                    name: "工具".into(),
-                    data: serde_json::to_value(crate::ToolLibrary::starter())
-                        .expect("JSON にできる"),
-                });
-            }
-            edits.push(Edit::Insert {
-                type_id: crate::SETUP.into(),
-                name: "板への配置".into(),
-                data: serde_json::to_value(setup).expect("JSON にできる"),
-            });
-            return Ok(Outcome::Change {
-                label: "板への配置を作る".into(),
-                edits,
-            });
-        }
-        let sid = selected_setup(cx).ok_or("板への配置のセットアップを選んでください")?;
-        let mut setup = setup_of(cx, sid).ok_or("セットアップのデータが読めません")?;
-        let nest = setup
-            .nest
-            .as_mut()
-            .ok_or("板への配置のセットアップを選んでください")?;
-        if id == ADD_PART {
-            let body = FeatureId(
-                cx.arg("body")
-                    .and_then(|v| {
-                        v.as_u64().or_else(|| {
-                            v.as_f64()
-                                .filter(|n| *n >= 0.0 && *n < u64::MAX as f64 && n.fract() == 0.0)
-                                .map(|n| n as u64)
-                        })
+    let mut setup = Setup::new(body);
+    setup.set_machine(machine.clone());
+    setup.stock.mode = StockMode::Fixed;
+    setup.stock.width = mm(cx, "width", 100.0)?;
+    setup.stock.depth = mm(cx, "depth", 100.0)?;
+    setup.stock.height = mm(cx, "height", 20.0)?;
+    setup.nest = Some(nest);
+    let mut edits = Vec::new();
+    if crate::commands::last_tools(cx).is_none() {
+        edits.push(Edit::Insert {
+            type_id: crate::TOOLS.into(),
+            name: "工具".into(),
+            data: serde_json::to_value(crate::ToolLibrary::starter()).expect("JSON にできる"),
+        });
+    }
+    edits.push(Edit::Insert {
+        type_id: crate::SETUP.into(),
+        name: "板への配置".into(),
+        data: serde_json::to_value(setup).expect("JSON にできる"),
+    });
+    Ok(Outcome::Change {
+        label: "板への配置を作る".into(),
+        edits,
+    })
+}
+
+fn edit_part(id: &str, cx: &Context<'_>) -> Result<Outcome, Problem> {
+    let sid = selected_setup(cx).ok_or("板への配置のセットアップを選んでください")?;
+    let mut setup = setup_of(cx, sid).ok_or("セットアップのデータが読めません")?;
+    let nest = setup
+        .nest
+        .as_mut()
+        .ok_or("板への配置のセットアップを選んでください")?;
+    if id == ADD_PART {
+        let body = FeatureId(
+            cx.arg("body")
+                .and_then(|v| {
+                    v.as_u64().or_else(|| {
+                        v.as_f64()
+                            .filter(|n| *n >= 0.0 && *n < u64::MAX as f64 && n.fract() == 0.0)
+                            .map(|n| n as u64)
                     })
-                    .ok_or("足すボディの番号がありません")?,
-            );
-            nest.parts
-                .push(auto_part(cx, body, integer(cx, "count", 1)?)?);
+                })
+                .ok_or("足すボディの番号がありません")?,
+        );
+        nest.parts
+            .push(auto_part(cx, body, integer(cx, "count", 1)?)?);
+    } else {
+        let index = integer(cx, "part", 0)?
+            .checked_sub(1)
+            .ok_or("部品の番号は 1 から指定してください")? as usize;
+        if index >= nest.parts.len() {
+            return Err("部品の番号がありません".into());
+        }
+        if id == REMOVE_PART {
+            if nest.parts.len() == 1 {
+                return Err("配置する部品は 1 種類以上必要です".into());
+            }
+            nest.parts.remove(index);
         } else {
-            let index = integer(cx, "part", 0)?
-                .checked_sub(1)
-                .ok_or("部品の番号は 1 から指定してください")? as usize;
-            if index >= nest.parts.len() {
-                return Err("部品の番号がありません".into());
+            if cx.arg("count").is_none_or(serde_json::Value::is_null)
+                && cx.arg_str("rotate").is_none()
+                && cx.arg_str("up").is_none()
+            {
+                return Err(
+                    "個数・回してよい向き・上に向ける面のいずれかを指定してください".into(),
+                );
             }
-            if id == REMOVE_PART {
-                if nest.parts.len() == 1 {
-                    return Err("配置する部品は 1 種類以上必要です".into());
-                }
-                nest.parts.remove(index);
-            } else {
-                if cx.arg("count").is_none_or(serde_json::Value::is_null)
-                    && cx.arg_str("rotate").is_none()
-                    && cx.arg_str("up").is_none()
-                {
-                    return Err(
-                        "個数・回してよい向き・上に向ける面のいずれかを指定してください".into(),
-                    );
-                }
-                let part = &mut nest.parts[index];
-                if cx.arg("count").is_some_and(|v| !v.is_null()) {
-                    part.count = integer(cx, "count", 1)?;
-                }
-                if let Some(s) = cx.arg_str("rotate") {
-                    part.rotate = serde_json::from_value(serde_json::json!(s))
-                        .map_err(|e| Problem::from(e.to_string()))?;
-                }
-                if let Some(s) = cx.arg_str("up") {
-                    part.up = serde_json::from_value(serde_json::json!(s))
-                        .map_err(|e| Problem::from(e.to_string()))?;
-                }
+            let part = &mut nest.parts[index];
+            if cx.arg("count").is_some_and(|v| !v.is_null()) {
+                part.count = integer(cx, "count", 1)?;
+            }
+            if let Some(s) = cx.arg_str("rotate") {
+                part.rotate = serde_json::from_value(serde_json::json!(s))
+                    .map_err(|e| Problem::from(e.to_string()))?;
+            }
+            if let Some(s) = cx.arg_str("up") {
+                part.up = serde_json::from_value(serde_json::json!(s))
+                    .map_err(|e| Problem::from(e.to_string()))?;
             }
         }
-        if nest.parts.iter().any(|p| p.count == 0)
-            || nest.parts.iter().map(|p| u64::from(p.count)).sum::<u64>() > 100
-        {
-            return Err("部品は各 1 個以上で合計 100 個までにしてください".into());
-        }
-        setup.body = nest.parts[0].body;
-        Ok(Outcome::Change {
-            label: "配置する部品を直す".into(),
-            edits: vec![Edit::SetData {
-                id: sid,
-                data: serde_json::to_value(setup).expect("JSON にできる"),
-            }],
-        })
-    })())
+    }
+    if nest.parts.iter().any(|p| p.count == 0)
+        || nest.parts.iter().map(|p| u64::from(p.count)).sum::<u64>() > 100
+    {
+        return Err("部品は各 1 個以上で合計 100 個までにしてください".into());
+    }
+    setup.body = nest.parts[0].body;
+    Ok(Outcome::Change {
+        label: "配置する部品を直す".into(),
+        edits: vec![Edit::SetData {
+            id: sid,
+            data: serde_json::to_value(setup).expect("JSON にできる"),
+        }],
+    })
 }
 
 pub fn handles(id: &str, cx: &Context<'_>) -> Option<Vec<kmb_core::Handle>> {
