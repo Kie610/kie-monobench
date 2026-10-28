@@ -720,6 +720,11 @@ impl MachiningModel {
         self.flats.iter().find(|f| f.name == name)
     }
 
+    /// 写しが共有する名前を、位置ごとの面としてすべて返す。
+    pub fn flats_named(&self, name: &str) -> Vec<&FlatFace> {
+        self.flats.iter().filter(|f| f.name == name).collect()
+    }
+
     /// 下を向いた面のうち、外周の囲む面積が最も大きいものの外周(部品の外形として使う)。
     pub fn outline(&self) -> Option<Loop> {
         // 外周の囲む面積がいちばん大きい面(同じなら低い方)。いちばん低い面を選ぶと、
