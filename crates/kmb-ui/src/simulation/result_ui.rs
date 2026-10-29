@@ -11,9 +11,125 @@ use kmb_core::{FrameBar, RunState, RunTone, Series, ShapeInk, StepMark};
 /// 凡例 1 つ(見出しと、上が高い値の色と文字)。
 pub(crate) type Legend = (String, Vec<(ShapeInk, String)>);
 
+/// 操作の宛先とコマに属する揺れの時計。文書の保存や取り消しには入れない。
+#[derive(Debug, Clone)]
+pub(crate) struct PhasePlayback {
+    target: String,
+    frame: usize,
+    angle: f64,
+    last: f64,
+    pub(super) playing: bool,
+}
+
+impl PhasePlayback {
+    fn new(bar: &FrameBar, frame: usize, now: f64) -> Self {
+        Self {
+            target: bar.seek.clone(),
+            frame,
+            angle: 0.0,
+            last: now,
+            playing: false,
+        }
+    }
+
+    fn matches(&self, bar: &FrameBar) -> bool {
+        self.target == bar.seek && self.frame == bar.at
+    }
+
+    fn tick(&mut self, now: f64) -> f64 {
+        if self.playing {
+            // 表示用の周期は2秒。結果の物理的な周波数とは結び付けない。
+            self.angle = (self.angle + (now - self.last).max(0.0) * std::f64::consts::PI)
+                .rem_euclid(std::f64::consts::TAU);
+        }
+        self.last = now;
+        self.angle.cos()
+    }
+}
+
 impl Workspace {
+    /// 宣言済みの変位係数を受ける操作なら、時刻を送らず同じコマを揺らせる。
+    fn phase_bar(&self, bar: &FrameBar) -> bool {
+        let id = format!("{}{}", bar.seek, bar.at);
+        let args = self
+            .win
+            .extensions
+            .action(&id, &self.context())
+            .map(|a| a.args)
+            .or_else(|| self.win.extensions.0.iter().find_map(|e| e.unlisted(&id)));
+        args.is_some_and(|args| {
+            args.iter().any(|a| {
+                a.key == "phase"
+                    && a.kind == kmb_core::ArgKind::Number
+                    && a.unit == Some(kmb_core::FieldUnit::Unitless)
+                    && a.default.as_ref().and_then(|v| v.as_f64()) == Some(1.0)
+            })
+        })
+    }
+
+    /// 結果のコマを操作の宣言とセッションの口を通して動かす。空の知らせは出さない。
+    fn run_frame_seek(&mut self, bar: &FrameBar, frame: usize, phase: Option<f64>) -> bool {
+        let args = phase.map_or(serde_json::Value::Null, |p| serde_json::json!({"phase": p}));
+        let r = self.run_through(
+            &format!("{}{frame}", bar.seek),
+            self.cur.selected,
+            None,
+            &args,
+        );
+        match r {
+            Ok(ran)
+                if matches!(&ran.handled, kmb_session::Handled::Other(o)
+                if matches!(o.as_ref(), kmb_core::Outcome::Message(m) if m.is_empty())) =>
+            {
+                true
+            }
+            Ok(ran) => {
+                self.take_ran(ran, None);
+                true
+            }
+            Err(e) => {
+                self.win.fail(e);
+                false
+            }
+        }
+    }
+
     /// 結果のコマを再生している間、時刻に合わせてコマを進める(ビューを描く前に呼ぶ)。
     pub(crate) fn frames_tick(&mut self, ctx: &egui::Context) {
+        let Some(bar) = self.frame_bar() else {
+            self.cur.frames_playing = None;
+            self.cur.phase_playback = None;
+            return;
+        };
+        if self.phase_bar(&bar) {
+            self.cur.frames_playing = None;
+            let now = ctx.input(|i| i.time);
+            let reset = self
+                .cur
+                .phase_playback
+                .as_ref()
+                .is_none_or(|p| !p.matches(&bar));
+            if reset {
+                self.cur.phase_playback = Some(PhasePlayback::new(&bar, bar.at, now));
+            }
+            let clock = self.cur.phase_playback.as_mut().expect("時計を用意した");
+            let phase = clock.tick(now);
+            let playing = clock.playing;
+            if (reset || playing) && !self.run_frame_seek(&bar, bar.at, Some(phase)) {
+                self.cur.phase_playback = None;
+                return;
+            }
+            if playing {
+                // 予測するコマの時間が差し引かれても正の描き直し間隔を残す。
+                let predicted = ctx.input(|i| i.predicted_dt);
+                let frame = std::time::Duration::try_from_secs_f32(predicted).unwrap_or_default();
+                ctx.request_repaint_after(
+                    frame.saturating_add(std::time::Duration::from_secs_f64(1.0 / 30.0)),
+                );
+            }
+            return;
+        }
+        self.cur.phase_playback = None;
         let Some((t0, f0)) = self.cur.frames_playing else {
             return;
         };
@@ -53,7 +169,15 @@ impl Workspace {
         );
         let mut seek: Option<usize> = None;
         let mut toggle = false;
-        let playing = self.cur.frames_playing.is_some();
+        let phase = self.phase_bar(&bar);
+        let playing = if phase {
+            self.cur
+                .phase_playback
+                .as_ref()
+                .is_some_and(|p| p.matches(&bar) && p.playing)
+        } else {
+            self.cur.frames_playing.is_some()
+        };
         ui.scope_builder(egui::UiBuilder::new().max_rect(br), |ui| {
             egui::Frame::new()
                 .fill(l.pal.panel)
@@ -64,7 +188,11 @@ impl Workspace {
                     ui.set_width(w - 12.0);
                     ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
                     ui.horizontal(|ui| {
-                        let what = if bar.playable { "時刻" } else { "コマ" };
+                        let what = if bar.playable && !phase {
+                            "時刻"
+                        } else {
+                            "コマ"
+                        };
                         let buttons: [(&str, String, Option<usize>); 5] = [
                             ("first", "最初のコマ".into(), Some(0)),
                             ("back", "前のコマ".into(), Some(bar.at.saturating_sub(1))),
@@ -91,7 +219,7 @@ impl Workspace {
                         }
                         ui.add_space(8.0);
                         let now = bar.labels.get(bar.at).cloned().unwrap_or_default();
-                        let text = if bar.playable {
+                        let text = if bar.playable && !phase {
                             format!("{now} / {}", bar.total)
                         } else {
                             now
@@ -115,7 +243,16 @@ impl Workspace {
                     }
                 });
         });
-        if toggle {
+        if toggle && phase {
+            let now = ui.input(|i| i.time);
+            let clock = self
+                .cur
+                .phase_playback
+                .get_or_insert_with(|| PhasePlayback::new(&bar, bar.at, now));
+            clock.tick(now);
+            clock.playing = !clock.playing;
+            ui.ctx().request_repaint();
+        } else if toggle {
             self.cur.frames_playing = match self.cur.frames_playing {
                 Some(_) => None,
                 None => {
@@ -131,7 +268,10 @@ impl Workspace {
         }
         if let Some(f) = seek {
             self.cur.frames_playing = None;
-            if f != bar.at {
+            if phase {
+                self.cur.phase_playback = Some(PhasePlayback::new(&bar, f, ui.input(|i| i.time)));
+                self.run_frame_seek(&bar, f, Some(1.0));
+            } else if f != bar.at {
                 self.run_quiet(&format!("{}{f}", bar.seek));
             }
         }
@@ -505,3 +645,6 @@ fn series_plot(ui: &mut egui::Ui, s: &Series, look: &theme::Look) {
         r.on_hover_text(format!("{}(横軸: {})", s.note, s.x_name));
     }
 }
+
+#[cfg(test)]
+mod phase_tests;
