@@ -232,7 +232,9 @@ impl Workspace {
         }
         let shape = overlay.shape.as_ref().map(|s| s.label.clone());
         if !measuring {
-            let hover = ev.hover.and_then(|p| self.hover_hit(rect, p));
+            let hover = self
+                .hover_position_for_drawing(ev.hover)
+                .and_then(|p| self.hover_hit(rect, p));
             self.cur.hover_kind = hover.as_ref().map(Hit::kind);
             self.cur.hover_feature = hover.as_ref().map(Hit::feature);
             self.draw_edges(ui, rect, hover.as_ref());

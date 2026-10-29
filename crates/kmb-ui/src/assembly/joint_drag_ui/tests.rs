@@ -395,3 +395,100 @@ fn turning_a_joint_moves_only_the_view_until_released() {
     assert!(!ws.cur.scene.is_posed(), "形が直ったら見せていた動きを外す");
     assert!(ws.cur.drag_pose.is_none());
 }
+
+/// 確かめること: 実入力で部品を引く間、別の部品の辺・頂点の追加強調だけを止める。
+fn drag_hover_case(kind: kmb_core::RefKind, target_world: [f32; 3]) {
+    use egui_kittest::Harness;
+    let (mut ws, _, _) = cylinder(json!({"kind": "slider", "axis": [1., 0., 0.]}));
+    ws.set_view(0., 90.);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280., 800.))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let fit = h.state_mut().run_script("click 全体表示").unwrap();
+    let mut fitted = false;
+    for _ in 0..100 {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(fit) {
+            assert!(result.ok, "{result:?}");
+            fitted = true;
+            break;
+        }
+    }
+    assert!(fitted, "全体表示が時間内に終わる");
+    h.run();
+    let rect = h.state().win.view_rect;
+    let target = h.state().cur.camera.project(target_world, rect).0;
+    h.hover_at(target);
+    h.run();
+    assert_eq!(
+        h.state().cur.hover_kind,
+        Some(kind),
+        "普通のホバーは対象を拾う"
+    );
+    let selected_at = h.state().cur.camera.project([0., 10., 10.], rect).0;
+    let selected = h
+        .state_mut()
+        .edge_hit(rect, selected_at)
+        .expect("別の辺を選べる");
+    h.state_mut().cur.picked_edges = vec![selected.clone()];
+    let press = h.state().cur.camera.project([55., 10., 2.], rect).0;
+    let delta = (target - press) * 2.;
+    let batch = h
+        .state_mut()
+        .run_script(&format!("drag f4:end {} {}", delta.x, delta.y))
+        .unwrap();
+    let mut dragging = false;
+    for _ in 0..100 {
+        h.step();
+        if h.state().joint_dragging() {
+            dragging = true;
+            break;
+        }
+    }
+    assert!(dragging, "実入力でジョイントに沿って引き始める");
+    assert_eq!(
+        h.state().hover_position_for_drawing(Some(target)),
+        None,
+        "引く間は表示用の位置だけを渡さない"
+    );
+    assert_eq!(h.state().cur.picked_edges, [selected]);
+    h.step();
+    assert!(h.state().joint_dragging());
+    assert!(h.state().cur.hover_kind.is_none());
+    assert!(h.state().cur.hover_feature.is_none());
+    let mut released = false;
+    for _ in 0..100 {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{result:?}");
+            released = true;
+            break;
+        }
+    }
+    assert!(released, "離す入力が時間内に終わる");
+    assert!(!h.state().joint_dragging());
+    assert_eq!(
+        h.state().hover_position_for_drawing(Some(target)),
+        Some(target)
+    );
+    let rect = h.state().win.view_rect;
+    let target = h.state().cur.camera.project(target_world, rect).0;
+    h.hover_at(target);
+    h.run();
+    assert_eq!(
+        h.state().cur.hover_kind,
+        Some(kind),
+        "離した後のホバーは戻る"
+    );
+}
+
+#[test]
+fn joint_drag_hides_the_edge_under_the_cursor() {
+    drag_hover_case(kmb_core::RefKind::Edge, [30., 10., 10.]);
+}
+
+#[test]
+fn joint_drag_hides_the_vertex_under_the_cursor() {
+    drag_hover_case(kmb_core::RefKind::Vertex, [30., 0., 10.]);
+}

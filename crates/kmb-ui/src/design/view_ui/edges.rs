@@ -3,6 +3,11 @@
 use super::*;
 
 impl Workspace {
+    /// 入力用の位置とは分けて、カーソルの下を明るく描く位置を決める。
+    pub(crate) fn hover_position_for_drawing(&self, raw: Option<Pos2>) -> Option<Pos2> {
+        raw.filter(|_| !self.joint_dragging())
+    }
+
     /// 画面上の点 `pos` のいちばん近くの、見えている辺(GPU の有無によらず CPU で拾う)。
     pub(crate) fn edge_hit(&mut self, rect: Rect, pos: Pos2) -> Option<kmb_core::EdgePick> {
         self.scene_edges();

@@ -1340,3 +1340,6 @@ pub fn module() -> kmb_core::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod snap_tests;
