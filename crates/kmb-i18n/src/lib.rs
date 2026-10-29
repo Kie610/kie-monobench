@@ -129,7 +129,7 @@ macro_rules! files {
 
 pub const FILES: &[(Lang, &str, &str)] = files!(
     "common", "settings", "frame", "menu", "toolbar", "action", "feature", "browser", "timeline",
-    "view", "review"
+    "view", "review", "field"
 );
 
 /// 全言語の文言。作るのは起動の時に 1 回(画面は窓の状態に持つ)。
@@ -304,6 +304,15 @@ pub fn feature_id(type_id: &str) -> String {
         "feature-{}",
         kind.replace(['.', '_'], "-").to_ascii_lowercase()
     )
+}
+
+/// 編集パネルの欄の文言の ID。種類の版を外し、欄の完全な鍵の `.` と `_` を `-` にする。
+/// 行の並びの中の欄は、親の欄の鍵も含める(`edges.radius` など)。説明は後ろに `-help`。
+pub fn field_id(type_id: &str, key: &str) -> String {
+    let kind = type_id.split('@').next().unwrap_or(type_id);
+    format!("field-{kind}-{key}")
+        .replace(['.', '_'], "-")
+        .to_ascii_lowercase()
 }
 
 /// Fluent のファイルの中の文言の ID(行頭の `名前 =`。`-` で始まる用語は数えない)。
