@@ -12,6 +12,23 @@ use std::path::{Path, PathBuf};
 /// 覚えておく文書の数(古い物から忘れる)
 pub const DOC_VIEWS_MAX: usize = 200;
 
+/// 部品ごとの色を切り替える、文書を変更しない表示操作。
+pub const PART_HUES: &str = "view.part_hues";
+
+/// 画面・CLI・MCP が共有する表示操作の宣言。
+pub fn actions() -> Vec<kmb_core::Action> {
+    vec![
+        kmb_core::Action::new(PART_HUES, "部品ごとに色を変える", "view")
+            .arg(kmb_core::Arg::flag("on", "入れるか(省くと切り替える)"))
+            .aliases("ぶひん いろ 色 component part colors hues")
+            .hint("外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える"),
+    ]
+}
+
+pub fn is_action(id: &str) -> bool {
+    id == PART_HUES
+}
+
 /// 1 つの文書の見え方。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct DocView {
@@ -21,6 +38,12 @@ pub struct DocView {
     /// 畳んでいるタイムラインのグループ
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub collapsed: Vec<u64>,
+    /// 外観や材料を持たないボディを、部品ごとの色で見る。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub part_hues: bool,
+    /// 知らない見え方の項目も、同じ文書へ書き戻す。
+    #[serde(flatten)]
+    pub rest: BTreeMap<String, serde_json::Value>,
 }
 
 impl DocView {
@@ -42,6 +65,8 @@ struct Entry {
 pub struct DocViews {
     #[serde(default)]
     docs: Vec<Entry>,
+    #[serde(flatten)]
+    rest: BTreeMap<String, serde_json::Value>,
 }
 
 impl DocViews {
@@ -89,6 +114,36 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unknown_view_fields_are_preserved() {
+        let source = serde_json::json!({
+            "future_root": {"keep": [1, 2]},
+            "docs": [{"path":"/tmp/part-colors.kmb", "future_entry":{"keep":true}}]
+        });
+        let views: DocViews = serde_json::from_value(source.clone()).unwrap();
+        let back = serde_json::to_value(views).unwrap();
+        assert_eq!(back["future_root"], source["future_root"]);
+        assert_eq!(
+            back["docs"][0]["future_entry"],
+            source["docs"][0]["future_entry"]
+        );
+    }
+
+    #[test]
+    fn plain_views_default_off_and_do_not_absorb_the_entry_path() {
+        let views: DocViews = serde_json::from_value(serde_json::json!({
+            "docs": [{"path":"/tmp/plain-view.kmb", "open":{"branch":true}, "future":7}]
+        }))
+        .unwrap();
+        let view = views.get(Path::new("/tmp/plain-view.kmb")).unwrap();
+        assert!(!view.part_hues);
+        assert_eq!(view.rest["future"], 7);
+        assert!(!view.rest.contains_key("path"));
+        let back = serde_json::to_value(&views).unwrap();
+        assert!(back["docs"][0].get("part_hues").is_none());
+        assert_eq!(back["docs"][0]["path"], "/tmp/plain-view.kmb");
+    }
+
+    #[test]
     fn views_are_kept_per_document_newest_first_and_forgotten_when_plain() {
         let dir = std::env::temp_dir().join(format!("kmb-doc-views-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -99,6 +154,7 @@ mod tests {
         let open = DocView {
             open: [("\"origin\"".to_string(), true)].into(),
             collapsed: vec![7],
+            ..Default::default()
         };
         v.set(&a, open.clone());
         v.set(

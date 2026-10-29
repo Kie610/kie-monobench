@@ -45,6 +45,8 @@ pub struct Scene {
     pub section: Option<Section>,
     /// ボディの外観の色([`SceneBody::tint`]。網を作り直しても残す)
     body_colors: std::collections::BTreeMap<FeatureId, Color32>,
+    /// 外観の無いボディに割り当てる色の番号(形や写実の書き出しは変えない)。
+    part_hues: std::collections::BTreeMap<FeatureId, usize>,
     /// ボディの材質([`SceneBody::look`]。網を作り直しても残す)
     body_looks: std::collections::BTreeMap<FeatureId, kmb_render::Look>,
     /// 面の外観の材質(ボディの最後の機能 → 面の名前 → 材質。[`SceneBody::face_looks`]。網を作り直しても残す)
@@ -450,6 +452,29 @@ impl Scene {
         &self.body_colors
     }
 
+    /// 部品ごとの色の番号を替える。網と拾いの控えは作り直さない。
+    pub fn set_part_hues(&mut self, hues: std::collections::BTreeMap<FeatureId, usize>) -> bool {
+        if self.part_hues == hues {
+            return false;
+        }
+        self.part_hues = hues;
+        true
+    }
+
+    pub fn part_hues(&self) -> &std::collections::BTreeMap<FeatureId, usize> {
+        &self.part_hues
+    }
+
+    fn part_color(&self, index: usize, colors: &Colors) -> Option<Color32> {
+        let body = self.bodies.get(index)?;
+        if body.tint.is_some() {
+            return None;
+        }
+        self.part_hues
+            .get(&body.feature)
+            .map(|n| colors.inks.part_hue[n % 8])
+    }
+
     /// ボディ(最後の機能の ID)ごとの材質を替える(網は作り直さない)。無いボディは材質なし。
     /// 変わったら真。
     pub fn set_body_looks(
@@ -545,7 +570,10 @@ impl Scene {
         }
         match &b.look {
             Some(l) => Some(l.clone()),
-            None if fx.all_bodies => Some(self.default_look(index, colors)),
+            None if fx.all_bodies => Some(match self.part_color(index, colors) {
+                Some(c) => kmb_render::Look::plain([c.r(), c.g(), c.b()]),
+                None => self.default_look(index, colors),
+            }),
             None => None,
         }
     }
@@ -603,6 +631,7 @@ impl Scene {
                 .bodies
                 .get(index)
                 .and_then(|b| b.tint)
+                .or_else(|| self.part_color(index, colors))
                 .unwrap_or(colors.body);
             return self.glow_tint(index, c);
         }
@@ -610,6 +639,7 @@ impl Scene {
             .bodies
             .get(index)
             .and_then(|b| b.tint)
+            .or_else(|| self.part_color(index, colors))
             .unwrap_or_else(|| body_tint(colors.body, colors.edge, index));
         match self.bodies.get(index) {
             // 淡く描くボディは色を抜く(形は見えるが目立たない)
@@ -677,7 +707,10 @@ impl Scene {
             return false;
         }
         self.bodies.get(index).is_some_and(|b| {
-            b.look.is_none() && b.tint.is_none() && !self.faded.contains(&b.feature)
+            b.look.is_none()
+                && b.tint.is_none()
+                && !self.part_hues.contains_key(&b.feature)
+                && !self.faded.contains(&b.feature)
         }) && !self.glows(index)
     }
 
@@ -1020,5 +1053,109 @@ mod sheet_tests {
             2,
             "測定の面積は片面のまま"
         );
+    }
+}
+
+#[cfg(test)]
+mod part_hue_tests {
+    use super::*;
+
+    fn colors(inks: Inks) -> Colors {
+        let white = Color32::WHITE;
+        Colors::from_look(Palette {
+            dark: false,
+            canvas: white,
+            ink: Color32::BLACK,
+            ink2: white,
+            ink3: white,
+            err: white,
+            warn: white,
+            design: white,
+            cam: white,
+            shade3: white,
+            accent: white,
+            inks,
+        })
+    }
+
+    #[test]
+    fn component_colors_change_only_paint_and_keep_overrides_and_export_looks() {
+        let mut scene = Scene::default();
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            normals: vec![[0., 0., 1.]; 3],
+            triangles: vec![[0, 1, 2]],
+            triangle_faces: vec![0],
+            face_names: vec!["top".into()],
+            ..Mesh::default()
+        };
+        let ids: Vec<_> = (1..=10).map(FeatureId).collect();
+        scene.set(
+            &ids.iter()
+                .map(|&id| (id, ShapeHandle(id.0)))
+                .collect::<Vec<_>>(),
+            ids.iter().map(|&id| (id, mesh.clone())).collect(),
+        );
+        let tree = scene.bodies[0].bvh.clone();
+        let points = scene.bodies[0].mesh.positions.as_ptr();
+        let generation = scene.generation;
+        for inks in [Inks::LIGHT, Inks::DARK] {
+            let c = colors(inks);
+            let off: Vec<_> = (0..10).map(|i| scene.body_color(i, &c)).collect();
+            let exported: Vec<_> = scene
+                .render_scene(&c)
+                .objects
+                .iter()
+                .map(|o| o.look.clone())
+                .collect();
+            scene.set_part_hues(
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, &id)| (id, if i == 1 { 0 } else { i % 8 }))
+                    .collect(),
+            );
+            assert_eq!(scene.body_color(0, &c), scene.body_color(1, &c));
+            assert_ne!(scene.body_color(0, &c), scene.body_color(2, &c));
+            assert_eq!(scene.body_color(0, &c), scene.body_color(8, &c));
+            assert!(!scene.steel_env(0));
+            scene.effects.all_bodies = true;
+            assert_eq!(
+                scene.body_look(0, &c).unwrap().color,
+                [
+                    inks.part_hue[0].r(),
+                    inks.part_hue[0].g(),
+                    inks.part_hue[0].b()
+                ]
+            );
+            let tint = Color32::from_rgb(9, 19, 29);
+            scene.set_body_colors([(ids[0], tint)].into());
+            assert_eq!(scene.body_color(0, &c), tint, "外観を優先");
+            scene.set_body_colors(Default::default());
+            scene.set_faded([ids[0]].into());
+            assert_ne!(scene.body_color(0, &c), inks.part_hue[0]);
+            scene.set_faded(Default::default());
+            scene.set_glow([ids[0]].into(), Color32::WHITE, 1.);
+            assert_ne!(scene.body_color(0, &c), inks.part_hue[0]);
+            scene.set_glow(Default::default(), Color32::WHITE, 0.);
+            assert_eq!(
+                scene
+                    .render_scene(&c)
+                    .objects
+                    .iter()
+                    .map(|o| o.look.clone())
+                    .collect::<Vec<_>>(),
+                exported,
+                "写実へ持ち込まない"
+            );
+            scene.effects.all_bodies = false;
+            scene.set_part_hues(Default::default());
+            assert_eq!(
+                (0..10).map(|i| scene.body_color(i, &c)).collect::<Vec<_>>(),
+                off
+            );
+        }
+        assert_eq!(scene.generation, generation);
+        assert_eq!(scene.bodies[0].mesh.positions.as_ptr(), points);
+        assert!(std::sync::Arc::ptr_eq(&scene.bodies[0].bvh, &tree));
     }
 }

@@ -358,3 +358,6 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-view-part-hues = 部品ごとに色を変える
+action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える

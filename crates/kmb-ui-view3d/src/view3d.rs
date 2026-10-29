@@ -593,6 +593,8 @@ fn paint_scene(
                 .for_each(|l| l.as_ref().map(look_key).hash(&mut h));
         });
         scene.faded().hash(&mut h);
+        scene.part_hues().hash(&mut h);
+        colors.inks.part_hue.map(|c| c.to_array()).hash(&mut h);
         scene.lamps.iter().for_each(|l| {
             [l.pos, l.dir, l.power]
                 .map(|v| v.map(f32::to_bits))

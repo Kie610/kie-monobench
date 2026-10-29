@@ -499,6 +499,26 @@ impl Workspace {
             .on_hover_text(origin_tip);
         crate::keycast::command_response(ui.checkbox(&mut self.win.layout.see_through, &see), see)
             .on_hover_text(see_tip);
+        let mut hues = self.cur.work.doc_view().part_hues;
+        let label = self.win.t("view-part-hues");
+        let tip = self.win.t("view-part-hues-tip");
+        if crate::keycast::command_response(ui.checkbox(&mut hues, &label), label)
+            .on_hover_text(tip)
+            .changed()
+        {
+            let result = self.run_through(
+                kmb_session::doc_view::PART_HUES,
+                self.cur.selected,
+                None,
+                &serde_json::json!({"on":hues}),
+            );
+            match result {
+                Ok(ran) => {
+                    self.take_ran(ran, None);
+                }
+                Err(why) => self.win.fail(why),
+            }
+        }
         ui.separator();
         head(ui, self.win.t("view-effects"));
         self.effects_items(ui);

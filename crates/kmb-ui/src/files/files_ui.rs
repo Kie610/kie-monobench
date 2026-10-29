@@ -93,6 +93,7 @@ pub(crate) enum Back {
         modified: bool,
         saved: Box<kmb_core::DocumentData>,
         report: Box<kmb_core::RecomputeReport>,
+        view: kmb_session::doc_view::DocView,
     },
     /// 読み込んだ機能を取り消す(STEP を読み込む時)
     Undo,
@@ -156,6 +157,7 @@ impl Workspace {
         }
         self.win.layout_saved = self.win.layout.clone();
         self.win.data_dir = Some(dir);
+        self.restore_doc_view();
         self
     }
 
@@ -403,6 +405,7 @@ impl Workspace {
                 let before = self.cur.work.path().map(std::path::Path::to_path_buf);
                 let (modified, saved) = (self.cur.modified, Box::new(self.cur.saved.clone()));
                 let report = Box::new(self.cur.work.report().clone());
+                let view = self.doc_view();
                 let old = self.replace_document(doc, Some(path.to_path_buf()));
                 let back = Back::Document {
                     doc: Box::new(old),
@@ -410,6 +413,7 @@ impl Workspace {
                     modified,
                     saved,
                     report,
+                    view,
                 };
                 self.watch_opening(path, back);
                 self.remember(path);
@@ -453,6 +457,7 @@ impl Workspace {
                 modified,
                 saved,
                 report,
+                view,
             } => {
                 // 走っている計算は開いた文書のもの。結果もキャッシュも前の文書には使わない
                 self.cur.work.put_back(*doc, path, *report);
@@ -470,7 +475,7 @@ impl Workspace {
                 self.cur.scene_fresh = false;
                 self.cur.held.clear();
                 self.recompute();
-                self.restore_doc_view();
+                self.apply_doc_view(view);
                 self.win.message = Some(format!("{} を開くのをやめ、前の文書に戻しました", o.name));
                 // 新しいタブに開いていたなら、空のタブは閉じて前のタブへ戻る(候補 20)
                 if self.tab_count() > 1 && self.is_blank() {
