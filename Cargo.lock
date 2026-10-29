@@ -2834,6 +2834,7 @@ dependencies = [
 name = "kmb-io-stl"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",

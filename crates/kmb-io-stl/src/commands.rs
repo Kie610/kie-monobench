@@ -126,6 +126,7 @@ fn step_each(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
             .kernel
             .export_step_named(&[h], std::slice::from_ref(&name), &name)
             .map_err(|e| e.to_string())?;
+        let s = crate::step_header::apply(&s, &cx.data.properties)?;
         files.push((format!("{name}.step"), s.into_bytes()));
     }
     log::info!("STEP をボディごとに {} 個書き出す", files.len());
@@ -169,6 +170,7 @@ fn step(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
         .kernel
         .export_step_named(&hs, &names, "kieMonoBench")
         .map_err(|e| e.to_string())?;
+    let s = crate::step_header::apply(&s, &cx.data.properties)?;
     Ok(Outcome::File {
         suffix: "形状.step".into(),
         contents: s.into_bytes(),
