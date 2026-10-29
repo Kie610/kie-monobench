@@ -107,8 +107,11 @@ skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive"] }
 proptest = "1.12.0"
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
-egui = "0.36.2"
-egui-wgpu = { version = "0.36.2", default-features = false }
+# 画面の crate はどれを選んで組んでも、アプリ(eframe)と同じ機能の組み合わせにする。揃えた依存
+# (kmb-workspace-hack)に画面の依存を入れないので、ここで揃えないと `-p kmb-ui` などで組んだ時に
+# egui・wgpu・naga の機能がアプリと違い、同じ target に別の組ができる(docs/verify.md の 2 節)
+egui = { version = "0.36.2", features = ["bytemuck", "persistence"] }
+egui-wgpu = { version = "0.36.2", features = ["wayland", "winit", "x11"] }
 bytemuck = { version = "1.25.2", features = ["derive"] }
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 rfd = "0.17.2"

@@ -101,6 +101,12 @@ Cargo は、選んだ crate の組み合わせごとに依存先の機能(featur
 
 `crates/kmb-workspace-hack` は中身のない crate で、全部の crate がこれに依存し、依存先の機能を全体と同じにそろえる。ただし見本のプラグイン(`plugins/post-example`)が組む crate(kmb-post・kmb-toolpath と、その依存の kmb-cam-tool・kmb-core・kmb-expr・kmb-format・kmb-look)は、`.config/hakari.toml` の `final-excludes` で外す。揃えた依存は egui などの画面の部品を抱えるので、外さないとプラグインが WASM でもそれを組む(kmb-plugin-host の試験が、プラグインの Cargo.lock に揃えた依存と画面の部品が無いことを確かめる)。この 7 crate だけを `-p` で選ぶと、依存先の作り直しが起きることがある。入れた後は、どの crate を選んでも依存先の作り直しは 0 件だった(`kmb-cam-commands`・`kmb-ui`・`kmb-expr`・`kmb-sketch` などで確認)。
 
+画面(egui・egui-wgpu・wgpu・naga など)と WASM(wasmtime の下の wasmparser・pulley-interpreter など)の依存は、`.config/hakari.toml` の `final-excludes` の `third-party` で揃えた依存から外す。揃えた依存に入れると、画面にも WASM にも関係の無い crate を 1 つ検査するだけでも、これらを全部組み立てていた(空の target から `cargo test -p kmb-strategy-pocket2d --no-run` で、外す前は 189 crate・370 秒・1.7 GB、外した後は 85 crate・92 秒・0.73 GB。2026-10-29 にクラウドで測った)。小さいディスクの作業場で担当の crate だけを確かめるため(1 節の `--dependents-lower`)。
+
+- 外した依存を使うのは、画面の crate(層 ui・app)と kmb-plugin-host から上だけ。WASM の依存は、どの crate を選んでも機能の組み合わせが変わらない。画面の依存は、根の `Cargo.toml` の `egui`・`egui-wgpu` に、アプリ(eframe)が足すのと同じ機能を書いてそろえる。書かないと `-p kmb-ui` などで組んだ時に wgpu・naga の機能がアプリと違い、同じ target に別の組ができる。
+- 確かめ方: 選び方ごとに `cargo tree <選び方> -e features,normal,build,dev -i <依存> --prefix none` の `<依存> feature` の行を比べる(`--workspace`・`-p kmb-ui-view3d`・`-p kmb-ui`・`-p kmb-app` で同じ)。eframe の版を上げた時も比べ、違えば根の `Cargo.toml` の機能を足す。
+- 文字の形の crate(skrifa・read-fonts・font-types)は kmb-text も使うので外さない。
+
 - 作るのは [cargo-hakari](https://docs.rs/cargo-hakari)(MIT または Apache-2.0。開発の道具で、製品には入らない)。設定は `.config/hakari.toml`。
 - 入れた直後の 1 回だけ、全体のビルドで依存先を作り直す(3 節の変更と合わせ、クラウドで約 14 分)。
 - **依存を足した・外した時、crate を足した時**は、次を動かして結果もコミットする。
