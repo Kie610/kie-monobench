@@ -216,7 +216,7 @@ pub(super) fn notes(
                             editor.dim_text.clear();
                         }
                         editor.dim_error = None;
-                        editor.selection.clear();
+                        editor.clear_selection();
                     }
                 }
             }

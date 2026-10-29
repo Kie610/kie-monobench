@@ -95,3 +95,6 @@ mod tests;
 mod text_outline_tests;
 mod text_tests;
 mod thread_tests;
+
+#[cfg(test)]
+mod duplicate_profile_tests;

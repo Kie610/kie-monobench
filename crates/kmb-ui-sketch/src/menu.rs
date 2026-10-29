@@ -593,7 +593,7 @@ pub(crate) fn apply(
         }
         Ask::Delete => crate::constraints_ui::selection_action(editor, sketch, sol, "delete"),
         Ask::Deselect => {
-            editor.selection.clear();
+            editor.clear_selection();
             editor.regions.clear();
             None
         }

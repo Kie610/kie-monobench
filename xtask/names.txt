@@ -203,6 +203,15 @@ cam.trace@1	kmb-strategy-engrave
 cam.vcarve@1	kmb-strategy-engrave
 cam.view_gcode	kmb-cam-commands
 cam.waterline@1	kmb-strategy-waterline
+drawing.add_sheet	kmb-drawing
+drawing.base_view	kmb-drawing
+drawing.delete	kmb-drawing
+drawing.detail_view	kmb-drawing
+drawing.move_view	kmb-drawing
+drawing.picture	kmb-drawing
+drawing.projected_view	kmb-drawing
+drawing.section_view	kmb-drawing
+drawing.set_view	kmb-drawing
 fea.modal@1	kmb-fea
 fea.static@1	kmb-fea
 fea.thermal@1	kmb-fea

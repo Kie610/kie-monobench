@@ -333,6 +333,27 @@ action-cam-setup-origin-pick = 原点を 3D で選ぶ
 action-cam-setup-origin-pick-tip = ストックの箱の角・辺の中点・面の中心か、部品の外形の箱の点、部品の角をクリックして、作業座標系の原点にする
 action-cam-template-save = テンプレートとして保存…
 action-cam-template-save-tip = 選んだ加工(セットアップなら中の加工すべて)を名前を付けて PC に保存し、別のセットアップや文書で使う。面や線は保存せず、使う時に選び直す
+
+## 図面
+
+action-drawing-add-sheet = 用紙を追加
+action-drawing-add-sheet-tip = 図面に用紙を追加する
+action-drawing-base-view = 基準ビュー
+action-drawing-base-view-tip = 形と名前の向きから基準ビューを作る
+action-drawing-projected-view = 投影ビュー
+action-drawing-projected-view-tip = 親のビューから投影ビューを作る
+action-drawing-section-view = 断面ビュー
+action-drawing-section-view-tip = 親のビューの切断線から断面ビューを作る
+action-drawing-detail-view = 詳細ビュー
+action-drawing-detail-view-tip = 親のビューの円の内側を拡大する
+action-drawing-move-view = ビューを移動
+action-drawing-move-view-tip = 用紙の上の位置か親からの距離を変える
+action-drawing-set-view = ビューを編集
+action-drawing-set-view-tip = ビューの尺度と隠れ線や接線の表示を変える
+action-drawing-delete = 図面を削除
+action-drawing-delete-tip = 用紙かビューを削除する。子のビューがある時は先に子を削除する
+action-drawing-picture = 図面の線を書き出す
+action-drawing-picture-tip = 用紙の線と問題を JSON に書き出す
 action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…

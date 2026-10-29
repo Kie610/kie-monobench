@@ -68,7 +68,7 @@ pub(crate) const GEOMETRIC: [(&str, &str, &str); 15] = [
     (HV, "hv", "線分を 1 本か、点・円を 2 つ"),
     ("一致", "coinc", "点を 2 つ"),
     ("平行", "parallel", "線分を 2 本"),
-    ("等しい", "equal", "線分を 2 本か、円を 2 つ"),
+    ("等しい", "equal", "線分だけか、円・円弧だけを 2 つ以上"),
     ("直交", "perp", "線分を 2 本"),
     ("固定", "fix", "点を 1 つ"),
     ("線上", "online", "点と線分"),
@@ -404,6 +404,23 @@ pub(crate) fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
         .collect()
 }
 
+/// 選んでいる要素をクリックの順に並べる。まとめて選んだ要素は番号順で続く。
+pub(crate) fn selected_in_order(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
+    editor
+        .selection_order
+        .iter()
+        .filter(|id| editor.selection.contains(id))
+        .chain(
+            editor
+                .selection
+                .iter()
+                .filter(|id| !editor.selection_order.contains(id)),
+        )
+        .copied()
+        .filter(|id| sketch.entity(*id).is_some())
+        .collect()
+}
+
 /// 選んだ要素への操作(リボンの「修正」と、パネルのボタン)。変えたスケッチを返す。
 pub(crate) fn selection_action(
     editor: &mut Editor,
@@ -420,7 +437,7 @@ pub(crate) fn selection_action(
     match action {
         "delete" => {
             s.remove_entities(&sel);
-            editor.selection.clear();
+            editor.clear_selection();
         }
         "construction" => {
             for id in &sel {
@@ -936,7 +953,7 @@ fn dimension_tool(
             {
                 c.reference = true;
             }
-            editor.selection.clear();
+            editor.clear_selection();
             editor.dim_kind = None;
             editor.dim_text.clear();
             editor.dim_error = None;

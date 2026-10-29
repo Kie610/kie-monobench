@@ -17,6 +17,8 @@ mod doc_state;
 mod dock_ui;
 pub mod drive;
 mod editor;
+mod field_text;
+pub use field_text::translated_field;
 mod fonts;
 mod frame_ui;
 mod gesture;
@@ -884,6 +886,8 @@ pub(crate) fn action_row(ui: &mut egui::Ui, a: &kmb_core::Action, keys: &str) ->
     }
 }
 
+#[cfg(test)]
+mod field_text_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
