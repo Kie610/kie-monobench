@@ -16,7 +16,7 @@ See [README.en.md](README.en.md#building) for what you need to build. Before ope
 
 ```sh
 cargo xtask verify                # tests and checks for the crates you changed
-cargo xtask verify --dependents   # also the crates that depend on them
+cargo xtask verify --dependents-lower   # also the crates that depend on them (up to, not including, the assembly and app layers)
 ```
 
 Report the result as counts (passed, failed, skipped) in the pull request. [docs/verify.md](docs/verify.md) explains the checks (layer direction, argument declarations, wording and so on). If a check fails, fix the code rather than loosening the check.

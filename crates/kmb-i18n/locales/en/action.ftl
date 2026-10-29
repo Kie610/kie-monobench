@@ -332,6 +332,27 @@ action-cam-setup-origin-pick = Pick Origin in 3D
 action-cam-setup-origin-pick-tip = Click a stock box corner, edge midpoint or face center, a point of the part's bounding box, or a part corner to make it the work coordinate origin
 action-cam-template-save = Save as Template…
 action-cam-template-save-tip = Save the selected operations (all operations inside, for a setup) on this PC under a name to use in another setup or document. Faces and lines are not saved; select them again when using it
+
+## Drawing
+
+action-drawing-add-sheet = Add sheet
+action-drawing-add-sheet-tip = Add a sheet to the drawing
+action-drawing-base-view = Base view
+action-drawing-base-view-tip = Create a base view from the model and a named orientation
+action-drawing-projected-view = Projected view
+action-drawing-projected-view-tip = Create a projected view from its parent
+action-drawing-section-view = Section view
+action-drawing-section-view-tip = Create a section from a cutting line in its parent view
+action-drawing-detail-view = Detail view
+action-drawing-detail-view-tip = Enlarge the region inside a circle in the parent view
+action-drawing-move-view = Move view
+action-drawing-move-view-tip = Change the paper position or distance from the parent
+action-drawing-set-view = Edit view
+action-drawing-set-view-tip = Change the scale and visibility of hidden and tangent lines
+action-drawing-delete = Delete drawing
+action-drawing-delete-tip = Delete a sheet or view; delete child views first
+action-drawing-picture = Export drawing lines
+action-drawing-picture-tip = Export the sheet geometry and problems as JSON
 action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…

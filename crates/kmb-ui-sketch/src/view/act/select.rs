@@ -94,7 +94,7 @@ pub(super) fn act(
             _ if label.is_some() => {
                 editor.dim_drag = label;
                 editor.picked_constraint = label;
-                editor.selection.clear();
+                editor.clear_selection();
             }
             Some(g) if !on_mark => editor.drag = Some(g),
             _ => {
@@ -195,7 +195,7 @@ pub(super) fn act(
                 crate::drag::Window::new(t.to_world(a), t.to_world(b))
             };
             if !add {
-                editor.selection.clear();
+                editor.clear_selection();
             }
             let mut path: Vec<[f64; 2]> = editor.lasso.drain(..).map(|p| t.to_world(p)).collect();
             path.push(t.to_world(b));
@@ -263,7 +263,7 @@ pub(super) fn act(
         })
     {
         // 寸法の値の札: その寸法を選ぶ(Delete で消す。値はダブルクリックで直す。網羅版 F6)
-        editor.selection.clear();
+        editor.clear_selection();
         editor.regions.clear();
         editor.picked_constraint = Some(id);
     } else if response.clicked()
@@ -274,7 +274,7 @@ pub(super) fn act(
             .and_then(|p| crate::marks::at(&state.marks, p))
     {
         // 拘束の印: その拘束を選ぶ(もう一度で外す)。Delete か右クリックで外せる
-        editor.selection.clear();
+        editor.clear_selection();
         editor.regions.clear();
         editor.picked_constraint = (editor.picked_constraint != Some(id)).then_some(id);
     } else if response.clicked()
@@ -298,22 +298,22 @@ pub(super) fn act(
         match hit {
             Some(h) => {
                 if !add {
-                    editor.selection.clear();
+                    editor.clear_selection();
                 }
                 if aug.kind(h.entity).is_some() {
                     // ボディの辺や角は選ぶだけでは写さない(網羅版 G10)。寸法や拘束に
                     // 使った時に写す(パネルの操作は lib.rs、道具は prune が残す)
                     if !(toggle && editor.selection.remove(&h.entity)) {
-                        editor.selection.insert(h.entity);
+                        editor.select(h.entity);
                     }
                 } else if !(toggle && editor.selection.remove(&h.entity)) {
-                    editor.selection.insert(h.entity);
+                    editor.select(h.entity);
                 }
             }
             None => {
                 // 線の無い所: 閉じた領域の中なら、その領域を選ぶ(Shift で足す、Ctrl で足し外し)
                 if !add {
-                    editor.selection.clear();
+                    editor.clear_selection();
                 }
                 let areas = crate::annot::regions(base_sketch, base_sol);
                 if editor.filter.profiles

@@ -8,7 +8,8 @@
 | --- | --- |
 | 変えた crate のテストと clippy(作業中はこれ) | `cargo xtask verify` |
 | crate を名指しで検査する | `cargo xtask verify kmb-ui kmb-cam-commands` |
-| 変えた crate に依存する側も含める(プッシュの前。PC での取り込みの検査もこれ) | `cargo xtask verify --dependents` |
+| 変えた crate に依存する側も、組み立てと入口の層の手前まで含める(プッシュの前。下の「担当分と全体」) | `cargo xtask verify --dependents-lower` |
+| 変えた crate に依存する側を全部含める(PR の CI が流す。PC での取り込みの検査もこれ) | `cargo xtask verify --dependents` |
 | 全体を検査する(クラウドで手渡す前。前後に下の `cloud-target-cache.sh`) | `cargo xtask verify --all` |
 | 全体を、truck のカーネルでも検査する(公開の準備の時。週に 1 回は `--all` が自動で足す) | `cargo xtask verify --all --truck` |
 | 何が対象になるかを見るだけ | `cargo xtask affected [--dependents]` |
@@ -23,7 +24,8 @@
 
 - 「変えた」は `origin/main` との分かれ目からの差で、まだコミットしていないファイルと git に入れていないファイルも含む。比べる相手は `--base <ref>` で変えられる。
 - 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた時は、全体を検査する。`docs/` など crate の外のファイルはテストしない(何を飛ばしたかは表示する)。ただし下の点検はいつも流し、テストの段は「未実行」と出す(通過ではない)。
-- `--all`・`--dependents` は cargo-nextest が無ければ失敗にする(件数が残らないため。nextest なしで流すなら `JC_VERIFY_NEXTEST=off`)。
+- `--all`・`--dependents`・`--dependents-lower` は cargo-nextest が無ければ失敗にする(件数が残らないため。nextest なしで流すなら `JC_VERIFY_NEXTEST=off`)。
+- 担当分と全体: 機能の crate はどれも組み立て(kmb-bundle)に依存されるので、`--dependents` はどの機能を変えても組み立て・session・画面・アプリまで届き、画面の GPU・両方のカーネル・WASM を全部組む(target は 15〜22 GB)。小さいディスクの作業場で並べて作業するため、プッシュの前の手元の検査は `--dependents-lower` にする。依存する側のうち、層が組み立て・session・画面・アプリ(`xtask/src/main.rs` の `UPPER_LAYERS`)の crate を足さず、そこを通って先へも進まない(変えた crate がその層なら、それ自身は検査する)。上の層と全体は PR の CI(14 節)が Linux と Windows で `--dependents` を流して確かめるので、CI が落ちたら直してプッシュし直す。加工の戦略や CAD の機能 1 つなら、空の target から数分・1〜2 GB で済む(2 節)。画面・session・アプリそのものを変えた時は今と同じ大きさになるので、クラウドでは下の `cloud-target-cache.sh` を使う。
 - 最後に段ごとの「通過/失敗」とかかった秒数を出す。失敗があれば終了コードが 1 になる。
 - clippy は警告を誤りとして扱う(`-D warnings`)。テストだけなら `--no-clippy`。
 - 普段の検査(手渡しの前・PC での取り込みを含む)は SMLib のカーネルだけで流し、`--truck` は付けない。truck の回は、公開の準備で truck のカーネルも配る前と、週に 1 回だけ流す(使うのは SMLib だけで、truck は戻すための控え)。
@@ -100,6 +102,12 @@
 Cargo は、選んだ crate の組み合わせごとに依存先の機能(features)を決め直す。そのため `cargo test -p kmb-cam-commands` のように一部だけを選ぶと、全体のビルドと機能の組み合わせが変わり、wasmtime や egui などの依存先を最初から作り直していた(測った例: `-p kmb-cam-commands` で 2 分 46 秒、`-p kmb-ui` で 6 分 15 秒)。
 
 `crates/kmb-workspace-hack` は中身のない crate で、全部の crate がこれに依存し、依存先の機能を全体と同じにそろえる。ただし見本のプラグイン(`plugins/post-example`)が組む crate(kmb-post・kmb-toolpath と、その依存の kmb-cam-tool・kmb-core・kmb-expr・kmb-format・kmb-look)は、`.config/hakari.toml` の `final-excludes` で外す。揃えた依存は egui などの画面の部品を抱えるので、外さないとプラグインが WASM でもそれを組む(kmb-plugin-host の試験が、プラグインの Cargo.lock に揃えた依存と画面の部品が無いことを確かめる)。この 7 crate だけを `-p` で選ぶと、依存先の作り直しが起きることがある。入れた後は、どの crate を選んでも依存先の作り直しは 0 件だった(`kmb-cam-commands`・`kmb-ui`・`kmb-expr`・`kmb-sketch` などで確認)。
+
+画面(egui・egui-wgpu・wgpu・naga など)と WASM(wasmtime の下の wasmparser・pulley-interpreter など)の依存は、`.config/hakari.toml` の `final-excludes` の `third-party` で揃えた依存から外す。揃えた依存に入れると、画面にも WASM にも関係の無い crate を 1 つ検査するだけでも、これらを全部組み立てていた(空の target から `cargo test -p kmb-strategy-pocket2d --no-run` で、外す前は 189 crate・370 秒・1.7 GB、外した後は 85 crate・92 秒・0.73 GB。2026-10-29 にクラウドで測った)。小さいディスクの作業場で担当の crate だけを確かめるため(1 節の `--dependents-lower`)。
+
+- 外した依存を使うのは、画面の crate(層 ui・app)と kmb-plugin-host から上だけ。WASM の依存は、どの crate を選んでも機能の組み合わせが変わらない。画面の依存は、根の `Cargo.toml` の `egui`・`egui-wgpu` に、アプリ(eframe)が足すのと同じ機能を書いてそろえる。書かないと `-p kmb-ui` などで組んだ時に wgpu・naga の機能がアプリと違い、同じ target に別の組ができる。
+- 確かめ方: 選び方ごとに `cargo tree <選び方> -e features,normal,build,dev -i <依存> --prefix none` の `<依存> feature` の行を比べる(`--workspace`・`-p kmb-ui-view3d`・`-p kmb-ui`・`-p kmb-app` で同じ)。eframe の版を上げた時も比べ、違えば根の `Cargo.toml` の機能を足す。
+- 文字の形の crate(skrifa・read-fonts・font-types)は kmb-text も使うので外さない。
 
 - 作るのは [cargo-hakari](https://docs.rs/cargo-hakari)(MIT または Apache-2.0。開発の道具で、製品には入らない)。設定は `.config/hakari.toml`。
 - 入れた直後の 1 回だけ、全体のビルドで依存先を作り直す(3 節の変更と合わせ、クラウドで約 14 分)。

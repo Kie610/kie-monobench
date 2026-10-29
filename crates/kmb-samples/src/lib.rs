@@ -6,7 +6,14 @@
 //! (CAM の crate が CAD の crate に依存しないように)。
 
 pub mod cam;
+mod drawing;
 mod edges;
+pub use drawing::{
+    drawing_assembly_document, drawing_box_document, drawing_cylinder_document,
+    drawing_hole_document,
+};
+#[cfg(test)]
+mod drawing_tests;
 pub mod sample;
 mod sketch;
 mod sweep;
