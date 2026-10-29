@@ -5,6 +5,7 @@
 //! cargo xtask checks [--base <ref>]
 //! cargo xtask verify [<crate>...] [--base <ref>] [--dependents | --dependents-lower] [--all] [--truck] [--no-clippy]
 //! cargo xtask sweep [--yes] [--keep-days <日数>]
+//! cargo xtask warm
 //! cargo xtask docs
 //! cargo xtask labels
 //! cargo xtask api
@@ -54,6 +55,9 @@
 //!   (space.rs。依存の宣言が変わって下流の指紋が全部変わった時に、組み立てと sweep で尽きていた)。
 //! - クラウド(Linux)では、cargo-nextest と cargo-hakari が無ければ `scripts/install-*.sh` で入れる。
 //!
+//! - `warm` は組み立てと入口の層より下の全部を、テストを流さずに組んでおく(並列の作業場の共通部分。
+//!   作業場の準備の台本と、共有フォルダに置く依存だけの写しで使う。warm.rs)。
+//!
 //! - 段を流してログから件数を読むのは jobs.rs、空きを保つ片付けは space.rs と sweep.rs。
 //!
 //! 手順の説明は docs/verify.md。
@@ -76,6 +80,7 @@ mod skips;
 mod source;
 mod space;
 mod sweep;
+mod warm;
 mod words;
 
 use jobs::{Done, run_counting_compiles, spawn, step, wait_all};
@@ -1064,6 +1069,32 @@ fn install_on_linux(script: &str) {
     }
 }
 
+/// クラウドの作業場(Linux)で、組み立ての前に共通部分だけの写しを target に足す
+/// (`scripts/cloud-target-cache.sh restore-deps`。並列の作業場がそれぞれ空の target から外の crate と
+/// SMLib を組み直していた。2026-10-29)。共有フォルダの無い所と、target を別の場所に置いた時は
+/// 何もしない。同じ組は 2 度戻さない。`JC_DEPS_CACHE=off` で使わない。
+fn restore_shared_deps(ws: &Workspace) {
+    let script = "scripts/cloud-target-cache.sh";
+    if !cfg!(target_os = "linux")
+        || std::env::var("JC_DEPS_CACHE").is_ok_and(|v| v.trim() == "off")
+        || ws.target_dir != ws.root.join("target")
+        || !Path::new(script).is_file()
+    {
+        return;
+    }
+    println!(
+        "
+== 共通部分だけの写しを確かめます({script} restore-deps)"
+    );
+    if !Command::new("sh")
+        .args([script, "restore-deps"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("戻せませんでした(一から組み立てます)");
+    }
+}
+
 /// nextest を使わないと明示したか(`JC_VERIFY_NEXTEST=off`)。
 fn nextest_off() -> bool {
     std::env::var("JC_VERIFY_NEXTEST").is_ok_and(|v| v.trim() == "off")
@@ -1073,7 +1104,7 @@ fn run() -> Result<ExitCode, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some((cmd, rest)) = args.split_first() else {
         return Err(
-            "使い方: cargo xtask affected|checks|verify|sweep|docs|labels|io|api|dxc|release|paths [...](docs/verify.md)"
+            "使い方: cargo xtask affected|checks|verify|sweep|warm|docs|labels|io|api|dxc|release|paths [...](docs/verify.md)"
                 .into(),
         );
     };
@@ -1092,6 +1123,11 @@ fn run() -> Result<ExitCode, String> {
                 ExitCode::FAILURE
             },
         );
+    }
+    if cmd == "warm" {
+        let ws = workspace()?;
+        restore_shared_deps(&ws);
+        return warm::run(&ws);
     }
     if cmd == "release" {
         let ws = workspace()?;
@@ -1221,6 +1257,9 @@ fn run() -> Result<ExitCode, String> {
             let _ = fs::remove_file(skip_log(&ws));
             let started = SystemTime::now();
             let testing = !sel.as_ref().is_some_and(BTreeSet::is_empty);
+            if testing {
+                restore_shared_deps(&ws);
+            }
             if testing && !nextest_off() && !nextest_available() {
                 install_on_linux("scripts/install-nextest.sh");
             }
