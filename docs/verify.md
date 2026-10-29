@@ -435,7 +435,7 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
 - タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
 - できた物は OS ごとに「kie-monobench-<版>-<OS>-<arch>」(Windows は `windows-x64.zip`、Linux は `linux-x86_64.tar.gz`。中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`・`README.md`・`README.en.md`)にまとめて成果物に置く。版はタグから `v` を外した物(手で流した時はブランチの名前)。両方の OS が済んだら、全部の SHA256 を 1 つの `SHA256SUMS.txt`(`sha256sum -c SHA256SUMS.txt` で確かめられる形)にして「kie-monobench-<版>-SHA256SUMS」の成果物に置く。
-- タグの回は、同じ回で GitHub のリリースを下書きで作り(題は「kieMonoBench <版>」、本文は入っている物の表)、2 つの配る物と `SHA256SUMS.txt` を載せる。下書きを落とし直してハッシュを確かめてから、変わった所を本文に足して手で公開する。
+- タグの回は、同じ回で GitHub のリリースを下書きで作り(題は「kieMonoBench <版>」、本文は `.github/release-notes.md` のひな型に版を埋めた物)、2 つの配る物と `SHA256SUMS.txt` を載せる。下書きを落とし直してハッシュを確かめてから、新しくできること・直したことの節を埋めて手で公開する。
 - 検査は取り込みの前の PR の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。
 
 ## 16. PR を GitHub で取り込む

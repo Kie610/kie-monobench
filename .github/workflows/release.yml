@@ -103,6 +103,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: kie-monobench-*
@@ -138,19 +140,9 @@ jobs:
         run: |
           set -eu
           ver="${{ steps.sums.outputs.ver }}"
-          cat > notes.md <<EOT
-          ## 入っている物
-          | ファイル | 中身 |
-          |---|---|
-          | \`kie-monobench-$ver-windows-x64.zip\` | Windows 10・11(x64)。画面のアプリ \`kie-monobench.exe\`、CLI \`kmb.exe\`、MCP のサーバー \`kmb-mcp.exe\`、許諾文 |
-          | \`kie-monobench-$ver-linux-x86_64.tar.gz\` | Linux(x86_64、glibc 2.39 以降。Ubuntu 24.04 以降など)。\`kie-monobench\`、\`kmb\`、\`kmb-mcp\`、許諾文 |
-          | \`SHA256SUMS.txt\` | 上の 2 つの SHA-256 |
-
-          - 展開してそのまま起動します(入れる手順は要りません)。
-          - 署名はまだしていません。Windows では初回に SmartScreen の確認が出ることがあります。
-          - \`THIRD-PARTY-LICENSES.txt\` は同梱した他者の部品とその許諾文の一覧です。
-          - ライセンスは MIT または Apache-2.0 です。
-          EOT
+          # 本文は .github/release-notes.md のひな型から作る(初めの説明の注を外し、{版} を埋める)。
+          # 新しくできること・直したことの節は、公開の前に下書きで埋める
+          sed -e '1,/^-->$/d' -e "s/{版}/$ver/g" .github/release-notes.md > notes.md
           gh release create "${{ github.ref_name }}" --draft --verify-tag \
             --title "kieMonoBench $ver" --notes-file notes.md \
             dist/*.zip dist/*.tar.gz dist/SHA256SUMS.txt
