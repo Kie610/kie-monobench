@@ -113,6 +113,9 @@ pub type Make = fn(&dyn Picks) -> Result<serde_json::Value, String>;
 /// 使えない工具を足す時)。
 pub type Adopt = fn(&serde_json::Value) -> Result<serde_json::Value, String>;
 
+/// 工具を替えて取残しを足す時に、戦略固有の引継ぎ値を整える。
+pub type RestInherit = fn(&mut serde_json::Value, FeatureId) -> Result<(), String>;
+
 /// 1 つの加工の戦略の名乗り。
 #[derive(Clone, Copy)]
 pub struct Strategy {
@@ -138,6 +141,8 @@ pub struct Strategy {
     pub rough_grid: bool,
     /// 細い工具で残りを削る加工を足せる時、使える工具の種類
     pub rest: &'static [ToolKind],
+    /// 取残しを足す時に、戦略固有の参照を引き継ぐ。
+    pub rest_inherit: Option<RestInherit>,
     /// 既定とテンプレートに使えるか
     pub reuse: bool,
     /// ツールバーと一覧での並び(小さい順)
@@ -154,6 +159,9 @@ pub struct Strategy {
     pub floor_faces: bool,
     /// 工具の順番を持てるか(同じ領域の残り削りを、データの `rest_tool` で後ろに並べる)
     pub tool_order: bool,
+    /// 工具の順番で領域を比べる時の、`side` 欄を省いたデータの削る側。
+    /// 欄を持たない戦略は None。面の内側を削る領域として輪郭の内側とつなぐ。
+    pub tool_order_default_side: Option<&'static str>,
     /// 部品を切り抜くか(工具の順に並べ替える時に前へ動かさない。印 [`CUTS_FREE`])
     pub cuts_free: bool,
     /// 同じ領域の別の種類の加工のデータを、この種類にする(工具の順番で使う)
@@ -182,6 +190,7 @@ impl Strategy {
             entry: None,
             rough_grid: false,
             rest: &[],
+            rest_inherit: None,
             reuse: true,
             order: 0,
             make,
@@ -190,6 +199,7 @@ impl Strategy {
             commands: None,
             floor_faces: false,
             tool_order: false,
+            tool_order_default_side: None,
             cuts_free: false,
             adopt: None,
         }
@@ -208,6 +218,14 @@ impl Strategy {
         Strategy {
             tool_order: true,
             adopt,
+            ..self
+        }
+    }
+
+    /// `side` 欄を省いた旧形式も、戦略自身の既定の削る側で工具の順番に入れる。
+    pub fn tool_order_default_side(self, side: &'static str) -> Self {
+        Strategy {
+            tool_order_default_side: Some(side),
             ..self
         }
     }
@@ -295,6 +313,14 @@ impl Strategy {
     pub fn rest(self, kinds: &'static [ToolKind]) -> Self {
         Strategy {
             rest: kinds,
+            ..self
+        }
+    }
+
+    /// 取残し加工を複製する共通の入口から呼ぶ、戦略固有の引継ぎ。
+    pub fn rest_inherit(self, inherit: RestInherit) -> Self {
+        Strategy {
+            rest_inherit: Some(inherit),
             ..self
         }
     }

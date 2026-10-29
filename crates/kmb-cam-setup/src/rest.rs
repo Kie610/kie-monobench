@@ -140,6 +140,12 @@ fn check_rest(p: &Prepared, big: Tool) -> Result<Tool, EvalError> {
     Ok(big)
 }
 
+/// 前の工具より先が細く、戦略が取残しに使える種類の工具か。
+/// 取残し加工の追加と、工具の順番に足す候補で同じ判断を使う。
+pub fn can_follow_tool(tool: &Tool, previous: &Tool, kinds: &[ToolKind]) -> bool {
+    kinds.contains(&tool.kind) && tool.tip_radius() < previous.tip_radius() - 1e-6
+}
+
 /// 前の太い工具で削った後の削り残しと、今の工具がそこにかかるかの調べ方。
 /// 削り残しは高さで変わることがある(前の工具が V・テーパーだと壁が斜めに残る)ので、
 /// 高さの見本ごとに「前の工具が削った所」と「その高さでの今の工具の半径」を持つ。

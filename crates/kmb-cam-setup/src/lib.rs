@@ -60,7 +60,9 @@ pub use plan::{
     EntryRegion, HeightRule, MachineView, Planner, SetupView, Sources, StrategyInput,
     StrategyOutput, machine_stepdown, plan_error,
 };
-pub use rest::{RestSize, is_rest_data, rest_levels, rest_plan, rest_tool, rest_tool_or_size};
+pub use rest::{
+    RestSize, can_follow_tool, is_rest_data, rest_levels, rest_plan, rest_tool, rest_tool_or_size,
+};
 pub use strategy::{
     Adopt, CUTS_FREE, FaceMenu, Make, Needs, Picks, ROUGH_GRID, Strategy, StrategyModule, fitted,
     split, to_data,
@@ -656,6 +658,21 @@ pub struct TabPath {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct TabPaths {
     pub paths: Vec<TabPath>,
+    /// 経路と一緒に再計算したタブの設定。幅と高さは mm。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tabs: Option<TabSettings>,
+    /// 取残しで引き継ぐタブを残した元の工具半径。通常の輪郭は自分の経路の工具を使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_radius: Option<f64>,
+}
+
+/// 元加工が現在の経路に置くタブ。手置きの点があれば個数より優先する。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TabSettings {
+    pub count: u32,
+    pub points: Vec<P2>,
+    pub width: f64,
+    pub height: f64,
 }
 
 impl kmb_core::Payload for TabPaths {
