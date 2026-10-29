@@ -43,7 +43,11 @@ fn path_from(var: Option<std::ffi::OsString>, target: &Path) -> (PathBuf, bool) 
 
 /// 1 段の表の欄。`86.0 秒(通過 968・失敗 0・飛ばし 6)`。
 fn cell(d: &Done) -> String {
-    let mut s = format!("{:.1} 秒", d.secs);
+    let mut s = if d.name.starts_with("広い操作") {
+        format!("{}: {:.1} 秒", d.name, d.secs)
+    } else {
+        format!("{:.1} 秒", d.secs)
+    };
     if let Some(x) = &d.detail {
         s += &format!("({x})");
     }
@@ -63,7 +67,9 @@ fn column(name: &str) -> Option<usize> {
         Some(1)
     } else if name.contains("clippy") || name.contains("doctest") {
         Some(3)
-    } else if matches!(name, "点検" | "実行中の飛ばし" | "ライセンス") {
+    } else if matches!(name, "点検" | "実行中の飛ばし" | "ライセンス")
+        || name.starts_with("広い操作")
+    {
         Some(4)
     } else {
         None
@@ -77,8 +83,9 @@ fn row(
     commit: &str,
     args: &[String],
     results: &[Done],
-    total: f64,
+    end: (f64, Option<&str>),
 ) -> String {
+    let (total, wide_not_run) = end;
     let mut cols = vec![String::new(); 5];
     for d in results {
         if let Some(i) = column(&d.name) {
@@ -87,6 +94,12 @@ fn row(
             }
             cols[i] += &cell(d);
         }
+    }
+    if let Some(reason) = wide_not_run {
+        if !cols[4].is_empty() {
+            cols[4] += "、";
+        }
+        cols[4] += &format!("広い操作の試験: 未実行({reason})");
     }
     let args = if args.is_empty() {
         "(変えた crate)".to_string()
@@ -203,7 +216,13 @@ fn place(shared: bool) -> String {
 }
 
 /// 1 回分を記録へ足す。
-pub fn record(target: &Path, args: &[String], results: &[Done], total: f64) {
+pub fn record(
+    target: &Path,
+    args: &[String],
+    results: &[Done],
+    total: f64,
+    wide_not_run: Option<&str>,
+) {
     let (p, shared) = path(target);
     let line = row(
         &jst(SystemTime::now()),
@@ -211,7 +230,7 @@ pub fn record(target: &Path, args: &[String], results: &[Done], total: f64) {
         &commit(),
         args,
         results,
-        total,
+        (total, wide_not_run),
     );
     let res = (|| -> std::io::Result<()> {
         if let Some(dir) = p.parent() {
@@ -249,7 +268,7 @@ mod tests {
             "5f01732",
             &["--all".into()],
             &[checks, built, test, clippy],
-            110.0,
+            (110.0, None),
         );
         assert_eq!(
             r,
@@ -267,10 +286,39 @@ mod tests {
                 Done::new("テスト(truck) kmb-solid", true, 1.0),
                 Done::new("テスト(truck) kmb-samples", true, 2.0),
             ],
-            3.0,
+            (3.0, None),
         );
         assert!(r.contains("| (変えた crate) | 通過 |"));
         assert!(r.contains("| 1.0 秒、2.0 秒 |"));
+    }
+
+    /// 確かめること: 広い段を別名で残し、未実行を通過として書かず、truck の列を動かさない。
+    #[test]
+    fn wide_results_keep_the_truck_column_and_name_not_run() {
+        let r = row(
+            "2026-10-29 10:00",
+            "p",
+            "c",
+            &[],
+            &[
+                Done::new("テスト(truck)", true, 2.0),
+                Done::new("広い操作の試験", true, 3.0),
+            ],
+            (5.0, None),
+        );
+        assert!(r.contains("広い操作の試験: 3.0 秒"));
+        assert_eq!(r.split('|').nth(9).unwrap().trim(), "2.0 秒");
+        assert_eq!(last_truck_pass(&r), days_of("2026-10-29"));
+        let r = row(
+            "2026-10-29 10:00",
+            "p",
+            "c",
+            &[],
+            &[],
+            (0.0, Some("下位層の検査")),
+        );
+        assert!(r.contains("広い操作の試験: 未実行(下位層の検査)"));
+        assert_eq!(last_truck_pass(&r), None);
     }
 
     #[test]
