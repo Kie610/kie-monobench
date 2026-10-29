@@ -143,7 +143,12 @@ impl egui::Plugin for UiDriver {
             });
         }
         if !self.marks.is_empty() {
-            ctx.request_repaint();
+            // 次の描画には間隔を空け、予約の予測時間補正で即時描画へ戻らないようにする。
+            let predicted = ctx.input(|i| i.predicted_dt);
+            let frame = std::time::Duration::try_from_secs_f32(predicted).unwrap_or_default();
+            ctx.request_repaint_after(
+                frame.saturating_add(std::time::Duration::from_secs_f64(1.0 / 30.0)),
+            );
         }
     }
 }
@@ -573,7 +578,12 @@ mod widget_glow_tests {
     }
 
     fn fixture() -> egui_kittest::Harness<'static, Fixture> {
+        fixture_with_step(0.25)
+    }
+
+    fn fixture_with_step(step_dt: f32) -> egui_kittest::Harness<'static, Fixture> {
         let mut h = egui_kittest::Harness::builder()
+            .with_step_dt(step_dt)
             .with_size(egui::vec2(320.0, 240.0))
             .build_ui_state(
                 |ui, state: &mut Fixture| {
@@ -723,6 +733,46 @@ mod widget_glow_tests {
             let mut changed = node.clone();
             changed.rect = rect;
             assert!(driver.visible_marks_in(&[changed], screen, now).is_empty());
+        }
+    }
+
+    /// 確かめること: 枠が有効な間も次の描画を遅延で予約し、ほかの操作の整いを待てる。
+    #[test]
+    fn widget_glow_schedules_delayed_repaint_and_preserves_settling() {
+        for predicted in [1.0 / 60.0, 1.0 / 15.0, 0.25] {
+            let mut h = fixture_with_step(predicted);
+            h.run();
+            let requests = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let recorded = requests.clone();
+            h.ctx.set_request_repaint_callback(move |request| {
+                recorded.lock().unwrap().push(request.delay);
+            });
+            let node = target(&h.ctx);
+            h.ctx
+                .plugin::<UiDriver>()
+                .lock()
+                .mark_press(&node, InputOrigin::Script);
+            h.step();
+            assert_eq!(h.ctx.input(|i| i.predicted_dt), predicted);
+            let delays = requests.lock().unwrap().clone();
+            assert!(
+                delays
+                    .iter()
+                    .any(|d| *d > Duration::ZERO && *d <= Duration::from_millis(40)),
+                "次の枠の描画は有限の遅延で予約する: {delays:?}"
+            );
+            h.run();
+            let status = h.ctx.plugin::<UiDriver>().lock().glow_status(
+                h.ctx.pixels_per_point(),
+                h.ctx.content_rect(),
+                Instant::now(),
+            );
+            assert_eq!(
+                status.as_array().unwrap().len(),
+                1,
+                "整うまで待っても枠の寿命を使い切らない"
+            );
+            assert!(status[0]["alpha"].as_f64().unwrap() > 0.0);
         }
     }
 }
