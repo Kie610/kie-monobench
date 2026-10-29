@@ -762,15 +762,13 @@ const TAPS: &[(&str, &str)] = &[
 ];
 // 画面は項目がなければ最初の選択肢を出すので、既定の値を最初に置く
 const FITS: &[(&str, &str)] = &[("normal", "中"), ("close", "精"), ("loose", "粗")];
-/// ネジのサイズを省いた時の値(欄の最初の選択肢)。
+/// ネジのサイズを省いた時の値。
 pub(crate) const DEFAULT_SIZE: &str = "M3";
 
 /// 穴の設定欄(欄で指定する穴と、面に穴の作っている途中のパネルで同じものを使う)。
 pub fn hole_fields() -> Vec<Field> {
-    // 通し穴にも使えるメートル並目を M3 から並べ、ほかの族のねじ穴の呼びを続ける。
+    // 通し穴にも使えるメートル並目を径の小さい順に並べ、ほかの族のねじ穴の呼びを続ける。
     let mut sizes: Vec<String> = THREADS.iter().map(|t| t.name.to_string()).collect();
-    let first = sizes.iter().position(|s| s == DEFAULT_SIZE).unwrap_or(0);
-    sizes.rotate_left(first);
     sizes.extend(
         thread::sizes()
             .into_iter()

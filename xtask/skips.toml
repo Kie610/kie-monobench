@@ -7,6 +7,7 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+expanded_thread_attributes_use_the_shared_action_without_changing_the_shape = "truck の回(円筒の面を選ぶための円の辺を列挙しない)"
 modeled_threads_keep_large_fine_long_and_print_clearance_shafts_closed = "truck の回(らせんの掃引に対応していない)"
 modeled_thread_run_out_and_recomputed_dimensions_keep_a_closed_body = "truck の回(らせんの掃引に対応していない)"
 modeled_threads_cross_a_chamfered_tip_without_cutting_the_shaft_away = "truck の回(らせんの掃引に対応していない)"

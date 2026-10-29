@@ -457,18 +457,42 @@ pub fn suggest_for(c: &Cylinder) -> Vec<Size> {
     v
 }
 
+/// 円筒の径が表の寸法と一致するとみなす幅(mm)。
+const DIAMETER_MATCH: f64 = 1e-3;
+
+/// 新しく付けるねじで、呼びを省いた時はメートルを優先し、ほかの族は寸法が一致する時だけ選ぶ。
+fn automatic_size(c: &Cylinder) -> Size {
+    let near = suggest_for(c);
+    let matches = |s: &&Size| (s.major - c.diameter).abs() < DIAMETER_MATCH || tap_matches(s, c);
+    near.iter()
+        .filter(|s| s.family == Family::Metric)
+        .find(matches)
+        .or_else(|| {
+            near.iter()
+                .filter(|s| s.family != Family::Metric && (c.internal || !s.pipe_internal))
+                .find(matches)
+        })
+        .or_else(|| near.iter().find(|s| s.family == Family::Metric))
+        .copied()
+        .expect("メートルの呼びがある")
+}
+
+/// 内ねじはメートルの並目と、ユニファイ・管用の表の下穴を照合する。
+fn tap_matches(s: &Size, c: &Cylinder) -> bool {
+    c.internal
+        && (s.family != Family::Metric || s.coarse)
+        && (s.tap_drill() - c.diameter).abs() < DIAMETER_MATCH
+}
+
 /// 下穴と一致する呼びを先にする。省略した呼びは保存された表の範囲だけを使う。
 fn promote_tap_match(v: &mut Vec<Size>, c: &Cylinder, v1: bool) {
-    if c.internal
-        && let Some(i) = v.iter().position(|s| {
-            (s.family != Family::Metric || s.coarse)
-                && (s.tap_drill() - c.diameter).abs() < 1e-3
-                && (!v1
-                    || crate::THREADS.iter().any(|row| {
-                        crate::shape::v1_thread_row(row) && (row.major - s.major).abs() < 1e-9
-                    }))
-        })
-    {
+    if let Some(i) = v.iter().position(|s| {
+        tap_matches(s, c)
+            && (!v1
+                || crate::THREADS.iter().any(|row| {
+                    crate::shape::v1_thread_row(row) && (row.major - s.major).abs() < 1e-9
+                }))
+    }) {
         let size = v.remove(i);
         v.insert(0, size);
     }
@@ -1090,7 +1114,7 @@ pub fn register(reg: &mut Registry) {
             .field(Field::info("face", "円筒の面"))
             .field(
                 Field::text("size", "呼び")
-                    .help("空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)")
+                    .help("空ならメートルの呼びを優先。インチ・管用は呼び径(めねじは下穴も)と面の径の差が 0.001 mm 未満の時だけ選ぶ。一覧は面の径に近い順")
                     .suggest_own("sizes"),
             )
             .field(Field::opt_expr("length", "長さ").length().help("空なら面の全長。形を作る時は端の余裕を残した最大長さ(突き抜ける時は全長)"))
@@ -1143,7 +1167,7 @@ fn thread_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         Some(s) => parse_size(s).ok_or_else(|| unknown_size(s))?.name(),
         None => match hole_size(cx, &data.face) {
             Some(s) => s.name(),
-            None => suggest_for(&c)[0].name(),
+            None => automatic_size(&c).name(),
         },
     };
     if let Some(v) = cx.arg("form") {
@@ -1227,7 +1251,7 @@ impl Extension for ThreadCommands {
                 .args([
                     kmb_core::Arg::text("face", "ねじを付ける円筒の面の名前(省くと選んでいる面)"),
                     kmb_core::Arg::feature("feature", "面を持つ機能の番号"),
-                    kmb_core::Arg::text("size", "ねじの呼び(M6・1/4-20 UNC・G1/4・Rp1/4 など。省くと面の径に近いもの)"),
+                    kmb_core::Arg::text("size", "ねじの呼び(M6・1/4-20 UNC・G1/4・Rp1/4 など。省くとメートルを優先して面の径から選ぶ)"),
                 ].into_iter().chain(form_args()))
                 .menu("作成")
                 .icon("thread")
@@ -1422,7 +1446,7 @@ mod tests {
         let Some(kmb_core::Suggest::Values { values }) = field.suggest else {
             panic!()
         };
-        assert_eq!(values[0].value, crate::DEFAULT_SIZE);
+        assert!(values.iter().any(|v| v.value == crate::DEFAULT_SIZE));
         for name in [
             "M14",
             "M16",
@@ -1617,6 +1641,105 @@ mod tests {
         assert_eq!(suggest(6.0)[0].name(), "M6x1");
         assert_eq!(suggest(5.0)[0].name(), "M5x0.8");
         assert_eq!(suggest(8.0)[0].name(), "M8x1.25");
+    }
+
+    #[test]
+    fn an_omitted_thread_size_prefers_metric_for_rounded_diameters() {
+        let names: Vec<String> = [9.7, 7.9]
+            .into_iter()
+            .map(|diameter| {
+                automatic_size(&Cylinder {
+                    diameter,
+                    center: [0.0; 3],
+                    axis: [0.0, 0.0, 1.0],
+                    length: 10.0,
+                    internal: false,
+                })
+                .name()
+            })
+            .collect();
+        assert_eq!(names, ["M10x1.5", "M8x1.25"]);
+    }
+
+    #[test]
+    fn an_omitted_thread_size_accepts_other_families_only_at_matching_diameters() {
+        for (name, metric) in [
+            ("G1/8", "M10x1.5"),
+            ("5/16-18 UNC", "M8x1.25"),
+            ("1/4-20 UNC", "M6x1"),
+        ] {
+            let major = parse_size(name).unwrap().major;
+            for (delta, expected) in [(0.0, name), (0.0005, name), (0.002, metric)] {
+                let c = Cylinder {
+                    diameter: major + delta,
+                    center: [0.0; 3],
+                    axis: [0.0, 0.0, 1.0],
+                    length: 10.0,
+                    internal: false,
+                };
+                assert_eq!(automatic_size(&c).name(), expected, "{name}, {delta}");
+            }
+        }
+        let c = Cylinder {
+            diameter: 5.0,
+            center: [0.0; 3],
+            axis: [0.0, 0.0, 1.0],
+            length: 10.0,
+            internal: true,
+        };
+        assert_eq!(automatic_size(&c).name(), "M6x1");
+        let unf = parse_size("5/16-24 UNF").unwrap();
+        let tapped = Cylinder {
+            diameter: unf.tap_drill(),
+            ..c
+        };
+        assert_eq!(automatic_size(&tapped).name(), unf.name());
+        let old = Thread {
+            target: FeatureId(1),
+            face: "f1:side".into(),
+            size: String::new(),
+            length: None,
+            hand: Hand::Right,
+            form: Form::Cosmetic,
+            clearance: None,
+            end: End::RunOut,
+            flip: false,
+        };
+        let c = Cylinder {
+            diameter: 9.728,
+            internal: false,
+            ..c
+        };
+        assert_eq!(resolve(&old, &c).unwrap().0.name(), "M10x1.5");
+        assert_eq!(automatic_size(&c).name(), "G1/8");
+    }
+
+    #[test]
+    fn hole_thread_choices_follow_metric_diameter_then_family_order() {
+        let field = crate::hole_fields()
+            .into_iter()
+            .find(|f| f.key == "size")
+            .unwrap();
+        let Some(kmb_core::Suggest::Values { values }) = field.suggest else {
+            panic!("呼びの候補")
+        };
+        let metric: Vec<&str> = crate::THREADS.iter().map(|t| t.name).collect();
+        assert_eq!(
+            values[..metric.len()]
+                .iter()
+                .map(|v| v.value.as_str())
+                .collect::<Vec<_>>(),
+            metric
+        );
+        let families: Vec<Family> = values[metric.len()..]
+            .iter()
+            .map(|v| parse_size(&v.value).unwrap().family)
+            .collect();
+        let pipe = families.iter().position(|f| *f == Family::Pipe).unwrap();
+        assert!(families[..pipe].iter().all(|f| *f == Family::Unified));
+        assert!(families[pipe..].iter().all(|f| *f == Family::Pipe));
+        assert_eq!(crate::DEFAULT_SIZE, "M3");
+        assert_eq!(crate::Hole::new(FeatureId(1), FeatureId(2)).size, None);
     }
 
     #[test]
