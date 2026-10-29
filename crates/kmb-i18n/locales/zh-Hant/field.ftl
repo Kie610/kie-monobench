@@ -402,7 +402,7 @@
 # field-cam-contour2d-rest-diameter = Rest Machining: Previous Tool Diameter
 # field-cam-contour2d-rest-diameter-help = For example 6.35 mm. Enter this when the previous tool is not in the tool library. A previous tool number takes precedence.
 # field-cam-contour2d-rest-tool = Rest Machining: Previous Tool Number
-# field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Tabs, finishing, lateral roughing and lead-in/out arcs are unavailable.
+# field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Low sections crossing tabs are skipped, and the tool retracts to travel between sections. Finishing, lateral roughing and lead-in/out arcs are unavailable.
 # field-cam-contour2d-retract = Retract Mode
 # field-cam-contour2d-retract-help = Minimum Retract rises above the highest material along the move by the clearance allowance, never below stock top + 1 mm. Reduces vertical travel across cleared areas.
 # field-cam-contour2d-rough-passes = Roughing Passes
