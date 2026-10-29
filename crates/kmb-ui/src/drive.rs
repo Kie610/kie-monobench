@@ -79,6 +79,14 @@ pub struct UiDriver {
     queue: Vec<Event>,
     /// 届いた木の数(木が新しくなったかを見る)
     pub frames: u64,
+    /// 自動入力で押した部品。それぞれの時刻と識別子で追う。
+    marks: Vec<PressMark>,
+}
+
+struct PressMark {
+    node: UiNode,
+    origin: crate::cmdline::InputOrigin,
+    at: std::time::Instant,
 }
 
 struct NoChange;
@@ -101,7 +109,10 @@ impl egui::Plugin for UiDriver {
         "jc_ui_driver"
     }
 
-    fn input_hook(&mut self, _ctx: &egui::Context, input: &mut egui::RawInput) {
+    fn input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
+        if !self.marks.is_empty() {
+            ctx.enable_accesskit();
+        }
         if !self.queue.is_empty() {
             // 人の入力より先に入れる(同じフレームに人が触っても、頼んだ順を崩さない)
             let mut ev = std::mem::take(&mut self.queue);
@@ -110,14 +121,98 @@ impl egui::Plugin for UiDriver {
         }
     }
 
-    fn output_hook(&mut self, _ctx: &egui::Context, output: &mut egui::FullOutput) {
+    fn output_hook(&mut self, ctx: &egui::Context, output: &mut egui::FullOutput) {
         if let Some(u) = output.platform_output.accesskit_update.clone() {
             self.take(u);
+        }
+        let now = std::time::Instant::now();
+        self.marks.retain(|m| {
+            crate::live_ui::mark_strength(now.saturating_duration_since(m.at)).is_some()
+        });
+        let screen = ctx.content_rect();
+        for (_, node, strength) in self.visible_marks(ctx.pixels_per_point(), screen, now) {
+            // 木を更新した後に重ねる。入力を受ける部品は増やさない。
+            output.shapes.push(egui::epaint::ClippedShape {
+                clip_rect: screen,
+                shape: egui::Shape::rect_stroke(
+                    node.rect.shrink(1.0),
+                    3.0,
+                    egui::Stroke::new(2.0, crate::theme::look(ctx).ws().gamma_multiply(strength)),
+                    egui::StrokeKind::Inside,
+                ),
+            });
+        }
+        if !self.marks.is_empty() {
+            ctx.request_repaint();
         }
     }
 }
 
 impl UiDriver {
+    pub(crate) fn mark_press(&mut self, node: &UiNode, origin: crate::cmdline::InputOrigin) {
+        if origin != crate::cmdline::InputOrigin::Human && !node.disabled {
+            self.marks.push(PressMark {
+                node: node.clone(),
+                origin,
+                at: std::time::Instant::now(),
+            });
+        }
+    }
+
+    fn visible_marks(
+        &self,
+        ppp: f32,
+        screen: Rect,
+        now: std::time::Instant,
+    ) -> Vec<(&PressMark, UiNode, f32)> {
+        if self.marks.is_empty() {
+            return Vec::new();
+        }
+        let nodes = self.nodes(ppp);
+        self.visible_marks_in(&nodes, screen, now)
+    }
+
+    fn visible_marks_in(
+        &self,
+        nodes: &[UiNode],
+        screen: Rect,
+        now: std::time::Instant,
+    ) -> Vec<(&PressMark, UiNode, f32)> {
+        self.marks
+            .iter()
+            .filter_map(|mark| {
+                let strength =
+                    crate::live_ui::mark_strength(now.saturating_duration_since(mark.at))?;
+                let node = nodes.iter().find(|n| {
+                    n.id == mark.node.id && n.name == mark.node.name && n.role == mark.node.role
+                })?;
+                let rect = node.rect;
+                (rect.min.x.is_finite()
+                    && rect.min.y.is_finite()
+                    && rect.max.x.is_finite()
+                    && rect.max.y.is_finite()
+                    && rect.area() > 0.0
+                    && rect.intersects(screen))
+                .then(|| (mark, node.clone(), strength))
+            })
+            .collect()
+    }
+
+    pub(crate) fn glow_status(
+        &self,
+        ppp: f32,
+        screen: Rect,
+        now: std::time::Instant,
+    ) -> serde_json::Value {
+        serde_json::json!(self.visible_marks(ppp, screen, now).into_iter().map(|(mark, node, strength)| {
+            serde_json::json!({
+                "source": mark.origin.name(), "name": node.name, "role": node.role,
+                "rect": [node.rect.min.x, node.rect.min.y, node.rect.width(), node.rect.height()],
+                "alpha": strength, "age_ms": now.saturating_duration_since(mark.at).as_secs_f64() * 1000.0,
+            })
+        }).collect::<Vec<_>>())
+    }
+
     fn take(&mut self, u: TreeUpdate) {
         match &mut self.tree {
             Some(t) => t.update_and_process_changes(u, &mut NoChange),
@@ -464,4 +559,170 @@ pub fn scroll_into_view(n: &UiNode) -> Event {
         target_node: n.id.0,
         data: None,
     })
+}
+
+#[cfg(test)]
+mod widget_glow_tests {
+    use super::*;
+    use crate::cmdline::InputOrigin;
+    use std::time::{Duration, Instant};
+
+    struct Fixture {
+        shown: bool,
+        offset: f32,
+    }
+
+    fn fixture() -> egui_kittest::Harness<'static, Fixture> {
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(egui::vec2(320.0, 240.0))
+            .build_ui_state(
+                |ui, state: &mut Fixture| {
+                    ui.add_space(state.offset);
+                    if state.shown {
+                        let _ = ui.button("押した部品");
+                    }
+                },
+                Fixture {
+                    shown: true,
+                    offset: 0.0,
+                },
+            );
+        h.ctx.add_plugin(UiDriver::default());
+        h.ctx.enable_accesskit();
+        h.step();
+        h
+    }
+
+    fn target(ctx: &egui::Context) -> UiNode {
+        ctx.plugin::<UiDriver>()
+            .lock()
+            .nodes(ctx.pixels_per_point())
+            .into_iter()
+            .find(|n| n.name == "押した部品")
+            .expect("実際に描いたボタン")
+    }
+
+    /// 確かめること: 共通の強さと各押下の寿命。人と使えない部品は記録しない。
+    #[test]
+    fn widget_glow_uses_shared_fade_and_independent_expirations() {
+        assert_eq!(
+            crate::live_ui::mark_strength(Duration::from_millis(0)),
+            Some(1.0)
+        );
+        assert_eq!(
+            crate::live_ui::mark_strength(Duration::from_millis(1200)),
+            Some(1.0)
+        );
+        assert!(
+            (crate::live_ui::mark_strength(Duration::from_millis(1500)).unwrap() - 0.5).abs()
+                < 1e-6
+        );
+        assert_eq!(
+            crate::live_ui::mark_strength(Duration::from_millis(1800)),
+            None
+        );
+        let h = fixture();
+        let node = target(&h.ctx);
+        let plugin = h.ctx.plugin::<UiDriver>();
+        let mut driver = plugin.lock();
+        driver.mark_press(&node, InputOrigin::Human);
+        let mut disabled = node.clone();
+        disabled.disabled = true;
+        driver.mark_press(&disabled, InputOrigin::Mcp);
+        assert!(driver.marks.is_empty());
+        driver.mark_press(&node, InputOrigin::Script);
+        driver.mark_press(&node, InputOrigin::Mcp);
+        let now = Instant::now();
+        driver.marks[0].at = now - Duration::from_millis(1500);
+        driver.marks[1].at = now - Duration::from_millis(300);
+        let nodes = vec![node];
+        let screen = h.ctx.content_rect();
+        let active = driver.visible_marks_in(&nodes, screen, now);
+        assert_eq!(active.len(), 2);
+        assert!((active[0].2 - 0.5).abs() < 1e-6);
+        assert_eq!(active[1].2, 1.0);
+        assert_eq!(
+            driver
+                .visible_marks_in(&nodes, screen, now + Duration::from_millis(400))
+                .len(),
+            1
+        );
+        assert!(
+            driver
+                .visible_marks_in(&nodes, screen, now + Duration::from_millis(1800))
+                .is_empty()
+        );
+    }
+
+    /// 確かめること: 当該フレームの木へ追従し、消えた部品には枠を残さない。
+    #[test]
+    fn widget_glow_follows_current_frame_and_is_the_last_noninteractive_shape() {
+        let mut h = fixture();
+        let node = target(&h.ctx);
+        h.ctx
+            .plugin::<UiDriver>()
+            .lock()
+            .mark_press(&node, InputOrigin::Script);
+        h.state_mut().offset = 35.0;
+        h.step();
+        let moved = target(&h.ctx);
+        assert_ne!(moved.rect, node.rect);
+        let egui::Shape::Rect(shape) = &h.output().shapes.last().expect("最上層の印").shape
+        else {
+            panic!("枠の矩形");
+        };
+        assert_eq!(shape.rect, moved.rect.shrink(1.0));
+        assert_eq!(shape.stroke.width, 2.0);
+        assert_eq!(shape.fill, egui::Color32::TRANSPARENT);
+        let driver = h.ctx.plugin::<UiDriver>();
+        let status = driver.lock().glow_status(
+            h.ctx.pixels_per_point(),
+            h.ctx.content_rect(),
+            Instant::now(),
+        );
+        assert_eq!(status.as_array().unwrap().len(), 1);
+        h.state_mut().shown = false;
+        h.step();
+        assert!(
+            driver
+                .lock()
+                .glow_status(
+                    h.ctx.pixels_per_point(),
+                    h.ctx.content_rect(),
+                    Instant::now()
+                )
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(!h.output().shapes.iter().any(|s| matches!(&s.shape, egui::Shape::Rect(r) if r.rect == moved.rect.shrink(1.0) && r.stroke.width == 2.0)));
+    }
+
+    /// 確かめること: 同じ番号でも別名・別役割、画面外や空の矩形は光らせない。
+    #[test]
+    fn widget_glow_rejects_missing_reused_and_invisible_targets() {
+        let h = fixture();
+        let node = target(&h.ctx);
+        let plugin = h.ctx.plugin::<UiDriver>();
+        let mut driver = plugin.lock();
+        driver.mark_press(&node, InputOrigin::Script);
+        let now = Instant::now();
+        let screen = h.ctx.content_rect();
+        assert!(driver.visible_marks_in(&[], screen, now).is_empty());
+        let mut changed = node.clone();
+        changed.name = "別の部品".into();
+        assert!(driver.visible_marks_in(&[changed], screen, now).is_empty());
+        let mut changed = node.clone();
+        changed.role = "Label".into();
+        assert!(driver.visible_marks_in(&[changed], screen, now).is_empty());
+        for rect in [
+            Rect::from_min_size(egui::pos2(1000.0, 1000.0), egui::vec2(10.0, 10.0)),
+            Rect::NOTHING,
+            Rect::from_min_max(egui::pos2(f32::NAN, 0.0), egui::pos2(10.0, 10.0)),
+        ] {
+            let mut changed = node.clone();
+            changed.rect = rect;
+            assert!(driver.visible_marks_in(&[changed], screen, now).is_empty());
+        }
+    }
 }
