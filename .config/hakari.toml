@@ -40,3 +40,28 @@ workspace-members = [
     "kmb-post",
     "kmb-toolpath",
 ]
+# 画面(egui・wgpu・naga)と WASM(wasmtime まわり)の重い依存は揃えた依存に入れない。入れると
+# 画面にも WASM にも関係の無い crate(加工の戦略など)を 1 つ検査するだけでも、これらを全部組み立てる
+# (戦略 1 つの組み立てが 189 crate・1.7 GB から 85 crate・0.73 GB になる。docs/verify.md の 2 節)。
+# これらを使うのは画面とプラグインの crate だけで、互いに一緒に組むので機能の組み合わせはほぼ変わらない
+third-party = [
+    { name = "accesskit" },
+    { name = "ecolor" },
+    { name = "egui" },
+    { name = "egui-wgpu" },
+    { name = "emath" },
+    { name = "epaint" },
+    { name = "naga" },
+    { name = "wayland-backend" },
+    { name = "wgpu" },
+    { name = "wgpu-core" },
+    { name = "wgpu-core-deps-windows-linux-android" },
+    { name = "wgpu-hal" },
+    { name = "wgpu-types" },
+    { name = "windows" },
+    { name = "cranelift-bitset" },
+    { name = "pulley-interpreter" },
+    { name = "wasm-encoder" },
+    { name = "wasmparser" },
+    { name = "wasmtime-internal-core" },
+]
