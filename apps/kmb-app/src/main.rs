@@ -58,8 +58,14 @@ impl Dialogs for OsDialogs {
     }
 
     fn open_document(&self) -> Option<PathBuf> {
+        let extensions: Vec<&str> = kmb_core::DOCUMENT_EXTENSIONS
+            .iter()
+            .copied()
+            .chain(["dxf", "DXF"])
+            .collect();
         rfd::FileDialog::new()
             .set_title("文書を開く")
+            .add_filter("設計と DXF", &extensions)
             .add_filter("kieMonoBench の文書", kmb_core::DOCUMENT_EXTENSIONS)
             .pick_file()
     }

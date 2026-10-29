@@ -238,3 +238,156 @@ fn bodies_are_exported_one_file_each_with_their_names_and_hidden_ones_are_not() 
     assert!(d.join("b-ふた.step").exists(), "{:?}", ws.message());
     std::fs::remove_dir_all(&d).ok();
 }
+
+fn small_dxf(path: &std::path::Path) {
+    std::fs::write(path, b"0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n0\n0\nLINE\n8\n0\n10\n0\n20\n5\n11\n10\n21\n5\n0\nENDSEC\n0\nEOF\n").unwrap();
+}
+
+/// 確かめること: DXF は別の未保存タブとなり、1 回の取り消しとやり直しで空/読んだ形へ戻る。
+#[test]
+fn a_dxf_opens_in_a_new_unsaved_tab_with_one_undo_step() {
+    let d = temp_dir("open-dxf");
+    let file = d.join("外の 図.DXF");
+    small_dxf(&file);
+    let mut ws = Workspace::new(kmb_samples::reference_document(), None, reg()).with_dialogs(
+        Box::new(FakeDialogs {
+            open: None,
+            save: Some(d.join("保存した設計")),
+            unsaved: Unsaved::Cancel,
+        }),
+    );
+    ws.add_param("extra", "1 mm");
+    let original = ws.document().data().clone();
+    let undo: Vec<String> = ws
+        .document()
+        .undo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let volumes: Vec<_> = ws
+        .visible_bodies()
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    assert!(ws.open_in_tab(&file));
+    assert_eq!((ws.tab_count(), ws.active_tab()), (2, 1));
+    assert_eq!(ws.tab_titles()[1], ("外の 図".into(), true));
+    assert!(ws.path().is_none());
+    assert_eq!(ws.document().data().features.len(), 1);
+    let sketch: kmb_sketch::Sketch =
+        serde_json::from_value(ws.document().data().features[0].data.clone()).unwrap();
+    assert_eq!(
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, kmb_sketch::Entity::Line { .. }))
+            .count(),
+        2
+    );
+    assert_eq!(ws.document().undo_labels().len(), 1);
+    let imported = ws.document().data().clone();
+    ws.undo();
+    assert!(ws.document().data().features.is_empty());
+    assert!(!ws.is_modified());
+    ws.redo();
+    assert_eq!(ws.document().data(), &imported);
+    assert!(ws.is_modified());
+    let source = std::fs::read(&file).unwrap();
+    assert_eq!(ws.document_name(), "外の 図");
+    ws.save();
+    let saved = d.join(format!("保存した設計.{}", kmb_core::DOCUMENT_EXTENSION));
+    assert_eq!(ws.path(), Some(saved.as_path()));
+    assert!(!ws.is_modified());
+    assert_eq!(
+        std::fs::read(&file).unwrap(),
+        source,
+        "元の DXF は保存先にしない"
+    );
+    assert_eq!(kmb_session::load(&saved).unwrap().data().features.len(), 1);
+    ws.switch_tab(0);
+    assert_eq!(ws.document().data(), &original);
+    assert_eq!(ws.document().undo_labels(), undo);
+    assert!(ws.is_modified());
+    let now: Vec<_> = ws
+        .visible_bodies()
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    assert_eq!(now, volumes);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+/// 確かめること: 読めない・空の DXF は、新しいタブも元の文書の形の破棄も起こさない。
+#[test]
+fn a_failed_dxf_open_preserves_the_document_tabs_history_and_shapes() {
+    let d = temp_dir("bad-dxf");
+    let mut ws = Workspace::new(kmb_samples::reference_document(), None, reg());
+    ws.add_param("extra", "1 mm");
+    ws.add_param("redo", "2 mm");
+    ws.undo();
+    let before = ws.document().data().clone();
+    let undo: Vec<String> = ws
+        .document()
+        .undo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let redo: Vec<String> = ws
+        .document()
+        .redo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let tab_seq = ws.win.tab_seq;
+    let bodies = ws.visible_bodies();
+    let volumes: Vec<_> = bodies
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    for (name, bytes) in [
+        ("壊れた.dxf", "壊れた図面"),
+        ("空.dxf", "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
+    ] {
+        let path = d.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(!ws.open_in_tab(&path));
+        assert_eq!(
+            (ws.tab_count(), ws.active_tab(), ws.win.tab_seq),
+            (1, 0, tab_seq)
+        );
+        assert_eq!(ws.document().data(), &before);
+        assert_eq!(ws.document().undo_labels(), undo);
+        assert_eq!(ws.document().redo_labels(), redo);
+        assert!(ws.is_modified());
+        for ((_, h), volume) in bodies.iter().zip(&volumes) {
+            assert_eq!(ws.cur.work.kernel().volume(*h).unwrap(), *volume);
+        }
+    }
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_dxf_is_opened_from_the_start_screen_as_an_unsaved_design() {
+    let d = temp_dir("start-dxf");
+    let file = d.join("輪郭.dxf");
+    small_dxf(&file);
+    let ws = Workspace::new(Document::new(), None, reg())
+        .with_dialogs(Box::new(FakeDialogs {
+            open: Some(file),
+            save: None,
+            unsaved: Unsaved::Cancel,
+        }))
+        .show_start();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1000., 700.))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.get_by_label("開く…").click();
+    h.run();
+    assert!(!h.state().is_start_screen());
+    assert_eq!(h.state().tab_count(), 1);
+    assert_eq!(h.state().tab_titles(), [("輪郭".to_string(), true)]);
+    assert!(h.state().path().is_none());
+    assert_eq!(h.state().document().data().features.len(), 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}
