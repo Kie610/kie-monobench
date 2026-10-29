@@ -917,8 +917,8 @@ pub fn modifier(ui: &mut Ui, key: &str, on: bool) {
     });
 }
 
-/// 枠つきのキーの印。高さは試作と同じ 16(文字 10.5 の行と枠)で、帯の高さまで伸ばさない。
-fn key_cap(
+/// 枠つきのキーの印。字が帯用の高さ16を超える時だけ、上下の余白を加えた高さにする。
+pub(crate) fn key_cap(
     ui: &mut Ui,
     key: &str,
     font: FontId,
@@ -927,7 +927,12 @@ fn key_cap(
     line: Color32,
 ) -> Response {
     let g = ui.painter().layout_no_wrap(key.to_string(), font, fg);
-    let (rect, r) = ui.allocate_exact_size(Vec2::new(g.size().x + 10.0, fs(16.0)), Sense::hover());
+    let height = if g.size().y > fs(16.0) {
+        g.size().y + fs(4.0)
+    } else {
+        fs(16.0)
+    };
+    let (rect, r) = ui.allocate_exact_size(Vec2::new(g.size().x + 10.0, height), Sense::hover());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
         p.rect(
@@ -1478,4 +1483,44 @@ pub fn segmented(ui: &mut Ui, items: &[(&str, bool, bool)], fill: Color32) -> Op
         }
     }
     out
+}
+
+#[cfg(test)]
+mod key_cap_tests {
+    use super::*;
+
+    /// 確かめること: 小さいキーの印は帯の高さを保ち、大きい字も枠の内側に収める。
+    #[test]
+    fn review_imported_key_caps_fit_large_text_and_keep_small_height() {
+        let mut h = egui_kittest::Harness::builder().build_ui_state(
+            |ui, sizes: &mut Vec<(f32, f32, f32)>| {
+                sizes.clear();
+                for size in [10.5, 20.0, 40.0] {
+                    let font = FontId::proportional(size);
+                    let glyph =
+                        ui.painter()
+                            .layout_no_wrap("F8".into(), font.clone(), Color32::WHITE);
+                    let response = key_cap(
+                        ui,
+                        "F8",
+                        font,
+                        Color32::BLACK,
+                        Color32::WHITE,
+                        Color32::GRAY,
+                    );
+                    sizes.push((size, response.rect.height(), glyph.size().y));
+                }
+            },
+            Vec::new(),
+        );
+        h.run_steps(2);
+        let sizes = h.state();
+        assert_eq!(sizes[0].1, fs(16.0));
+        for &(size, height, glyph) in sizes {
+            assert!(
+                height >= glyph,
+                "文字{size}: 枠の高さ{height}に字の高さ{glyph}が収まりません"
+            );
+        }
+    }
 }

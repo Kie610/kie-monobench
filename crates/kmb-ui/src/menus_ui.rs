@@ -1131,11 +1131,12 @@ impl Workspace {
             self.cur.camera.set_pivot(p);
             done = true;
         }
-        if crate::theme::menu_row(ui, "fit", "全体表示", "Home", true)
-            .on_hover_text("Home。全体を収め、部品の中心で回す")
+        let fit = self.win.t("view-fit");
+        if crate::theme::menu_row(ui, "fit", &fit, "Home", true)
+            .on_hover_text(self.win.t("view-fit-tip"))
             .clicked()
         {
-            crate::keycast::command_name(ui.ctx(), "全体表示".into(), false);
+            crate::keycast::command_name(ui.ctx(), fit, false);
             self.cur.camera.refit();
             done = true;
         }

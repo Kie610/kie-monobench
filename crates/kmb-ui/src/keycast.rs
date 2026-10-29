@@ -263,6 +263,7 @@ impl Keycast {
                 egui::Event::Key {
                     key,
                     pressed: true,
+                    repeat: false,
                     modifiers,
                     ..
                 } if s.keys && allowed(*key, *modifiers, typing) => {
@@ -480,6 +481,7 @@ impl Keycast {
         if rows.is_empty() || !view_rect.is_positive() {
             return;
         }
+        let words = crate::window_state::Words::of(ctx);
         let size = theme::fs(20.0) * s.scale();
         let pos = match s.place {
             KeycastPlace::LeftBottom => {
@@ -567,14 +569,33 @@ impl Keycast {
                                             down,
                                             ..
                                         } => {
+                                            let (fill, fg, line) = if *down {
+                                                (look.ws(), look.pal.chrome, look.ws())
+                                            } else {
+                                                (Color32::TRANSPARENT, look.pal.ink, look.pal.edge)
+                                            };
                                             let prefix = chord.strip_suffix('+').unwrap_or(chord);
                                             for cap in
                                                 prefix.split('+').filter(|cap| !cap.is_empty())
                                             {
-                                                key_cap(ui, cap, size, *down, look);
+                                                let _ = theme::key_cap(
+                                                    ui,
+                                                    cap,
+                                                    egui::FontId::proportional(size),
+                                                    fill,
+                                                    fg,
+                                                    line,
+                                                );
                                             }
                                             if chord.ends_with('+') {
-                                                key_cap(ui, "+", size, *down, look);
+                                                let _ = theme::key_cap(
+                                                    ui,
+                                                    "+",
+                                                    egui::FontId::proportional(size),
+                                                    fill,
+                                                    fg,
+                                                    line,
+                                                );
                                             }
                                             if let Some(name) = name {
                                                 ui.label(
@@ -609,6 +630,7 @@ impl Keycast {
                                             double,
                                         } => {
                                             mouse(ui, *down, size, look);
+                                            let drag_text = words.t("view-keycast-drag");
                                             for (text, remaining) in [
                                                 (
                                                     if *wheel > 0 {
@@ -621,7 +643,7 @@ impl Keycast {
                                                     self.wheel.1 - now,
                                                 ),
                                                 (
-                                                    if *drag { "ドラッグ" } else { "" },
+                                                    if *drag { drag_text.as_str() } else { "" },
                                                     f64::INFINITY,
                                                 ),
                                                 (
@@ -692,8 +714,9 @@ impl Keycast {
                                                             s.hold() - (now - time)
                                                         });
                                                     ui.label(
-                                                        egui::RichText::new(format!(
-                                                            "3D マウス ボタン {b}"
+                                                        egui::RichText::new(words.t_with(
+                                                            "view-keycast-mouse3d-button",
+                                                            &[("number", (*b as usize).into())],
                                                         ))
                                                         .size(size * 0.65)
                                                         .color(look.pal.ink.gamma_multiply(
@@ -744,28 +767,6 @@ impl Row {
         };
         format!("操作の表示: {text}")
     }
-}
-
-fn key_cap(ui: &mut egui::Ui, text: &str, size: f32, down: bool, look: theme::Look) {
-    egui::Frame::new()
-        .fill(if down {
-            look.ws()
-        } else {
-            Color32::TRANSPARENT
-        })
-        .stroke(Stroke::new(
-            1.0,
-            if down { look.ws() } else { look.pal.edge },
-        ))
-        .corner_radius(3.0)
-        .inner_margin(egui::Margin::symmetric(6, 3))
-        .show(ui, |ui| {
-            ui.label(egui::RichText::new(text).size(size).color(if down {
-                look.pal.chrome
-            } else {
-                look.pal.ink
-            }));
-        });
 }
 
 fn mouse(ui: &mut egui::Ui, down: [bool; 3], size: f32, look: theme::Look) {
@@ -901,6 +902,136 @@ mod tests {
         }
     }
 
+    /// 確かめること: 押し続けたキーの自動繰り返しは、物理的な押下の回数を増やさない。
+    #[test]
+    fn review_imported_auto_repeat_is_not_counted() {
+        let ctx = egui::Context::default();
+        let mut k = Keycast::default();
+        input(
+            &ctx,
+            &mut k,
+            &on(),
+            1.0,
+            vec![key(Key::F8, Modifiers::NONE, true)],
+            Modifiers::NONE,
+            false,
+            None,
+        );
+        for now in [1.1, 1.2, 1.3] {
+            input(
+                &ctx,
+                &mut k,
+                &on(),
+                now,
+                vec![egui::Event::Key {
+                    key: Key::F8,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: true,
+                    modifiers: Modifiers::NONE,
+                }],
+                Modifiers::NONE,
+                false,
+                None,
+            );
+        }
+        assert_eq!(k.entries.len(), 1);
+        assert!(matches!(
+            &k.rows(1.3)[0],
+            Row::Keys { chord, count: 1, .. } if chord == "F8"
+        ));
+    }
+
+    /// 確かめること: 英語の画面で、ドラッグと3Dマウスのボタンを英語の札で描く。
+    #[test]
+    fn review_imported_overlay_uses_english_labels() {
+        use egui_kittest::kittest::Queryable;
+        let mut ws = crate::Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
+        ws.win.layout.appearance.language = "en".into();
+        let k = Keycast {
+            settings: KeycastSettings {
+                mouse: true,
+                mouse3d: true,
+                ..on()
+            },
+            mouse: [true, false, false],
+            drag: true,
+            mouse3d_visible: true,
+            buttons: vec![(2, 1.0)],
+            ..Default::default()
+        };
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(Vec2::new(600.0, 400.0))
+            .build_ui_state(
+                |ui, (ws, k): &mut (crate::Workspace, Keycast)| {
+                    ws.win.words().share(ui.ctx());
+                    k.show(
+                        ui.ctx(),
+                        Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(600.0, 400.0)),
+                        theme::Look::default(),
+                        &k.settings,
+                    );
+                },
+                (ws, k),
+            );
+        for _ in 0..3 {
+            h.input_mut().time = Some(1.0);
+            h.step();
+        }
+        assert_eq!(h.ctx.input(|i| i.time), 1.0);
+        assert_eq!(h.state().0.win.t("view-fit"), "Fit");
+        assert!(
+            h.state()
+                .1
+                .rows(1.0)
+                .iter()
+                .any(|row| matches!(row, Row::Mouse3d { buttons, .. } if buttons == &[2]))
+        );
+        assert!(h.query_by_label("操作の表示: 3D マウス").is_some());
+        let missing: Vec<_> = ["Drag", "3D mouse button 2"]
+            .into_iter()
+            .filter(|label| h.query_by_label(label).is_none())
+            .collect();
+        assert!(missing.is_empty(), "英語で描かれていない札: {missing:?}");
+    }
+
+    /// 確かめること: ビューのメニューと、押した操作の札が同じ英語の全体表示名を使う。
+    #[test]
+    fn review_imported_view_menu_uses_english_fit() {
+        use egui_kittest::kittest::Queryable;
+        let mut ws = crate::Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
+        ws.win.layout.appearance.language = "en".into();
+        ws.win.layout.keycast = KeycastSettings {
+            mouse: true,
+            ..on()
+        };
+        ws.win.view_rect = Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(600.0, 500.0));
+        let mut h = egui_kittest::Harness::builder()
+            .with_size(Vec2::new(600.0, 500.0))
+            .build_ui_state(
+                |ui, ws: &mut crate::Workspace| {
+                    let ctx = ui.ctx().clone();
+                    ws.win.words().share(&ctx);
+                    ws.take_keycast(&ctx);
+                    ws.view_menu(ui);
+                    ws.show_keycast(&ctx);
+                },
+                ws,
+            );
+        h.run_steps(3);
+        h.get_by_label("Fit").click();
+        h.run_steps(2);
+        let now = h.ctx.input(|i| i.time);
+        assert!(
+            h.state()
+                .win
+                .keycast
+                .rows(now)
+                .iter()
+                .any(|row| matches!(row, Row::MouseCommand { name, .. } if name == "Fit"))
+        );
+    }
+
     fn key(key: Key, mods: Modifiers, pressed: bool) -> egui::Event {
         egui::Event::Key {
             key,
@@ -1013,7 +1144,7 @@ mod tests {
             &mut k,
             &on(),
             1.1,
-            vec![key(Key::Z, mods, true)],
+            vec![key(Key::Z, mods, false), key(Key::Z, mods, true)],
             mods,
             false,
             None,
@@ -1113,9 +1244,15 @@ mod tests {
             &mut k,
             &on(),
             1.0,
-            (0..4)
-                .map(|_| key(Key::F8, Modifiers::NONE, true))
-                .collect(),
+            vec![
+                key(Key::F8, Modifiers::NONE, true),
+                key(Key::F8, Modifiers::NONE, false),
+                key(Key::F8, Modifiers::NONE, true),
+                key(Key::F8, Modifiers::NONE, false),
+                key(Key::F8, Modifiers::NONE, true),
+                key(Key::F8, Modifiers::NONE, false),
+                key(Key::F8, Modifiers::NONE, true),
+            ],
             Modifiers::NONE,
             false,
             None,
@@ -1161,7 +1298,7 @@ mod tests {
                 &mut k,
                 &on(),
                 1.1 + i as f64 * 0.1,
-                vec![key(code, mods, true)],
+                vec![key(code, mods, false), key(code, mods, true)],
                 mods,
                 true,
                 None,
@@ -1374,7 +1511,10 @@ mod tests {
                 &mut k,
                 &on(),
                 now,
-                vec![key(Key::Z, Modifiers::CTRL, true)],
+                vec![
+                    key(Key::Z, Modifiers::CTRL, false),
+                    key(Key::Z, Modifiers::CTRL, true),
+                ],
                 Modifiers::CTRL,
                 false,
                 name(),

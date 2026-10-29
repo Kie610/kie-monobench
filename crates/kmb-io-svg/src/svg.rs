@@ -16,7 +16,7 @@ const MAX_SIZE_MM: f64 = 1e6;
 const TOO_LARGE: &str = "SVG の倍率が大きすぎます。形を 1000000 mm 以下にしてください";
 const TOO_SMALL: &str = "SVG の倍率が小さすぎます。形を 0.00001 mm 以上にしてください";
 const ZERO_SIZE: &str = "SVG の形の大きさが 0 です。長さのある線か曲線を指定してください";
-const BAD_SCALE: &str = "SVG の倍率が正しくありません。有限で正の倍率を指定してください";
+const BAD_SCALE: &str = "SVG の倍率が正しくありません。用紙寸法と viewBox の幅・高さは有限の正数にし、transform は図形を潰さない有限の倍率にしてください(負の倍率は鏡写しに使えます)";
 
 fn positive(value: f64) -> Result<f64, String> {
     if !value.is_finite() || value <= 0.0 {
@@ -687,11 +687,11 @@ fn root_transform(attr: &dyn Fn(&str) -> Option<String>) -> Result<Affine, Strin
     };
     let w = length("width")?;
     let h = length("height")?;
-    let vb = attr("viewBox").map(|s| scale_numbers(&s)).transpose()?;
+    let vb = attr("viewBox")
+        .map(|s| scale_numbers(&s))
+        .transpose()?
+        .filter(|v| v.len() == 4);
     if let Some(v) = &vb {
-        if v.len() != 4 {
-            return Err(BAD_SCALE.into());
-        }
         positive(v[2])?;
         positive(v[3])?;
     }
@@ -842,7 +842,15 @@ pub fn from_svg(text: &str) -> Result<Imported, String> {
             } else {
                 let num = |k: &str| length_user(attr(k).as_deref());
                 if let Some(local_shapes) = element_shapes(local, &attr, &num) {
-                    has_geometry = true;
+                    // 空の輪郭と、指定された零長の形を区別する。
+                    let declared = match local {
+                        "path" => attr("d").is_some_and(|d| !d.trim().is_empty()),
+                        "polyline" | "polygon" => {
+                            attr("points").is_some_and(|points| !points.trim().is_empty())
+                        }
+                        _ => true,
+                    };
+                    has_geometry |= declared;
                     for shape in &local_shapes {
                         let shape = transform_shape(shape, &m);
                         check_shape(&shape)?;

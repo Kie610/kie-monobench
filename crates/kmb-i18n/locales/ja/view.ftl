@@ -111,3 +111,6 @@ view-mark-leftover = 紫の点: 削り残し { $count } か所(大きいほど�
 ## 重なった面の候補(長押し)
 
 view-candidates = 重なっているもの(手前から)
+
+view-keycast-drag = ドラッグ
+view-keycast-mouse3d-button = 3D マウス ボタン { $number }
