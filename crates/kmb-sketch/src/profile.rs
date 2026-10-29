@@ -149,6 +149,8 @@ struct Piece {
     name: String,
     /// 名前の並び(スケッチの順、区間の順)
     segment: Segment,
+    /// 同じ区間を描いた要素の名前。輪郭に使われた重複を未使用とは数えない。
+    sources: Vec<String>,
     ends: Option<(usize, usize)>,
     alive: bool,
 }
@@ -303,6 +305,44 @@ fn part(s: &Segment, a: f64, b: f64) -> Segment {
     }
 }
 
+/// 区間の長さ(mm)。
+fn segment_length(s: &Segment) -> f64 {
+    match s {
+        Segment::Line { a, b } => dist(*a, *b),
+        Segment::Arc {
+            radius, start, end, ..
+        } => radius * arc_sweep(*start, *end),
+        Segment::Circle { radius, .. } => TAU * radius,
+    }
+}
+
+/// 向きを除いて、位置と範囲が同じ区間か。同じ端の反対側の弧は別に扱う。
+fn same_segment(a: &Segment, b: &Segment) -> bool {
+    let close = |a, b| dist(a, b) < EPS;
+    match (a, b) {
+        (Segment::Line { a, b }, Segment::Line { a: c, b: d }) => {
+            (close(*a, *c) && close(*b, *d)) || (close(*a, *d) && close(*b, *c))
+        }
+        _ => {
+            let (Some((a_center, a_radius, a_range)), Some((b_center, b_radius, b_range))) =
+                (circle_of(a), circle_of(b))
+            else {
+                return false;
+            };
+            if !close(a_center, b_center) || (a_radius - b_radius).abs() >= EPS {
+                return false;
+            }
+            let a_sweep = a_range.map_or(TAU, |(_, sweep)| sweep);
+            let b_sweep = b_range.map_or(TAU, |(_, sweep)| sweep);
+            if (a_sweep - b_sweep).abs() * a_radius.max(b_radius) >= EPS {
+                return false;
+            }
+            (a_sweep - TAU).abs() * a_radius < EPS && (b_sweep - TAU).abs() * b_radius < EPS
+                || close(a.start_point(), b.start_point()) && close(a.end_point(), b.end_point())
+        }
+    }
+}
+
 /// 半辺の出ていく向き(角度、0〜2π)と、曲がり具合(左へ曲がるほど大きい)。
 fn leaving(s: &Segment, forward: bool) -> (f64, f64) {
     let (ang, curv) = match (s, forward) {
@@ -405,6 +445,7 @@ impl Arrangement {
             let name = names[i].clone();
             if matches!(s, Segment::Circle { .. }) && parts.is_empty() {
                 pieces.push(Piece {
+                    sources: vec![name.clone()],
                     name,
                     segment: s.clone(),
                     ends: None,
@@ -414,6 +455,7 @@ impl Arrangement {
                 // 切れ目のない線分・円弧は、そのままの形と名前にする
                 let (_, va, vb) = parts.pop().expect("1 つある");
                 pieces.push(Piece {
+                    sources: vec![name.clone()],
                     name,
                     segment: s.clone(),
                     ends: Some((va, vb)),
@@ -421,14 +463,124 @@ impl Arrangement {
                 });
             } else {
                 for (k, (seg, va, vb)) in parts.into_iter().enumerate() {
+                    let name = format!("{name}.{k}");
                     pieces.push(Piece {
-                        name: format!("{name}.{k}"),
+                        sources: vec![name.clone()],
+                        name,
                         segment: seg,
                         ends: Some((va, vb)),
                         alive: true,
                     });
                 }
             }
+        }
+
+        // 許容差の近さは推移しないため、代表の名前と形を自然順で先に固定する。
+        pieces.sort_by_cached_key(|p| natural_key(&p.name));
+        // 同じ位置の区間を半辺として二重に数えない。
+        let mut unique: Vec<Piece> = Vec::new();
+        for p in pieces {
+            match unique
+                .iter()
+                .position(|q| same_segment(&p.segment, &q.segment))
+            {
+                Some(i) => unique[i].sources.extend(p.sources),
+                None => unique.push(p),
+            }
+        }
+        let mut pieces = unique;
+        // 重複の端が作った切れ目に別の線が来なければ、区間をつなぎ直す。
+        // 本当の交差や分岐は残し、そこから順に番号を付けるので領域の名前も保てる。
+        let has_duplicates = pieces.iter().any(|p| p.sources.len() > 1);
+        for ((_, original), name) in segs.iter().zip(&names).filter(|_| has_duplicates) {
+            let prefix = format!("{name}.");
+            let belongs = |p: &Piece| p.name == *name || p.name.starts_with(&prefix);
+            let parts: Vec<_> = pieces.iter().filter(|p| belongs(p)).collect();
+            if parts.is_empty() || !parts.iter().any(|p| p.sources.len() > 1) {
+                continue;
+            }
+            let length: f64 = parts.iter().map(|p| segment_length(&p.segment)).sum();
+            if (length - segment_length(original)).abs() > EPS * parts.len() as f64 {
+                continue;
+            }
+            let mut degree = vec![0usize; verts.len()];
+            for p in &pieces {
+                if let Some((a, b)) = p.ends {
+                    degree[a] += 1;
+                    degree[b] += 1;
+                }
+            }
+            let mut groups = Vec::new();
+            let mut rest = Vec::new();
+            for p in pieces {
+                if belongs(&p) {
+                    groups.push(p);
+                } else {
+                    rest.push(p);
+                }
+            }
+            groups.sort_by(|a, b| {
+                param_on(original, a.segment.start_point())
+                    .unwrap_or(0.0)
+                    .total_cmp(&param_on(original, b.segment.start_point()).unwrap_or(0.0))
+            });
+            loop {
+                let n = groups.len();
+                let joined = (0..n).find_map(|i| {
+                    let j = (i + 1) % n;
+                    if i == j || j == 0 && !matches!(original, Segment::Circle { .. }) {
+                        return None;
+                    }
+                    let (Some((a, at)), Some((from, b))) = (groups[i].ends, groups[j].ends) else {
+                        return None;
+                    };
+                    if at != from || degree[at] != 2 {
+                        return None;
+                    }
+                    let start = param_on(original, groups[i].segment.start_point())?;
+                    let end = match original {
+                        Segment::Line { .. } => param_on(original, groups[j].segment.end_point())?,
+                        _ => {
+                            start
+                                + (segment_length(&groups[i].segment)
+                                    + segment_length(&groups[j].segment))
+                                    / circle_of(original)?.1
+                        }
+                    };
+                    Some((i, j, part(original, start, end), (a, b)))
+                });
+                let Some((i, j, segment, ends)) = joined else {
+                    break;
+                };
+                let mut sources = std::mem::take(&mut groups[j].sources);
+                groups[i].sources.append(&mut sources);
+                groups[i].segment = segment;
+                groups[i].ends = Some(ends);
+                groups.remove(j);
+            }
+            groups.sort_by(|a, b| {
+                param_on(original, a.segment.start_point())
+                    .unwrap_or(0.0)
+                    .total_cmp(&param_on(original, b.segment.start_point()).unwrap_or(0.0))
+            });
+            let whole = groups.len() == 1
+                && same_segment(&groups[0].segment, original)
+                // 円に戻すと頂点が無くなる。接する別の線がある頂点は円弧の端として残す。
+                && (!matches!(original, Segment::Circle { .. })
+                    || groups[0].ends.is_none_or(|(a, b)| a == b && degree[a] == 2));
+            for (i, p) in groups.iter_mut().enumerate() {
+                if whole {
+                    p.name = name.clone();
+                    p.segment = original.clone();
+                    if matches!(original, Segment::Circle { .. }) {
+                        p.ends = None;
+                    }
+                } else {
+                    p.name = format!("{name}.{i}");
+                }
+            }
+            rest.extend(groups);
+            pieces = rest;
         }
 
         // 行き止まりの区間(片方の端がどこにもつながらない)を、なくなるまで外す
@@ -626,9 +778,12 @@ impl Arrangement {
         ids.dedup();
         for id in ids {
             let name = format!("e{}", id.0);
-            let used = pieces
-                .iter()
-                .any(|p| p.alive && (p.name == name || p.name.starts_with(&format!("{name}."))));
+            let used = pieces.iter().any(|p| {
+                p.alive
+                    && p.sources
+                        .iter()
+                        .any(|s| s == &name || s.starts_with(&format!("{name}.")))
+            });
             if !used {
                 unused.push(name);
             }
@@ -638,5 +793,168 @@ impl Arrangement {
             unused,
             open_ends,
         }
+    }
+}
+
+#[cfg(test)]
+mod duplicate_tests {
+    use super::*;
+    use std::f64::consts::{FRAC_PI_2, PI};
+
+    fn line(id: u32, a: P2, b: P2) -> (EntityId, Segment) {
+        (EntityId(id), Segment::Line { a, b })
+    }
+
+    fn circle(id: u32) -> (EntityId, Segment) {
+        (
+            EntityId(id),
+            Segment::Circle {
+                center: [0.0, 0.0],
+                radius: 5.0,
+            },
+        )
+    }
+
+    fn arc(id: u32, start: f64, end: f64) -> (EntityId, Segment) {
+        (
+            EntityId(id),
+            Segment::Arc {
+                center: [0.0, 0.0],
+                radius: 5.0,
+                start,
+                end,
+            },
+        )
+    }
+
+    fn signature(segs: &[(EntityId, Segment)]) -> Vec<(String, Region, bool)> {
+        let a = Arrangement::new(segs);
+        assert!(a.open_ends.is_empty(), "{:?}", a.open_ends);
+        assert!(a.unused.is_empty(), "{:?}", a.unused);
+        a.faces
+            .into_iter()
+            .map(|f| (f.key, f.region, f.filled))
+            .collect()
+    }
+
+    #[test]
+    fn duplicate_circle_keeps_the_naturally_first_name_even_when_drawn_later() {
+        let want = signature(&[circle(2)]);
+        assert_eq!(signature(&[circle(10), circle(2)]), want);
+        assert_eq!(signature(&[circle(2), circle(10)]), want);
+        assert_eq!(want[0].0, "e2");
+    }
+
+    #[test]
+    fn a_reversed_duplicate_line_does_not_change_the_outline_or_its_keys() {
+        let base = vec![
+            line(2, [0.0, 0.0], [20.0, 0.0]),
+            line(3, [20.0, 0.0], [20.0, 10.0]),
+            line(4, [20.0, 10.0], [0.0, 10.0]),
+            line(5, [0.0, 10.0], [0.0, 0.0]),
+        ];
+        let mut doubled = base.clone();
+        doubled.extend(
+            base.iter()
+                .enumerate()
+                .map(|(i, (_, s))| line(i as u32 + 20, s.end_point(), s.start_point())),
+        );
+        assert_eq!(signature(&doubled), signature(&base));
+    }
+
+    #[test]
+    fn duplicate_arcs_are_merged_but_opposite_semicircles_are_not() {
+        let base = [arc(2, 0.0, PI), arc(3, PI, TAU)];
+        assert!(!same_segment(&base[0].1, &base[1].1));
+        assert_eq!(
+            signature(&[
+                base[0].clone(),
+                base[1].clone(),
+                arc(20, 0.0, PI),
+                arc(21, PI, TAU)
+            ]),
+            signature(&base)
+        );
+        assert_eq!(signature(&base).len(), 1);
+    }
+
+    #[test]
+    fn an_overlapping_part_of_a_line_preserves_real_intersections_and_region_keys() {
+        for split in [false, true] {
+            let mut base = vec![
+                line(2, [0.0, 0.0], [20.0, 0.0]),
+                line(3, [20.0, 0.0], [20.0, 10.0]),
+                line(4, [20.0, 10.0], [0.0, 10.0]),
+                line(5, [0.0, 10.0], [0.0, 0.0]),
+            ];
+            if split {
+                base.push(line(6, [10.0, 0.0], [10.0, 10.0]));
+            }
+            let mut doubled = base.clone();
+            doubled.push(line(20, [5.0, 0.0], [15.0, 0.0]));
+            assert_eq!(signature(&doubled), signature(&base), "分割={split}");
+        }
+    }
+
+    #[test]
+    fn an_overlapping_arc_preserves_a_circle_and_its_real_intersections() {
+        for split in [false, true] {
+            let mut base = vec![circle(2)];
+            if split {
+                base.push(line(3, [-5.0, 0.0], [5.0, 0.0]));
+            }
+            let mut doubled = base.clone();
+            doubled.push(arc(20, FRAC_PI_2 / 2.0, PI + FRAC_PI_2 / 2.0));
+            assert_eq!(signature(&doubled), signature(&base), "分割={split}");
+        }
+    }
+
+    #[test]
+    fn a_duplicate_circle_keeps_a_real_tangent_vertex_and_region_names() {
+        let base = vec![
+            circle(2),
+            line(3, [5.0, 0.0], [10.0, 0.0]),
+            line(4, [10.0, 0.0], [10.0, 5.0]),
+            line(5, [10.0, 5.0], [5.0, 5.0]),
+            line(6, [5.0, 5.0], [5.0, 0.0]),
+        ];
+        let want = signature(&base);
+        let mut doubled = base;
+        doubled.push(circle(20));
+        assert_eq!(signature(&doubled), want);
+    }
+
+    #[test]
+    fn near_duplicate_representatives_do_not_depend_on_insertion_order() {
+        let a = line(10, [0.0, 0.0], [10.0, 0.0]);
+        let b = line(2, [0.0, EPS * 0.9], [10.0, EPS * 0.9]);
+        let c = line(20, [0.0, EPS * 1.8], [10.0, EPS * 1.8]);
+        let mut results = Vec::new();
+        for order in [
+            [a.clone(), b.clone(), c.clone()],
+            [c.clone(), a.clone(), b.clone()],
+            [b.clone(), c.clone(), a.clone()],
+            [a.clone(), c.clone(), b.clone()],
+            [b.clone(), a.clone(), c.clone()],
+            [c.clone(), b.clone(), a.clone()],
+        ] {
+            let arrangement = Arrangement::new(&order);
+            assert!(arrangement.faces.is_empty());
+            results.push((arrangement.open_ends.len(), arrangement.unused.len()));
+        }
+        assert!(results.iter().all(|r| *r == (2, 3)), "{results:?}");
+    }
+
+    #[test]
+    fn nearby_distinct_curves_are_not_deduplicated() {
+        let a = circle(2).1;
+        let b = Segment::Circle {
+            center: [EPS * 2.0, 0.0],
+            radius: 5.0,
+        };
+        assert!(!same_segment(&a, &b));
+        let a = line(2, [0.0, 0.0], [10.0, 0.0]).1;
+        let b = line(3, [0.0, EPS * 2.0], [10.0, EPS * 2.0]).1;
+        assert!(!same_segment(&a, &b));
     }
 }
