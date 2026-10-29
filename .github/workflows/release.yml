@@ -2,8 +2,10 @@
 # - 組み立ては `cargo xtask release`(この PC のパスを exe に残さない引数と数え、許諾文の一覧)。
 #   タグはワークスペースの版と合うかを xtask が先に確かめる。
 # - 検査は取り込みの前の PR の回と毎晩の main の回(verify.yml)が済ませているので、ここでは流さない。
-# - OS ごとに zip にまとめ、全部の zip の SHA256SUMS を最後の回で作る。
-# - できた物は成果物(artifact)に置くだけで、GitHub のリリースは作らない。
+# - OS ごとに「kie-monobench-<版>-<OS>-<arch>」にまとめ(Windows は zip、Linux は tar.gz)、
+#   全部の SHA256SUMS.txt を最後の回で作る。
+# - できた物は成果物(artifact)に置く。タグの回は GitHub のリリースを下書きで作って載せる。
+#   公開は中身を確かめてから手で行う。
 name: リリース
 
 on:
@@ -60,54 +62,87 @@ jobs:
         shell: bash
         run: |
           set -eu
-          name="kie-monobench-${{ github.ref_name }}-${{ runner.os }}"
-          name="${name//\//-}"
+          # 版はタグから v を外した物、手で流した時はブランチの名前
+          ver="${{ github.ref_name }}"
+          ver="${ver#v}"
+          ver="${ver//\//-}"
           ext=""
-          if [ "${{ runner.os }}" = Windows ]; then ext=".exe"; fi
+          if [ "${{ runner.os }}" = Windows ]; then
+            ext=".exe"
+            name="kie-monobench-$ver-windows-x64"
+          else
+            name="kie-monobench-$ver-linux-x86_64"
+          fi
           mkdir -p "dist/$name"
           for b in kie-monobench kmb kmb-mcp; do cp "target/release/$b$ext" "dist/$name/"; done
-          cp target/release/THIRD-PARTY-LICENSES.txt LICENSE-MIT LICENSE-APACHE "dist/$name/"
-          # zip の中は「<名前>/」の 1 つのフォルダにする(展開しても散らばらない)
+          cp target/release/THIRD-PARTY-LICENSES.txt LICENSE-MIT LICENSE-APACHE README.md README.en.md "dist/$name/"
+          # 中は「<名前>/」の 1 つのフォルダにする(展開しても散らばらない)
           cd dist
           if [ "${{ runner.os }}" = Windows ]; then
-            7z a -tzip -bd "$name.zip" "$name" > /dev/null
+            file="$name.zip"
+            7z a -tzip -bd "$file" "$name" > /dev/null
           else
-            zip -qr "$name.zip" "$name"
+            file="$name.tar.gz"
+            tar -czf "$file" "$name"
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.dist.outputs.name }}
-          path: dist/${{ steps.dist.outputs.name }}.zip
+          path: dist/${{ steps.dist.outputs.file }}
           if-no-files-found: error
 
-  # 両方の OS の zip がそろってから、まとめて 1 つの SHA256SUMS を作る(`sha256sum -c SHA256SUMS` で確かめられる形)
+  # 両方の OS の物がそろってから、まとめて 1 つの SHA256SUMS.txt を作る(`sha256sum -c SHA256SUMS.txt` で確かめられる形)。
+  # タグの回はリリースを下書きで作り、全部を載せる
   sums:
-    name: SHA256SUMS
+    name: SHA256SUMS とリリースの下書き
     needs: release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           pattern: kie-monobench-*
           path: dist
           merge-multiple: true
 
-      - name: SHA256SUMS を作る
+      - name: SHA256SUMS.txt を作る
         id: sums
         shell: bash
         run: |
           set -eu
-          name="kie-monobench-${{ github.ref_name }}-SHA256SUMS"
-          name="${name//\//-}"
+          ver="${{ github.ref_name }}"
+          ver="${ver#v}"
+          ver="${ver//\//-}"
           cd dist
-          sha256sum -- *.zip > SHA256SUMS
-          cat SHA256SUMS
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          sha256sum -- *.zip *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          echo "name=kie-monobench-$ver-SHA256SUMS" >> "$GITHUB_OUTPUT"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.sums.outputs.name }}
-          path: dist/SHA256SUMS
+          path: dist/SHA256SUMS.txt
           if-no-files-found: error
+
+      - name: リリースを下書きで作る
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          ver="${{ steps.sums.outputs.ver }}"
+          # 本文は .github/release-notes.md のひな型から作る(初めの説明の注を外し、{版} を埋める)。
+          # 新しくできること・直したことの節は、公開の前に下書きで埋める
+          sed -e '1,/^-->$/d' -e "s/{版}/$ver/g" .github/release-notes.md > notes.md
+          gh release create "${{ github.ref_name }}" --draft --verify-tag \
+            --title "kieMonoBench $ver" --notes-file notes.md \
+            dist/*.zip dist/*.tar.gz dist/SHA256SUMS.txt

@@ -2287,7 +2287,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "eframe",
  "egui",
@@ -2314,7 +2314,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-asm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2328,7 +2328,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-bundle"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-asm",
  "kmb-cad",
@@ -2389,7 +2389,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cavalier_contours",
  "kmb-core",
@@ -2403,7 +2403,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-boolean"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-datum"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-edge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2439,7 +2439,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-extrude"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2451,7 +2451,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-hole"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2463,7 +2463,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-import-step"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "encoding_rs",
  "kmb-cad",
@@ -2478,7 +2478,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-modify"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2491,7 +2491,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-pattern"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2502,7 +2502,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-revolve"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2513,7 +2513,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-surface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2525,7 +2525,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-sweep"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -2537,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-commands"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-program",
@@ -2574,7 +2574,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-dropcutter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-tool",
@@ -2586,7 +2586,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-geom"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cavalier_contours",
  "kmb-core",
@@ -2596,7 +2596,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-program"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-setup",
  "kmb-cam-tool",
@@ -2620,7 +2620,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-setup"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-tool",
@@ -2638,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cam-tool"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "kmb-core",
@@ -2651,7 +2651,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "kmb-bundle",
@@ -2665,7 +2665,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-config"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-bundle",
  "kmb-core",
@@ -2678,7 +2678,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-contract"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-workspace-hack",
@@ -2687,7 +2687,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-expr",
  "log",
@@ -2698,7 +2698,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-drawing"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-interchange",
@@ -2711,7 +2711,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-expr"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "serde",
@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-fea"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-look",
@@ -2734,7 +2734,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-flow"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-study",
@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-format"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.9.1",
@@ -2755,7 +2755,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-gcode-read"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "kmb-toolpath",
@@ -2764,7 +2764,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-i18n"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fluent-bundle",
  "kmb-workspace-hack",
@@ -2775,7 +2775,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-image"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "image",
  "kmb-format",
@@ -2784,7 +2784,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-interchange"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-look",
@@ -2796,7 +2796,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-io-dxf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-format",
@@ -2810,7 +2810,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-io-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "color_quant",
  "gif",
@@ -2832,7 +2832,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-io-stl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-format",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-io-svg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-format",
@@ -2859,7 +2859,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-io-view"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-format",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-kernel-smlib"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "kmb-contract",
@@ -2888,7 +2888,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-kernel-truck"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-contract",
  "kmb-core",
@@ -2904,7 +2904,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-look"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "log",
@@ -2914,7 +2914,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-bundle",
  "kmb-core",
@@ -2932,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-measure"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-look",
@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-plugin-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "kmb-post",
@@ -2955,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-post"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "kmb-format",
@@ -2966,7 +2966,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-post-carvera-air"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "insta",
  "kmb-cam-tool",
@@ -2979,7 +2979,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "crc32fast",
  "kmb-core",
@@ -2993,7 +2993,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-samples"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-bundle",
  "kmb-cad",
@@ -3037,7 +3037,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-scene"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -3053,7 +3053,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-session"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "kmb-bundle",
@@ -3074,7 +3074,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-sim"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "kmb-core",
@@ -3084,7 +3084,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-sketch"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "i_overlay",
  "kmb-contract",
@@ -3099,7 +3099,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-sketch-3d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-interchange",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-sketch-canvas"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cad",
  "kmb-core",
@@ -3127,7 +3127,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-sketch-solver"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-workspace-hack",
@@ -3137,7 +3137,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-solid"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-asm",
  "kmb-cad",
@@ -3170,7 +3170,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-adaptive2d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3186,7 +3186,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-chamfer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3200,7 +3200,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-contour2d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3214,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-drill"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3229,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-engrave"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3243,7 +3243,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-face"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3257,7 +3257,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-laser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3271,7 +3271,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-pencil"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-dropcutter",
  "kmb-cam-setup",
@@ -3285,7 +3285,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-pocket2d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-setup",
@@ -3300,7 +3300,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-raster3d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-dropcutter",
  "kmb-cam-geom",
@@ -3315,7 +3315,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-rough3d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-dropcutter",
  "kmb-cam-geom",
@@ -3332,7 +3332,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-strategy-waterline"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-dropcutter",
  "kmb-cam-geom",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-study"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
  "kmb-workspace-hack",
@@ -3358,7 +3358,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-text"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "i_overlay",
  "kmb-core",
@@ -3373,7 +3373,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-toolpath"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "serde",
@@ -3382,7 +3382,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-toolpath-fit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-tool",
  "kmb-toolpath",
@@ -3391,7 +3391,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-toolpath-moves"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-cam-geom",
  "kmb-cam-tool",
@@ -3404,7 +3404,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "accesskit_consumer",
  "egui",
@@ -3451,7 +3451,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-library"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -3466,7 +3466,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-mouse3d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-workspace-hack",
  "log",
@@ -3475,7 +3475,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-sketch"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -3495,7 +3495,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-text"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -3510,7 +3510,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -3527,7 +3527,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-ui-view3d"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytemuck",
  "egui",
@@ -3545,7 +3545,7 @@ dependencies = [
 
 [[package]]
 name = "kmb-view-lines"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "kmb-core",
 ]
@@ -5511,7 +5511,7 @@ dependencies = [
 
 [[package]]
 name = "smlib-sys"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cc",
  "kmb-workspace-hack",
@@ -7295,7 +7295,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
  "sha2",
