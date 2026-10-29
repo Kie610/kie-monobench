@@ -15,6 +15,8 @@ pub(crate) struct Editor {
     pub(crate) fmt: kmb_sketch::DimFormat,
     pub tool: Tool,
     pub selection: BTreeSet<EntityId>,
+    /// クリックで選んだ順。まとめて選んだ要素は番号順で後に続く。
+    pub(crate) selection_order: Vec<EntityId>,
     pub(crate) pending: Option<Pick>,
     /// 円弧の始点(中心の次に決める)
     pub(crate) pending2: Option<Pick>,
@@ -201,6 +203,7 @@ impl Default for Editor {
             fmt: kmb_sketch::DimFormat::default(),
             tool: Tool::Select,
             selection: BTreeSet::new(),
+            selection_order: Vec::new(),
             pending: None,
             pending2: None,
             pending3: None,
@@ -340,6 +343,7 @@ impl Editor {
         }
         let at = |id: EntityId| moved.get(&id).copied().unwrap_or(id);
         self.selection = self.selection.iter().map(|id| at(*id)).collect();
+        self.selection_order.iter_mut().for_each(|id| *id = at(*id));
         for p in [&mut self.pending, &mut self.pending2, &mut self.pending3]
             .into_iter()
             .flatten()
@@ -359,5 +363,19 @@ impl Editor {
             + self.pending3.is_some() as usize
             + self.picked.len()
             + self.spline_pts.len()
+    }
+
+    /// 選びとクリックの順を一緒に外す。
+    pub(crate) fn clear_selection(&mut self) {
+        self.selection.clear();
+        self.selection_order.clear();
+    }
+
+    /// クリックの順を残して要素を選ぶ。外した要素を選び直すと末尾になる。
+    pub(crate) fn select(&mut self, id: EntityId) {
+        self.selection_order.retain(|p| self.selection.contains(p));
+        if self.selection.insert(id) {
+            self.selection_order.push(id);
+        }
     }
 }

@@ -99,9 +99,10 @@ pub(super) fn act(ui: &mut egui::Ui, editor: &mut Editor, input: Input<'_>, out:
                                 .collect();
                             others.extend(editor.infer.recent.iter().copied());
                             let line = s.add_line(a, b);
+                            let diameter = !ctrl && aug.attach_diameter(&mut s, line, a, b);
                             // 描いた向きから、水平・垂直・平行・直角・接するを推測して付ける(Ctrl で止める)。
                             // ただし輪郭を閉じた時など、ほかの拘束で既に決まっていれば付けない
-                            if !ctrl {
+                            if !ctrl && !diameter {
                                 crate::infer::add_line_rel(
                                     &mut s, sol, line, start.pos, end.pos, &others, values,
                                 );
