@@ -104,7 +104,7 @@ pub(super) fn act(ui: &mut egui::Ui, editor: &mut Editor, input: Input<'_>, out:
         match sketch.hit_test(sol, w[0], w[1], tol) {
             Some(h) => {
                 if editor.selection.len() >= 2 {
-                    editor.selection.clear();
+                    editor.clear_selection();
                 }
                 if aug.kind(h.entity).is_some() {
                     out.keep.push(h.entity);
@@ -113,7 +113,7 @@ pub(super) fn act(ui: &mut egui::Ui, editor: &mut Editor, input: Input<'_>, out:
                     editor.selection.insert(h.entity);
                 }
             }
-            None => editor.selection.clear(),
+            None => editor.clear_selection(),
         }
     }
     // パネルの欄から離れたのが図のクリックでなかった(リボンなど、パネルと図の外を押した):

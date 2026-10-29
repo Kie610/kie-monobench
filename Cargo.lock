@@ -2348,6 +2348,7 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-config",
  "kmb-core",
+ "kmb-drawing",
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
@@ -2696,6 +2697,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-drawing"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-view-lines",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-expr"
 version = "0.1.0"
 dependencies = [
@@ -2850,6 +2864,7 @@ dependencies = [
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
+ "kmb-view-lines",
  "kmb-workspace-hack",
  "log",
  "serde_json",
@@ -2992,6 +3007,7 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-contract",
  "kmb-core",
+ "kmb-drawing",
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
@@ -3528,10 +3544,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-view-lines"
+version = "0.1.0"
+dependencies = [
+ "kmb-core",
+]
+
+[[package]]
 name = "kmb-workspace-hack"
 version = "0.1.0"
 dependencies = [
- "accesskit",
  "ahash",
  "anyhow",
  "arrayvec",
@@ -3539,30 +3561,23 @@ dependencies = [
  "bytemuck",
  "cc",
  "chrono",
- "cranelift-bitset",
- "ecolor",
- "egui",
- "egui-wgpu",
- "emath",
- "epaint",
  "fnv",
  "font-types",
  "getrandom 0.4.3",
  "hashbrown 0.16.1",
  "hashbrown 0.17.1",
  "indexmap",
+ "libc",
  "linux-raw-sys 0.12.1",
  "log",
  "memchr",
  "miniz_oxide 0.9.1",
- "naga",
  "num-complex",
  "num-rational",
  "num-traits",
  "once_cell",
  "proc-macro2",
  "profiling",
- "pulley-interpreter",
  "quote",
  "read-fonts",
  "ron",
@@ -3579,20 +3594,10 @@ dependencies = [
  "smallvec",
  "syn 2.0.119",
  "syn 3.0.8",
- "thiserror 2.0.21",
  "tracing",
  "tracing-core",
  "uuid",
- "wasm-encoder",
- "wasmparser",
- "wasmtime-internal-core",
- "wayland-backend",
- "wgpu",
- "wgpu-core",
- "wgpu-core-deps-windows-linux-android",
- "wgpu-hal",
- "wgpu-types",
- "windows",
+ "wayland-sys",
  "windows-sys 0.61.2",
  "zerocopy",
 ]

@@ -94,3 +94,6 @@ mod sweep_loft_tests;
 mod tests;
 mod text_outline_tests;
 mod text_tests;
+
+#[cfg(test)]
+mod duplicate_profile_tests;
