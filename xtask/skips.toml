@@ -7,6 +7,7 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+cylinder_named_ends_are_arcs = "truck の回(円の辺の名前付き列挙がなく、網の折れ線へ戻す)"
 expanded_thread_tapped_holes_use_all_families_and_survive_reopening = "truck の回(曲面の網による近似で M14 ねじ穴の体積が 0.183 mm³ ずれる)"
 legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth = "truck の回(曲面の網による近似で M14 ザグリの除去体積が 0.613 mm³ ずれる)"
 legacy_thread_countersink_keeps_the_omitted_diameter = "truck の回(省略寸法の皿穴のブーリアンで閉じたシェルを作れない)"

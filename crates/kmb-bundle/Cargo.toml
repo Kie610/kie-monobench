@@ -10,6 +10,7 @@ rust-version.workspace = true
 layer = "assembly"
 
 [dependencies]
+kmb-drawing.workspace = true
 kmb-core.workspace = true
 kmb-interchange.workspace = true
 kmb-plugin-host.workspace = true

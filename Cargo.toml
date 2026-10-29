@@ -59,6 +59,8 @@ kmb-sketch-canvas = { path = "crates/kmb-sketch-canvas" }
 kmb-scene = { path = "crates/kmb-scene" }
 kmb-config = { path = "crates/kmb-config" }
 kmb-io-stl = { path = "crates/kmb-io-stl" }
+kmb-view-lines = { path = "crates/kmb-view-lines" }
+kmb-drawing = { path = "crates/kmb-drawing" }
 kmb-io-view = { path = "crates/kmb-io-view" }
 kmb-io-render = { path = "crates/kmb-io-render" }
 kmb-cam-tool = { path = "crates/kmb-cam-tool" }
