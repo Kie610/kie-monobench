@@ -22,6 +22,10 @@ pub(crate) struct Words {
 }
 
 impl Words {
+    pub(crate) fn find(&self, id: &str) -> Option<String> {
+        self.texts.find(self.lang, id)
+    }
+
     fn key() -> egui::Id {
         egui::Id::new("kmb_words")
     }

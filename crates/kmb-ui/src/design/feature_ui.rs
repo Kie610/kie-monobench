@@ -332,7 +332,8 @@ pub(crate) fn field_ui(
     data: &mut Json,
     newly_applies: bool,
 ) {
-    marked_field_ui(ui, ws, entry, f, data, newly_applies, false);
+    let f = crate::field_text::translate(&ws.win.words(), &entry.type_id, f, "");
+    marked_field_ui(ui, ws, entry, &f, data, newly_applies, false);
 }
 
 /// [`field_ui`] の、名前を今の手順として強調するもの(`mark`)。
@@ -993,7 +994,10 @@ pub(crate) fn parse_vector(s: &str) -> Option<[f64; 3]> {
 
 /// 記述子の欄を並べる。変えたら新しいデータを返す。
 fn descriptor_form(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry) -> Option<Json> {
-    let desc = ws.win.registry.descriptor(&entry.type_id)?;
+    let mut desc = ws.win.registry.descriptor(&entry.type_id)?;
+    for field in &mut desc.fields {
+        *field = crate::field_text::translate(&ws.win.words(), &entry.type_id, field, "");
+    }
     // 前の形のデータは今の形にしてから欄に出す(直さなければ文書はそのまま)
     let base = desc.upgraded(&entry.data);
     let entry = &FeatureEntry {

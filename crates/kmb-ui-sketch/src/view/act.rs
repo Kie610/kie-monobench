@@ -132,7 +132,7 @@ pub(super) fn act(
         editor.edit_dim = Some((id, value.to_string()));
         editor.edit_dim_fresh = true;
         editor.dim_error = None;
-        editor.selection.clear();
+        editor.clear_selection();
         editor.ghost = None;
         return out;
     }
@@ -328,13 +328,13 @@ pub(super) fn act(
                 match base_sketch.hit_test(base_sol, w[0], w[1], tol) {
                     Some(h) => {
                         if editor.selection.len() >= 2 {
-                            editor.selection.clear();
+                            editor.clear_selection();
                         }
                         if !editor.selection.remove(&h.entity) {
                             editor.selection.insert(h.entity);
                         }
                     }
-                    None => editor.selection.clear(),
+                    None => editor.clear_selection(),
                 }
             }
             editor.measured = measure_text(base_sketch, base_sol, values, editor);

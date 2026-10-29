@@ -1,9 +1,9 @@
 //! 開発用の道具。変えた crate だけをテストと clippy に掛ける(全体を作り直さない)。
 //!
 //! ```text
-//! cargo xtask affected [--base <ref>] [--dependents]
+//! cargo xtask affected [--base <ref>] [--dependents | --dependents-lower]
 //! cargo xtask checks [--base <ref>]
-//! cargo xtask verify [<crate>...] [--base <ref>] [--dependents] [--all] [--truck] [--no-clippy]
+//! cargo xtask verify [<crate>...] [--base <ref>] [--dependents | --dependents-lower] [--all] [--truck] [--no-clippy]
 //! cargo xtask sweep [--yes] [--keep-days <日数>]
 //! cargo xtask docs
 //! cargo xtask labels
@@ -16,7 +16,9 @@
 //!
 //! - crate を書かなければ、`--base`(既定は `origin/main`)から変えたファイル(まだコミットして
 //!   いないもの、git に入れていないものを含む)を持つ crate を選ぶ。
-//! - `--dependents` は、選んだ crate に依存する crate も足す(プッシュの前に)。
+//! - `--dependents` は、選んだ crate に依存する crate も足す(PR の CI が流す)。
+//! - `--dependents-lower` は、依存する crate のうち組み立てと入口の層(`UPPER_LAYERS`)の手前までを足す
+//!   (プッシュの前に。小さいディスクで担当分を確かめる。上の層と全体は PR の CI に任せる、2026-10-29 Kie)。
 //! - `--all` はワークスペース全体。`--truck` は `JC_KERNEL=truck` でもう一度テストする(形の計算の
 //!   試験だけ。`TRUCK_TESTS`)。普段は付けず、公開の準備の時だけ流す(2026-10-18 Kie)。
 //! - cargo-nextest があれば、テストは nextest で crate をまたいで並べて流し、SMLib の回・truck の回・
@@ -24,7 +26,8 @@
 //!
 //! - `verify` は、どの crate を選んでも(docs だけの変更で選ばなくても)最初に組み立てずに点検する:
 //!   層の向き(layers.rs)、ソースの書き方(layers/code.rs)、他の層の名前(layers/names.rs)、理由の
-//!   無い飛ばしと消えたテスト(skips.rs)。`--all` ではライセンス(cargo-deny)も。`--all`・`--dependents` は cargo-nextest が無ければ失敗にする。
+//!   無い飛ばしと消えたテスト(skips.rs)。`--all` ではライセンス(cargo-deny)も。`--all`・`--dependents`・
+//!   `--dependents-lower` は cargo-nextest が無ければ失敗にする。
 //! - 点検には資料の形(docs.rs)も入る: docs/機能/ の断片、凍結した経緯、地図.md の crate の一覧。
 //!   `docs` は断片から一覧の表を target/docs/ に作り、地図.md の crate の一覧を書き直す。
 //! - Issue のひな型が付けるラベルが `.github/labels.yml` にあるか(labels.rs)。`labels` はその定義を
@@ -169,6 +172,9 @@ fn classify(files: &[String], packages: &[Package]) -> Changes {
 const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     // 押し出し・ブーリアン・フィレット・面取り・穴など、形そのものの試験
     ("kmb-solid", None),
+    ("kmb-drawing", None),
+    ("kmb-view-lines", None),
+    ("kmb-samples", Some("drawing_tests::")),
     ("kmb-cad-surface", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
@@ -199,13 +205,37 @@ fn truck_filter(ts: &[(&str, Option<&str>)]) -> String {
         .join(" | ")
 }
 
+/// 組み立てと入口の層。どの機能を変えても組み立て(kmb-bundle)を通ってここまで届き、画面の GPU・
+/// 両方のカーネル・WASM を全部組むので、`--dependents-lower` はこの層の crate を足さない(選んだ crate が
+/// この層なら、それ自身は検査する)。
+const UPPER_LAYERS: [&str; 4] = ["assembly", "session", "ui", "app"];
+
 /// `roots` と、それに(間接に)依存する crate。
 fn with_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
+    dependents_where(roots, packages, |_| true)
+}
+
+/// `roots` と、それに(間接に)依存する crate のうち `UPPER_LAYERS` の手前まで(その層の crate を
+/// 通って先へも進まない)。
+fn with_lower_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
+    dependents_where(roots, packages, |p| {
+        !p.layer
+            .as_deref()
+            .is_some_and(|l| UPPER_LAYERS.contains(&l))
+    })
+}
+
+fn dependents_where(
+    roots: &BTreeSet<String>,
+    packages: &[Package],
+    keep: impl Fn(&Package) -> bool,
+) -> BTreeSet<String> {
     let mut out = roots.clone();
     loop {
         let more: Vec<String> = packages
             .iter()
-            .filter(|p| !out.contains(&p.name) && p.deps.iter().any(|d| out.contains(d)))
+            .filter(|p| !out.contains(&p.name) && keep(p))
+            .filter(|p| p.deps.iter().any(|d| out.contains(d)))
             .map(|p| p.name.clone())
             .collect();
         if more.is_empty() {
@@ -349,6 +379,8 @@ struct Options {
     crates: Vec<String>,
     base: String,
     dependents: bool,
+    /// `--dependents-lower`
+    lower: bool,
     all: bool,
     truck: bool,
     clippy: bool,
@@ -370,12 +402,16 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                     .clone()
             }
             "--dependents" => o.dependents = true,
+            "--dependents-lower" => o.lower = true,
             "--all" => o.all = true,
             "--truck" => o.truck = true,
             "--no-clippy" => o.clippy = false,
             s if s.starts_with('-') => return Err(format!("知らない指定です: {s}")),
             s => o.crates.push(s.into()),
         }
+    }
+    if o.dependents && o.lower {
+        return Err("--dependents と --dependents-lower はどちらか 1 つにしてください".into());
     }
     Ok(o)
 }
@@ -412,6 +448,8 @@ fn select(
     };
     Ok(Some(if o.dependents {
         with_dependents(&roots, packages)
+    } else if o.lower {
+        with_lower_dependents(&roots, packages)
     } else {
         roots
     }))
@@ -1195,10 +1233,10 @@ fn run() -> Result<ExitCode, String> {
             } else if nextest_available() {
                 free_before_build(&ws);
                 results.extend(verify_nextest(&o, &sel, &ws)?);
-            } else if (o.all || o.dependents) && !nextest_off() {
+            } else if (o.all || o.dependents || o.lower) && !nextest_off() {
                 // nextest の無い回は件数が残らないので、手渡しやプッシュの前の検査には使わない
                 println!(
-                    "\n== テスト: cargo-nextest が無いので失敗にします(--all・--dependents は nextest で流す。\
+                    "\n== テスト: cargo-nextest が無いので失敗にします(--all・--dependents・--dependents-lower は nextest で流す。\
                      入れ方は docs/verify.md の 1 節、クラウドは scripts/install-nextest.sh。\
                      nextest なしで流すなら JC_VERIFY_NEXTEST=off)"
                 );
@@ -1335,22 +1373,66 @@ mod tests {
     }
 
     #[test]
+    fn lower_dependents_stop_before_the_assembly_and_entry_layers() {
+        let layered = |name: &str, layer: &str, deps: &[&str]| Package {
+            layer: Some(layer.into()),
+            ..pkg(name, &format!("crates/{name}"), deps)
+        };
+        let w = vec![
+            layered("kmb-core", "core", &[]),
+            layered("kmb-cam", "cam", &["kmb-core"]),
+            layered("kmb-cam-commands", "cam", &["kmb-cam"]),
+            layered("kmb-bundle", "assembly", &["kmb-cam-commands"]),
+            // 組み立てを通ってしか届かない crate は足さない
+            layered("kmb-io", "io", &["kmb-bundle"]),
+            layered("kmb-session", "session", &["kmb-core"]),
+            layered("kmb-ui", "ui", &["kmb-cam"]),
+            layered("kmb-app", "app", &["kmb-ui", "kmb-bundle"]),
+        ];
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-cam"]), &w),
+            set(&["kmb-cam", "kmb-cam-commands"])
+        );
+        // 選んだ crate が上の層なら、それ自身は検査する
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui"])
+        );
+        assert_eq!(
+            with_dependents(&set(&["kmb-cam"]), &w),
+            set(&[
+                "kmb-cam",
+                "kmb-cam-commands",
+                "kmb-bundle",
+                "kmb-io",
+                "kmb-ui",
+                "kmb-app"
+            ])
+        );
+    }
+
+    #[test]
     fn truck_runs_only_the_shape_tests() {
         let mut w = ws();
         w.push(pkg("kmb-solid", "crates/kmb-solid", &[]));
         w.push(pkg("kmb-samples", "crates/kmb-samples", &[]));
+        w.push(pkg("kmb-drawing", "crates/kmb-drawing", &[]));
+        w.push(pkg("kmb-view-lines", "crates/kmb-view-lines", &[]));
         let all = truck_targets(&None, &w);
         assert_eq!(
             all,
             [
                 ("kmb-solid", None),
+                ("kmb-drawing", None),
+                ("kmb-view-lines", None),
+                ("kmb-samples", Some("drawing_tests::")),
                 ("kmb-samples", Some("hole_tests::")),
                 ("kmb-samples", Some("nest_tests::"))
             ]
         );
         assert_eq!(
             truck_filter(&all),
-            "package(kmb-solid) | (package(kmb-samples) & test(/^hole_tests::/)) | (package(kmb-samples) & test(/^nest_tests::/))"
+            "package(kmb-solid) | package(kmb-drawing) | package(kmb-view-lines) | (package(kmb-samples) & test(/^drawing_tests::/)) | (package(kmb-samples) & test(/^hole_tests::/)) | (package(kmb-samples) & test(/^nest_tests::/))"
         );
         // 選んだ crate に形の計算の試験がなければ流さない(画面や加工だけの変更)
         assert_eq!(
@@ -1422,6 +1504,8 @@ mod tests {
         assert_eq!(o.base, "main");
         assert_eq!(a(&[]).unwrap().base, "origin/main");
         assert!(a(&["--fast"]).is_err());
+        assert!(a(&["--dependents-lower"]).unwrap().lower);
+        assert!(a(&["--dependents", "--dependents-lower"]).is_err());
         assert_eq!(
             package_args(&Some(set(&["kmb-ui", "kmb-core"]))),
             ["-p", "kmb-core", "-p", "kmb-ui"]

@@ -16,7 +16,7 @@
 
 ```sh
 cargo xtask verify                # 変えた crate のテストと点検
-cargo xtask verify --dependents   # 変えた crate に依存する crate も
+cargo xtask verify --dependents-lower   # 変えた crate に依存する crate も(組み立てと画面・アプリの手前まで)
 ```
 
 PR の本文には、検査の結果を件数(通過・失敗・飛ばし)で書いてください。点検(層の向き・引数の宣言・言葉の揺れなど)の意味は [docs/verify.md](docs/verify.md) にあります。点検が落ちたら、点検を緩めずに直してください。

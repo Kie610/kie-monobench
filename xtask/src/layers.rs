@@ -622,6 +622,7 @@ const JSON_NAME_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-asm", "src/link.rs", 1),           // 部品を移した記録 moved.json
     ("kmb-cam-commands", "src/reuse.rs", 5), // 加工のテンプレートのファイル
     ("kmb-cam-tool", "src/exchange.rs", 2),  // 工具ライブラリのファイル
+    ("kmb-drawing", "src/commands.rs", 1),   // 用紙の計算結果。文書の保存形式ではない
     ("kmb-core", "src/document.rs", 1),      // 文書の拡張子の定数そのもの
     ("kmb-post-carvera-air", "src/machine.rs", 1), // 機械の台の穴の表
     ("kmb-session", "src/crash.rs", 5),      // 落ちた時の記録

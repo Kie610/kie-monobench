@@ -1620,7 +1620,11 @@ impl FeatureEditor for SketchEditor {
                 .map(to_value);
         }
         let name = id.strip_prefix("c:")?;
-        let sel = constraints_ui::selected(&self.editor, &sketch);
+        let sel = if name == "等しい" {
+            constraints_ui::selected_in_order(&self.editor, &sketch)
+        } else {
+            constraints_ui::selected(&self.editor, &sketch)
+        };
         // 図形の固定・図形どうしの対称・ポリゴンは、選んであればすぐ付ける
         let values = dimension_values(host, &sketch);
         if let Some(out) = constraint_tool::try_multi(
@@ -1674,7 +1678,7 @@ impl FeatureEditor for SketchEditor {
                 // 組の途中になる選びは残し、そうでなければ外す
                 let tool = constraint_tool::tool_of(name)?;
                 if !constraint_tool::usable(name, &sketch, &sel) {
-                    self.editor.selection.clear();
+                    self.editor.clear_selection();
                 }
                 self.editor.set_tool(tool);
                 None
@@ -1773,6 +1777,8 @@ mod intersect_tests;
 mod label_tests;
 #[cfg(test)]
 mod modify_ui_tests;
+#[cfg(test)]
+mod multi_equal_ui_tests;
 #[cfg(test)]
 mod ops_tests;
 #[cfg(test)]
