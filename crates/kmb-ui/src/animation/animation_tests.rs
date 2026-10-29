@@ -580,3 +580,197 @@ fn the_motion_study_window_moves_the_lid_from_its_keys_and_plays() {
     assert!(!h.state().cur.scene.is_posed());
     assert_eq!(h.state().cur.work.doc().data(), &shape);
 }
+
+/// 部品の選びは作業先とは別で、道具の開始時に固定する。予告だけでは文書を変えない。
+fn scoped_explode_fixture() -> (Workspace, u64, u64, FeatureId) {
+    let mut b = DocBuilder::new();
+    let mut ids = Vec::new();
+    for (x, y, w, h, t, z, name) in [
+        (0., 0., 60., 30., 10., 0., "箱"),
+        (0., 0., 60., 30., 2., 10., "蓋"),
+        (28., 13., 4., 4., 4., 12., "つまみ"),
+    ] {
+        let mut sketch = SketchBuilder::new(SketchPlane::Xy);
+        let origin = sketch.fixed_point(x, y);
+        sketch.rectangle(
+            origin,
+            &format!("{w} mm"),
+            &format!("{h} mm"),
+            [x, y, x + w, y + h],
+        );
+        let source = b.feature(
+            kmb_sketch::SKETCH,
+            &format!("{name}のスケッチ"),
+            sketch.build(),
+        );
+        ids.push(b.feature(
+            EXTRUDE,
+            name,
+            Extrude {
+                profile: Some(source),
+                distance: format!("{t} mm"),
+                start: kmb_cad_extrude::Start::Offset,
+                start_offset: Some(format!("{z} mm")),
+                ..Default::default()
+            },
+        ));
+    }
+    let mut doc = b.finish("自動分解の対象");
+    let lid = doc.alloc_group_id();
+    let knob = doc.alloc_group_id();
+    doc.apply(kmb_core::Transaction::new(
+        "部品",
+        vec![kmb_core::Op::SetComponents {
+            components: vec![
+                kmb_core::Component {
+                    id: lid,
+                    name: "蓋の部品".into(),
+                    parent: None,
+                    bodies: vec![ids[1]],
+                },
+                kmb_core::Component {
+                    id: knob,
+                    name: "つまみの部品".into(),
+                    parent: Some(lid),
+                    bodies: vec![ids[2]],
+                },
+            ],
+        }],
+    ))
+    .unwrap();
+    let mut ws = Workspace::new(doc, None, kmb_bundle::modules());
+    ws.wait();
+    assert_eq!(ws.report().error_count(), 0);
+    ws.switch_space(Space::Animation);
+    (ws, lid, knob, ids[0])
+}
+
+#[test]
+fn auto_explode_component_clicks_use_the_shared_action_and_keep_the_target_during_preview() {
+    use kmb_interchange::animation::{self as anim, StepKind, Target};
+    let (ws, lid, knob, boxed) = scoped_explode_fixture();
+    let before = ws.document().to_json();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280., 800.))
+        .with_step_dt(0.05)
+        .with_max_steps(40)
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    assert!(h.query_by_label("つまみの部品").is_some());
+    let result = crate::cmdline_tests::run(&mut h, include_str!("auto-explode-component.jcs"));
+    assert!(result.ok, "{}", result.report());
+    assert_eq!(h.state().cur.selected_component, Some(lid));
+    assert_eq!(
+        h.state().active_component(),
+        None,
+        "選んでも作業先を変えない"
+    );
+    assert!(
+        h.query_by_label("つまみの部品").is_none(),
+        "行クリックの開閉を保つ"
+    );
+    assert_eq!(h.state().document().to_json(), before);
+    let shown = h.state().animation_steps_shown();
+    let StepKind::ExplodeMany { moves } = &shown.last().unwrap().kind else {
+        panic!("同時の段")
+    };
+    assert_eq!(moves.len(), 2);
+    assert_eq!(moves[0].targets, vec![Target::Component { id: knob }]);
+    assert!(
+        !moves
+            .iter()
+            .flat_map(|m| &m.targets)
+            .flat_map(|t| t.roots(h.state().document().data()))
+            .any(|r| r == boxed)
+    );
+    h.state_mut().select(boxed);
+    assert_eq!(h.state().cur.selected_component, None);
+    h.state_mut().set_auto_explode(false, false, 2.);
+    let shown = h.state().animation_steps_shown();
+    let StepKind::ExplodeMany { moves } = &shown.last().unwrap().kind else {
+        panic!("同時の段")
+    };
+    assert_eq!(
+        moves[0].targets,
+        vec![Target::Component { id: knob }],
+        "開始時の対象を保つ"
+    );
+    assert_eq!(moves[0].offset, [0., 0., 8.]);
+    h.state_mut().new_tab();
+    h.run();
+    assert!(!h.state().is_auto_exploding());
+    assert_eq!(h.state().cur.selected_component, None);
+    h.state_mut().switch_tab(0);
+    h.run();
+    assert!(h.state().is_auto_exploding());
+    let result = crate::cmdline_tests::run(&mut h, "click OK");
+    assert!(result.ok, "{}", result.report());
+    assert_eq!(anim::steps(h.state().document().data()).len(), 1);
+    h.state_mut().undo();
+    h.run();
+    assert_eq!(h.state().document().to_json(), before, "1回で全部戻る");
+    let result = crate::cmdline_tests::run(&mut h, "click 蓋の部品");
+    assert!(result.ok, "{}", result.report());
+    assert!(
+        h.query_by_label("つまみの部品").is_some(),
+        "もう一度押すと開く"
+    );
+    let result = crate::cmdline_tests::run(&mut h, "key Escape");
+    assert!(result.ok, "{}", result.report());
+    assert_eq!(h.state().cur.selected_component, None);
+    let result = crate::cmdline_tests::run(&mut h, "click \"蓋の部品 をアクティブにする\"");
+    assert!(result.ok, "{}", result.report());
+    assert_eq!(h.state().active_component(), Some(lid));
+    assert_eq!(
+        h.state().cur.selected_component,
+        None,
+        "作業先の丸は部品の選びにしない"
+    );
+}
+
+#[test]
+fn auto_explode_component_selection_clears_for_other_selections_and_rejects_a_single_part() {
+    let (mut ws, lid, knob, boxed) = scoped_explode_fixture();
+    for select in [
+        Workspace::select,
+        Workspace::toggle_select,
+        Workspace::select_range,
+    ] {
+        ws.select_component_row(lid);
+        select(&mut ws, boxed);
+        assert_eq!(ws.cur.selected_component, None);
+    }
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280., 800.));
+    for events in [
+        view3d::ViewEvents {
+            click: Some(egui::pos2(1., 1.)),
+            ..Default::default()
+        },
+        view3d::ViewEvents {
+            boxed: Some(egui::Rect::from_min_size(
+                egui::pos2(1., 1.),
+                egui::vec2(10., 10.),
+            )),
+            ..Default::default()
+        },
+    ] {
+        ws.select_component_row(lid);
+        ws.pick_events_with(&events, rect, egui::Modifiers::NONE);
+        assert_eq!(
+            ws.cur.selected_component, None,
+            "3D のクリックと範囲選択でも外す"
+        );
+    }
+    ws.select_component_row(lid);
+    ws.clear_selection();
+    assert_eq!(ws.cur.selected_component, None);
+    ws.select_component_row(knob);
+    ws.start_action("anim.auto_explode_one");
+    assert!(!ws.is_auto_exploding());
+    assert!(
+        ws.message()
+            .unwrap()
+            .contains("分けて動かせる物が 2 つ以上ありません")
+    );
+    assert!(kmb_interchange::animation::steps(ws.document().data()).is_empty());
+}

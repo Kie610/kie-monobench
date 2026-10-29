@@ -27,6 +27,7 @@ impl Workspace {
         // 右クリックした面も選ぶ(メニューはその面に使える操作)
         let hit = all.into_iter().next();
         if let Some((pick, at)) = hit {
+            self.cur.selected_component = None;
             if !on_picked && !self.picked_faces().contains(&pick) {
                 self.cur.picked = Some(pick);
                 self.cur.also_picked.clear();
@@ -73,6 +74,9 @@ impl Workspace {
                 self.pick_field_click(rect, p, ev.add || m.command);
             }
             return;
+        }
+        if ev.click.is_some() || ev.boxed.is_some() {
+            self.cur.selected_component = None;
         }
         let f = self.win.pick_filter;
         if !f.body

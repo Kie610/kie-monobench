@@ -5,6 +5,7 @@ use crate::*;
 impl Workspace {
     /// 機能を 1 つだけ選ぶ(一緒に選んでいたものは外す)。
     pub fn select(&mut self, id: FeatureId) {
+        self.cur.selected_component = None;
         self.cur.browser_bodies = false;
         self.cur.also.clear();
         self.cur.range_anchor = Some(id);
@@ -25,6 +26,19 @@ impl Workspace {
         self.cur.data_edit = None;
     }
 
+    /// 部品の行を選ぶ。作業先と文書は変えず、自動分解へ渡す対象を覚える。
+    pub(crate) fn select_component_row(&mut self, id: u64) {
+        if self.cur.work.doc().data().component(id).is_none() {
+            return;
+        }
+        self.clear_selection();
+        self.cur.picked = None;
+        self.cur.also_picked.clear();
+        self.cur.picked_edges.clear();
+        self.cur.picked_vertices.clear();
+        self.cur.selected_component = Some(id);
+    }
+
     /// ブラウザのボディの行を押した時に選ぶ(`add` なら一緒に選ぶ物へ足す)。
     pub fn select_body_row(&mut self, id: FeatureId, add: bool) {
         let more = add && (self.cur.browser_bodies || self.cur.selected.is_none());
@@ -39,6 +53,7 @@ impl Workspace {
 
     /// 何も選ばない。
     pub fn clear_selection(&mut self) {
+        self.cur.selected_component = None;
         self.cur.browser_bodies = false;
         self.cur.origin_pick = None;
         self.commit_creation();
@@ -181,6 +196,7 @@ impl Workspace {
 
     /// Ctrl: 選びに足す・外す。
     pub fn toggle_select(&mut self, id: FeatureId) {
+        self.cur.selected_component = None;
         self.cur.browser_bodies = false;
         self.commit_creation();
         self.cur.editing = None;
@@ -201,6 +217,7 @@ impl Workspace {
     /// Shift: 起点(最後に普通に押した物)から `id` までをタイムラインの順で選ぶ。
     /// 続けて Shift で押し直しても起点は動かず、範囲だけが替わる(ファイルの一覧などと同じ)。
     pub fn select_range(&mut self, id: FeatureId) {
+        self.cur.selected_component = None;
         self.cur.browser_bodies = false;
         self.commit_creation();
         self.cur.editing = None;

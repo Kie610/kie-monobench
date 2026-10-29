@@ -7,9 +7,9 @@
 action-anim-appearance = 外観
 action-anim-appearance-tip = 選んだ部品の外観を、段の長さをかけて替える段を足す(設計の外観は変えない)。外観は段の帯で選び直す
 action-anim-auto-explode-all = 自動分解: すべてのレベル
-action-anim-auto-explode-all-tip = 部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-all-tip = 選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-auto-explode-one = 自動分解: 1 レベル
-action-anim-auto-explode-one-tip = 部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-one-tip = 選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-drive = ジョイントの動き
 action-anim-drive-tip = ジョイントの値を下限から上限へ動かす段を足す(上下限が無ければ回転は 90 度、スライダは部品の長さ)。値と長さは段の帯で直す
 action-anim-explode = 分解の移動

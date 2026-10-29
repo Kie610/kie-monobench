@@ -6,9 +6,9 @@
 action-anim-appearance = Appearance
 action-anim-appearance-tip = Add a step that changes the selected part's appearance over the step's length (the design's appearance is unchanged). Pick the appearance again on the step bar
 action-anim-auto-explode-all = Auto Explode: All Levels
-action-anim-auto-explode-all-tip = Move parts away from the assembly center automatically, and parts inside parts away from that part's center. Choose one step or sequential, trail lines and explode scale, then OK
+action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-auto-explode-one = Auto Explode: One Level
-action-anim-auto-explode-one-tip = Move parts away from the assembly center automatically (direct children only; parts inside are not moved). Choose one step (all at once) or sequential (1 second per part), trail lines and explode scale, then OK
+action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-drive = Joint Motion
 action-anim-drive-tip = Add a step that drives a joint from its lower to its upper limit (without limits: 90 deg for revolute, the part's length for slider). Edit the values and length on the step bar
 action-anim-explode = Explode Move
