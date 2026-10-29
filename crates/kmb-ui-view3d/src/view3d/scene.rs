@@ -8,6 +8,8 @@ pub struct SceneBody {
     pub mesh: Mesh,
     /// 面のボディは裏からも描く。測定用の網は片面のまま保つ。
     pub two_sided: bool,
+    /// 元の網の全ての辺が逆向きに対を持つ。断面の拾いに使い、帯と剛体移動では保つ。
+    pub(super) section_closed_boundary: bool,
     pub(super) edges: Vec<[[f32; 3]; 2]>,
     /// 面ごとの決まった色(`mesh.face_names` の順。`None` と足りない面はボディの色)
     pub colors: Vec<Option<Color32>>,
@@ -310,22 +312,26 @@ impl Scene {
         self.bodies = meshes
             .into_iter()
             .map(|(feature, mesh)| {
+                let section_closed_boundary = has_closed_boundary(&mesh);
                 let (mesh, plain) = banded(mesh, self.threads.get(&feature));
-                (feature, mesh, plain)
+                (feature, mesh, plain, section_closed_boundary)
             })
-            .map(|(feature, mesh, plain)| SceneBody {
-                feature,
-                two_sided: false,
-                edges: feature_edges(&mesh),
-                look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
-                face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
-                mesh,
-                colors: Vec::new(),
-                tint: self.body_colors.get(&feature).copied(),
-                bvh: Default::default(),
-                rest: None,
-                plain,
-            })
+            .map(
+                |(feature, mesh, plain, section_closed_boundary)| SceneBody {
+                    feature,
+                    two_sided: false,
+                    section_closed_boundary,
+                    edges: feature_edges(&mesh),
+                    look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
+                    face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
+                    mesh,
+                    colors: Vec::new(),
+                    tint: self.body_colors.get(&feature).copied(),
+                    bvh: Default::default(),
+                    rest: None,
+                    plain,
+                },
+            )
             .collect();
         self.apply_poses();
         for b in &self.bodies {
@@ -878,6 +884,68 @@ impl SceneBody {
             cell.tree.get_or_init(|| build_bvh(&mesh));
         });
     }
+}
+
+/// 同じ座標の点を合わせ、境界が向き付きで閉じた網だけを認める。
+/// 許容差で穴を塞がず、不明な接続は開いた網と同じ扱いにする。
+fn has_closed_boundary(mesh: &Mesh) -> bool {
+    use std::collections::HashMap;
+    if mesh.triangles.is_empty() {
+        return false;
+    }
+    let mut points = HashMap::with_capacity(mesh.positions.len());
+    let mut ids = Vec::with_capacity(mesh.positions.len());
+    for p in &mesh.positions {
+        if p.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        let key = p.map(|v| if v == 0.0 { 0 } else { v.to_bits() });
+        let next = points.len();
+        ids.push(*points.entry(key).or_insert(next));
+    }
+    let mut faces = Vec::with_capacity(mesh.triangles.len());
+    let mut edges = Vec::with_capacity(mesh.triangles.len() * 3);
+    for tri in &mesh.triangles {
+        let mut vertices = [0; 3];
+        for i in 0..3 {
+            let Some(&id) = ids.get(tri[i] as usize) else {
+                return false;
+            };
+            vertices[i] = id;
+        }
+        if vertices[0] == vertices[1] || vertices[1] == vertices[2] || vertices[2] == vertices[0] {
+            return false;
+        }
+        let [a, b, c] = tri.map(|i| mesh.positions[i as usize]);
+        let normal = cross(sub(b, a), sub(c, a));
+        if normal == [0.0; 3] || normal.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        let mut face = vertices;
+        face.sort_unstable();
+        faces.push(face);
+        for [a, b] in [
+            [vertices[0], vertices[1]],
+            [vertices[1], vertices[2]],
+            [vertices[2], vertices[0]],
+        ] {
+            edges.push(([a.min(b), a.max(b)], a < b));
+        }
+    }
+    faces.sort_unstable();
+    if faces.windows(2).any(|pair| pair[0] == pair[1]) {
+        return false;
+    }
+    edges.sort_unstable_by_key(|edge| edge.0);
+    let (pairs, remainder) = edges.as_chunks::<2>();
+    let mut previous = None;
+    for pair in pairs {
+        if pair[0].0 != pair[1].0 || pair[0].1 == pair[1].1 || previous == Some(pair[0].0) {
+            return false;
+        }
+        previous = Some(pair[0].0);
+    }
+    remainder.is_empty()
 }
 
 /// ねじの印 `marks` の円筒を帯に切った網と、切る前の網(切った時だけ)。
