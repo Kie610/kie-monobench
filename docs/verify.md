@@ -430,12 +430,14 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - 組み立て済みの物は毎晩の main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
 
-## 15. タグで配る物を組み立てる(GitHub の CI)
+## 15. 配る物を組み立ててリリースに載せる(GitHub の CI)
 
-- `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
-- タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
-- できた物は OS ごとに「kie-monobench-<版>-<OS>-<arch>」(Windows は `windows-x64.zip`、Linux は `linux-x86_64.tar.gz`。中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`・`README.md`・`README.en.md`)にまとめて成果物に置く。版はタグから `v` を外した物(手で流した時はブランチの名前)。両方の OS が済んだら、全部の SHA256 を 1 つの `SHA256SUMS.txt`(`sha256sum -c SHA256SUMS.txt` で確かめられる形)にして「kie-monobench-<版>-SHA256SUMS」の成果物に置く。
-- タグの回は、同じ回で GitHub のリリースを下書きで作り(題は「kieMonoBench <版>」、本文は `.github/release-notes.md` のひな型に版を埋めた物)、2 つの配る物と `SHA256SUMS.txt` を載せる。下書きを落とし直してハッシュを確かめてから、新しくできること・直したことの節を埋めて手で公開する。
+- `.github/workflows/release.yml` が、Linux と Windows で `cargo xtask release -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。回は次の 2 通り。
+- **正式な版**: 「リリース」を手で流し、「版」に版の番号(例 `0.3.0`)を入れる。先に `Cargo.toml` の `[workspace.package] version` を上げる PR を取り込んでおく。main から流した時だけ、版がワークスペースの版と合い、同じタグがまだ無ければ、main の先頭に注釈付きのタグ `v<版>` を付けて組み立てる(`--tag` でもう一度突き合わせる)。PC から `v<版>` のタグを押しても同じ回になる。
+- **ナイトリー**: 毎晩の main の検査(14 節)が通った後、前のナイトリー(タグ `nightly`)から main が進んでいれば、検査したコミットを組み立てる。プレリリース「nightly」を消して作り直し、タグ `nightly` だけを付け替える(タグは増えない)。題は「kieMonoBench ナイトリー <日付>」、本文は前のナイトリーから入った PR の題の一覧。GitHub の「最新」は正式な版のまま。「版」を空にして手で流すと、進んでいなくても今の main で出す。
+- できた物は OS ごとに「kie-monobench-<版>-<OS>-<arch>」(Windows は `windows-x64.zip`、Linux は `linux-x86_64.tar.gz`。中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`・`README.md`・`README.en.md`)にまとめる。ナイトリーの <版> は `nightly-<日本時間の日付>`。両方の OS が済んだら、全部の SHA256 を 1 つの `SHA256SUMS.txt`(`sha256sum -c SHA256SUMS.txt` で確かめられる形)にする。成果物にも置く。
+- 正式な版は、同じ回で GitHub のリリースを下書きで作り(題は「kieMonoBench <版>」、本文は `.github/release-notes.md` のひな型に版を埋めた物)、2 つの配る物と `SHA256SUMS.txt` を載せる。下書きを落とし直してハッシュを確かめてから、新しくできること・直したことの節を埋めて手で公開する。
+- GitHub の道具(`GITHUB_TOKEN`)で押したタグはほかの回を起こさないので、タグ付けから載せるまでを 1 回で行う。
 - 検査は取り込みの前の PR の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。
 
 ## 16. PR を GitHub で取り込む
