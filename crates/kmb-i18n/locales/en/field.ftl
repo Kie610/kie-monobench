@@ -2162,3 +2162,10 @@ field-solid-thread-length-help = Blank uses the full face length.
 field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 field-solid-thread-target = Target
+
+field-cam-spiral3d-levels = Cut in depth levels from the top
+field-cam-spiral3d-direction = Cutting direction
+field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+field-cam-radial3d-levels = Cut in depth levels from the top
+field-cam-radial3d-direction = Cutting direction
+field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line

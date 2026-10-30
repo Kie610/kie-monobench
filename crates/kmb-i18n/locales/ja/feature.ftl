@@ -52,3 +52,8 @@ feature-flow-volume = 3D の流れ
 feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)
 feature-solid-surface-patch = 面を張る
 feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る
+
+feature-cam-spiral3d = 渦巻き(3D)
+feature-cam-spiral3d-tip = 中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる
+feature-cam-radial3d = 放射状(3D)
+feature-cam-radial3d-tip = 中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる

@@ -7,11 +7,14 @@
 //! - 放射: 中心から等しい角度ごとの放射の線を、外へ・内へと交互にたどる。線の間隔は、外の半径で
 //!   送り幅になる角度
 //!
+//! `levels` は切込みごとに経路を持ち上げる。`direction` は渦巻きの回る向きと放射の各線の
+//! 向きを選ぶ。往復は段ごとに反転し、一方向の放射は線ごとに上げて移る。
+//!
 //! 線の点ごとに工具(径方向に残す厚さの分だけ太らせたもの)を下ろした高さに軸方向の残す厚さを
 //! 足す。部品の外形(工具の半径だけ外まで)と加工の範囲・傾きの外は削らない(短い所は面をなぞって
 //! つなぐ)。工具の負荷を見て線を変えることはしない。
 
-use crate::{BRIDGE, Pt, cut_passes, split};
+use crate::{BRIDGE, Pt, RasterDir, cut_passes, split};
 use crate::{resolution, zero};
 use kmb_cam_dropcutter::limits::{boundary_fields, leave_radial_field, slope_fields, slope_span};
 use kmb_cam_dropcutter::{Cutter, Heights, Limits, Resolved};
@@ -68,6 +71,12 @@ pub struct Circular {
     /// 部品のいちばん高い所から、どこまで下をなぞるか(省くとストックの底まで)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<String>,
+    /// 段に分けて上から削るか
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub levels: bool,
+    /// 削る向き。往復なら段ごとに点列を反転する
+    #[serde(default, skip_serializing_if = "RasterDir::is_both")]
+    pub direction: RasterDir,
 }
 
 impl Circular {
@@ -83,6 +92,8 @@ impl Circular {
             outer: None,
             step: None,
             depth: None,
+            levels: false,
+            direction: RasterDir::Both,
         }
     }
 
@@ -108,6 +119,10 @@ pub struct CircOpts {
     pub outer: Option<f64>,
     pub step: f64,
     pub limits: Resolved,
+    #[serde(default)]
+    pub levels: bool,
+    #[serde(default)]
+    pub direction: RasterDir,
 }
 
 /// 渦巻きの線(外から内へ)。点の間隔はほぼ `ds`。
@@ -187,10 +202,29 @@ pub fn circular_passes(p: &Planner, o: &CircOpts) -> Result<Vec<Vec<P3>>, EvalEr
         o.floor,
         &p.model.triangles,
     );
-    let lines: Vec<Vec<[f64; 2]>> = match o.pattern {
+    let mut lines: Vec<Vec<[f64; 2]>> = match o.pattern {
         Pattern::Spiral => vec![spiral_xy(center, o.inner, outer, o.step, cell)],
         Pattern::Radial => radial_xy(center, o.inner, outer, o.step, cell),
     };
+    match o.pattern {
+        Pattern::Spiral if o.direction == RasterDir::Climb => {
+            // 外から内へ削る時の残材は中心側。主軸が時計回りのダウンカットは残材を進行方向の
+            // 右に見るので、時計回りにする。角度の符号だけを変え、外から内への順は保つ。
+            for q in &mut lines[0] {
+                q[1] = 2.0 * center[1] - q[1];
+            }
+        }
+        Pattern::Radial if !o.direction.is_both() => {
+            // 線を反時計回りに並べると、次の線側の残材は外向きに進む時の左側。
+            // 主軸が時計回りなら、ダウンカットは内向き、アップカットは外向きに削る。
+            for (n, line) in lines.iter_mut().enumerate() {
+                if (n % 2 == 0) == (o.direction == RasterDir::Climb) {
+                    line.reverse();
+                }
+            }
+        }
+        _ => {}
+    }
     let lim = &o.limits;
     let d = slope_span(cell) as f64 * cell;
     let in_box = |q: [f64; 2]| {
@@ -218,10 +252,16 @@ pub fn circular_passes(p: &Planner, o: &CircOpts) -> Result<Vec<Vec<P3>>, EvalEr
         kmb_cam_dropcutter::par_map(&chunks, |c| c.iter().map(|&q| point(q)).collect::<Vec<_>>())
             .into_iter()
             .flatten();
-    // 放射の線は、外の端か内の端どうしを、面をなぞってつなぐ(一続きにする)
+    // 往復の放射は、外の端か内の端どうしを面に沿ってつなぐ。一方向は線ごとに上げて移る。
+    let separate = o.pattern == Pattern::Radial && !o.direction.is_both();
+    let mut surfaces = Vec::new();
     let mut surface: Vec<Pt> = Vec::new();
     for line in &lines {
         let pts: Vec<Pt> = found.by_ref().take(line.len()).collect();
+        if separate {
+            surfaces.push(pts);
+            continue;
+        }
         if let (Some(a), Some(b)) = (surface.last(), pts.first()) {
             let (a, b) = ([a.q[0], a.q[1]], [b.q[0], b.q[1]]);
             let m = ((b[0] - a[0]).hypot(b[1] - a[1]) / cell).ceil() as usize;
@@ -232,8 +272,12 @@ pub fn circular_passes(p: &Planner, o: &CircOpts) -> Result<Vec<Vec<P3>>, EvalEr
         }
         surface.extend(pts);
     }
-    let pieces: Vec<Vec<P3>> = split(&surface, BRIDGE * p.tool.diameter)
-        .into_iter()
+    if !separate {
+        surfaces.push(surface);
+    }
+    let pieces: Vec<Vec<P3>> = surfaces
+        .iter()
+        .flat_map(|s| split(s, BRIDGE * p.tool.diameter))
         .filter(|s| s.len() >= 2)
         .map(|s| kmb_cam_dropcutter::simplify(&s))
         .collect();
@@ -251,7 +295,29 @@ pub fn circular_passes(p: &Planner, o: &CircOpts) -> Result<Vec<Vec<P3>>, EvalEr
         }));
     }
     p.check_depth(top, lowest)?;
-    Ok(pieces)
+    if !o.levels {
+        return Ok(pieces);
+    }
+    let mut passes = Vec::new();
+    for (n, z) in p.levels(top, lowest).into_iter().enumerate() {
+        let mut level: Vec<Vec<P3>> = pieces
+            .iter()
+            .map(|piece| piece.iter().map(|q| [q[0], q[1], q[2].max(z)]).collect())
+            .collect();
+        // 往復は前の段の終わりの真下から下ろす。一方向は段が変わっても削る向きを保つ。
+        if n % 2 == 1 && o.direction.is_both() {
+            level.reverse();
+            for piece in &mut level {
+                piece.reverse();
+            }
+        }
+        passes.extend(
+            level
+                .iter()
+                .map(|piece| kmb_cam_dropcutter::simplify(piece)),
+        );
+    }
+    Ok(passes)
 }
 
 impl Circular {
@@ -300,6 +366,8 @@ impl Circular {
             outer,
             step,
             limits,
+            levels: self.levels,
+            direction: self.direction,
         })
     }
 }
@@ -375,6 +443,17 @@ pub fn register(reg: &mut Registry) {
             Field::opt_expr("depth", "なぞる深さ")
                 .length()
                 .help("空ならストックの底まで"),
+            Field::bool("levels", "段に分けて上から削る"),
+            Field::choice(
+                "direction",
+                "削る向き",
+                &[
+                    ("both", "往復"),
+                    ("climb", "一方向(ダウンカット)"),
+                    ("conventional", "一方向(アップカット)"),
+                ],
+            )
+            .help("渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る"),
         ];
         f.extend(slope_fields());
         f.extend(boundary_fields());
@@ -384,7 +463,7 @@ pub fn register(reg: &mut Registry) {
         kmb_cam_setup::operation(
             SPIRAL3D,
             "渦巻き(3D)",
-            "中心のまわりの渦巻きを外から内へなぞり、丸い形や浅い曲面を仕上げる",
+            "中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる",
             fields("渦巻きの 1 周ごとの間隔。空なら工具の送り幅"),
         )
         .icon("spiral3d"),
@@ -398,7 +477,7 @@ pub fn register(reg: &mut Registry) {
         kmb_cam_setup::operation(
             RADIAL3D,
             "放射状(3D)",
-            "中心から放射の線を等しい角度ごとに外へ・内へとなぞって仕上げる",
+            "中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる",
             fields("外の半径での線の間隔。空なら工具の送り幅"),
         )
         .icon("radial3d"),

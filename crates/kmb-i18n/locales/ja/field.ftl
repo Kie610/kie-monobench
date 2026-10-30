@@ -2162,3 +2162,10 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-cam-spiral3d-levels = 段に分けて上から削る
+field-cam-spiral3d-direction = 削る向き
+field-cam-spiral3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+field-cam-radial3d-levels = 段に分けて上から削る
+field-cam-radial3d-direction = 削る向き
+field-cam-radial3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る

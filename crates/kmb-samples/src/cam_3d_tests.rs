@@ -10,8 +10,8 @@ use kmb_strategy_face::FACE;
 use kmb_strategy_pencil::{PENCIL, Pencil};
 use kmb_strategy_pocket2d::POCKET;
 use kmb_strategy_raster3d::{
-    Circular, MORPH3D, Morph, PROJECT3D, Pattern as CircularPattern, Project, SCALLOP3D, SPIRAL3D,
-    Scallop,
+    Circular, MORPH3D, Morph, PROJECT3D, Pattern as CircularPattern, Project, RADIAL3D, RasterDir,
+    SCALLOP3D, SPIRAL3D, Scallop,
 };
 use kmb_strategy_rough3d::{FLAT3D, Flat3d, ROUGH3D, Rough3d};
 use kmb_strategy_waterline::{RAMP3D, Ramp3d, WATERLINE, Waterline};
@@ -544,6 +544,45 @@ fn the_3d_rough_flat_and_spiral_ops_run_on_the_reference_part_without_gouging() 
     };
     assert!(data.get("entry").is_some(), "{data}");
     assert_eq!(data.get("leave"), Some(&serde_json::json!("0.3 mm")));
+}
+
+// 確かめること: 段分けした渦巻きと一方向の放射が、文書の再計算と切削シミュレーションを通る。
+#[test]
+fn stepped_spiral_and_one_way_radial_finish_the_reference_part_without_gouging() {
+    let mut cam = reference_cam_3d();
+    let reg = registry();
+    let kernel = kmb_bundle::kernel();
+    for (kind, pattern, direction, name) in [
+        (
+            SPIRAL3D,
+            CircularPattern::Spiral,
+            RasterDir::Climb,
+            "段ごとの渦巻き",
+        ),
+        (
+            RADIAL3D,
+            CircularPattern::Radial,
+            RasterDir::Conventional,
+            "段ごとの放射",
+        ),
+    ] {
+        let op = Circular {
+            levels: true,
+            direction,
+            resolution: "0.1 mm".into(),
+            step: Some("1 mm".into()),
+            depth: Some("6.5 mm".into()),
+            ..Circular::new(OpBase::new(cam.setup, cam.tools, 4), pattern)
+        };
+        insert_op(&mut cam, kind, name, json(&op));
+    }
+    let s = recompute_ok(&mut cam, &reg, kernel.as_ref());
+    for name in ["段ごとの渦巻き", "段ごとの放射"] {
+        let path = s.paths.iter().find(|p| p.name == name).unwrap();
+        assert!(path.moves.len() > 10, "{name}");
+    }
+    let sim = simulate(kernel.as_ref(), &s, SimOptions::default()).unwrap();
+    assert!(sim.is_ok(), "{}", sim.summary());
 }
 
 #[test]
