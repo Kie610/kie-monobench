@@ -130,17 +130,18 @@ mod tests {
 
     #[test]
     fn plain_views_default_off_and_do_not_absorb_the_entry_path() {
+        let path = key(&std::env::temp_dir().join("plain-view.kmb"));
         let views: DocViews = serde_json::from_value(serde_json::json!({
-            "docs": [{"path":"/tmp/plain-view.kmb", "open":{"branch":true}, "future":7}]
+            "docs": [{"path":path, "open":{"branch":true}, "future":7}]
         }))
         .unwrap();
-        let view = views.get(Path::new("/tmp/plain-view.kmb")).unwrap();
+        let view = views.get(&path).unwrap();
         assert!(!view.part_hues);
         assert_eq!(view.rest["future"], 7);
         assert!(!view.rest.contains_key("path"));
         let back = serde_json::to_value(&views).unwrap();
         assert!(back["docs"][0].get("part_hues").is_none());
-        assert_eq!(back["docs"][0]["path"], "/tmp/plain-view.kmb");
+        assert_eq!(back["docs"][0]["path"], serde_json::json!(path));
     }
 
     #[test]
