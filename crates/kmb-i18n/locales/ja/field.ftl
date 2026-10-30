@@ -2162,3 +2162,12 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-cam-setup-stock-cost-material-price = 費用: 材料の値段
+field-cam-setup-stock-cost-material-price-help = ストック 1 枚の値段。空なら材料費を含めない。0 以上
+field-cam-setup-stock-cost-pieces = 費用: 取れる個数
+field-cam-setup-stock-cost-pieces-help = このセットアップでストック 1 枚から削る個数。合計の加工時間をこの個数で割る。1 以上
+field-cam-setup-stock-cost-electricity-price = 費用: 電気の単価
+field-cam-setup-stock-cost-electricity-price-help = 1 kWh あたりの値段。空なら電気代を含めない。0 以上
+field-cam-setup-stock-cost-currency = 費用: 通貨
+field-cam-setup-stock-cost-currency-help = 値段に添える記号や名前。為替の換算はしない

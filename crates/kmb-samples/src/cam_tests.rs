@@ -895,3 +895,35 @@ fn a_design_feature_added_after_the_setup_is_flagged_on_the_setup() {
         "{setups}"
     );
 }
+
+#[test]
+fn stock_cost_and_machine_power_are_carried_to_the_setup_sheet() {
+    let mut cam = reference_cam();
+    let reg = registry();
+    let kernel = kmb_bundle::kernel();
+    let mut data = cam.part.doc.data().feature(cam.setup).unwrap().data.clone();
+    data["stock"]["cost"] = serde_json::json!({
+        "material_price":600.0, "pieces":3, "electricity_price":30.0, "currency":"円"
+    });
+    let mut machine = kmb_post_carvera_air::profile();
+    machine.power_w = 100.0;
+    data["machine_values"] = serde_json::to_value(machine).unwrap();
+    set_data(&mut cam.part.doc, cam.setup, data);
+    let report = cam.part.doc.recompute(&reg, kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{:?}", report.features);
+    let s = &setups(cam.part.doc.data(), &report, &reg)[0];
+    assert_eq!(s.info.cost.material_price, Some(600.0));
+    assert_eq!(s.info.cost.pieces, 3);
+    assert_eq!(s.info.machine_profile().power_w, 100.0);
+    for text in [
+        setup_sheet(s, s.info.machine_profile()),
+        setup_sheet_html(s, s.info.machine_profile()),
+    ] {
+        assert!(text.contains("材料費と電気代") && text.contains("材料費 200.00 円"));
+    }
+    let loaded = kmb_core::Document::from_json(&cam.part.doc.to_json()).unwrap();
+    assert_eq!(
+        loaded.data().feature(cam.setup).unwrap().data["stock"]["cost"]["pieces"],
+        3
+    );
+}

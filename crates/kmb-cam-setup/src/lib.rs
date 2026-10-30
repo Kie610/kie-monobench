@@ -100,6 +100,9 @@ pub struct Stock {
     /// 材料の名前(例: 「アルミ」)。工具の切削条件のプリセットを選ぶ。空なら工具の既定の条件
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub material: String,
+    /// 費用の入力。未入力の項目は段取り表の合計に入れない
+    #[serde(default)]
+    pub cost: CostInfo,
     /// 横の余白(4 面共通)。`Margin` の時
     #[serde(default = "two_mm")]
     pub margin_side: String,
@@ -140,6 +143,7 @@ impl Default for Stock {
         Stock {
             mode: StockMode::Margin,
             material: String::new(),
+            cost: CostInfo::default(),
             margin_side: two_mm(),
             margin_left: None,
             margin_right: None,
@@ -154,6 +158,48 @@ impl Default for Stock {
             align: Origin::Center,
             body: None,
         }
+    }
+}
+
+/// ストック 1 枚と、そのセットアップで削る個数に対する費用。通貨の換算はしない。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CostInfo {
+    pub material_price: Option<f64>,
+    pub pieces: u32,
+    pub electricity_price: Option<f64>,
+    pub currency: String,
+}
+
+impl Default for CostInfo {
+    fn default() -> Self {
+        Self {
+            material_price: None,
+            pieces: 1,
+            electricity_price: None,
+            currency: "円".into(),
+        }
+    }
+}
+
+impl CostInfo {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+
+    fn validate(&self) -> Result<(), EvalError> {
+        if self.pieces == 0 {
+            return Err(invalid("取れる個数は 1 以上の整数にしてください"));
+        }
+        for (value, label) in [
+            (self.material_price, "材料の値段"),
+            (self.electricity_price, "電気の単価"),
+        ] {
+            if value.is_some_and(|v| !v.is_finite() || v < 0.0) {
+                return Err(invalid(format!("{label}は 0 以上の数にしてください")));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -501,6 +547,9 @@ pub struct SetupInfo {
     /// ストックの材料(空なら指定なし)
     #[serde(default)]
     pub material: String,
+    /// 文書に入力した費用(単価と通貨を含む)
+    #[serde(default, skip_serializing_if = "CostInfo::is_default")]
+    pub cost: CostInfo,
     /// 裏返しの向きと、回す軸の通る点(部品の外形の箱の中心、世界座標)
     #[serde(default, skip_serializing_if = "Flip::is_none")]
     pub flip: Flip,
@@ -897,6 +946,7 @@ impl Feature for Setup {
                 _ => Err(invalid(format!("{id} はボディではありません"))),
             }
         };
+        self.stock.cost.validate()?;
         let body = shape_of(ctx, self.body)?;
         let more = self
             .more_bodies
@@ -924,6 +974,9 @@ impl Feature for Setup {
             .service::<kmb_post::machines::MachineLibrary>()
             .ok_or_else(|| invalid("マシンライブラリが組み立てにありません"))?;
         let machine = self.machine_values(&lib).map_err(invalid)?;
+        if !machine.power_w.is_finite() || machine.power_w < 0.0 {
+            return Err(invalid("消費電力は 0 以上の数にしてください"));
+        }
         let wcs_warning = (self.wcs > machine.wcs_count).then(|| {
             format!(
                 "作業座標系 {}(G{})は、{} では書き出せません(G54{})。ポストのプラグインなら使えます",
@@ -1061,6 +1114,7 @@ impl Feature for Setup {
             clearance_z: top + clearance,
             wcs: self.wcs,
             material: self.stock.material.trim().to_string(),
+            cost: self.stock.cost.clone(),
             flip: self.flip,
             flip_center: center,
             tolerance,
@@ -1158,6 +1212,14 @@ fn register_with(reg: &mut Registry, lib: kmb_post::machines::MachineLibrary) {
                     .help("工具の切削条件のプリセットを選ぶ。一覧から選ぶか、名前を打つ")
                     .suggest(&kmb_cam_tool::MATERIALS.iter().map(|m| m.name).collect::<Vec<_>>()),
             )
+            .field(Field::opt_number("stock.cost.material_price", "費用: 材料の値段").unitless()
+                .help("ストック 1 枚の値段。空なら材料費を含めない。0 以上"))
+            .field(Field::integer("stock.cost.pieces", "費用: 取れる個数").unitless().step(1.0, 1.0)
+                .help("このセットアップでストック 1 枚から削る個数。合計の加工時間をこの個数で割る。1 以上"))
+            .field(Field::opt_number("stock.cost.electricity_price", "費用: 電気の単価").unitless()
+                .help("1 kWh あたりの値段。空なら電気代を含めない。0 以上"))
+            .field(Field::text("stock.cost.currency", "費用: 通貨")
+                .help("値段に添える記号や名前。為替の換算はしない"))
             .field(Field::choice(
                 "stock.mode",
                 "ストックの決め方",
@@ -1535,5 +1597,31 @@ mod tests {
         };
         assert_eq!(round_corners(vec![thin.clone()], 2.0), vec![thin]);
         assert_eq!(round_corners(vec![sq.clone()], 0.0), vec![sq]);
+    }
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::*;
+
+    #[test]
+    fn cost_inputs_reject_zero_count_and_invalid_prices_and_read_legacy_stock() {
+        let old = serde_json::json!({"material": "木"});
+        let stock: Stock = serde_json::from_value(old).unwrap();
+        assert_eq!(stock.cost, CostInfo::default());
+        assert_eq!(serde_json::to_value(stock).unwrap()["cost"]["pieces"], 1);
+        let mut c = CostInfo::default();
+        assert!(c.validate().is_ok());
+        c.pieces = 0;
+        assert!(c.validate().is_err());
+        c.pieces = 3;
+        for v in [-1.0, f64::NAN, f64::INFINITY] {
+            c.material_price = Some(v);
+            assert!(c.validate().is_err());
+            c.material_price = None;
+            c.electricity_price = Some(v);
+            assert!(c.validate().is_err());
+            c.electricity_price = None;
+        }
     }
 }

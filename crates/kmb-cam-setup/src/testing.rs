@@ -49,6 +49,7 @@ pub fn prepared(mesh: &Mesh, stock_min: P3, stock_max: P3, tool: Tool) -> Prepar
             clearance_z: top + 20.0,
             wcs: 1,
             material: String::new(),
+            cost: Default::default(),
             flip: Flip::default(),
             flip_center: [0.0; 3],
             tolerance: MESH_TOLERANCE,
