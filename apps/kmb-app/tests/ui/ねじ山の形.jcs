@@ -1,0 +1,24 @@
+# 新しいねじ山の欄を画面の部品名で選び、長さの単位と端の選びを確かめる。
+#! sample part
+#! size 1280x800
+click "全体表示"
+run cad.thread face=f12:side:e3
+expect "呼び" = "M10x1.5"
+expect "ねじ山" = "属性のみ"
+expect ~"長さ 5 mm(全長)" exists
+shot 属性のみの欄
+select "ねじ山" "形を作る"
+expect ~"長さ 自動(端に合わせた最大)" exists
+expect "すき間" exists
+expect "奥の端" = "切り上げ"
+expect "反対の端から始める" exists
+type "すき間" "0.05 mm"
+expect "すき間" = "0.05 mm"
+select "奥の端" "切りっぱなし"
+expect "奥の端" = "切りっぱなし"
+select "方向" "左ねじ"
+expect "方向" = "左ねじ"
+click "反対の端から始める"
+shot 山の形の欄
+click ~OK
+shot 山の形

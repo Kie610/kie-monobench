@@ -52,6 +52,33 @@ pub enum BooleanOp {
     Intersect,
 }
 
+/// `turns` 回りの間、1 回りで軸の向きに `pitch` 進む区間。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HelixSpan {
+    pub turns: f64,
+    pub pitch: f64,
+}
+
+/// 最後のピッチで進みながら、輪郭を軸から `radial` だけ離す切り上げ。負なら軸へ寄せる。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HelixRun {
+    pub turns: f64,
+    pub radial: f64,
+}
+
+/// 輪郭を軸のまわりに回しながら軸の向きへ進める動き。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Helix {
+    pub origin: P3,
+    /// 単位の向き。この向きの右ねじが正の回転。
+    pub axis: P3,
+    pub left: bool,
+    pub spans: Vec<HelixSpan>,
+    /// 区間の境を中心に、この回り数の間でピッチを線形に変える。0 なら折れる。
+    pub blend: f64,
+    pub run_out: Option<HelixRun>,
+}
+
 /// 面の情報。平面なら、面上の点と外向きの法線を持つ。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FaceInfo {
@@ -653,6 +680,18 @@ pub trait Kernel: Send + Sync {
     ) -> Result<ShapeHandle, KernelError> {
         let _ = (profile, path, twist, scale, tag);
         Err(KernelError::Unsupported("スイープ".into()))
+    }
+
+    /// 軸を含む平面の輪郭をらせんの動きで掃引した立体。面は 1 回りごとに分け、
+    /// `{tag}:side:{輪郭の区間}:{何回り目(0 から)}`、端は `{tag}:start`・`{tag}:end` と名付ける。
+    fn helical_sweep(
+        &self,
+        profile: &Profile,
+        helix: &Helix,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (profile, helix, tag);
+        Err(KernelError::Unsupported("らせんの掃引".into()))
     }
 
     /// 断面 `sections`(順に並べた、閉じた輪郭 1 つずつ)をなめらかにつないだ立体(ロフト)。

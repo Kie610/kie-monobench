@@ -1,0 +1,23 @@
+# ねじ山のすき間は文書の単位で入力し、属性のみへ戻すと形専用の欄を隠す。
+#! sample part
+#! size 1280x800
+click "設定"
+click "単位"
+select "この文書の長さの単位" "インチ(in)"
+expect "この文書の長さの単位" = "インチ(in)"
+click "Close window"
+run cad.thread face=f12:side:e3
+expect "ねじ山" = "属性のみ"
+expect "すき間" missing
+select "ねじ山" "形を作る"
+type "すき間" 0.001
+expect "すき間" = "0.001 in"
+expect ~"長さ 自動(端に合わせた最大)" exists
+type "長さ" 0.1
+expect "長さ" = "0.1 in"
+expect ~"長さ 0.1 in" exists
+select "ねじ山" "属性のみ"
+expect "すき間" missing
+expect "奥の端" missing
+expect "反対の端から始める" missing
+key Escape
