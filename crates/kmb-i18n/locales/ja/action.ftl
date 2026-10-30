@@ -351,10 +351,43 @@ action-drawing-move-view-tip = 用紙の上の位置か親からの距離を変�
 action-drawing-set-view = ビューを編集
 action-drawing-set-view-tip = ビューの尺度と隠れ線や接線の表示を変える
 action-drawing-delete = 図面を削除
-action-drawing-delete-tip = 用紙かビューを削除する。子のビューがある時は先に子を削除する
+action-drawing-delete-tip = 用紙・ビュー・注記を削除する。子のビューがある時は先に子を削除する
 action-drawing-picture = 図面の線を書き出す
 action-drawing-picture-tip = 用紙の線と問題を JSON に書き出す
 action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-drawing-dimension = 寸法
+action-drawing-dimension-tip = ビューの辺を参照し、形の値を表示する寸法を置く
+
+action-drawing-dimension_set = 寸法をまとめて置く
+action-drawing-dimension_set-tip = 選んだ点の列から並列・直列・座標の寸法を一回だけ置く
+
+action-drawing-import_dimensions = モデルの寸法を取り込む
+action-drawing-import_dimensions-tip = 選んだスケッチの寸法を、ビューの見える辺を参照する寸法として一回だけ取り込む
+
+action-drawing-note = 注記
+action-drawing-note-tip = 用紙に文字か引出線付きの文字を置く
+
+action-drawing-center_mark = 中心の印
+action-drawing-center_mark-tip = 円や円弧の中心に十字の印を付ける
+
+action-drawing-center_line = 中心線
+action-drawing-center_line-tip = 平行な二本の辺の中間か、円筒の両端の円から中心線を引く
+
+action-drawing-balloon = 番号札
+action-drawing-balloon-tip = 部品表の行に対応する番号札を利用者が決めた位置に置く
+
+action-drawing-renumber_balloons = 番号札を振り直す
+action-drawing-renumber_balloons-tip = 番号札の番号を現在の部品表の行の順に合わせる
+
+action-drawing-align_balloons = 番号札をそろえる
+action-drawing-align_balloons-tip = 選んだ番号札を最初の札と同じ縦か横の位置にそろえる
+
+action-drawing-parts_table = 部品表
+action-drawing-parts_table-tip = 選んだ列の部品表を線と文字にして用紙に置く
+
+action-drawing-set_style = 寸法の様式
+action-drawing-set_style-tip = 文字・矢印・補助線・桁・単位・公差の様式を用紙ごとに決める
