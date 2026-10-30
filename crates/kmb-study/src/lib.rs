@@ -12,11 +12,11 @@ pub mod result;
 pub mod run;
 pub mod view;
 
-pub use commands::{CANCEL, RUN, StudyCommands, solve_now};
+pub use commands::{CANCEL, CHECK, CONVERGE, RUN, StudyCommands, solve_now};
 pub use result::{
     Derive, Frame, Geometry, Grid, Mark, Part, Quantity, Role, SimResult, Start, Tets, Values,
 };
-pub use run::{Control, PLAN, Plan, Prepared, Task, prepare, prepared};
+pub use run::{Check, Control, Mode, PLAN, Plan, Prepared, Task, prepare, prepared};
 
 /// この crate の名乗り(操作だけ。種類は解き方の crate が登録する)。
 pub fn module() -> kmb_core::Module {
