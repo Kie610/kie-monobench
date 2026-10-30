@@ -1,4 +1,4 @@
-//! DXF R12(AC1009)の書き手。R12 はハンドルも CLASSES も要らず、ほとんどのソフト(LightBurn など)が読める最小の形(HEADER・TABLES・ENTITIES)で書く。単位は mm。
+//! DXF R12(AC1009)の書き手。R12 はハンドルも CLASSES も要らず、多くの読み手が扱える最小の形(HEADER・TABLES・ENTITIES)で書く。単位は mm。
 
 use std::fmt::Write as _;
 
@@ -12,6 +12,15 @@ pub struct R12 {
 /// 線種 CONTINUOUS(実線)と DASHED(破線)。
 pub const CONTINUOUS: &str = "CONTINUOUS";
 pub const DASHED: &str = "DASHED";
+pub const CHAIN: &str = "CENTER";
+pub const DOUBLE_CHAIN: &str = "PHANTOM";
+
+/// 正の長さは線、負は間。単位は mm。
+pub struct LineType<'a> {
+    pub name: &'a str,
+    pub description: &'a str,
+    pub pattern: &'a [f64],
+}
 
 impl R12 {
     /// HEADER(版・単位 mm・図の囲み `lo`〜`hi`)と、TABLES の線種(実線と破線)と画層
@@ -21,6 +30,17 @@ impl R12 {
         lo: [f64; 2],
         hi: [f64; 2],
         layers: &[(&str, i32, &str)],
+    ) -> R12 {
+        Self::begin_with_linetypes(num, lo, hi, layers, &[])
+    }
+
+    /// 実線・破線と、用紙の線種を同じ表へ書く。
+    pub fn begin_with_linetypes(
+        num: fn(f64) -> String,
+        lo: [f64; 2],
+        hi: [f64; 2],
+        layers: &[(&str, i32, &str)],
+        extra: &[LineType<'_>],
     ) -> R12 {
         let mut o = R12 {
             out: String::new(),
@@ -45,7 +65,7 @@ impl R12 {
         o.pair(2, "TABLES");
         o.pair(0, "TABLE");
         o.pair(2, "LTYPE");
-        o.pair(70, 2);
+        o.pair(70, 2 + extra.len());
         o.pair(0, "LTYPE");
         o.pair(2, CONTINUOUS);
         o.pair(70, 0);
@@ -62,6 +82,18 @@ impl R12 {
         o.pair(40, "3.0");
         o.pair(49, "2.0");
         o.pair(49, "-1.0");
+        for line in extra {
+            o.pair(0, "LTYPE");
+            o.pair(2, line.name);
+            o.pair(70, 0);
+            o.pair(3, line.description);
+            o.pair(72, 65);
+            o.pair(73, line.pattern.len());
+            o.pair(40, num(line.pattern.iter().map(|x| x.abs()).sum()));
+            for part in line.pattern {
+                o.pair(49, num(*part));
+            }
+        }
         o.pair(0, "ENDTAB");
         o.pair(0, "TABLE");
         o.pair(2, "LAYER");

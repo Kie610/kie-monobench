@@ -2701,7 +2701,9 @@ name = "kmb-drawing"
 version = "0.2.0"
 dependencies = [
  "kmb-core",
+ "kmb-format",
  "kmb-interchange",
+ "kmb-text",
  "kmb-view-lines",
  "kmb-workspace-hack",
  "log",
@@ -3011,6 +3013,8 @@ dependencies = [
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
+ "kmb-io-dxf",
+ "kmb-io-svg",
  "kmb-look",
  "kmb-post",
  "kmb-post-carvera-air",
