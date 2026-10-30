@@ -152,6 +152,11 @@ fn removing_a_dimensioned_edge_reports_only_that_annotation() {
 }
 #[test]
 fn circular_dimensions_and_stored_japanese_glyphs_reopen_together() {
+    if modules().kernel.name() == "truck" {
+        kmb_contract::skip!(
+            "truck は円の辺を名前付きで列挙できないため、円の寸法と中心線の参照を作れない"
+        );
+    }
     let mut doc = crate::drawing_cylinder_document();
     let m = modules();
     let r = doc.recompute(&m.registry, m.kernel.as_ref());
@@ -391,6 +396,11 @@ fn model_dimension_import_uses_sketch_labels_and_named_visible_geometry_once() {
 
 #[test]
 fn cylinder_centerline_follows_named_end_circles_in_a_side_view() {
+    if modules().kernel.name() == "truck" {
+        kmb_contract::skip!(
+            "truck は円の辺を名前付きで列挙できないため、円の寸法と中心線の参照を作れない"
+        );
+    }
     let mut doc = crate::drawing_cylinder_document();
     edit(&mut doc, |d| d.sheets[0].views.truncate(1));
     let m = modules();
