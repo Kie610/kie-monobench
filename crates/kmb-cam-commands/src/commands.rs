@@ -251,6 +251,8 @@ fn machine_fields(choices: &[(&str, &str)]) -> Vec<Field> {
         Field::number("min_rpm", "主軸の最低回転数(rpm)").plain("rpm"),
         Field::number("max_rpm", "主軸の最高回転数(rpm)").plain("rpm"),
         Field::number("rapid_feed", "早送り(mm/min)").plain("mm/min").help(speed),
+        Field::number("power_w", "加工中の消費電力(W)").plain("W")
+            .help("段取り表の電気代に使う。0 は不明。新しいセットアップに値を写して持つ"),
         Field::number("acceleration", "加速度(mm/s²)").plain("mm/s²")
             .help("加工時間の目安に使う。0 なら加減速を見込まない"),
         Field::number("junction_deviation", "角の回りやすさ(mm)").plain("mm")
@@ -287,6 +289,7 @@ fn machine_value(m: &MachineProfile) -> serde_json::Value {
         "max_rpm": m.max_rpm,
         "rapid_feed": m.rapid_feed,
         "acceleration": m.acceleration,
+        "power_w": m.power_w,
         "junction_deviation": m.junction_deviation,
         "max_rate_x": m.max_rate[0],
         "max_rate_y": m.max_rate[1],
@@ -354,6 +357,7 @@ fn machine_with(m: &MachineProfile, v: &serde_json::Value) -> Result<MachineProf
         ));
     }
     out.acceleration = num("acceleration", m.acceleration)?;
+    out.power_w = num("power_w", m.power_w)?;
     out.junction_deviation = num("junction_deviation", m.junction_deviation)?;
     out.measure_after_tool_change = flag("measure_after_tool_change", m.measure_after_tool_change)?;
     out.air = flag("air", m.air)?;
@@ -1974,4 +1978,26 @@ fn sim_args() -> Vec<kmb_core::Arg> {
             "荒削りの格子の大きさ(0 は細かい格子と同じ、または 0.01〜2 mm)。省くと設定の値",
         ),
     ]
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::*;
+    #[test]
+    fn power_is_editable_and_old_machine_settings_keep_it_unknown() {
+        let m = kmb_post::machines::generic_grbl();
+        assert_eq!(m.power_w, 0.0);
+        assert_eq!(machine_with(&m, &json!({})).unwrap().power_w, 0.0);
+        let changed = machine_with(&m, &json!({"power_w":100.0})).unwrap();
+        assert_eq!(machine_value(&changed)["power_w"], 100.0);
+        assert!(machine_with(&m, &json!({"power_w":-1.0})).is_err());
+        let mut legacy = serde_json::to_value(changed).unwrap();
+        legacy.as_object_mut().unwrap().remove("power_w");
+        assert_eq!(
+            serde_json::from_value::<MachineProfile>(legacy)
+                .unwrap()
+                .power_w,
+            0.0
+        );
+    }
 }

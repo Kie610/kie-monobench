@@ -99,8 +99,66 @@ pub fn link_summary(p: &crate::Toolpath, motion: &kmb_toolpath::Motion) -> Strin
     s
 }
 
+#[derive(Debug, PartialEq)]
+struct PieceCost {
+    material: Option<f64>,
+    electricity: Option<f64>,
+    missing_power: bool,
+}
+
+/// セットアップの全個数を削る時間から、1 個ぶんの入力済みの費用だけを計算する。
+fn piece_cost(cost: &kmb_cam_setup::CostInfo, power_w: f64, minutes: f64) -> Option<PieceCost> {
+    if cost.material_price.is_none() && cost.electricity_price.is_none() {
+        return None;
+    }
+    let pieces = f64::from(cost.pieces);
+    Some(PieceCost {
+        material: cost.material_price.map(|v| v / pieces),
+        electricity: cost
+            .electricity_price
+            .filter(|_| power_w > 0.0)
+            .map(|v| minutes / 60.0 * (power_w / 1000.0) * v / pieces),
+        missing_power: cost.electricity_price.is_some() && power_w == 0.0,
+    })
+}
+
+fn cost_text(s: &SetupPaths, machine: &MachineProfile, minutes: f64) -> Option<String> {
+    let input = &s.info.cost;
+    let c = piece_cost(input, machine.power_w, minutes)?;
+    let currency = &input.currency;
+    let includes = match (c.material, c.electricity) {
+        (Some(_), Some(_)) => "材料費と電気代",
+        (Some(_), None) => "材料費だけ",
+        (None, Some(_)) => "電気代だけ",
+        (None, None) => "計算できません",
+    };
+    let mut text = if c.material.is_some() || c.electricity.is_some() {
+        format!(
+            "{:.2} {currency}({includes})",
+            c.material.unwrap_or(0.0) + c.electricity.unwrap_or(0.0)
+        )
+    } else {
+        includes.into()
+    };
+    for (label, amount) in [("材料費", c.material), ("電気代", c.electricity)] {
+        if let Some(v) = amount {
+            let _ = write!(text, "、{label} {v:.2} {currency}");
+        }
+    }
+    let _ = write!(
+        text,
+        "、取れる個数 {}。このセットアップの合計の加工時間を個数で割る(工具交換と工具長の測定は含まない)",
+        input.pieces
+    );
+    if c.missing_power {
+        text.push_str("。消費電力が未入力なので電気代を含めない");
+    }
+    Some(text)
+}
+
 /// セットアップ `s` の段取り表(Markdown)。時間は `machine` の早送りの速さと加減速で見積もる。
 pub fn setup_sheet(s: &SetupPaths, machine: &MachineProfile) -> String {
+    let rows = rows(s, machine);
     let i = &s.info;
     let size = [
         i.stock_max[0] - i.stock_min[0],
@@ -117,6 +175,15 @@ pub fn setup_sheet(s: &SetupPaths, machine: &MachineProfile) -> String {
         i.material.as_str()
     };
     let _ = writeln!(o, "| 材料 | {material} |");
+    if let Some(cost) = cost_text(s, machine, Totals::of(&rows).minutes) {
+        let _ = writeln!(
+            o,
+            "| 1 個あたりの費用 | {} |",
+            cost.replace('\n', " ")
+                .replace('\r', " ")
+                .replace('|', "\\|")
+        );
+    }
     let _ = writeln!(
         o,
         "| ストック | 幅 {:.2} × 奥行 {:.2} × 厚さ {:.2} mm |",
@@ -211,7 +278,6 @@ pub fn setup_sheet(s: &SetupPaths, machine: &MachineProfile) -> String {
         o,
         "| 順 | 加工 | 工具 | 回転数 | 送り | 下降の送り | 切り込み | 送り幅 | 最も深い Z | 最も高い Z | 切削の長さ | 早送りの長さ | 突き出し | 時間の目安 | 削っていない間の動き |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     );
-    let rows = rows(s, machine);
     for r in &rows {
         match r {
             Row::Op(r) => {
@@ -580,7 +646,7 @@ tr.manual td {{ font-style: italic; }}
 <table>
 <tr><th>機械</th><td>{machine}</td></tr>
 <tr><th>材料</th><td>{material}</td></tr>
-<tr><th>ストック</th><td>幅 {sx:.2} × 奥行 {sy:.2} × 厚さ {sz:.2} mm</td></tr>
+{cost}<tr><th>ストック</th><td>幅 {sx:.2} × 奥行 {sy:.2} × 厚さ {sz:.2} mm</td></tr>
 <tr><th>作業座標系</th><td>G{wcs}</td></tr>
 {leveling}<tr><th>原点</th><td>X0 Y0: ストックの左端から {ox:.2} mm、手前から {oy:.2} mm。Z0: ストックの上面から {oz:.2} mm 下</td></tr>
 <tr><th>高さ</th><td>横の早送り Z{safe:.2}、工具交換 Z{clear:.2}</td></tr>
@@ -594,6 +660,9 @@ tr.manual td {{ font-style: italic; }}
         } else {
             esc(&i.material)
         },
+        cost = cost_text(s, machine, t.minutes)
+            .map(|c| format!("<tr><th>1 個あたりの費用</th><td>{}</td></tr>\n", esc(&c)))
+            .unwrap_or_default(),
         sx = size[0],
         sy = size[1],
         sz = size[2],
@@ -751,6 +820,81 @@ mod tests {
         // 名前の記号は HTML の文字に置き換える
         s.paths[0].name = "<b>&".into();
         assert!(setup_sheet_html(&s, &m).contains("&lt;b&gt;&amp;"));
+    }
+
+    #[test]
+    fn per_piece_cost_uses_the_whole_setup_time_and_only_known_inputs() {
+        let mut input = kmb_cam_setup::CostInfo {
+            material_price: Some(600.0),
+            pieces: 3,
+            electricity_price: Some(30.0),
+            currency: "円".into(),
+        };
+        let c = piece_cost(&input, 100.0, 90.0).unwrap();
+        assert_eq!(c.material, Some(200.0));
+        assert!((c.electricity.unwrap() - 1.5).abs() < 1e-12);
+        assert!((c.material.unwrap() + c.electricity.unwrap() - 201.5).abs() < 1e-12);
+        assert!(!c.missing_power);
+        assert_eq!(
+            piece_cost(&input, 0.0, 90.0),
+            Some(PieceCost {
+                material: Some(200.0),
+                electricity: None,
+                missing_power: true,
+            })
+        );
+        input.material_price = None;
+        assert!(
+            (piece_cost(&input, 100.0, 90.0)
+                .unwrap()
+                .electricity
+                .unwrap()
+                - 1.5)
+                .abs()
+                < 1e-12
+        );
+        input.electricity_price = None;
+        assert_eq!(piece_cost(&input, 100.0, 90.0), None);
+        input.material_price = Some(0.0);
+        assert_eq!(piece_cost(&input, 0.0, 90.0).unwrap().material, Some(0.0));
+    }
+
+    #[test]
+    fn both_sheets_show_the_same_cost_and_keep_unpriced_sheets_unchanged() {
+        let mut s = crate::tests::setup_of(&[("ポケット", 1, kmb_strategy_pocket2d::POCKET)]);
+        let mut m = kmb_post_carvera_air::profile();
+        let old_md = setup_sheet(&s, &m);
+        let old_html = setup_sheet_html(&s, &m);
+        assert!(!old_md.contains("1 個あたりの費用"));
+        assert!(!old_html.contains("1 個あたりの費用"));
+        s.info.cost = kmb_cam_setup::CostInfo {
+            material_price: Some(600.0),
+            pieces: 3,
+            electricity_price: Some(30.0),
+            currency: "<円>|".into(),
+        };
+        m.power_w = 100.0;
+        let text = cost_text(&s, &m, Totals::of(&rows(&s, &m)).minutes).unwrap();
+        assert!(text.contains("材料費と電気代") && text.contains("取れる個数 3"));
+        assert!(setup_sheet(&s, &m).contains(&text.replace('|', "\\|")));
+        assert!(setup_sheet_html(&s, &m).contains(&esc(&text)));
+        assert!(!setup_sheet_html(&s, &m).contains("<円>"));
+        m.power_w = 0.0;
+        for sheet in [setup_sheet(&s, &m), setup_sheet_html(&s, &m)] {
+            assert!(sheet.contains("材料費だけ") && sheet.contains("消費電力が未入力"));
+        }
+        s.info.cost.material_price = None;
+        m.power_w = 100.0;
+        assert!(setup_sheet(&s, &m).contains("電気代だけ"));
+        s.info.cost = Default::default();
+        m.power_w = 0.0;
+        assert_eq!(setup_sheet(&s, &m), old_md);
+        assert_eq!(setup_sheet_html(&s, &m), old_html);
+        let mut legacy = serde_json::to_value(&s.info).unwrap();
+        legacy.as_object_mut().unwrap().remove("cost");
+        s.info = serde_json::from_value(legacy).unwrap();
+        assert_eq!(setup_sheet(&s, &m), old_md);
+        assert_eq!(setup_sheet_html(&s, &m), old_html);
     }
 
     #[test]

@@ -2162,3 +2162,12 @@
 # field-solid-thread-size = Nominal Size
 # field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 # field-solid-thread-target = Target
+
+# field-cam-setup-stock-cost-material-price = Cost: Stock price
+# field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+# field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+# field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+# field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+# field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+# field-cam-setup-stock-cost-currency = Cost: Currency
+# field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
