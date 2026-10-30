@@ -2,3 +2,6 @@
 ### Translations for ko (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-cad-sketch-regions = List sketch regions
+# action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
