@@ -2,3 +2,6 @@
 ### Translations for zh-Hans (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-cad-sketch-export-svg = Save as SVG…
+# action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit; join connected lines into closed outlines

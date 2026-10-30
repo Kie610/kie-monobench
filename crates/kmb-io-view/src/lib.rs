@@ -2,6 +2,7 @@
 //! (稜線と曲面の輪郭、隠れ線は破線の画層に分けられる)。書き出しの操作は [`ViewCommands`]。
 
 mod commands;
+mod polylines;
 pub mod view_dxf;
 pub mod view_svg;
 pub use commands::{EXPORT_VIEW_DXF, EXPORT_VIEW_DXF_HIDDEN, EXPORT_VIEW_SVG, ViewCommands};
