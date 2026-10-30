@@ -71,3 +71,6 @@ mod machine_tests;
 mod matrix_tests;
 #[cfg(test)]
 mod trace_thread_tests;
+
+#[cfg(test)]
+mod wide_actions_tests;

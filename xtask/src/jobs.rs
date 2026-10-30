@@ -81,23 +81,38 @@ pub(crate) fn spawn(
     })
 }
 
+/// 端末の色や強調を除いて集計の行を見つける。保存・表示には元の行を使う。
+fn summary_line(line: &str) -> Option<String> {
+    let mut plain = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            for c in chars.by_ref() {
+                if ('@'..='~').contains(&c) {
+                    break;
+                }
+            }
+        } else {
+            plain.push(c);
+        }
+    }
+    plain.trim_start().starts_with("Summary").then_some(plain)
+}
+
 /// nextest の出力の終わりの集計(`Summary` の行から後)。
 pub(crate) fn nextest_summary(log: &str) -> String {
     let lines: Vec<&str> = log.lines().collect();
     let from = lines
         .iter()
-        .rposition(|l| l.trim_start().starts_with("Summary"))
+        .rposition(|l| summary_line(l).is_some())
         .unwrap_or(lines.len().saturating_sub(30));
     lines[from..].join("\n")
 }
 
-/// 段の成否と nextest の集計が食い違う時の説明。集計が 2 本あるのは、止めた前の検査の nextest が
-/// 生き残って同じログに書いた時(2026-10-22、終了は通過なのに「失敗 75」と出た)。
+/// 段の成否と集計の食い違いを見つける。集計が 2 本なら、複数の検査の出力が混ざっている。
 pub(crate) fn summary_problem(log: &str, ok: bool) -> Option<String> {
-    let summaries = log
-        .lines()
-        .filter(|l| l.trim_start().starts_with("Summary"))
-        .count();
+    let summaries = log.lines().filter(|l| summary_line(l).is_some()).count();
     if summaries > 1 {
         return Some(format!(
             "ログに集計が {summaries} 本ある(前の検査の nextest が同じログに書いた疑い。\
@@ -118,9 +133,7 @@ pub(crate) fn nextest_failed(log: &str) -> Option<u64> {
 /// nextest の集計の行(`Summary [ 52.1s] 968 tests run: 968 passed (2 slow), 6 skipped`)から、
 /// 通過・失敗・飛ばしの件数。
 pub(crate) fn nextest_counts(log: &str) -> Option<String> {
-    let line = log
-        .lines()
-        .rfind(|l| l.trim_start().starts_with("Summary"))?;
+    let line = log.lines().rev().find_map(summary_line)?;
     let (_, counts) = line.split_once("run:")?;
     // 括弧の中(`(5 slow, 2 leaky)` など)は通過の内訳なので数えない
     let mut plain = String::new();
@@ -220,7 +233,7 @@ mod tests {
 
     #[test]
     fn a_second_summary_or_failures_after_a_passing_exit_fail_the_step() {
-        // 止めた前の検査の nextest が同じログに書いた形(2026-10-22 の「失敗 75」)
+        // 複数の検査の集計が混ざっても、成功した最後の回だけを採らない。
         let mixed = "Summary [ 9.0s] 75 tests run: 0 passed, 75 failed\n\
                      Summary [ 60.0s] 867 tests run: 867 passed, 2 skipped\n";
         assert!(summary_problem(mixed, true).is_some_and(|p| p.contains("2 本")));
@@ -229,6 +242,29 @@ mod tests {
         assert_eq!(summary_problem(lying, false), None);
         let fine = "Summary [ 9.0s] 10 tests run: 10 passed, 1 skipped";
         assert_eq!(summary_problem(fine, true), None);
+    }
+
+    /// 確かめること: 色付きの実形式の件数を読み、成功出力の後置でも二重集計や失敗を見逃さない。
+    #[test]
+    fn coloured_summaries_keep_counts_and_failure_guards() {
+        let summary = "\x1b[32;1m     Summary\x1b[0m [ 626.025s] \x1b[1m2\x1b[0m tests run: \x1b[1m2\x1b[0m \x1b[32;1mpassed\x1b[0m (\x1b[1m2\x1b[0m \x1b[33;1mslow\x1b[0m), \x1b[1m538\x1b[0m \x1b[33;1mskipped\x1b[0m";
+        let output = "{\"wide\":\"button_counts\",\"failures\":[]}";
+        let log = format!("before\n{summary}\n{output}\n");
+        assert_eq!(
+            nextest_counts(&log).as_deref(),
+            Some("通過 2・失敗 0・飛ばし 538")
+        );
+        assert_eq!(nextest_summary(&log), format!("{summary}\n{output}"));
+        assert_eq!(summary_problem(&log, true), None);
+        let mixed = format!("{summary}\n{summary}\n");
+        assert!(summary_problem(&mixed, true).is_some_and(|p| p.contains("2 本")));
+        let failed = "\x1b[31;1m     Summary\x1b[0m [ 9.0s] \x1b[1m10\x1b[0m tests run: \x1b[1m7\x1b[0m \x1b[32mpassed\x1b[0m, \x1b[1m3\x1b[0m \x1b[31mfailed\x1b[0m";
+        assert_eq!(
+            nextest_counts(failed).as_deref(),
+            Some("通過 7・失敗 3・飛ばし 0")
+        );
+        assert!(summary_problem(failed, true).is_some_and(|p| p.contains("失敗 3")));
+        assert_eq!(summary_problem(failed, false), None);
     }
 
     #[test]
