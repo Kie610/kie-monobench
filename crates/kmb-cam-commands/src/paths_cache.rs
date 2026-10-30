@@ -44,6 +44,7 @@ impl SetupRef {
 fn data_sig(cx: &Context<'_>) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
+    cx.data.body_names.hash(&mut h);
     for f in &cx.data.features {
         f.id.0.hash(&mut h);
         f.type_id.hash(&mut h);

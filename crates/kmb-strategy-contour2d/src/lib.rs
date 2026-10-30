@@ -301,6 +301,7 @@ impl Contour {
         ctx: &EvalCtx<'_>,
         p: &Prepared,
         skipped: &mut Vec<String>,
+        nested_outlines: Option<Vec<(Loop, f64)>>,
     ) -> Result<Vec<Target>, EvalError> {
         let on = self.side == Side::On;
         let closed = |l: &Loop, tool_out: bool| {
@@ -313,28 +314,37 @@ impl Contour {
         };
         let mut out = Vec::new();
         if self.chains.is_empty() {
-            let (outline, floor) = match &self.face {
+            let outlines = match &self.face {
                 Some(name) => {
-                    let f = p.model.flat(name).ok_or_else(|| {
-                        invalid(format!(
+                    let faces = p.model.flats_named(name);
+                    if faces.is_empty() {
+                        return Err(invalid(format!(
                             "面 {name} が見つかりません(参照が切れたか、水平な平面ではありません)"
-                        ))
-                    })?;
-                    (f.area.outer.clone(), f.z)
+                        )));
+                    }
+                    faces
+                        .into_iter()
+                        .map(|f| (f.area.outer.clone(), f.z))
+                        .collect::<Vec<_>>()
                 }
-                None => (
-                    p.model
-                        .outline()
-                        .ok_or_else(|| invalid("部品の外形(下向きの平らな面)が見つかりません"))?,
-                    p.model.min[2],
-                ),
+                None => match nested_outlines {
+                    Some(outlines) => outlines,
+                    None => vec![(
+                        p.model.outline().ok_or_else(|| {
+                            invalid("部品の外形(下向きの平らな面)が見つかりません")
+                        })?,
+                        p.model.min[2],
+                    )],
+                },
             };
-            out.push(Target {
-                shape: closed(&outline, self.side != Side::Inside),
-                on,
-                floor,
-                extra: true,
-            });
+            for (outline, floor) in outlines {
+                out.push(Target {
+                    shape: closed(&outline, self.side != Side::Inside),
+                    on,
+                    floor,
+                    extra: true,
+                });
+            }
             return Ok(out);
         }
         let depth = match &self.depth {
@@ -347,53 +357,56 @@ impl Contour {
         for c in &self.chains {
             match c {
                 ChainRef::Face { face, ring } => {
-                    let f = p.model.flat(face).cloned().ok_or_else(|| {
-                        invalid(format!(
+                    let faces = p.model.flats_named(face);
+                    if faces.is_empty() {
+                        return Err(invalid(format!(
                             "面 {face} が見つかりません(参照が切れたか、水平な平面ではありません)"
-                        ))
-                    })?;
-                    let rings: Vec<usize> = match ring {
-                        Some(k) => vec![*k],
-                        None => (0..=f.area.holes.len()).collect(),
-                    };
-                    for k in rings {
-                        let l = if k == 0 {
-                            &f.area.outer
-                        } else {
-                            f.area.holes.get(k - 1).ok_or_else(|| {
-                                invalid(format!("面 {face} に {k} 番目の穴の縁がありません"))
-                            })?
+                        )));
+                    }
+                    for f in faces {
+                        let rings: Vec<usize> = match ring {
+                            Some(k) => vec![*k],
+                            None => (0..=f.area.holes.len()).collect(),
                         };
-                        // 「外側」は面から離れる側(外周なら輪の外、穴なら穴の中)
-                        let away_out = k == 0;
-                        let tool_out = match self.side {
-                            Side::Inside => !away_out,
-                            _ => away_out,
-                        };
-                        let floor = if self.side == Side::Inside {
-                            f.z
-                        } else {
-                            match floor_beyond(p, l, away_out, f.z) {
-                                Some(z) => z,
-                                None => {
-                                    // 一つだけ選んだ縁なら知らせる(全部の時はボスの根元などを黙って除く)
-                                    if ring.is_some() {
-                                        skipped.push(format!(
+                        for k in rings {
+                            let l = if k == 0 {
+                                &f.area.outer
+                            } else {
+                                f.area.holes.get(k - 1).ok_or_else(|| {
+                                    invalid(format!("面 {face} に {k} 番目の穴の縁がありません"))
+                                })?
+                            };
+                            // 「外側」は面から離れる側(外周なら輪の外、穴なら穴の中)
+                            let away_out = k == 0;
+                            let tool_out = match self.side {
+                                Side::Inside => !away_out,
+                                _ => away_out,
+                            };
+                            let floor = if self.side == Side::Inside {
+                                f.z
+                            } else {
+                                match floor_beyond(p, l, away_out, f.z) {
+                                    Some(z) => z,
+                                    None => {
+                                        // 一つだけ選んだ縁なら知らせる(全部の時はボスの根元などを黙って除く)
+                                        if ring.is_some() {
+                                            skipped.push(format!(
                                             "面 {face} の {} は、外側が面より高い(ボスや壁の根元)ので削りません\
                                              (削る側を「内側」にすると、面の上を縁に沿って削ります)",
                                             if k == 0 { "外周".to_string() } else { format!("{k} 番目の穴の縁") }
                                         ));
+                                        }
+                                        continue;
                                     }
-                                    continue;
                                 }
-                            }
-                        };
-                        out.push(Target {
-                            shape: closed(l, tool_out),
-                            on,
-                            floor,
-                            extra: floor <= p.model.min[2] + 1e-6,
-                        });
+                            };
+                            out.push(Target {
+                                shape: closed(l, tool_out),
+                                on,
+                                floor,
+                                extra: floor <= p.model.min[2] + 1e-6,
+                            });
+                        }
                     }
                 }
                 ChainRef::Sketch { sketch, chain } => {
@@ -754,7 +767,18 @@ impl Feature for Contour {
             return Err(invalid("横の荒取りの数は 50 以下にしてください"));
         }
         let mut skipped = Vec::new();
-        let targets = self.targets(ctx, &p, &mut skipped)?;
+        let nested_outlines = if self.face.is_none()
+            && self.chains.is_empty()
+            && p.info
+                .sections
+                .as_ref()
+                .is_some_and(|s| s.kind == kmb_cam_setup::sections::SectionKind::Sheets)
+        {
+            Some(p.body_outlines(ctx)?)
+        } else {
+            None
+        };
+        let targets = self.targets(ctx, &p, &mut skipped, nested_outlines)?;
         p.warnings.extend(skipped);
         let rest = rest_tool_or_size(ctx, &p, self.base.tools, self.rest_tool, &self.rest_size)?;
         let params = ContourPlan {
@@ -773,7 +797,9 @@ impl Feature for Contour {
         };
         let input = p.input(ctx.feature_id(), params, Default::default());
         let out = plan(&input);
-        p.finish_plan(self.base.setup, out)
+        let mut outputs = p.finish_plan(self.base.setup, out)?;
+        kmb_cam_setup::sections::add_entry(&mut outputs, &p.info, entry_plan);
+        Ok(outputs)
     }
 
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {

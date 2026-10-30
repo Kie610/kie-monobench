@@ -167,6 +167,10 @@ cam.laser@1	kmb-strategy-laser
 cam.machine	kmb-cam-commands
 cam.manual_nc@1	kmb-cam-setup
 cam.morph3d@1	kmb-strategy-raster3d
+cam.nest.add_part	kmb-cam-commands
+cam.nest.create	kmb-cam-commands
+cam.nest.remove_part	kmb-cam-commands
+cam.nest.set_part	kmb-cam-commands
 cam.op_defaults	kmb-cam-commands
 cam.pattern@1	kmb-cam-setup
 cam.pencil3d@1	kmb-strategy-pencil

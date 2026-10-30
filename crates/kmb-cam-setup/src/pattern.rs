@@ -397,6 +397,7 @@ mod tests {
             machine: kmb_post::machines::GENERIC_GRBL.into(),
             machine_values: kmb_post::machines::generic_grbl(),
             leveling: None,
+            sections: None,
         }
     }
 
