@@ -36,7 +36,7 @@
 //! - 毎回読む骨格の資料(agents.rs): AGENTS.md と .claude/rules/ に書いた名前・パス・節の実在、
 //!   大きさの上限、決まりに付けた点検の名前、層の表(`docs` が layers.rs から作る)。
 //! - コアの公開の項目(api.rs)が分かれ目から変わっていれば、契約テスト(kmb-contract)を使う crate を
-//!   全部足して流す(`CORE_API_VERSION` は公開まで上げない、2026-10-21)。`api` は今の一覧を出す。
+//!   足して流す(`--dependents-lower` は下位だけ。`CORE_API_VERSION` は公開まで上げない)。`api` は今の一覧を出す。
 //! - `release` はアプリを release で作り、exe にこの PC のパス(ユーザー名を含むホームなど)が残って
 //!   いないかを数える。`paths` は数えるだけ(release.rs)。組み立てた後、exe の横に他者の部品の
 //!   許諾文の一覧(THIRD-PARTY-LICENSES.txt)を置く。`licenses` はその一覧だけを作る(licenses.rs)。
@@ -210,8 +210,8 @@ fn truck_filter(ts: &[(&str, Option<&str>)]) -> String {
 }
 
 /// 組み立てと入口の層。どの機能を変えても組み立て(kmb-bundle)を通ってここまで届き、画面の GPU・
-/// 両方のカーネル・WASM を全部組むので、`--dependents-lower` はこの層の crate を足さない(選んだ crate が
-/// この層なら、それ自身は検査する)。
+/// 両方のカーネル・WASM を全部組むので、`--dependents-lower` はこの層を自動で選ばない。
+/// crate の名前を明示した時は、その crate 自身を検査する。
 const UPPER_LAYERS: [&str; 4] = ["assembly", "session", "ui", "app"];
 
 /// `roots` と、それに(間接に)依存する crate。
@@ -219,14 +219,24 @@ fn with_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<S
     dependents_where(roots, packages, |_| true)
 }
 
+fn is_lower_package(p: &Package) -> bool {
+    !p.layer
+        .as_deref()
+        .is_some_and(|l| UPPER_LAYERS.contains(&l))
+}
+
 /// `roots` と、それに(間接に)依存する crate のうち `UPPER_LAYERS` の手前まで(その層の crate を
 /// 通って先へも進まない)。
 fn with_lower_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
-    dependents_where(roots, packages, |p| {
-        !p.layer
-            .as_deref()
-            .is_some_and(|l| UPPER_LAYERS.contains(&l))
-    })
+    let lower_roots = packages
+        .iter()
+        .filter(|p| roots.contains(&p.name) && is_lower_package(p))
+        .map(|p| p.name.clone())
+        .collect();
+    let mut out = dependents_where(&lower_roots, packages, is_lower_package);
+    // 直接選んだ上位の crate は残すが、依存を辿る起点にはしない。
+    out.extend(roots.iter().cloned());
+    out
 }
 
 fn dependents_where(
@@ -429,7 +439,7 @@ fn select(
     if o.all {
         return Ok(None);
     }
-    let roots: BTreeSet<String> = if o.crates.is_empty() {
+    let mut roots: BTreeSet<String> = if o.crates.is_empty() {
         let c = classify(changed, packages);
         if !c.unrelated.is_empty() {
             println!(
@@ -438,6 +448,18 @@ fn select(
             );
         }
         if c.everything {
+            if o.lower {
+                println!(
+                    "ワークスペース全体に効くファイルを変えたので、下位の crate を全部検査します"
+                );
+                return Ok(Some(
+                    packages
+                        .iter()
+                        .filter(|p| is_lower_package(p))
+                        .map(|p| p.name.clone())
+                        .collect(),
+                ));
+            }
             println!("ワークスペース全体に効くファイルを変えたので、全体を検査します");
             return Ok(None);
         }
@@ -450,6 +472,14 @@ fn select(
         }
         o.crates.iter().cloned().collect()
     };
+    if o.lower && o.crates.is_empty() {
+        // 自動選択は、直接変えたファイルの持ち主でも上位の層を選ばない。
+        roots.retain(|name| {
+            packages
+                .iter()
+                .any(|p| p.name == *name && is_lower_package(p))
+        });
+    }
     Ok(Some(if o.dependents {
         with_dependents(&roots, packages)
     } else if o.lower {
@@ -750,8 +780,20 @@ fn core_api(ws: &Workspace, fork: &str) -> Option<(api::Api, api::Api)> {
     Some((old, now))
 }
 
+/// 契約テストを使う crate を足す。既に選ばれた上位の crate は消さない。
+fn extend_contract_users(s: &mut BTreeSet<String>, packages: &[Package], lower: bool) {
+    s.insert("kmb-contract".into());
+    s.extend(
+        packages
+            .iter()
+            .filter(|p| !lower || is_lower_package(p))
+            .filter(|p| p.edges.iter().any(|e| e.name == "kmb-contract"))
+            .map(|p| p.name.clone()),
+    );
+}
+
 /// コアの公開の項目が変わっていれば、契約テストを使う crate(と kmb-contract)を選びに足す。
-fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<String>>) {
+fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<String>>, lower: bool) {
     let Some(s) = sel.as_mut() else {
         return;
     };
@@ -763,9 +805,10 @@ fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<Stri
         return;
     }
     println!(
-        "コアの公開の項目が変わった(消えた {}・増えた {})ので、契約テストを使う crate を全部足します",
+        "コアの公開の項目が変わった(消えた {}・増えた {})ので、契約テストを使う{} crate を全部足します",
         lost.len(),
-        gained.len()
+        gained.len(),
+        if lower { "下位の" } else { "" }
     );
     for (sign, v) in [("-", &lost), ("+", &gained)] {
         for x in v.iter().take(10) {
@@ -775,12 +818,7 @@ fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<Stri
             println!("  {sign} …ほか {} 件", v.len() - 10);
         }
     }
-    s.insert("kmb-contract".into());
-    for p in &ws.packages {
-        if p.edges.iter().any(|e| e.name == "kmb-contract") {
-            s.insert(p.name.clone());
-        }
-    }
+    extend_contract_users(s, &ws.packages, lower);
 }
 
 fn checks(ws: &Workspace, fork: &str, changed: &[String]) -> Done {
@@ -1223,7 +1261,7 @@ fn run() -> Result<ExitCode, String> {
     let changed = changed_files(&fork)?;
     let mut sel = select(&o, &ws.packages, &changed)?;
     if o.crates.is_empty() {
-        add_contract_users(&ws, &fork, &mut sel);
+        add_contract_users(&ws, &fork, &mut sel, o.lower);
     }
     match cmd.as_str() {
         "checks" => {
@@ -1446,6 +1484,165 @@ mod tests {
                 "kmb-ui",
                 "kmb-app"
             ])
+        );
+    }
+
+    fn layered_selection_workspace() -> Vec<Package> {
+        [
+            ("kmb-core", "core", false),
+            ("kmb-contract", "test", false),
+            ("kmb-cad", "cad", true),
+            ("kmb-bundle", "assembly", true),
+            ("kmb-session", "session", true),
+            ("kmb-ui", "ui", true),
+            ("kmb-app", "app", true),
+        ]
+        .into_iter()
+        .map(|(name, layer, contract)| Package {
+            layer: Some(layer.into()),
+            edges: if contract {
+                vec![Edge {
+                    name: "kmb-contract".into(),
+                    kind: Kind::Dev,
+                }]
+            } else {
+                vec![]
+            },
+            ..pkg(
+                name,
+                &format!("{}/{name}", if layer == "app" { "apps" } else { "crates" }),
+                &[],
+            )
+        })
+        .collect()
+    }
+
+    #[test]
+    fn lower_selection_also_limits_contract_users() {
+        let w = layered_selection_workspace();
+        let mut selected = set(&["kmb-core"]);
+        extend_contract_users(&mut selected, &w, true);
+        assert_eq!(selected, set(&["kmb-core", "kmb-contract", "kmb-cad"]));
+
+        // 直接選ばれた上位の crate 自身は残し、ほかの上位は足さない。
+        let mut selected = set(&["kmb-ui"]);
+        extend_contract_users(&mut selected, &w, true);
+        assert_eq!(selected, set(&["kmb-ui", "kmb-contract", "kmb-cad"]));
+
+        let mut selected = set(&["kmb-core"]);
+        extend_contract_users(&mut selected, &w, false);
+        assert_eq!(selected, w.iter().map(|p| p.name.clone()).collect());
+    }
+
+    #[test]
+    fn lower_selection_excludes_automatic_upper_roots() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        for (upper_file, owner) in [
+            ("crates/kmb-ui/src/lib.rs", "kmb-ui"),
+            ("apps/kmb-app/tests/ui/a.jcs", "kmb-app"),
+        ] {
+            assert_eq!(classify(&[upper_file.into()], &w).packages, set(&[owner]));
+            assert_eq!(
+                select(&options, &w, &[upper_file.into()]).unwrap(),
+                Some(BTreeSet::new())
+            );
+            assert_eq!(
+                select(
+                    &options,
+                    &w,
+                    &[upper_file.into(), "crates/kmb-cad/src/lib.rs".into()]
+                )
+                .unwrap(),
+                Some(set(&["kmb-cad"]))
+            );
+        }
+    }
+
+    #[test]
+    fn lower_selection_excludes_automatic_app_root() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        let file = "apps/kmb-app/tests/ui/a.jcs";
+        assert_eq!(classify(&[file.into()], &w).packages, set(&["kmb-app"]));
+        assert_eq!(
+            select(&options, &w, &[file.into()]).unwrap(),
+            Some(BTreeSet::new())
+        );
+    }
+
+    #[test]
+    fn lower_selection_limits_global_changes() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        for global in ["Cargo.toml", "Cargo.lock", ".cargo/config.toml"] {
+            assert_eq!(
+                select(&options, &w, &[global.into()]).unwrap(),
+                Some(set(&["kmb-core", "kmb-contract", "kmb-cad"]))
+            );
+            assert_eq!(
+                select(
+                    &options,
+                    &w,
+                    &[global.into(), "crates/kmb-ui/src/lib.rs".into()]
+                )
+                .unwrap(),
+                Some(set(&["kmb-core", "kmb-contract", "kmb-cad"]))
+            );
+            for options in [
+                Options::default(),
+                Options {
+                    dependents: true,
+                    ..Default::default()
+                },
+                Options {
+                    all: true,
+                    lower: true,
+                    ..Default::default()
+                },
+            ] {
+                assert_eq!(select(&options, &w, &[global.into()]).unwrap(), None);
+            }
+        }
+        let options = Options {
+            crates: vec!["kmb-ui".into()],
+            lower: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            select(&options, &w, &["Cargo.lock".into()]).unwrap(),
+            Some(set(&["kmb-ui"]))
+        );
+    }
+
+    #[test]
+    fn lower_dependents_do_not_walk_through_an_upper_root() {
+        let w = vec![
+            Package {
+                layer: Some("ui".into()),
+                ..pkg("kmb-ui", "crates/kmb-ui", &[])
+            },
+            Package {
+                layer: Some("test".into()),
+                ..pkg("kmb-tests", "crates/kmb-tests", &["kmb-ui"])
+            },
+        ];
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui"])
+        );
+        assert_eq!(
+            with_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui", "kmb-tests"])
         );
     }
 
