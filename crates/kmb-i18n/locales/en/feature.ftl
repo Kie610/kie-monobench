@@ -51,3 +51,8 @@ feature-flow-volume = 3D Flow
 feature-flow-volume-tip = Solve the 3D flow and drag around a body to see surface pressure and streamlines, and speed, pressure and vorticity on a section (takes about a minute)
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
+
+feature-cam-spiral3d = Spiral (3D)
+feature-cam-spiral3d-tip = Finish by tracing a spiral from outside in around the center. Choose depth levels and cutting direction
+feature-cam-radial3d = Radial (3D)
+feature-cam-radial3d-tip = Finish by tracing radial lines from the center. Choose depth levels and back-and-forth or one-way cutting

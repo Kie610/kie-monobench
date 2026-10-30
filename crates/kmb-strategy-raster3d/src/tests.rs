@@ -323,6 +323,8 @@ fn circ(p: &Planner, pattern: Pattern) -> CircOpts {
         outer: Some(10.0),
         step: 0.5,
         limits: Resolved::default(),
+        levels: false,
+        direction: RasterDir::Both,
     }
 }
 
@@ -479,7 +481,195 @@ fn circular_documents_do_not_store_the_pattern() {
     let c: Circular = serde_json::from_value(v).unwrap();
     assert_eq!(c.pattern, Pattern::Spiral);
     let back = serde_json::to_value(Circular::new(c.base.clone(), Pattern::Radial)).unwrap();
-    for k in ["pattern", "center", "inner", "outer", "step"] {
+    for k in [
+        "pattern",
+        "center",
+        "inner",
+        "outer",
+        "step",
+        "levels",
+        "direction",
+    ] {
         assert!(back.get(k).is_none(), "{k}");
+    }
+}
+
+// 確かめること: 渦巻きと放射も、走査線と同じ欄名と選択肢を共通の宣言から出す。
+#[test]
+fn circular_level_and_direction_fields_match_the_raster_declaration() {
+    let mut reg = kmb_core::Registry::new();
+    register(&mut reg);
+    let raster = reg.descriptor(RASTER3D).unwrap();
+    for kind in [SPIRAL3D, RADIAL3D] {
+        let circular = reg.descriptor(kind).unwrap();
+        for key in ["levels", "direction"] {
+            let expected = raster.fields.iter().find(|f| f.key == key).unwrap();
+            let actual = circular.fields.iter().find(|f| f.key == key).unwrap();
+            assert_eq!(actual.label, expected.label);
+            assert_eq!(actual.kind, expected.kind);
+            assert_eq!(actual.unit, expected.unit);
+        }
+    }
+}
+
+fn circular_options(p: &Planner, pattern: Pattern, levels: bool, direction: RasterDir) -> CircOpts {
+    let mut v = serde_json::to_value(circ(p, pattern)).unwrap();
+    v["levels"] = serde_json::json!(levels);
+    v["direction"] = serde_json::to_value(direction).unwrap();
+    v["cell"] = serde_json::json!(0.1);
+    v["step"] = serde_json::json!(2.0);
+    serde_json::from_value(v).unwrap()
+}
+
+// 確かめること: 欄を省いた文書と戦略の入力は、段なし・往復の経路をそのまま出す。
+#[test]
+fn circular_inputs_without_levels_or_direction_keep_the_default_path() {
+    let old = serde_json::json!({"setup": 1, "tools": 2, "tool": 4});
+    let c: Circular = serde_json::from_value(old.clone()).unwrap();
+    let mut explicit = old;
+    explicit["levels"] = serde_json::json!(false);
+    explicit["direction"] = serde_json::json!("both");
+    assert_eq!(c, serde_json::from_value::<Circular>(explicit).unwrap());
+    let p = dome();
+    for pattern in [Pattern::Spiral, Pattern::Radial] {
+        let o = circular_options(&p, pattern, false, RasterDir::Both);
+        let expected = circular_passes(&p, &o).unwrap();
+        let mut data = serde_json::to_value(&o).unwrap();
+        data.as_object_mut().unwrap().remove("levels");
+        data.as_object_mut().unwrap().remove("direction");
+        let restored: CircOpts = serde_json::from_value(data).unwrap();
+        let actual = circular_passes(&p, &restored).unwrap();
+        assert_eq!(actual, expected);
+        let mut a = p.toolpath();
+        let mut b = p.toolpath();
+        cut_passes(&p, &mut a, actual);
+        cut_passes(&p, &mut b, expected);
+        assert_eq!(a, b);
+    }
+}
+
+// 確かめること: 解いた入力の JSON 往復だけで、段分けと向きを含む同じ戦略の結果を再現する。
+#[test]
+fn circular_plan_is_reproducible_from_its_serialized_input() {
+    let mesh = mesh_of(&[("floor", top(-12.0, -12.0, 12.0, 12.0, 0.0))]);
+    let mut prepared = prepared(&mesh, [-12.0, -12.0, 0.0], [12.0, 12.0, 3.0], ball());
+    prepared.cutting.stepdown = 1.0;
+    let p = prepared.planner();
+    for pattern in [Pattern::Spiral, Pattern::Radial] {
+        let o = circular_options(&p, pattern, true, RasterDir::Climb);
+        let input = prepared.input(kmb_core::FeatureId(1), &o, Default::default());
+        let data = serde_json::to_string(&input).unwrap();
+        let restored = serde_json::from_str(&data).unwrap();
+        let output = circular::plan(&input).unwrap();
+        assert_eq!(circular::plan(&restored).unwrap(), output);
+        assert!(!output.toolpath.moves.is_empty());
+    }
+}
+
+// 確かめること: 段高さは下限で、工具は半球に食い込まず、最後の段は面をなぞる。
+#[test]
+fn circular_levels_stay_above_each_level_and_the_part() {
+    let mut p = dome();
+    p.cutting.stepdown = 3.0;
+    for pattern in [Pattern::Spiral, Pattern::Radial] {
+        let o = circular_options(&p, pattern, false, RasterDir::Both);
+        let surface = circular_passes(&p, &o).unwrap();
+        assert_eq!(surface.len(), 1);
+        let lowest = surface[0]
+            .iter()
+            .map(|q| q[2])
+            .fold(f64::INFINITY, f64::min);
+        let levels = p.levels(p.info.stock_max[2], lowest);
+        assert!(levels.len() > 1);
+        let passes =
+            circular_passes(&p, &circular_options(&p, pattern, true, RasterDir::Both)).unwrap();
+        assert_eq!(passes.len(), levels.len(), "{pattern:?}");
+        for (n, (pass, z)) in passes.iter().zip(&levels).enumerate() {
+            assert!(pass.iter().all(|q| q[2] >= z - 1e-9));
+            assert!(pass.iter().any(|q| (q[2] - z).abs() < 1e-9));
+            for q in pass {
+                assert!(q[2] >= on_dome(&p, *q) - 0.03, "{pattern:?}: {q:?}");
+            }
+            let first = if n % 2 == 0 {
+                surface[0].first().unwrap()
+            } else {
+                surface[0].last().unwrap()
+            };
+            assert_eq!(pass[0], [first[0], first[1], first[2].max(*z)]);
+        }
+        let mut final_pass = passes.last().unwrap().clone();
+        if (levels.len() - 1) % 2 == 1 {
+            final_pass.reverse();
+        }
+        assert_eq!(final_pass, surface[0]);
+        let mut tp = p.toolpath();
+        cut_passes(&p, &mut tp, passes);
+        assert_eq!(
+            tp.moves
+                .iter()
+                .filter(|m| matches!(m, Move::Rapid { .. }))
+                .count(),
+            3
+        );
+    }
+}
+
+// 確かめること: 主軸が時計回りなら、渦巻きはダウンカットで時計回り、アップカットで反時計回り。
+#[test]
+fn circular_spiral_directions_turn_opposite_ways_and_keep_going_inward() {
+    let p = dome();
+    for (dir, sign) in [(RasterDir::Climb, -1.0), (RasterDir::Conventional, 1.0)] {
+        let passes =
+            circular_passes(&p, &circular_options(&p, Pattern::Spiral, false, dir)).unwrap();
+        assert_eq!(passes.len(), 1);
+        let pass = &passes[0];
+        assert!((rho(&pass[0]) - 10.0).abs() < 1e-9);
+        assert!(rho(pass.last().unwrap()) < 1e-9);
+        let turn: f64 = pass
+            .windows(2)
+            .map(|w| w[0][0] * w[1][1] - w[0][1] * w[1][0])
+            .sum();
+        assert!(turn * sign > 0.0, "{dir:?}: {turn}");
+        assert!(pass.iter().all(|q| q[2] >= on_dome(&p, *q) - 0.03));
+    }
+}
+
+// 確かめること: 一方向の放射は各段の各線が同じ半径方向で、線ごとに上げて移る。
+#[test]
+fn circular_one_way_radial_lines_retract_and_keep_the_same_direction_on_all_levels() {
+    let mut p = dome();
+    p.cutting.stepdown = 3.0;
+    for (dir, sign) in [(RasterDir::Climb, -1.0), (RasterDir::Conventional, 1.0)] {
+        for levels in [false, true] {
+            let passes =
+                circular_passes(&p, &circular_options(&p, Pattern::Radial, levels, dir)).unwrap();
+            let lines = (std::f64::consts::TAU * 10.0 / 2.0).ceil() as usize;
+            let n = if levels { p.levels(9.0, 0.0).len() } else { 1 };
+            assert_eq!(passes.len(), lines * n);
+            for pass in &passes {
+                assert!((rho(pass.last().unwrap()) - rho(&pass[0])) * sign > 0.0);
+                let end = if sign > 0.0 {
+                    pass.last().unwrap()
+                } else {
+                    &pass[0]
+                };
+                assert!(
+                    pass.iter()
+                        .all(|q| (q[0] * end[1] - q[1] * end[0]).abs() < 1e-8)
+                );
+            }
+            let mut tp = p.toolpath();
+            let count = passes.len();
+            cut_passes(&p, &mut tp, passes);
+            let lifts = tp
+                .moves
+                .windows(2)
+                .filter(|w| {
+                    w[0].to()[2] < tp.safe_z
+                        && matches!(w[1], Move::Rapid { to } if to[2] == tp.safe_z)
+                })
+                .count();
+            assert_eq!(lifts, count, "{dir:?}, 段: {levels}");
+        }
     }
 }
