@@ -1,6 +1,6 @@
-# JC_BLESS=1 cargo test -p kmb-bundle --test ids で書き直す(crates/kmb-bundle/tests/ids.rs)。
-# cargo xtask verify の層の点検が読む。手で直さず、
 # 名前(機能の種類・操作・設定の ID)と、それを名乗るモジュールの crate。
+# cargo xtask verify の層の点検が読む。手で直さず、
+# JC_BLESS=1 cargo test -p kmb-bundle --test ids で書き直す(crates/kmb-bundle/tests/ids.rs)。
 anim.appearance	kmb-asm
 anim.auto_explode_all	kmb-asm
 anim.auto_explode_one	kmb-asm
