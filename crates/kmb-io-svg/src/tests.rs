@@ -667,6 +667,44 @@ fn review_svg_a_zero_length_line_has_a_zero_size_reason() {
     assert!(reason.contains("形の大きさが 0"), "{reason}");
 }
 
+/// 確かめること: 数が四つではない viewBox は、指定の無い用紙と同じ形を読む。
+#[test]
+fn review_imported_svg_ignores_incomplete_viewbox_numbers() {
+    for dimensions in ["", r#"width="100mm" height="50mm""#] {
+        let expected = from_svg(&format!(
+            r#"<svg {dimensions}><line x1="1" y1="2" x2="9" y2="7"/></svg>"#
+        ))
+        .unwrap();
+        for viewbox in ["", "0", "0 0", "0 0 10", "0 0 10 10 20"] {
+            let actual = from_svg(&format!(
+                r#"<svg {dimensions} viewBox="{viewbox}"><line x1="1" y1="2" x2="9" y2="7"/></svg>"#
+            ))
+            .unwrap_or_else(|reason| panic!("viewBox={viewbox:?}: {reason}"));
+            assert_eq!(actual.shapes, expected.shapes);
+            assert_eq!(actual.bounds, expected.bounds);
+        }
+    }
+}
+
+/// 確かめること: 空の輪郭しかないファイルは、形も読み飛ばしも無い成功になる。
+#[test]
+fn review_imported_svg_accepts_empty_elements() {
+    for elements in [
+        r#"<path d=""/>"#,
+        r#"<path d="  "/>"#,
+        "<path/>",
+        r#"<polyline points=""/>"#,
+        r#"<polygon points="  "/>"#,
+        r#"<path d=""/><polyline points=""/><polygon points=""/>"#,
+    ] {
+        let actual = from_svg(&format!("<svg>{elements}</svg>"))
+            .unwrap_or_else(|reason| panic!("{elements}: {reason}"));
+        assert!(actual.shapes.is_empty());
+        assert!(actual.skipped.is_empty());
+        assert!(actual.bounds.is_none());
+    }
+}
+
 #[test]
 fn review_svg_hidden_transforms_do_not_stop_visible_geometry() {
     let expected = from_svg(&svg_compatibility_line("", "")).unwrap();
