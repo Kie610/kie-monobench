@@ -126,9 +126,9 @@ enum Command {
     Pack {
         file: PathBuf,
         out: PathBuf,
-        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().gcode, action = clap::ArgAction::Set)]
         gcode: bool,
-        #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().sheet, action = clap::ArgAction::Set)]
         sheet: bool,
         #[arg(long)]
         models: bool,

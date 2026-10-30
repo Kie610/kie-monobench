@@ -371,6 +371,7 @@ async fn the_server_speaks_mcp() {
         "topology",
         "measure",
         "export",
+        "pack",
         "crash_reports",
     ] {
         assert!(names.contains(&n), "{n} がない: {names:?}");
@@ -2066,6 +2067,12 @@ fn sketch_entities_are_found_by_conditions() {
 
 #[test]
 fn pack_shares_the_session_and_enforces_the_allowed_output_folder() {
+    assert!(
+        serde_json::from_value::<crate::server::PackArg>(
+            json!({"path":"delivery.zip","shet":false})
+        )
+        .is_err()
+    );
     let root = temp_root("pack");
     let mut s = Session::new(root.clone());
     s.sample(false, false).unwrap();

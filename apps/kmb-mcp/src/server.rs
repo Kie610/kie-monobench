@@ -267,6 +267,7 @@ pub struct GroupArg {
 }
 
 #[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PackArg {
     /// 書き出すzipの場所
     pub path: String,
@@ -757,7 +758,10 @@ tools! {
     "残ったボディの絵(PNG)。画面の 3D のビューの明るい見た目で、平行投影で全体が入るように描く(格子・寸法・スケッチは描かない)。view で向き、faces・edges で topology の面と辺を目立たせる。説明に 1 mm の画素数(px_per_mm)。out で PNG を書き出す"
     fn screenshot(s, a: ScreenshotArg) picture => s.screenshot(&a);
     "文書・セットアップごとのG-code・HTMLの段取り表をzipにまとめて渡す。modelsが真ならボディごとのSTEPも入れる。入れられなかった物は理由の一覧で返す"
-    fn pack(s, a: PackArg) edit => s.pack(&a.path, kmb_session::PackOptions { gcode: a.gcode.unwrap_or(true), sheet: a.sheet.unwrap_or(true), models: a.models.unwrap_or(false) });
+    fn pack(s, a: PackArg) edit => {
+        let defaults = kmb_session::PackOptions::default();
+        s.pack(&a.path, kmb_session::PackOptions { gcode: a.gcode.unwrap_or(defaults.gcode), sheet: a.sheet.unwrap_or(defaults.sheet), models: a.models.unwrap_or(defaults.models) })
+    };
     "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・OBJ の .obj・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
     fn export(s, a: ExportArg) edit => s.export(&a.path, a.action.as_deref(), a.view.as_ref(), a.tolerance, a.each);
     "セットアップの G-code を作る(既定は Carvera Air、post で WASM のポストのプラグインも使える)"

@@ -267,10 +267,20 @@ fn portable_names_and_case_insensitive_collisions() {
 
 #[test]
 fn step_time_replacement_preserves_escaped_names_and_the_data() {
-    let s = "ISO-10303-21;HEADER;FILE_NAME('a,''b','old',(''),(''),'writer','system','');ENDSEC;DATA;#1=X('old');ENDSEC;";
-    let got =
-        String::from_utf8(step_created_at(s.as_bytes().to_vec(), "2000-01-01T00:00:00").unwrap())
+    for name in ["a,''b", "ENDSEC; a,''b"] {
+        for description in [
+            "",
+            "FILE_DESCRIPTION(('FILE_NAME(''fake'',''fake'')'),'2;1');",
+        ] {
+            let s = format!(
+                "ISO-10303-21;HEADER;{description}FILE_NAME('{name}','old',(''),(''),'writer','system','');ENDSEC;DATA;#1=X('old');ENDSEC;"
+            );
+            let got = String::from_utf8(
+                step_created_at(s.as_bytes().to_vec(), "2000-01-01T00:00:00").unwrap(),
+            )
             .unwrap();
-    assert_eq!(got, s.replace("'old',('')", "'2000-01-01T00:00:00',('')"));
+            assert_eq!(got, s.replace("'old',('')", "'2000-01-01T00:00:00',('')"));
+        }
+    }
     assert!(step_created_at(b"DATA;".to_vec(), "2000-01-01T00:00:00").is_err());
 }

@@ -1,9 +1,22 @@
 //! zip の書き手と、中央の目録から読む読み手。
 
+/// 読み書きの両方で守る、展開後の合計の上限。
+pub const UNPACKED_LIMIT: usize = 512 * 1024 * 1024;
+
+// UTF-8の印がないzipで使うCP437の上半分。下半分はASCIIと同じ。
+const CP437: [char; 128] = [
+    'Ç', 'ü', 'é', 'â', 'ä', 'à', 'å', 'ç', 'ê', 'ë', 'è', 'ï', 'î', 'ì', 'Ä', 'Å', 'É', 'æ', 'Æ',
+    'ô', 'ö', 'ò', 'û', 'ù', 'ÿ', 'Ö', 'Ü', '¢', '£', '¥', '₧', 'ƒ', 'á', 'í', 'ó', 'ú', 'ñ', 'Ñ',
+    'ª', 'º', '¿', '⌐', '¬', '½', '¼', '¡', '«', '»', '░', '▒', '▓', '│', '┤', '╡', '╢', '╖', '╕',
+    '╣', '║', '╗', '╝', '╜', '╛', '┐', '└', '┴', '┬', '├', '─', '┼', '╞', '╟', '╚', '╔', '╩', '╦',
+    '╠', '═', '╬', '╧', '╨', '╤', '╥', '╙', '╘', '╒', '╓', '╫', '╪', '┘', '┌', '█', '▄', '▌', '▐',
+    '▀', 'α', 'ß', 'Γ', 'π', 'Σ', 'σ', 'µ', 'τ', 'Φ', 'Θ', 'Ω', 'δ', '∞', 'φ', 'ε', '∩', '≡', '±',
+    '≥', '≤', '⌠', '⌡', '÷', '≈', '°', '∙', '·', '√', 'ⁿ', '²', '■', '\u{00a0}',
+];
+
 /// 中央の目録を読み、無圧縮とdeflateのファイルを取り出す。展開先へは書かない。
 /// ZIP64、暗号化、分割した書庫は受け付けない。展開した合計は512 MiBまで。
 pub fn read(b: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
-    const LIMIT: usize = 512 * 1024 * 1024;
     let bad = || "zipの目録かファイルの内容が壊れています".to_string();
     let bytes = |at: usize, n: usize| b.get(at..at.checked_add(n)?);
     let u16_at = |at| -> Result<usize, String> {
@@ -52,12 +65,25 @@ pub fn read(b: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
         }
         total = total
             .checked_add(unpacked)
-            .filter(|n| *n <= LIMIT)
+            .filter(|n| *n <= UNPACKED_LIMIT)
             .ok_or("zipの展開後の合計が512 MiBを超えます")?;
         let name_bytes = bytes(at + 46, n).ok_or_else(bad)?;
-        let name = std::str::from_utf8(name_bytes)
-            .map_err(|_| "zipのファイル名をUTF-8として読めません")?
-            .to_owned();
+        let name: String = if flags & 0x0800 != 0 {
+            std::str::from_utf8(name_bytes)
+                .map_err(|_| "zipのファイル名をUTF-8として読めません")?
+                .to_owned()
+        } else {
+            name_bytes
+                .iter()
+                .map(|&b| {
+                    if b < 128 {
+                        char::from(b)
+                    } else {
+                        CP437[usize::from(b - 128)]
+                    }
+                })
+                .collect()
+        };
         if !names.insert(name.clone()) {
             return Err(format!("zipに同じ名前が重なっています: {name}"));
         }
@@ -219,6 +245,17 @@ mod tests {
             read(&write(&[("empty", b"")])).unwrap(),
             vec![("empty".into(), Vec::new())]
         );
+    }
+
+    #[test]
+    fn a_zip_without_the_utf8_flag_uses_the_standard_character_set() {
+        let mut z = write(&[("a.txt", b"text")]);
+        let cd = z.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        z[6..8].copy_from_slice(&0u16.to_le_bytes());
+        z[cd + 8..cd + 10].copy_from_slice(&0u16.to_le_bytes());
+        z[30] = 0x82;
+        z[cd + 46] = 0x82;
+        assert_eq!(read(&z).unwrap()[0].0, "é.txt");
     }
 
     #[test]

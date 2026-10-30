@@ -248,12 +248,14 @@ impl Headless {
         }
         readme += "- README.txt\n\n入れなかった物:\n";
         for item in &skipped {
+            log::warn!("まとめて渡せない: {}: {}", item.name, item.reason);
             readme += &format!("- {}: {}\n", item.name, item.reason);
         }
         entries.push(("README.txt".into(), readme.into_bytes()));
         if entries.len() >= 65535
             || entries.iter().any(|(n, _)| n.len() > 65535)
-            || entries.iter().map(|(_, b)| b.len() as u64).sum::<u64>() > 512 * 1024 * 1024
+            || entries.iter().map(|(_, b)| b.len() as u64).sum::<u64>()
+                > kmb_format::zip::UNPACKED_LIMIT as u64
         {
             return Err(Problem::new(
                 ProblemKind::Unavailable,
@@ -304,10 +306,34 @@ impl Headless {
 fn step_created_at(data: Vec<u8>, stamp: &str) -> Result<Vec<u8>, String> {
     let bad = || "STEPの頭の作成日時を読めません".to_string();
     let mut text = String::from_utf8(data).map_err(|_| bad())?;
-    let header_end = text.find("ENDSEC;").ok_or_else(bad)?;
-    let header = &text[..header_end];
-    let mut at = header.find("FILE_NAME(").ok_or_else(bad)? + "FILE_NAME(".len();
-    let bytes = header.as_bytes();
+    let bytes = text.as_bytes();
+    let mut at = text.find("HEADER;").ok_or_else(bad)? + "HEADER;".len();
+    let mut start = at;
+    let mut quoted = false;
+    // 文字列の中のキーワードやセミコロンは、実体の区切りとして読まない。
+    let mut at = loop {
+        match bytes.get(at) {
+            Some(b'\'') if quoted && bytes.get(at + 1) == Some(&b'\'') => {
+                at += 2;
+                continue;
+            }
+            Some(b'\'') => quoted = !quoted,
+            Some(b';') if !quoted => {
+                let record = text[start..at].trim();
+                if let Some(args) = record.strip_prefix("FILE_NAME(") {
+                    let leading = text[start..at].len() - text[start..at].trim_start().len();
+                    break start + leading + record.len() - args.len();
+                }
+                if record == "ENDSEC" {
+                    return Err(bad());
+                }
+                start = at + 1;
+            }
+            Some(_) => (),
+            None => return Err(bad()),
+        }
+        at += 1;
+    };
     let string = |at: &mut usize| -> Result<std::ops::Range<usize>, String> {
         while bytes.get(*at).is_some_and(u8::is_ascii_whitespace) {
             *at += 1;
@@ -368,6 +394,14 @@ pub fn load_design(path: &Path) -> Result<OpenedDesign, Problem> {
             label: None,
         });
     }
+    let result = read_zip_design(path);
+    if let Err(e) = &result {
+        log::error!("書庫を開けない: {}: {e}", path.display());
+    }
+    result
+}
+
+fn read_zip_design(path: &Path) -> Result<OpenedDesign, Problem> {
     let data = std::fs::read(path).map_err(|e| {
         Problem::new(
             ProblemKind::File,
