@@ -596,3 +596,157 @@ fn the_data_folder_of_the_old_name_is_carried_over_once_and_kept() {
     assert!(!fresh.exists());
     std::fs::remove_dir_all(d).ok();
 }
+
+/// 確かめること: DXF の線を、保存先の無い新しい設計として開く。
+#[test]
+fn a_dxf_file_opens_as_a_new_unsaved_design() {
+    let dir = temp("open-dxf-design");
+    let path = dir.join("外の 図.DXF");
+    write_small_dxf(&path);
+    let opened = Headless::open(kmb_bundle::modules(), &path)
+        .unwrap_or_else(|e| panic!("DXF を新しい設計として開けません: {e}"));
+    assert_eq!(opened.doc().data().features.len(), 1);
+    assert_eq!(
+        opened.doc().data().features[0].data["entities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|e| e["type"] == "line")
+            .count(),
+        2
+    );
+    assert_eq!(opened.report().error_count(), 0);
+    assert!(
+        opened.path().is_none(),
+        "読み込んだ DXF を文書の保存先にしない"
+    );
+    assert_eq!(opened.doc().undo_labels().len(), 1);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+fn write_small_dxf(path: &std::path::Path) {
+    std::fs::write(path, b"0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n0\n0\nLINE\n8\n0\n10\n0\n20\n5\n11\n10\n21\n5\n0\nENDSEC\n0\nEOF\n").unwrap();
+}
+
+/// 確かめること: prepare は通常の挿入操作と同じ値を作り、保存基準は挿入前の空文書。
+#[test]
+fn preparing_a_dxf_keeps_its_empty_saved_base_and_uses_the_declared_insert_action() {
+    let dir = temp("prepare-dxf");
+    let path = dir.join("外の 図.DXF");
+    write_small_dxf(&path);
+    let modules = kmb_bundle::modules();
+    let blank = Document::with_properties(kmb_core::Properties {
+        description: "新しい設計の既定".into(),
+        ..Default::default()
+    });
+    let baseline = blank.data().clone();
+    let prepared = Headless::prepare_open(modules.clone(), &path, blank).unwrap();
+    assert!(prepared.path.is_none());
+    assert_eq!(prepared.label.as_deref(), Some("外の 図"));
+    assert_eq!(prepared.saved, Some(baseline.clone()));
+    assert_eq!(prepared.document.undo_labels().len(), 1);
+    let mut direct = Headless::with_document(
+        modules,
+        Document::with_properties(baseline.properties),
+        None,
+    );
+    let action = direct
+        .action_for_role(&kmb_interchange::role::action::INSERT_DXF)
+        .unwrap();
+    direct
+        .run(&action, None, Some(&path), &serde_json::Value::Null)
+        .unwrap();
+    let mut imported = Headless::with_document(kmb_bundle::modules(), prepared.document, None);
+    assert_eq!(direct.doc().data(), imported.doc().data());
+    let data = imported.doc().data().clone();
+    imported.undo().unwrap();
+    assert!(imported.doc().data().features.is_empty());
+    imported.redo().unwrap();
+    assert_eq!(imported.doc().data(), &data);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// 確かめること: 成功・失敗どちらの準備も、共有カーネルの元の形と文書を触らない。
+#[test]
+fn preparing_a_file_keeps_the_current_document_history_and_live_shapes() {
+    let dir = temp("prepare-dxf-atomic");
+    let modules = kmb_bundle::modules();
+    let current =
+        Headless::with_document(modules.clone(), (kmb_bundle::Sample::Part.make())(), None);
+    let data = current.doc().data().clone();
+    let report = current.report().clone();
+    let undo: Vec<String> = current
+        .doc()
+        .undo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let bodies = current.bodies().unwrap();
+    let volumes: Vec<_> = bodies
+        .iter()
+        .map(|h| current.kernel().volume(*h).unwrap())
+        .collect();
+    let good = dir.join("線.dxf");
+    write_small_dxf(&good);
+    assert!(Headless::prepare_open(modules.clone(), &good, Document::new()).is_ok());
+    for (name, content) in [
+        ("壊れた.dxf", "壊れた"),
+        ("空.dxf", "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
+        (
+            "ゼロ.dxf",
+            "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n0\n21\n0\n0\nENDSEC\n0\nEOF\n",
+        ),
+    ] {
+        let path = dir.join(name);
+        std::fs::write(&path, content).unwrap();
+        assert!(Headless::prepare_open(modules.clone(), &path, Document::new()).is_err());
+    }
+    assert!(
+        Headless::prepare_open(modules.clone(), &dir.join("無い.dxf"), Document::new()).is_err()
+    );
+    assert_eq!(current.doc().data(), &data);
+    assert_eq!(current.report(), &report);
+    assert_eq!(current.doc().undo_labels(), undo);
+    assert_eq!(current.recomputes(), 1);
+    for (h, volume) in bodies.iter().zip(volumes) {
+        assert_eq!(current.kernel().volume(*h).unwrap(), volume);
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// 確かめること: 文書の形式は保存済みとして開き、知らない区画をそのまま持つ。
+#[test]
+fn preparing_a_native_document_keeps_its_path_and_unknown_sections() {
+    let dir = temp("prepare-native");
+    let path = dir.join("設計.kmb");
+    let section = kmb_core::section::Section {
+        version: 7,
+        data: serde_json::json!({"unknown": [1, "残す"]}),
+    };
+    let mut document = doc_with("12 mm");
+    document
+        .apply(Transaction::new(
+            "未知の区画",
+            vec![Op::SetSection {
+                key: "future.fixture".into(),
+                section: Some(section.clone()),
+            }],
+        ))
+        .unwrap();
+    save(&path, &document).unwrap();
+    let prepared = Headless::prepare_open(kmb_bundle::modules(), &path, Document::new()).unwrap();
+    assert_eq!(prepared.path.as_deref(), Some(path.as_path()));
+    assert!(prepared.label.is_none());
+    assert!(prepared.saved.is_none());
+    assert_eq!(
+        prepared.document.data().sections.get("future.fixture"),
+        Some(&section)
+    );
+    assert!(!prepared.document.can_undo());
+    let opened = Headless::open(kmb_bundle::modules(), &path).unwrap();
+    assert_eq!(opened.path(), Some(path.as_path()));
+    assert_eq!(opened.doc().data(), prepared.document.data());
+    assert_eq!(opened.report().error_count(), 0);
+    assert_eq!(opened.recomputes(), 1);
+    std::fs::remove_dir_all(dir).unwrap();
+}
