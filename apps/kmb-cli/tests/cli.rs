@@ -525,3 +525,197 @@ fn obj_export_writes_indexed_triangles_without_a_material_file() {
     }));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn convert_reads_a_step_without_a_document_and_writes_mesh_formats() {
+    let d = temp_dir("convert-step");
+    ok(&d, &["sample", "part.json"]);
+    ok(&d, &["export", "part.json", "part.STEP"]);
+    for (out, prefix) in [
+        ("part.stl", None),
+        ("part.3mf", Some(b"PK".as_slice())),
+        ("part.obj", None),
+    ] {
+        ok(&d, &["convert", "part.STEP", out]);
+        let bytes = std::fs::read(d.join(out)).unwrap();
+        assert!(bytes.len() > 100, "{out}");
+        if let Some(prefix) = prefix {
+            assert!(bytes.starts_with(prefix));
+        }
+        if out.ends_with(".obj") {
+            assert!(
+                String::from_utf8(bytes)
+                    .unwrap()
+                    .lines()
+                    .any(|l| l.starts_with("v "))
+            );
+        }
+    }
+    ok(
+        &d,
+        &[
+            "convert",
+            "part.STEP",
+            "tolerance.stl",
+            "--arg",
+            "tolerance=0.1 mm",
+        ],
+    );
+    assert!(std::fs::metadata(d.join("tolerance.stl")).unwrap().len() > 100);
+    assert_eq!(
+        exit_code(
+            &d,
+            &["convert", "part.STEP", "bad.stl", "--arg", "tolerence=0.1"]
+        ),
+        1
+    );
+    assert!(!d.join("bad.stl").exists());
+    assert_eq!(
+        exit_code(&d, &["convert", "part.STEP", "out.unsupported"]),
+        4
+    );
+    assert_eq!(
+        exit_code(&d, &["convert", "missing.step", "missing.stl"]),
+        5
+    );
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn convert_reads_a_dxf_sketch_and_selects_its_svg_writer() {
+    let d = temp_dir("convert-dxf");
+    std::fs::write(
+        d.join("line.dxf"),
+        "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n20\n21\n10\n0\nENDSEC\n0\nEOF\n",
+    )
+    .unwrap();
+    ok(&d, &["convert", "line.dxf", "line.svg"]);
+    let svg = std::fs::read_to_string(d.join("line.svg")).unwrap();
+    assert!(
+        svg.contains("<svg") && (svg.contains("<path") || svg.contains("<line")),
+        "{svg}"
+    );
+    assert_eq!(exit_code(&d, &["convert", "line.dxf", "line.stl"]), 4);
+    assert_eq!(
+        exit_code(&d, &["convert", "line.unsupported", "line.svg"]),
+        4
+    );
+    assert_eq!(
+        exit_code(
+            &d,
+            &["convert", "line.dxf", "line.svg", "--arg", "unknown=true"]
+        ),
+        1
+    );
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn a_script_runs_two_lines_and_saves_only_after_success() {
+    let d = temp_dir("batch-script");
+    std::fs::write(
+        d.join("parameters.jcs"),
+        "# 寸法\nadd_param width \"10 mm\"\nset_param width \"width + 5 mm\"\n",
+    )
+    .unwrap();
+    // 自分自身を読む式は計算の誤りで、行の番号を残す。
+    assert_eq!(
+        exit_code(&d, &["run", "parameters.jcs", "--save", "failed.json"]),
+        2
+    );
+    assert!(!d.join("failed.json").exists());
+    std::fs::write(
+        d.join("parameters.jcs"),
+        "add_param width \"10 mm\"\nadd_param height \"width * 2\"\n",
+    )
+    .unwrap();
+    ok(&d, &["run", "parameters.jcs", "--save", "saved.json"]);
+    let doc = read(&d.join("saved.json"));
+    assert_eq!(doc["params"].as_array().unwrap().len(), 2);
+    assert_eq!(doc["params"][1]["expr"], "width * 2");
+    std::fs::write(
+        d.join("bad.jcs"),
+        "add_param width \"10 mm\"\nunknown_command\nadd_param height \"20 mm\"\n",
+    )
+    .unwrap();
+    let (success, _, err) = jc(&d, &["run", "bad.jcs", "--save", "partial.json"]);
+    assert!(!success && err.contains("2 行目"), "{err}");
+    assert!(!d.join("partial.json").exists());
+    assert_eq!(exit_code(&d, &["run", "missing.jcs"]), 5);
+    std::fs::write(d.join("screen.jcs"), "click \"押し出し\"\n").unwrap();
+    assert_eq!(exit_code(&d, &["run", "screen.jcs"]), 4);
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn a_script_can_edit_an_existing_document_and_export_the_result() {
+    let d = temp_dir("batch-existing");
+    ok(&d, &["sample", "part.json"]);
+    std::fs::write(
+        d.join("change.jcs"),
+        "set_param width \"70 mm\"\nset_param width \"75 mm\"\n",
+    )
+    .unwrap();
+    ok(
+        &d,
+        &[
+            "run",
+            "change.jcs",
+            "--document",
+            "part.json",
+            "--save",
+            "changed.json",
+            "--export",
+            "changed.stl",
+        ],
+    );
+    let changed = read(&d.join("changed.json"));
+    let width = changed["params"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "width")
+        .unwrap();
+    assert_eq!(width["expr"], "75 mm");
+    assert_ne!(read(&d.join("part.json")), changed);
+    assert!(std::fs::metadata(d.join("changed.stl")).unwrap().len() > 100);
+    // 操作の ID を渡す既存の使い方も、同じ run で続けて使える。
+    ok(
+        &d,
+        &["run", "changed.json", "io.export_stl", "--out", "again.stl"],
+    );
+    assert_eq!(
+        exit_code(
+            &d,
+            &["run", "changed.json", "io.export_stl", "--save", "no.json"]
+        ),
+        1
+    );
+    let (_, help, _) = jc(&d, &["run", "--help"]);
+    assert!(help.contains("台本") && help.contains("--document") && help.contains("--save"));
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn an_empty_script_does_not_save_a_document_with_recompute_errors() {
+    let d = temp_dir("batch-empty-errors");
+    ok(&d, &["new", "bad.json"]);
+    ok(&d, &["param", "add", "bad.json", "width", "missing + 1 mm"]);
+    std::fs::write(d.join("empty.jcs"), "# 計算の結果も確かめる\n").unwrap();
+    assert_eq!(
+        exit_code(
+            &d,
+            &[
+                "run",
+                "empty.jcs",
+                "--document",
+                "bad.json",
+                "--save",
+                "out.json"
+            ]
+        ),
+        2
+    );
+    assert!(!d.join("out.json").exists());
+    std::fs::remove_dir_all(d).ok();
+}
