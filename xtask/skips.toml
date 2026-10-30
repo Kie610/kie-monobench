@@ -7,6 +7,13 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+a_shaft_with_clearance_is_neither_overlap_nor_coincident = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_oversized_shaft_has_the_annular_overlap_volume = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_exact_shaft_reports_the_cylindrical_face_as_coincident = "truck の回(同じ円筒で接するブーリアン)"
+a_half_inserted_shaft_marks_only_the_inserted_length = "truck の回(同じ円筒で接するブーリアン)"
+an_equal_diameter_shaft_offset_by_half_a_millimeter_is_overlap = "truck の回(横にずらした同径の軸と穴のブーリアンで単純な輪を作れない)"
+an_antiparallel_equal_diameter_shaft_is_coincident = "truck の回(反平行の同じ円筒で接するブーリアン)"
+circular_end_edges_do_not_make_a_waisted_side_cylindrical = "truck の回(ロフトに対応していない)"
 cylinder_named_ends_are_arcs = "truck の回(円の辺の名前付き列挙がなく、網の折れ線へ戻す)"
 expanded_thread_tapped_holes_use_all_families_and_survive_reopening = "truck の回(曲面の網による近似で M14 ねじ穴の体積が 0.183 mm³ ずれる)"
 legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth = "truck の回(曲面の網による近似で M14 ザグリの除去体積が 0.613 mm³ ずれる)"
