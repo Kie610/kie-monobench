@@ -24,6 +24,39 @@ pub struct TextCommands {
     fonts: std::sync::Mutex<crate::fonts::FontIndex>,
 }
 
+impl TextCommands {
+    fn insert_text(
+        &self,
+        cx: &Context<'_>,
+        label: &str,
+        mut text: Text,
+    ) -> Result<Outcome, kmb_core::Problem> {
+        let face = self
+            .fonts
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .gothic();
+        let label = match face {
+            Some(face) => {
+                let absent = use_face(&mut text, &face)?;
+                if absent.is_empty() {
+                    label.to_string()
+                } else {
+                    let letters: String = absent.iter().take(12).collect();
+                    format!("{label}(このフォントに無い字: {letters})")
+                }
+            }
+            None => format!("{label}(ゴシック体が見つからないので 1 本線にしました)"),
+        };
+        Ok(insert(
+            &label,
+            TEXT,
+            format!("文字{}", cx.count_of(TEXT) + 1),
+            &text,
+        ))
+    }
+}
+
 fn picked_plane(cx: &Context<'_>) -> Option<SketchPlane> {
     let p = cx.picked?;
     Some(SketchPlane::face(p.feature, p.face.clone()))
@@ -281,7 +314,7 @@ fn insert<T: serde::Serialize>(label: &str, type_id: &str, name: String, data: &
 }
 
 impl Extension for TextCommands {
-    /// 画面の並びは前と同じ(スケッチの「作成」の、平面の再定義より前。分解は再定義の後)。
+    /// スケッチの「作成」で平面の再定義より前に置き、分解は再定義の後に置く。
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let face = cx.picked_plane().is_some();
         vec![
@@ -324,8 +357,8 @@ impl Extension for TextCommands {
                 .menu("作成")
                 .icon("textf")
                 .aliases("もじ text てきすと ふぉんと font めん")
-                .hint("平らな面を選んでから押すと、面の中心に 1 本線のフォントの文字を置く。彫刻でなぞるか、押し出しで彫る・浮かせる")
-                // 帯の前には出さない(Kie 2026-10-21 の画板)
+                .hint("平らな面を選んでから押すと、面の中心に PC のゴシック体で文字を置く。書体が見つからない時は 1 本線にして知らせる。輪郭は押し出しで彫る・浮かせる")
+                // 作成の一覧に置き、帯の前には出さない
                 .at(if face {
                     &[Place::Menu, Place::FaceMenu]
                 } else {
@@ -377,11 +410,10 @@ impl Extension for TextCommands {
                 (Some(plane), Some(f)) => {
                     let center = face_center(cx).unwrap_or(f.point);
                     let at = kmb_core::Plane::from_point_normal(f.point, f.normal).to_local(center);
-                    Ok(insert(
+                    self.insert_text(
+                        cx,
                         "面に文字を追加",
-                        TEXT,
-                        format!("文字{}", cx.count_of(TEXT) + 1),
-                        &Text {
+                        Text {
                             plane,
                             x: format!("{:.2} mm", at[0]),
                             y: format!("{:.2} mm", at[1]),
@@ -389,23 +421,22 @@ impl Extension for TextCommands {
                             valign: crate::VAlign::Middle,
                             ..Default::default()
                         },
-                    ))
+                    )
                 }
                 _ => Err(NEED_FACE.into()),
             },
             TEXT_AT_POINT => match sketch_with_point(cx) {
-                Some(sketch) => Ok(insert(
+                Some(sketch) => self.insert_text(
+                    cx,
                     "スケッチの点に文字を追加",
-                    TEXT,
-                    format!("文字{}", cx.count_of(TEXT) + 1),
-                    &Text {
+                    Text {
                         anchor: Some(sketch),
                         anchor_point: given_point(cx),
                         align: crate::HAlign::Center,
                         valign: crate::VAlign::Middle,
                         ..Default::default()
                     },
-                )),
+                ),
                 None => Err("線や円に使っていない点のあるスケッチを選んでいません".into()),
             },
             // 円は真上に外向き(逆にたどる)、線分と円弧(とそれにつながる線の列)は真ん中に置く
@@ -413,11 +444,10 @@ impl Extension for TextCommands {
                 Some((sketch, path)) => {
                     let circle = path.closed() && path.len() == 1;
                     let middle = path.length() / 2.0;
-                    Ok(insert(
+                    self.insert_text(
+                        cx,
                         "スケッチの線に文字を追加",
-                        TEXT,
-                        format!("文字{}", cx.count_of(TEXT) + 1),
-                        &Text {
+                        Text {
                             path: Some(sketch),
                             reverse: circle,
                             chain: true,
@@ -429,7 +459,7 @@ impl Extension for TextCommands {
                             },
                             ..Default::default()
                         },
-                    ))
+                    )
                 }
                 None => Err("線分・円弧・円のあるスケッチを選んでいません".into()),
             },
@@ -500,3 +530,7 @@ impl Extension for TextCommands {
         o
     }
 }
+
+#[cfg(test)]
+#[path = "default_font_tests.rs"]
+mod default_font_tests;
