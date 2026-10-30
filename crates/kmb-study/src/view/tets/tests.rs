@@ -168,7 +168,7 @@ fn pressure_cylinder_band_borders_are_concentric() {
     );
     // 4 分割の線形補間では 0.139411207 段。半分以下かつ 0.1 段以下。
     assert!(
-        worst < 0.139411207 * 0.5 && worst < 0.1,
+        worst < (0.139411207_f64 * 0.5).min(0.1),
         "帯の境の波 {worst:.9} 段"
     );
 }
