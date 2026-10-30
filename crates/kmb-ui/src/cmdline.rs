@@ -414,7 +414,26 @@ impl ScriptResult {
     }
 }
 
+/// 入力の出どころは、ファイルの許可や実行中の別の行と独立して保持する。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InputOrigin {
+    Human,
+    Mcp,
+    Script,
+}
+
+impl InputOrigin {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Human => "human",
+            Self::Mcp => "mcp",
+            Self::Script => "script",
+        }
+    }
+}
+
 struct Job {
+    origin: InputOrigin,
     line: String,
     cmd: Cmd,
     batch: u64,
@@ -502,11 +521,20 @@ impl Workspace {
     /// スクリプト(何行でも)を流し始める。返す番号で終わりを [`Self::script_result`] から読む。
     /// 読めない行があれば、何も流さずにその行を返す。
     pub fn run_script(&mut self, text: &str) -> Result<u64, String> {
+        self.run_script_from(text, InputOrigin::Script)
+    }
+
+    pub(crate) fn run_script_from(
+        &mut self,
+        text: &str,
+        origin: InputOrigin,
+    ) -> Result<u64, String> {
         let mut jobs = Vec::new();
         let batch = self.cmdline.next_batch;
         for (i, line) in text.lines().enumerate() {
             match parse(line) {
                 Ok(Some(cmd)) => jobs.push(Job {
+                    origin,
                     line: line.trim().to_string(),
                     cmd,
                     batch,
@@ -740,6 +768,7 @@ impl Workspace {
                     }
                 };
                 Self::push_events(ctx, ev);
+                ctx.plugin::<UiDriver>().lock().mark_press(&n, r.job.origin);
                 r.target = Some(n);
                 Step::Next(SETTLE)
             }
@@ -797,6 +826,7 @@ impl Workspace {
                     ctx,
                     drive::click_at(f.rect.center(), PointerButton::Primary, Modifiers::NONE),
                 );
+                ctx.plugin::<UiDriver>().lock().mark_press(&f, r.job.origin);
                 r.target = Some(f);
                 Step::Next(SETTLE)
             }
@@ -857,6 +887,10 @@ impl Workspace {
                 };
                 // 欄の名前で書いた時は、その横の一覧の口
                 let n = drive::combo_for(&n, &nodes).cloned().unwrap_or(n);
+                if n.disabled {
+                    return Step::Done(Err(format!("「{}」は選べない状態です", n.name)));
+                }
+                ctx.plugin::<UiDriver>().lock().mark_press(&n, r.job.origin);
                 Self::push_events(
                     ctx,
                     drive::click_at(n.rect.center(), PointerButton::Primary, Modifiers::NONE),
@@ -881,6 +915,7 @@ impl Workspace {
                     });
                 match pick {
                     Some(p) => {
+                        ctx.plugin::<UiDriver>().lock().mark_press(p, r.job.origin);
                         Self::push_events(
                             ctx,
                             drive::click_at(
@@ -1315,6 +1350,7 @@ impl Workspace {
                     },
                 ));
                 self.cmdline.queue.push_front(Job {
+                    origin: InputOrigin::Human,
                     line: line.to_string(),
                     cmd,
                     batch,

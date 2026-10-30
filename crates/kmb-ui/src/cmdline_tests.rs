@@ -301,3 +301,233 @@ fn a_live_script_that_fails_puts_the_document_back() {
 
 #[path = "cmdline_tests/adopted_tests.rs"]
 mod adopted;
+
+fn widget_glow_status(h: &mut Harness<'static, Workspace>) -> serde_json::Value {
+    match h
+        .state_mut()
+        .live_request("status", &serde_json::json!({}))
+        .unwrap()
+    {
+        crate::live_ui::Answer::Now(value) => value,
+        _ => panic!("状態はすぐに返す"),
+    }
+}
+
+fn widget_glow_harness() -> Harness<'static, Workspace> {
+    harness(Workspace::new(
+        kmb_core::Document::new(),
+        None,
+        kmb_bundle::modules(),
+    ))
+}
+
+/// 確かめること: ファイル台本の実クリックを光らせる記録が状態から読める。
+#[test]
+fn script_widget_glow_records_the_actual_button() {
+    let mut h = widget_glow_harness();
+    let result = run(&mut h, "click \"作業空間: 設計\"");
+    assert!(result.ok, "{}", result.report());
+    let status = widget_glow_status(&mut h);
+    let marks = status["ui_glow"].as_array().expect("押した部品の光る記録");
+    assert!(
+        marks
+            .iter()
+            .any(|m| m["name"] == "作業空間: 設計" && m["source"] == "script"),
+        "{status}"
+    );
+}
+
+/// 確かめること: フォルダの制限を持たないMCP要求でも出どころを保持する。
+#[test]
+fn mcp_widget_glow_is_independent_of_file_roots() {
+    let mut h = widget_glow_harness();
+    let crate::live_ui::Answer::AfterScript(batch) = h
+        .state_mut()
+        .live_request("ui_click", &serde_json::json!({"target": "作業空間: 設計"}))
+        .unwrap()
+    else {
+        panic!("画面のクリックは台本として実行する");
+    };
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 30, "クリックが終わらない");
+    }
+    let status = widget_glow_status(&mut h);
+    let marks = status["ui_glow"]
+        .as_array()
+        .expect("MCPが押した部品の光る記録");
+    assert!(
+        marks
+            .iter()
+            .any(|m| m["name"] == "作業空間: 設計" && m["source"] == "mcp"),
+        "{status}"
+    );
+}
+
+/// 確かめること: 人のキー入力で送信したコマンド欄のクリックは光らせない。
+#[test]
+fn human_command_widget_glow_does_not_inherit_the_typing_script_origin() {
+    let mut h = widget_glow_harness();
+    assert!(run(&mut h, "pane コマンド on").ok);
+    let field = {
+        let nodes = h
+            .ctx
+            .plugin::<crate::drive::UiDriver>()
+            .lock()
+            .nodes(h.ctx.pixels_per_point());
+        let label = crate::drive::Query::parse("コマンド")
+            .one(&nodes, h.ctx.content_rect())
+            .unwrap();
+        crate::drive::field_for(label, &nodes).unwrap().clone()
+    };
+    h.input_mut().events.extend(crate::drive::click_at(
+        field.rect.center(),
+        egui::PointerButton::Primary,
+        egui::Modifiers::NONE,
+    ));
+    h.step();
+    h.input_mut()
+        .events
+        .push(egui::Event::Text("click \"作業空間: 設計\"".into()));
+    h.step();
+    h.input_mut().events.extend(crate::drive::key_events(
+        egui::Key::Enter,
+        egui::Modifiers::NONE,
+    ));
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if !h.state().script_running()
+            && h.state()
+                .command_log()
+                .iter()
+                .any(|(kind, s)| *kind == Kind::Input && s == "click \"作業空間: 設計\"")
+        {
+            break;
+        }
+        assert!(
+            started.elapsed().as_secs() < 10,
+            "人のコマンドが終わらない: {:?}",
+            h.state().command_log()
+        );
+    }
+    let status = widget_glow_status(&mut h);
+    assert!(
+        !status["ui_glow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "作業空間: 設計"),
+        "{status}"
+    );
+    assert!(
+        h.state()
+            .command_log()
+            .iter()
+            .any(|(kind, s)| *kind == Kind::Input && s == "click \"作業空間: 設計\"")
+    );
+}
+
+#[test]
+fn disabled_button_widget_glow_is_not_recorded() {
+    let mut h = widget_glow_harness();
+    let result = run(&mut h, "click \"元に戻す\"");
+    assert!(!result.ok);
+    assert!(
+        result.report().contains("押せない状態"),
+        "{}",
+        result.report()
+    );
+    assert!(
+        widget_glow_status(&mut h)["ui_glow"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+/// 確かめること: 実際の接続からの台本クリックと、状態を読む道具で印を確かめる。
+#[test]
+fn connected_ui_tools_widget_glow_end_to_end() {
+    let dir = std::env::temp_dir().join(format!(
+        "widget-glow-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut ws = Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules())
+        .with_data_dir(dir.clone());
+    ws.layout_mut().ai_live = true;
+    let mut h = harness(ws);
+    let ask = |h: &mut Harness<'static, Workspace>, tool: &str, args: serde_json::Value| {
+        let (data, name) = (dir.clone(), tool.to_string());
+        let request = std::thread::spawn(move || kmb_session::live::call(&data, &name, args));
+        let start = std::time::Instant::now();
+        while !request.is_finished() {
+            h.step();
+            assert!(start.elapsed().as_secs() < 30, "画面への要求が終わらない");
+            std::thread::yield_now();
+        }
+        request.join().unwrap().unwrap()
+    };
+    let result = ask(
+        &mut h,
+        "script",
+        serde_json::json!({"text":"click \"作業空間: 設計\""}),
+    );
+    assert_eq!(result["ok"], true, "{result}");
+    let status = ask(&mut h, "status", serde_json::json!({}));
+    assert!(
+        status["ui_glow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["name"] == "作業空間: 設計"
+                && m["source"] == "mcp"
+                && m["alpha"].as_f64().unwrap() > 0.0),
+        "{status}"
+    );
+    h.state_mut().live_disconnect();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn type_and_select_widget_glow_use_the_actual_field_and_combo() {
+    let mut h = widget_glow_harness();
+    let typed = run(
+        &mut h,
+        "click \"設定\"\nclick \"画面\"\ntype \"字の大きさ\" 150",
+    );
+    assert!(typed.ok, "{}", typed.report());
+    let status = widget_glow_status(&mut h);
+    assert!(
+        status["ui_glow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["role"] == "SpinButton"),
+        "{status}"
+    );
+    let selected = run(
+        &mut h,
+        "click \"単位\"\nselect \"この文書の長さの単位\" \"インチ(in)\"",
+    );
+    assert!(selected.ok, "{}", selected.report());
+    let status = widget_glow_status(&mut h);
+    assert!(
+        status["ui_glow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["role"] == "ComboBox"),
+        "{status}"
+    );
+    assert_eq!(h.state().length_unit(), kmb_core::LengthUnit::In);
+}
