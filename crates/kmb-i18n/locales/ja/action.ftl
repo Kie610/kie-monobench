@@ -358,3 +358,9 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-study-converge = 精度を確かめる
+action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる
+
+action-study-check = 点検
+action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる

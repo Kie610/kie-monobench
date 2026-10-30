@@ -265,4 +265,6 @@ solid.surface_patch@1	kmb-cad-surface
 solid.sweep@1	kmb-cad-sweep
 solid.thread@1	kmb-cad-hole
 study.cancel	kmb-study
+study.check	kmb-study
+study.converge	kmb-study
 study.run	kmb-study

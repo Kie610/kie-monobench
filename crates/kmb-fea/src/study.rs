@@ -27,6 +27,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
 
+mod convergence;
+mod precheck;
+use convergence::Measure;
+pub use precheck::precheck;
+
 pub const STATIC: &str = "fea.static@1";
 pub const THERMAL: &str = "fea.thermal@1";
 pub const MODAL: &str = "fea.modal@1";
@@ -450,6 +455,7 @@ impl Feature for Study {
                 })
             }
         };
+        let checks = precheck::precheck(self.kind, &self.data, &|s, name| number(ctx, s, name));
         let job = Job {
             kind: self.kind,
             mat,
@@ -470,6 +476,7 @@ impl Feature for Study {
                 steps,
                 section,
                 keeps_partial,
+                checks,
             }
             .to_value(),
         )]
@@ -656,9 +663,11 @@ impl Job {
     }
 
     /// 網を作る(自動の大きさなら、要素が多すぎない大きさを先に決める)。
-    fn prepare(&self, c: &Control) -> Result<(Prepared, Vec<String>), String> {
+    fn prepare(&self, c: &Control, size: Option<f64>) -> Result<(Prepared, Vec<String>), String> {
         let mut notes = Vec::new();
-        let h = if self.auto {
+        let h = if let Some(h) = size {
+            h
+        } else if self.auto {
             let h = self.auto_size(c)?;
             if h > self.h * 1.001 {
                 notes.push(format!(
@@ -712,20 +721,49 @@ const CANCELLED: &str = "中止しました";
 
 impl Task for Job {
     fn solve(&self, c: &Control) -> Result<SimResult, String> {
+        self.level(c, None, None).map(|v| v.result)
+    }
+
+    fn supports(&self, mode: &kmb_study::Mode) -> Result<(), String> {
+        mode.validate()?;
+        if matches!(mode, kmb_study::Mode::Converge { .. }) && self.kind == Kind::Topology {
+            Err("この研究では使えません".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn solve_mode(&self, mode: &kmb_study::Mode, c: &Control) -> Result<SimResult, String> {
+        self.supports(mode)?;
+        match mode {
+            kmb_study::Mode::Solve => self.solve(c),
+            kmb_study::Mode::Converge { ratio } => self.converge(*ratio, c),
+        }
+    }
+}
+
+impl Job {
+    fn level(
+        &self,
+        c: &Control,
+        size: Option<f64>,
+        stage: Option<usize>,
+    ) -> Result<convergence::Level, String> {
         let started = std::time::Instant::now();
-        c.step(0);
-        let (p, notes) = self.prepare(c)?;
-        c.step(1);
+        c.step(stage.unwrap_or(0));
+        let (p, notes) = self.prepare(c, size)?;
+        c.step(stage.unwrap_or(1));
         c.progress(0.2, format!("要素 {} 個", p.mesh.tets.len()));
+        let mut values = Vec::new();
         let r = match &self.solve {
-            Solve::Static(i) => static_result(&p, &self.mat, i)?,
-            Solve::Thermal(i) => thermal_result(&p, &self.mat, i)?,
-            Solve::Transient(i) => transient_result(&p, &self.mat, i, c)?,
-            Solve::Modal(i) => modal_result(&p, &self.mat, i)?,
+            Solve::Static(i) => static_result(&p, &self.mat, i, &mut values)?,
+            Solve::Thermal(i) => thermal_result(&p, &self.mat, i, &mut values)?,
+            Solve::Transient(i) => transient_result(&p, &self.mat, i, c, &mut values)?,
+            Solve::Modal(i) => modal_result(&p, &self.mat, i, &mut values)?,
             Solve::Topology(i) => topology_result(&p, &self.mat, i, c)?,
         };
         let mut r = self.check_cancelled(c, r)?;
-        c.step(2);
+        c.step(stage.unwrap_or(2));
         c.progress(0.98, "");
         let st = &p.mesh.stats;
         log::info!(
@@ -756,7 +794,12 @@ impl Task for Job {
         }
         note.push_str(NOTE);
         r.note = note;
-        Ok(r)
+        Ok(convergence::Level {
+            result: r,
+            values,
+            stats: st.clone(),
+            nodes: p.mesh.points.len(),
+        })
     }
 }
 
@@ -860,6 +903,7 @@ fn static_result(
     p: &Prepared,
     mat: &FeaMaterial,
     input: &StaticInput,
+    measures: &mut Vec<Measure>,
 ) -> Result<SimResult, String> {
     let out = solve_static(p, input)?;
     let keep = vec![true; p.mesh.tets.len()];
@@ -870,6 +914,8 @@ fn static_result(
         .collect();
     let max_vm = out.max_vm();
     let max_u = out.max_disp();
+    measures.push(Measure::new("最大の変位", "mm", max_u));
+    measures.push(Measure::new("全体の最大のミーゼス応力", "MPa", max_vm));
     let sf = if max_vm > 0.0 {
         mat.strength / max_vm
     } else {
@@ -919,6 +965,7 @@ fn static_result(
         .filter(|(_, n)| !**n)
         .map(|(v, _)| *v)
         .fold(0.0, f64::max);
+    measures.push(Measure::new("特異点を除いた最大", "MPa", away));
     let hot = out
         .node_vm
         .iter()
@@ -978,12 +1025,17 @@ fn thermal_result(
     p: &Prepared,
     mat: &FeaMaterial,
     input: &ThermalInput,
+    measures: &mut Vec<Measure>,
 ) -> Result<SimResult, String> {
     let out = solve_thermal(p, input)?;
     let keep = vec![true; p.mesh.tets.len()];
     let (mut r, nodes) = surface_result(p, &keep);
     let tmax = out.t.iter().copied().fold(f64::MIN, f64::max);
     let tmin = out.t.iter().copied().fold(f64::MAX, f64::min);
+    measures.extend([
+        Measure::new("最高の温度", "℃", tmax),
+        Measure::new("空気へ逃げた熱", "W", out.to_air),
+    ]);
     r.quantities = vec![Quantity::scalar("温度", "℃", 0)];
     r.frames = one_frame(vec![Values::exact(on_surface(&nodes, |n| out.t[n]))]);
     r.numbers = vec![
@@ -1009,6 +1061,7 @@ fn transient_result(
     mat: &FeaMaterial,
     input: &TransientInput,
     c: &Control,
+    measures: &mut Vec<Measure>,
 ) -> Result<SimResult, String> {
     let out = solve_transient(p, input, &|| c.cancelled(), &|f| {
         c.progress((0.2 + 0.75 * f) as f32, format!("{} s", fmt(input.end * f)))
@@ -1050,6 +1103,10 @@ fn transient_result(
     let last = out.frames.last().ok_or("温度のコマがありません")?;
     let high = last.t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let low = last.t.iter().copied().fold(f64::INFINITY, f64::min);
+    measures.extend([
+        Measure::new("最高の温度", "℃", high),
+        Measure::new("空気へ逃げた熱", "W", last.to_air),
+    ]);
     r.numbers = vec![
         ("最高の温度".into(), format!("{} ℃", fmt(high))),
         ("最低の温度".into(), format!("{} ℃", fmt(low))),
@@ -1085,8 +1142,16 @@ fn transient_result(
     Ok(r)
 }
 
-fn modal_result(p: &Prepared, mat: &FeaMaterial, input: &ModalInput) -> Result<SimResult, String> {
+fn modal_result(
+    p: &Prepared,
+    mat: &FeaMaterial,
+    input: &ModalInput,
+    measures: &mut Vec<Measure>,
+) -> Result<SimResult, String> {
     let out = solve_modal(p, input)?;
+    for (i, f) in out.freqs.iter().filter(|f| **f > 1e-6).take(3).enumerate() {
+        measures.push(Measure::new(format!("{} 次の振動数", i + 1), "Hz", *f));
+    }
     let keep = vec![true; p.mesh.tets.len()];
     let (mut r, nodes) = surface_result(p, &keep);
     // モードごとに 1 コマ(時刻の帯でモードを送る)
@@ -1423,8 +1488,8 @@ pub(crate) mod tests {
         let Solve::Thermal(b) = b else {
             panic!("定常を選ぶ")
         };
-        let a = thermal_result(&p, mat, &a).unwrap();
-        let b = thermal_result(&p, mat, &b).unwrap();
+        let a = thermal_result(&p, mat, &a, &mut Vec::new()).unwrap();
+        let b = thermal_result(&p, mat, &b, &mut Vec::new()).unwrap();
         assert_eq!(a.frames, b.frames);
         assert_eq!(a.frames.len(), 1);
         assert_eq!(a.frames[0].time, None);
@@ -1498,7 +1563,7 @@ pub(crate) mod tests {
         let mut i = crate::validation_tests::transient_case();
         i.frames = 2;
         let c = Control::new();
-        let result = transient_result(&p, mat, &i, &c).unwrap();
+        let result = transient_result(&p, mat, &i, &c, &mut Vec::new()).unwrap();
         assert_eq!(result.frames.len(), 3);
         assert_eq!(result.frames[0].time, Some(0.0));
         assert_eq!(result.frames[2].time, Some(i.end));
@@ -1509,14 +1574,14 @@ pub(crate) mod tests {
         assert!(range.0 < range.1);
         assert!(result.number("使った刻みの数").is_some());
         c.cancel();
-        let partial = transient_result(&p, mat, &i, &c).unwrap();
+        let partial = transient_result(&p, mat, &i, &c, &mut Vec::new()).unwrap();
         assert!(partial.partial);
         assert_eq!(partial.frames.len(), 1);
         assert_eq!(partial.frames[0].time, Some(0.0));
         i.thermal.k = 1.0;
         i.thermal.rest_h = Some(1e9);
         i.end = 0.01;
-        let abrupt = transient_result(&p, mat, &i, &Control::new()).unwrap();
+        let abrupt = transient_result(&p, mat, &i, &Control::new(), &mut Vec::new()).unwrap();
         assert!(
             abrupt
                 .note

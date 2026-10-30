@@ -17,11 +17,39 @@ use std::time::Instant;
 /// 研究の出力の名前(評価が出す仕事の鍵)。
 pub const PLAN: &str = "plan";
 
+/// 研究の実行の種類。条件の鍵は変えず、同じ研究の結果を置き換える。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Mode {
+    Solve,
+    Converge { ratio: f64 },
+}
+
+impl Mode {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Converge { ratio } if !ratio.is_finite() || !(1.3..=2.0).contains(ratio) => {
+                Err("網の大きさの比は 1.3 から 2.0 にしてください".into())
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
+/// 解く前に見つけた足りない条件と、その直し方。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Check {
+    pub error: bool,
+    pub what: String,
+    pub fix: String,
+}
+
 /// 評価が出す、解く仕事の札。
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Plan {
     /// 仕事の鍵(解く条件と形から作る。同じなら同じ結果になる)
     pub key: u64,
+    #[serde(default)]
+    pub checks: Vec<Check>,
     /// 計算の段の名前(進み具合の行)
     #[serde(default)]
     pub steps: Vec<String>,
@@ -42,6 +70,22 @@ impl Payload for Plan {
 pub trait Task: Send + Sync {
     /// 解く(重い)。中止されたら、途中までの結果([`SimResult::partial`])か誤りを返す。
     fn solve(&self, c: &Control) -> Result<SimResult, String>;
+
+    fn supports(&self, mode: &Mode) -> Result<(), String> {
+        mode.validate()?;
+        match mode {
+            Mode::Solve => Ok(()),
+            _ => Err("この研究では使えません".into()),
+        }
+    }
+
+    fn solve_mode(&self, mode: &Mode, c: &Control) -> Result<SimResult, String> {
+        self.supports(mode)?;
+        match mode {
+            Mode::Solve => self.solve(c),
+            _ => Err("この研究では使えません".into()),
+        }
+    }
 }
 
 /// 評価が作った解く仕事の預かり所(鍵ごと)。古い物から捨てる。組み立てごとに 1 つで、kmb-study の
@@ -216,7 +260,14 @@ pub struct Runner {
 
 impl Runner {
     /// 仕事を別のスレッドで解き始める。同じ研究が計算中なら止めてから。
-    pub fn start(&self, at: (u64, u64), key: u64, steps: Vec<String>, task: Arc<dyn Task>) {
+    pub fn start(
+        &self,
+        at: (u64, u64),
+        key: u64,
+        steps: Vec<String>,
+        task: Arc<dyn Task>,
+        mode: Mode,
+    ) {
         let control = Arc::new(Control::new());
         let out = Arc::new(Mutex::new(None));
         {
@@ -225,16 +276,17 @@ impl Runner {
                 .name("研究の計算".into())
                 .spawn(move || {
                     let t = Instant::now();
-                    let r =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| task.solve(&c)))
-                            .unwrap_or_else(|e| {
-                                let msg = e
-                                    .downcast_ref::<String>()
-                                    .cloned()
-                                    .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
-                                    .unwrap_or_default();
-                                Err(format!("計算の途中で止まりました({msg})"))
-                            });
+                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        task.solve_mode(&mode, &c)
+                    }))
+                    .unwrap_or_else(|e| {
+                        let msg = e
+                            .downcast_ref::<String>()
+                            .cloned()
+                            .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+                            .unwrap_or_default();
+                        Err(format!("計算の途中で止まりました({msg})"))
+                    });
                     match &r {
                         Ok(r) => log::info!(
                             "研究の計算が終わった({:.2} 秒、{}{})",
@@ -272,9 +324,10 @@ impl Runner {
         at: (u64, u64),
         key: u64,
         task: &dyn Task,
+        mode: Mode,
     ) -> Result<Arc<SimResult>, String> {
         let t = Instant::now();
-        let r = task.solve(&Control::new());
+        let r = task.solve_mode(&mode, &Control::new());
         let mut m = self.slots.lock().map_err(|e| e.to_string())?;
         let s = m.entry(at).or_default();
         match r {
@@ -428,7 +481,7 @@ mod tests {
     fn cancel_keeps_the_partial_result() {
         let r = Runner::default();
         let at = (1, 7);
-        r.start(at, 42, vec!["解く".into()], Arc::new(Slow));
+        r.start(at, 42, vec!["解く".into()], Arc::new(Slow), Mode::Solve);
         assert!(matches!(r.status(at), Status::Running { key: 42, .. }));
         assert!(r.busy());
         assert!(r.cancel(at));
@@ -457,8 +510,8 @@ mod tests {
     fn cancelling_without_a_partial_result_keeps_the_last_result_and_no_failure() {
         let r = Runner::default();
         let at = (1, 8);
-        r.solve_now(at, 1, &Slow).unwrap();
-        r.start(at, 2, Vec::new(), Arc::new(Stops));
+        r.solve_now(at, 1, &Slow, Mode::Solve).unwrap();
+        r.start(at, 2, Vec::new(), Arc::new(Stops), Mode::Solve);
         assert!(r.cancel(at));
         wait_idle(&r, at);
         assert!(r.failure(at).is_none(), "中止は失敗にしない");
@@ -473,5 +526,72 @@ mod tests {
         assert!(p.get(9_000_002).is_none());
         // 組み立てごとに別の預かり所(プロセス全体で 1 つにしない)
         assert!(Prepared::default().get(9_000_001).is_none());
+    }
+}
+
+#[cfg(test)]
+mod convergence_tests {
+    use super::*;
+    struct Complete;
+    impl Task for Complete {
+        fn solve(&self, _: &Control) -> Result<SimResult, String> {
+            Ok(SimResult {
+                summary: "前の結果".into(),
+                ..Default::default()
+            })
+        }
+    }
+    struct StopsAtMiddle(std::sync::mpsc::Sender<()>);
+    impl Task for StopsAtMiddle {
+        fn solve(&self, _: &Control) -> Result<SimResult, String> {
+            unreachable!()
+        }
+        fn supports(&self, m: &Mode) -> Result<(), String> {
+            m.validate()
+        }
+        fn solve_mode(&self, _: &Mode, c: &Control) -> Result<SimResult, String> {
+            c.step(0);
+            c.step(1);
+            self.0.send(()).unwrap();
+            while !c.cancelled() {
+                std::thread::yield_now();
+            }
+            Err("中止しました".into())
+        }
+    }
+    #[test]
+    fn cancelling_the_middle_convergence_level_keeps_the_previous_result() {
+        let r = Runner::default();
+        let at = (9, 1);
+        r.solve_now(at, 17, &Complete, Mode::Solve).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        r.start(
+            at,
+            17,
+            vec!["粗".into(), "中".into(), "細".into()],
+            Arc::new(StopsAtMiddle(tx)),
+            Mode::Converge { ratio: 1.5 },
+        );
+        rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        assert!(r.cancel(at));
+        let until = Instant::now();
+        while r.busy() {
+            assert!(until.elapsed().as_secs() < 5);
+            std::thread::yield_now();
+        }
+        let result = r.done(at).unwrap();
+        assert_eq!(result.key, 17);
+        assert_eq!(result.result.summary, "前の結果");
+        assert!(r.failure(at).is_none());
+    }
+    #[test]
+    fn default_task_and_old_plan_remain_solve_only() {
+        assert!(Complete.supports(&Mode::Solve).is_ok());
+        assert!(Complete.supports(&Mode::Converge { ratio: 1.5 }).is_err());
+        for ratio in [f64::NAN, 0.0, 1.2, 2.01] {
+            assert!(Mode::Converge { ratio }.validate().is_err());
+        }
+        let old: Plan = serde_json::from_value(serde_json::json!({"key":42})).unwrap();
+        assert!(old.checks.is_empty());
     }
 }
