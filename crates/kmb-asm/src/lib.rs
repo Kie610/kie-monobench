@@ -949,6 +949,7 @@ impl Extension for AsmCommands {
                 ),
             Action::new(MOVE_PART, "部品を移動", "cad")
                 .arg(Arg::list("bodies", "動かす部品のボディの機能の番号の並び(省くと選んでいる面のボディと選んでいるボディ)"))
+                .args(position::placement_args(true))
                 .menu("組立")
                 .icon("movecopy")
                 .aliases("ぶひん 部品 いどう 移動 うごかす 動かす move component")
@@ -1340,3 +1341,6 @@ pub fn module() -> kmb_core::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod numeric_placement_tests;

@@ -11,11 +11,11 @@
 use crate::joint::{apply_dir, moved_outputs, mul, transform_of};
 use crate::part::{Part, heir_before};
 use crate::{JOINT, Joint};
-use kmb_cad::{Exprs, expr_refs, length, output, parse, rename};
+use kmb_cad::{Exprs, angle, body_of, expr_refs, kernel_err, length, output, parse, rename};
 use kmb_core::kernel::{self as k};
 use kmb_core::{
-    Context, Descriptor, Edit, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outcome,
-    Outputs, Registry, body_root, category,
+    Arg, Context, Descriptor, Edit, EvalCtx, EvalError, Feature, FeatureId, Field, FieldUnit,
+    InputRef, Outcome, Outputs, Registry, add_warnings, body_root, category,
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +29,10 @@ pub const MOVE_PART: &str = "asm.move_part";
 
 fn zero_mm() -> String {
     "0 mm".into()
+}
+
+fn zero_deg() -> String {
+    "0 deg".into()
 }
 
 /// 例: `{"moving": {"kind": "component", "id": 12}, "bodies": [9, 10], "x": "12.5 mm", "y": "0 mm",
@@ -46,17 +50,39 @@ pub struct Position {
     pub y: String,
     #[serde(default = "zero_mm")]
     pub z: String,
+    #[serde(default = "zero_deg")]
+    pub rx: String,
+    #[serde(default = "zero_deg")]
+    pub ry: String,
+    #[serde(default = "zero_deg")]
+    pub rz: String,
+    /// 回転の中心を測る、動かす部品自身のボディ。連動して動く部品は含まない。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    center_bodies: Vec<FeatureId>,
 }
 
 impl Exprs for Position {
     fn exprs_mut(&mut self) -> Vec<&mut String> {
-        vec![&mut self.x, &mut self.y, &mut self.z]
+        vec![
+            &mut self.x,
+            &mut self.y,
+            &mut self.z,
+            &mut self.rx,
+            &mut self.ry,
+            &mut self.rz,
+        ]
     }
 }
 
 impl Feature for Position {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v: Vec<InputRef> = self.bodies.iter().map(|b| output(*b, "body")).collect();
+        for b in &self.center_bodies {
+            let input = output(*b, "body");
+            if !v.contains(&input) {
+                v.push(input);
+            }
+        }
         for i in expr_refs(self)? {
             if !v.contains(&i) {
                 v.push(i);
@@ -69,12 +95,44 @@ impl Feature for Position {
         if self.bodies.is_empty() {
             return Err(EvalError::InvalidData("動かすボディがありません".into()));
         }
-        let m = k::translation([
+        let mut m = k::translation([
             length(ctx, &self.x, "X 距離")?,
             length(ctx, &self.y, "Y 距離")?,
             length(ctx, &self.z, "Z 距離")?,
         ]);
         let mut out = Outputs::new();
+        let angles = [
+            angle(ctx, &self.rx, "X 回転角")?,
+            angle(ctx, &self.ry, "Y 回転角")?,
+            angle(ctx, &self.rz, "Z 回転角")?,
+        ];
+        if angles.iter().any(|v| *v != 0.0) {
+            let center = if self.center_bodies.is_empty() {
+                add_warnings(
+                    &mut out,
+                    vec!["回転の中心の参照が無い位置は、世界の原点を中心に回します".into()],
+                );
+                [0.0; 3]
+            } else {
+                let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+                for b in &self.center_bodies {
+                    let shape = body_of(ctx, *b)?;
+                    let bounds = ctx.kernel().bounds(shape).map_err(kernel_err)?;
+                    for i in 0..3 {
+                        lo[i] = lo[i].min(bounds.0[i]);
+                        hi[i] = hi[i].max(bounds.1[i]);
+                    }
+                }
+                [0, 1, 2].map(|i| (lo[i] + hi[i]) / 2.0)
+            };
+            let mut rotation = k::IDENTITY;
+            for (i, a) in angles.into_iter().enumerate() {
+                let mut axis = [0.0; 3];
+                axis[i] = 1.0;
+                rotation = mul(&k::rotation(center, axis, a), &rotation);
+            }
+            m = mul(&m, &rotation);
+        }
         moved_outputs(ctx, &self.bodies, &m, &mut out)?;
         Ok(out)
     }
@@ -88,24 +146,111 @@ pub fn descriptor() -> Descriptor {
     Descriptor::new(POSITION, category::SOLID, "位置")
         .role(kmb_interchange::role::kind::COMPONENT_POSITION)
         .icon("move")
-        .hint("3D のビューで引いて動かした部品の位置(一緒に動くジョイントの部品も)。値を直すと動く")
+        .hint("部品の中心で X・Y・Z の順に回してから、世界座標の距離だけ動かす。一緒に動くジョイントの部品も付いて来る")
         .aliases("いち 位置 きゃぷちゃ キャプチャ capture position ぶひん 部品 くみたて 組立")
         .field(
             Field::expr("x", "X 距離")
                 .length()
-                .help("引く前の位置からの距離"),
+                .help("回した後に、世界の X 向きへ動かす距離"),
         )
         .field(
             Field::expr("y", "Y 距離")
                 .length()
-                .help("引く前の位置からの距離"),
+                .help("回した後に、世界の Y 向きへ動かす距離"),
         )
         .field(
             Field::expr("z", "Z 距離")
                 .length()
-                .help("引く前の位置からの距離"),
+                .help("回した後に、世界の Z 向きへ動かす距離"),
         )
+        .field(Field::expr("rx", "X 回転角").angle().help("部品の外形の箱の中心で、世界の X 軸の向きに回す角度(X → Y → Z の順)"))
+        .field(Field::expr("ry", "Y 回転角").angle().help("部品の外形の箱の中心で、世界の Y 軸の向きに回す角度(X → Y → Z の順)"))
+        .field(Field::expr("rz", "Z 回転角").angle().help("部品の外形の箱の中心で、世界の Z 軸の向きに回す角度(X → Y → Z の順)"))
+        .upgrade(upgrade)
         .no_raw_editor()
+}
+
+fn upgrade(data: &mut serde_json::Value) {
+    if let Ok(p) = serde_json::from_value::<Position>(data.clone())
+        && let Ok(value) = serde_json::to_value(p)
+    {
+        *data = value;
+    }
+}
+
+pub(crate) fn placement_args(defaults: bool) -> Vec<Arg> {
+    [
+        ("x", "X 距離(mm。数または式。省くと 0)", FieldUnit::Length),
+        ("y", "Y 距離(mm。数または式。省くと 0)", FieldUnit::Length),
+        ("z", "Z 距離(mm。数または式。省くと 0)", FieldUnit::Length),
+        (
+            "rx",
+            "X 回転角(deg。数または式。省くと 0)",
+            FieldUnit::Angle,
+        ),
+        (
+            "ry",
+            "Y 回転角(deg。数または式。省くと 0)",
+            FieldUnit::Angle,
+        ),
+        (
+            "rz",
+            "Z 回転角(deg。数または式。省くと 0)",
+            FieldUnit::Angle,
+        ),
+    ]
+    .into_iter()
+    .map(|(key, help, unit)| {
+        let mut arg = Arg::value(key, help);
+        arg.unit = Some(unit);
+        if defaults {
+            arg = arg.default(0);
+        }
+        arg
+    })
+    .collect()
+}
+
+pub(crate) fn placement_data(
+    cx: &Context<'_>,
+) -> Result<(serde_json::Value, bool), kmb_core::Problem> {
+    let mut fields = serde_json::Map::new();
+    let mut specified = false;
+    for (key, unit) in [
+        ("x", "mm"),
+        ("y", "mm"),
+        ("z", "mm"),
+        ("rx", "deg"),
+        ("ry", "deg"),
+        ("rz", "deg"),
+    ] {
+        let value = match cx.arg(key) {
+            None | Some(serde_json::Value::Null) => format!("0 {unit}"),
+            Some(serde_json::Value::Number(n)) => {
+                specified = true;
+                format!("{n} {unit}")
+            }
+            Some(serde_json::Value::String(s)) if !s.trim().is_empty() => {
+                kmb_core::expr_inputs(s).map_err(|e| format!("{key} の式を読めません: {e}"))?;
+                specified = true;
+                s.clone()
+            }
+            _ => {
+                return Err(
+                    format!("{key} は数か、単位やパラメータを使った式で指定してください").into(),
+                );
+            }
+        };
+        fields.insert(key.into(), value.into());
+    }
+    Ok((serde_json::Value::Object(fields), specified))
+}
+
+fn center_bodies(cx: &Context<'_>, part: &Part) -> Vec<FeatureId> {
+    part.roots(cx.data)
+        .into_iter()
+        .map(|r| heir_before(cx.data, cx.registry, cx.report, r, None))
+        .collect()
 }
 
 pub fn register(reg: &mut Registry) {
@@ -244,11 +389,15 @@ pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         .collect();
     let [x, y, z] = offset.map(mm);
     let p = Position {
+        center_bodies: center_bodies(cx, &part),
         moving: part,
         bodies,
         x,
         y,
         z,
+        rx: zero_deg(),
+        ry: zero_deg(),
+        rz: zero_deg(),
     };
     let n = cx.count_of(POSITION) + 1;
     log::debug!("位置{n} を足す: {offset:?}(ボディ {} 個)", p.bodies.len());
@@ -287,32 +436,29 @@ pub fn move_target(cx: &Context<'_>, roots: &[FeatureId]) -> Result<Part, String
     Ok(part)
 }
 
-/// 部品 `part` を値で動かす位置の機能(0 mm から)を足す。いつも新しく足すので、作っている途中で
+/// 部品 `part` を値で動かす位置の機能を足す。いつも新しく足すので、作っている途中で
 /// やめれば足す前に戻る。
 pub fn move_part(cx: &Context<'_>, part: Part) -> Result<Outcome, kmb_core::Problem> {
     let name = part.label(cx.data, cx.registry, cx.report);
-    let bodies = moving_set(cx, &part)
+    let bodies: Vec<FeatureId> = moving_set(cx, &part)
         .iter()
         .map(|r| heir_before(cx.data, cx.registry, cx.report, *r, None))
         .collect();
-    let p = Position {
-        moving: part,
-        bodies,
-        x: zero_mm(),
-        y: zero_mm(),
-        z: zero_mm(),
-    };
+    let (mut data, _) = placement_data(cx)?;
+    data["moving"] = serde_json::json!(part);
+    data["bodies"] = serde_json::json!(bodies);
+    data["center_bodies"] = serde_json::json!(center_bodies(cx, &part));
     let n = cx.count_of(POSITION) + 1;
     log::debug!(
         "{name} を値で動かす位置{n} を足す(ボディ {} 個)",
-        p.bodies.len()
+        bodies.len()
     );
     Ok(Outcome::Change {
         label: format!("{name} を動かす"),
         edits: vec![Edit::Insert {
             type_id: POSITION.into(),
             name: format!("位置{n}"),
-            data: serde_json::to_value(&p).map_err(|e| e.to_string())?,
+            data,
         }],
     })
 }
