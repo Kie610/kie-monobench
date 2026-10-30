@@ -1,17 +1,11 @@
-//! 辺のフィレットと面取り。どちらも、2 つの平面の境目のまっすぐな辺と、平面とそれに垂直な
-//! 円筒の境目の円の辺に掛ける(円の辺は [`arc`])。
+//! 辺のフィレットと面取り。カーネルの丸めは曲がった辺も扱う。
+//! 柱で削る方法は、平面どうしの直線と、平面に垂直な円筒の円の辺を扱う。
 //!
-//! カーネルにフィレットの機能はないので、出っ張った辺は角を削り取る柱(断面が「角 − 円」か
-//! 三角形)を作って切り取り、へこんだ辺は角を埋める同じ形の柱を足す。truck のブーリアンは面が接する(同じ平面や、平面に接する円筒)と
-//! 失敗するので、丸めの円をわずか(`OFFSETS` の値)外へずらし、面と小さな角度で交わるようにする。
-//! また、隣り合う辺の柱が同じ点で面と交わらないよう、辺ごとに大きさを同じ量ずつ変える。
-//! 形のずれは辺の数 × その値ほど(0.001 mm × 辺の数)で、削る精度より十分に小さい。
-//!
-//! へこんだ辺の柱は、足元の面に穴やポケットがあれば、その上を埋めない(穴の上に丸めの
-//! 薄い肉を残さない)。丸めは穴の縁の 0.01 mm 手前で止まる(`shadow`)。
-//!
-//! 半径(面取りの距離)が辺の両側の面の幅に収まらないときは、収まる最大の値を誤りの文に出す。
-//! `fit` を真にすると、収まらない辺だけをその値に下げて警告に書く(`limits`)。
+//! 両側の幅が違う面取りは、指定幅を保つ柱で削る方法を使う。
+//! それ以外の曲がった辺では一定幅を保証できないため、種類を替えるよう知らせる。
+//! 柱のブーリアンは接する面で失敗しやすいので、[`OFFSETS`] の量だけ外へずらす。
+//! へこんだ辺では、足元の穴やポケットを埋めないよう [`shadow`] で柱を切る。
+//! 大きさが面に収まらない時は最大値を知らせ、`fit` が真なら値を下げて警告を出す。
 
 use kmb_cad::*;
 use kmb_core::kernel::{self as k, P3, Plane, Profile, ProfileEdge, ProfileLoop, Region, Segment};
@@ -1002,15 +996,15 @@ fn apply(
         }
         _ => {}
     }
-    // 両側で幅の違う面取りは柱で削る(カーネルの丸めは両側が同じ幅だけ)
+    // 両側で幅の違う面取りは、面の上の幅を保つ柱で削る。
     let uneven = rows.iter().any(|(_, s)| s.is_uneven());
     let method = if uneven { Method::Cut } else { method };
     let body = body_of(ctx, target)?;
     let kernel = ctx.kernel();
     let mut all = kernel.edges(body).map_err(kernel_err)?;
     all.extend(kernel.arc_edges(body).map_err(kernel_err)?);
-    // カーネルの丸めなら、曲がった辺も選べる(柱で削る形は平面と円筒の辺だけ)
-    if method == Method::Blend {
+    // 一定幅で扱えない曲線も列挙し、切れた参照と区別して知らせる。
+    if method == Method::Blend || uneven {
         all.extend(kernel.curve_edges(body).map_err(kernel_err)?);
     }
     // 辺ごとの大きさと行(誤りの文で行を示す)
@@ -1020,6 +1014,11 @@ fn apply(
             .resolve(&all, chain)
             .map_err(|e| in_row(e, row, rows.len()))?;
         for e in found {
+            if shape.is_uneven() && !e.curve.is_empty() {
+                return Err(in_row(EvalError::InvalidData(
+                    "この曲がった辺には 2 つの距離・距離と角度の面取りを一定の幅で付けられません。等しい距離の面取りを選んでください".into(),
+                ), row, rows.len()));
+            }
             match picked.iter_mut().find(|p| p.0 == e) {
                 Some(p) => (p.1, p.2) = (*shape, row),
                 None => picked.push((e, *shape, row)),
