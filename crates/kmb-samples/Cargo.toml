@@ -30,6 +30,8 @@ serde_json.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-io-dxf.workspace = true
+kmb-io-svg.workspace = true
 kmb-contract.workspace = true
 kmb-look.workspace = true
 kmb-cam-setup.workspace = true

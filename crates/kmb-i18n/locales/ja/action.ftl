@@ -358,3 +358,18 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-drawing-set-paper = 用紙を設定
+action-drawing-set-paper-tip = 図面の用紙の大きさ・向き・とじ代・ペンと画層の色を決める
+
+action-drawing-set-title = 表題欄を設定
+action-drawing-set-title-tip = 表題欄の固定の文字や文書から取る項目と、使う文字の書体を設定する
+
+action-drawing-export-pdf = 図面をPDFに書き出す
+action-drawing-export-pdf-tip = 選んだ用紙か全部の用紙を、実寸のページのPDFに書き出す
+
+action-drawing-export-dxf = 図面をDXFに書き出す
+action-drawing-export-dxf-tip = 選んだ用紙を、線の役ごとの画層と線種を持つDXFに書き出す
+
+action-drawing-export-svg = 図面をSVGに書き出す
+action-drawing-export-svg-tip = 選んだ用紙を、用紙の大きさと線の太さと線種を持つSVGに書き出す
