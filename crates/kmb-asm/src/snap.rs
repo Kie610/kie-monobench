@@ -8,6 +8,7 @@
 //!
 //! 円筒の面なら、両端の円の中心と軸の真ん中。原点の Z は面の外向き(円筒なら端の平らな面の外向き)、
 //! X は辺の上の候補ならその辺の向き、ほかは面のいちばん長いまっすぐな辺の向き。
+//! 「辺の向きを軸に」では、Z が辺の向き、X が面の外向きになる。
 
 use crate::joint::{Frame, perpendicular};
 use kmb_core::kernel::{self as k, EdgeInfo, P3};
@@ -150,6 +151,13 @@ pub fn choices(cx: &Context<'_>, at: &FacePick) -> Vec<HandleChoice> {
                     add(q, d1, "2 辺の交点".into());
                 }
             }
+            // 辺の向きを Z にし、面の外向きを X にして、辺のまわりの回転と辺に沿う移動を選べる。
+            found.extend(straight.iter().map(|e| Found {
+                point: k::scale(k::add(e.a, e.b), 0.5),
+                z: dir(e),
+                x: n,
+                label: "辺の向きを軸に(中点)".into(),
+            }));
         }
         None => {
             // 円筒の面: 端の円の中心(Z は端の平らな面の外向き)と、その真ん中
@@ -187,10 +195,13 @@ pub fn choices(cx: &Context<'_>, at: &FacePick) -> Vec<HandleChoice> {
             }
         }
     }
-    // 同じ点は先に出た取り方だけ
+    // 同じ点と軸の向きは先に出た取り方だけ。同じ中点の面法線と辺方向は選び分ける。
     let mut out: Vec<Found> = Vec::new();
     for f in found {
-        if !out.iter().any(|o| near(o.point, f.point)) {
+        if !out
+            .iter()
+            .any(|o| near(o.point, f.point) && near(k::normalize(o.z), k::normalize(f.z)))
+        {
             out.push(f);
         }
     }
