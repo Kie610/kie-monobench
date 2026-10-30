@@ -852,8 +852,21 @@ impl CamCommands {
     fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
         Ok(Outcome::File {
-            suffix: format!("{}-段取り.md", file_part(&s.name)),
-            contents: crate::setup_sheet(&s, &self.machine_for(&s.info)).into_bytes(),
+            suffix: format!(
+                "{}-段取り.{}",
+                file_part(&s.name),
+                if cx.arg_str("format") == Some("html") {
+                    "html"
+                } else {
+                    "md"
+                }
+            ),
+            contents: if cx.arg_str("format") == Some("html") {
+                crate::setup_sheet_html(&s, &self.machine_for(&s.info))
+            } else {
+                crate::setup_sheet(&s, &self.machine_for(&s.info))
+            }
+            .into_bytes(),
             info: json!({"setup": setup.0}),
         })
     }
@@ -1367,6 +1380,7 @@ impl Extension for CamCommands {
                 })
                 .disabled_if(need),
             Action::new(SETUP_SHEET, "加工指示書を書き出す", "cam")
+                .args(vec![kmb_core::Arg::choice("format", "加工指示書の形式", &[("md", "Markdown"), ("html", "HTML")]).default("md")])
                 .role(kmb_interchange::role::action::SETUP_SHEET)
                 .menu("出力")
                 .icon("sheet")

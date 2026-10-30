@@ -122,6 +122,17 @@ enum Command {
         #[arg(long)]
         each: bool,
     },
+    /// 設計・G-code・段取り表をzipにまとめて渡す
+    Pack {
+        file: PathBuf,
+        out: PathBuf,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().gcode, action = clap::ArgAction::Set)]
+        gcode: bool,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().sheet, action = clap::ArgAction::Set)]
+        sheet: bool,
+        #[arg(long)]
+        models: bool,
+    },
     /// 基準部品の文書を作る
     Sample {
         file: PathBuf,
@@ -852,6 +863,31 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                     }
                 }
             }
+        }
+        Command::Pack {
+            file,
+            out,
+            gcode,
+            sheet,
+            models,
+        } => {
+            let mut work = open(&file)?;
+            let packed = work.pack(
+                kmb_session::PackOptions {
+                    gcode,
+                    sheet,
+                    models,
+                },
+                None,
+            )?;
+            write(&out, &packed.contents)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &json!({"written":out,"included":packed.included,"skipped":packed.skipped})
+                )
+                .unwrap()
+            );
         }
         Command::Export {
             file,
