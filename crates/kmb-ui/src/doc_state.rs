@@ -220,8 +220,10 @@ impl DocState {
         saved: kmb_core::DocumentData,
         modules: kmb_core::Modules,
     ) -> Self {
+        let mut work = kmb_session::Headless::in_background(modules, doc, path);
+        work.set_view_directory(None);
         DocState {
-            work: kmb_session::Headless::in_background(modules, doc, path),
+            work,
             selected: None,
             expr_edits: HashMap::new(),
             name_edits: HashMap::new(),

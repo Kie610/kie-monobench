@@ -3,7 +3,7 @@
 //! 保存するので、ここでは扱わない。安全モードとデータフォルダの無い時は読みも書きもしない。
 
 use crate::Workspace;
-use kmb_session::doc_view::{DocView, DocViews};
+use kmb_session::doc_view::DocView;
 
 impl Workspace {
     /// 今の文書の見え方。
@@ -16,22 +16,28 @@ impl Workspace {
         for k in &c.tree_auto {
             open.insert(k.clone(), false);
         }
-        DocView { open, collapsed }
+        let mut view = c.work.doc_view().clone();
+        view.open = open;
+        view.collapsed = collapsed;
+        view
     }
 
     /// 文書を入れ替えた後に、その文書の前の見え方に戻す(覚えていなければ既定)。
     pub(crate) fn restore_doc_view(&mut self) {
-        let v = match (
-            self.win.data_dir.as_ref().filter(|_| !self.win.safe_mode),
-            self.cur.work.path(),
-        ) {
-            (Some(dir), Some(path)) => DocViews::load(dir).get(path).cloned().unwrap_or_default(),
-            _ => DocView::default(),
-        };
+        let directory = self.win.data_dir.clone().filter(|_| !self.win.safe_mode);
+        self.cur.work.set_view_directory(directory);
+        let v = self.cur.work.doc_view().clone();
+        self.apply_doc_view(v);
+    }
+
+    /// 退避した文書へ戻す時は、未保存の見え方もそのまま戻す。
+    pub(crate) fn apply_doc_view(&mut self, v: DocView) {
+        self.cur.work.sync_doc_view(v.clone());
         self.cur.tree_open = v.open.clone();
         self.cur.tree_auto.clear();
         self.cur.collapsed = v.collapsed.iter().copied().collect();
         self.refresh_hidden();
+        self.refresh_body_colors();
         self.cur.view_saved = self.doc_view();
     }
 
@@ -45,20 +51,16 @@ impl Workspace {
 
     /// 見え方が変わっていればデータフォルダへ書く。
     pub(crate) fn save_doc_view(&mut self) {
-        let (Some(dir), Some(path)) = (
-            self.win.data_dir.clone().filter(|_| !self.win.safe_mode),
-            self.cur.work.path().map(std::path::Path::to_path_buf),
-        ) else {
+        if self.win.safe_mode || self.win.data_dir.is_none() || self.cur.work.path().is_none() {
             return;
-        };
+        }
         let now = self.doc_view();
         if now == self.cur.view_saved {
             return;
         }
-        let mut all = DocViews::load(&dir);
-        all.set(&path, now.clone());
-        if let Err(e) = all.save(&dir) {
+        if let Err(e) = self.cur.work.save_doc_view(now.clone()) {
             self.win.fail(format!("文書の見え方を書けません: {e}"));
+            return;
         }
         self.cur.view_saved = now;
     }

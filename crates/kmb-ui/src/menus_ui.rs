@@ -421,6 +421,8 @@ impl Workspace {
             .filter_map(|&(last, root)| body.color(root).map(|c| (last, c)))
             .collect();
         self.cur.scene.set_body_colors(colors);
+        let hues = body.part_hues(&roots, self.cur.work.doc_view().part_hues);
+        self.cur.scene.set_part_hues(hues);
         // 材質の質感(金属・粗さ・木目)。外観か材料が付いたボディだけ(鋼は既定と同じに描く)
         let looks: std::collections::BTreeMap<FeatureId, kmb_render::Look> = roots
             .iter()
@@ -1156,6 +1158,44 @@ pub(crate) struct BodyLooks<'a> {
 }
 
 impl<'a> BodyLooks<'a> {
+    /// 最も外側の部品の番号順で色を決める。明示した外観と材料は、鋼でも置き換えない。
+    fn part_hues(
+        &self,
+        roots: &[(FeatureId, FeatureId)],
+        on: bool,
+    ) -> std::collections::BTreeMap<FeatureId, usize> {
+        if !on {
+            return Default::default();
+        }
+        let mut outer: Vec<_> = self
+            .data
+            .components
+            .iter()
+            .filter(|c| c.parent.is_none())
+            .map(|c| c.id)
+            .collect();
+        outer.sort_unstable();
+        roots
+            .iter()
+            .filter_map(|&(last, root)| {
+                if self.looks.appearance_of(self.data, root).is_some()
+                    || self.materials.get(root).is_some()
+                {
+                    return None;
+                }
+                let mut component = self.data.component_of(root)?;
+                for _ in 0..self.data.components.len() {
+                    let Some(parent) = component.parent else {
+                        break;
+                    };
+                    component = self.data.component(parent)?;
+                }
+                let number = outer.binary_search(&component.id).ok()?;
+                Some((last, number % 8))
+            })
+            .collect()
+    }
+
     pub(crate) fn read(data: &'a kmb_core::DocumentData) -> Self {
         Self {
             data,
@@ -1194,5 +1234,63 @@ impl<'a> BodyLooks<'a> {
             .get(root)
             .and_then(kmb_look::material::phys_material)
             .map(|m| rgb(m.color))
+    }
+}
+
+#[cfg(test)]
+mod component_color_tests {
+    use super::*;
+
+    #[test]
+    fn outer_component_id_order_and_explicit_materials_determine_color_membership() {
+        let mut data = kmb_core::Document::new().data().clone();
+        data.components = (1..=9)
+            .rev()
+            .map(|n| kmb_core::Component {
+                id: n * 10,
+                name: format!("部品{n}"),
+                parent: None,
+                bodies: vec![FeatureId(n)],
+            })
+            .collect();
+        data.components.push(kmb_core::Component {
+            id: 91,
+            name: "内側".into(),
+            parent: Some(10),
+            bodies: vec![FeatureId(11), FeatureId(12)],
+        });
+        let roots: Vec<_> = (1..=13)
+            .map(|n| (FeatureId(n + 100), FeatureId(n)))
+            .collect();
+        let mut body = BodyLooks::read(&data);
+        let hues = body.part_hues(&roots, true);
+        assert_eq!(hues[&FeatureId(101)], 0);
+        assert_eq!(hues[&FeatureId(109)], 0, "9 個目は最初の色");
+        assert_eq!(hues[&FeatureId(111)], 0, "内側の部品も最も外の色");
+        assert_eq!(hues[&FeatureId(111)], hues[&FeatureId(112)]);
+        assert_eq!(hues[&FeatureId(102)], 1, "部品の格納順ではなく番号順");
+        assert!(
+            !hues.contains_key(&FeatureId(113)),
+            "部品の無いボディは変えない"
+        );
+        assert!(body.part_hues(&roots, false).is_empty());
+        body.materials
+            .set(FeatureId(1), Some(kmb_look::material::DEFAULT_MATERIAL));
+        assert_eq!(
+            body.color(FeatureId(1)),
+            None,
+            "明示した鋼も既定と同じ描き方"
+        );
+        body.looks
+            .set_body(FeatureId(2), Some(kmb_look::material::DEFAULT_MATERIAL));
+        body.looks.set_component(91, Some("赤い塗装"));
+        let protected = body.part_hues(&roots, true);
+        for n in [101, 102, 111, 112] {
+            assert!(
+                !protected.contains_key(&FeatureId(n)),
+                "明示した外観・材料を守る: {n}"
+            );
+        }
+        assert_eq!(protected[&FeatureId(103)], hues[&FeatureId(103)]);
     }
 }

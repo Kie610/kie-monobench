@@ -111,3 +111,6 @@ view-mark-leftover = 紫の点: 削り残し { $count } か所(大きいほど�
 ## 重なった面の候補(長押し)
 
 view-candidates = 重なっているもの(手前から)
+
+view-part-hues = 部品ごとに色を変える
+view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
