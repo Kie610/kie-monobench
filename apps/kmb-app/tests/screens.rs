@@ -2585,3 +2585,34 @@ fn write_sketch_point_and_arc_screens() {
     s.settle();
     s.write(&dir, "円弧の端より外の半径の寸法");
 }
+
+/// 文書をまとめて渡すファイルメニュー。元のメニューと同じ条件で撮る。
+#[test]
+#[ignore = "道具: ファイルのメニューとまとめて渡す選択を写真に残す"]
+fn write_pack_menu_screen() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        let mut ws = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        );
+        ws.layout_mut().brightness = brightness;
+        let mut screen = Screen::sized(ws, Some([1280.0, 800.0]));
+        assert!(screen.click_exact("ファイル"));
+        screen.write(&dir, &format!("file-menu-{name}"));
+        let pack = screen.click("まとめて渡す…");
+        if std::env::var_os("JC_EXPECT_PACK_MENU").is_some() {
+            assert!(pack);
+        }
+        if pack {
+            screen.write(&dir, &format!("pack-menu-{name}"));
+        }
+    }
+}

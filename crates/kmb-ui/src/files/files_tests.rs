@@ -238,3 +238,57 @@ fn bodies_are_exported_one_file_each_with_their_names_and_hidden_ones_are_not() 
     assert!(d.join("b-ふた.step").exists(), "{:?}", ws.message());
     std::fs::remove_dir_all(&d).ok();
 }
+
+#[test]
+fn a_pack_opens_in_a_new_unsaved_tab_and_a_broken_zip_leaves_no_tab() {
+    let dir = temp_dir("pack-open");
+    let path = dir.join("delivery.zip");
+    let mut headless =
+        kmb_session::Headless::with_document(kmb_bundle::modules(), sample_document(), None);
+    let packed = headless
+        .pack(kmb_session::PackOptions::default(), None)
+        .unwrap();
+    kmb_session::write_output(&path, &packed.contents).unwrap();
+    let mut ws = Workspace::new(sample_document(), None, reg());
+    let count = ws.tab_count();
+    assert!(ws.open_in_tab(&path));
+    ws.wait();
+    assert_eq!(ws.tab_count(), count + 1);
+    assert!(ws.path().is_none());
+    assert!(!ws.is_modified());
+    assert_eq!(ws.document().to_json(), headless.doc().to_json());
+    let count = ws.tab_count();
+    kmb_session::write_output(&dir.join("bad.zip"), b"bad").unwrap();
+    assert!(!ws.open_in_tab(&dir.join("bad.zip")));
+    assert_eq!(ws.tab_count(), count);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn the_file_menu_packages_the_checked_items() {
+    let dir = temp_dir("pack-menu");
+    let path = dir.join("delivery.zip");
+    let ws = Workspace::new(sample_document(), None, reg()).with_dialogs(Box::new(FakeDialogs {
+        open: None,
+        save: Some(path.clone()),
+        unsaved: Unsaved::Cancel,
+    }));
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.get_by_label("ファイル").click();
+    h.run();
+    h.get_by_label_contains("まとめて渡す…").click();
+    h.run();
+    h.get_by_label("G-codeを入れる").click();
+    h.run();
+    h.get_by_label("加工指示書を入れる").click();
+    h.run();
+    h.get_by_label("zipに書き出す").click();
+    h.run();
+    let packed = kmb_session::load_design(&path).unwrap();
+    assert_eq!(packed.document.to_json(), h.state().document().to_json());
+    assert!(h.state().message().is_some_and(|m| m.contains("(2)")));
+    std::fs::remove_dir_all(dir).unwrap();
+}

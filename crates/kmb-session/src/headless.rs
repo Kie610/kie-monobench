@@ -97,7 +97,9 @@ pub enum Ran {
 mod actions;
 mod active;
 mod background;
+mod pack;
 mod params;
+pub use pack::{OpenedDesign, PackOptions, PackSkipped, Packed, load_design};
 mod status;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
@@ -180,8 +182,8 @@ impl Headless {
 
     /// ファイルを開く。
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
-        let doc = crate::load(path)?;
-        Ok(Self::with_document(modules, doc, Some(path.to_path_buf())))
+        let opened = load_design(path)?;
+        Ok(Self::with_document(modules, opened.document, opened.path))
     }
 
     /// 文書を入れ替える(開く、見本)。裏で前の文書を計算している時は、その結果を使わない。

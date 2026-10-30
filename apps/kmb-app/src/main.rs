@@ -58,8 +58,11 @@ impl Dialogs for OsDialogs {
     }
 
     fn open_document(&self) -> Option<PathBuf> {
+        let mut extensions = kmb_core::DOCUMENT_EXTENSIONS.to_vec();
+        extensions.push("zip");
         rfd::FileDialog::new()
             .set_title("文書を開く")
+            .add_filter("設計とzip", &extensions)
             .add_filter("kieMonoBench の文書", kmb_core::DOCUMENT_EXTENSIONS)
             .pick_file()
     }
@@ -450,11 +453,16 @@ fn main() -> Result<(), String> {
     if sample {
         args.remove(0);
     }
-    let path = args.first().map(PathBuf::from);
+    let mut path = args.first().map(PathBuf::from);
+    let mut opened_label = None;
     let (doc, start) = match &path {
         _ if sample => (kmb_bundle::Sample::Cam.make()(), false),
-        Some(p) if p.exists() => match kmb_session::load(p) {
-            Ok(doc) => (doc, false),
+        Some(p) if p.exists() => match kmb_session::load_design(p) {
+            Ok(opened) => {
+                path = opened.path;
+                opened_label = opened.label;
+                (opened.document, false)
+            }
             Err(e) => {
                 return fail("文書を開けません", &format!("{}\n\n{e}", p.display()));
             }
@@ -465,6 +473,7 @@ fn main() -> Result<(), String> {
     timing.mark("設定を確かめ、文書を読む");
     // 専用の編集器(汎用の欄では表せない種類)はここで組み込む
     let mut workspace = Workspace::open(doc, path, true, kmb_bundle::modules())
+        .with_document_label(opened_label)
         // 文書のタブごとに形のカーネルを作る(分け合うと片方の計算でもう片方の形が消える)
         .with_kernel_factory(std::sync::Arc::new(kmb_bundle::kernel))
         .with_editor(kmb_ui_sketch::SketchEditor::new())

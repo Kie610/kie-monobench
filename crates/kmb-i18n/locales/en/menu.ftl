@@ -32,3 +32,10 @@ menu-help-search = Command Search…
 menu-help-search-tip = Find a command by name and run it (S at the cursor, Ctrl+K at the top of the screen)
 menu-help-crash = Crash Reports…
 menu-help-crash-tip = View reports saved on this PC after a crash (nothing is sent anywhere)
+
+menu-file-pack = Package for delivery…
+menu-file-pack-tip = Save the design, G-code and setup sheets together in a zip file
+menu-file-pack-gcode = Include G-code
+menu-file-pack-sheet = Include setup sheets
+menu-file-pack-models = Include STEP files for each body
+menu-file-pack-write = Export zip

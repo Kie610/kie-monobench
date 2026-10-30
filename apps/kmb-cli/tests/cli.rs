@@ -525,3 +525,32 @@ fn obj_export_writes_indexed_triangles_without_a_material_file() {
     }));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn pack_writes_a_zip_that_the_cli_can_open() {
+    let dir = temp_dir("pack");
+    let file = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
+    ok(&dir, &["sample", &file]);
+    let result = ok(
+        &dir,
+        &[
+            "pack",
+            &file,
+            "delivery.zip",
+            "--gcode",
+            "false",
+            "--sheet",
+            "false",
+        ],
+    );
+    let result: Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(result["included"].as_array().unwrap().len(), 2);
+    assert!(result["skipped"].as_array().unwrap().is_empty());
+    let a = ok(&dir, &["mass", &file, "--json"]);
+    let b = ok(&dir, &["mass", "delivery.zip", "--json"]);
+    assert_eq!(
+        serde_json::from_str::<Value>(&a).unwrap(),
+        serde_json::from_str::<Value>(&b).unwrap()
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
