@@ -42,6 +42,9 @@ pub struct HoleInfo {
     /// ネジのサイズ(穴の機能で省いた時は空。読む側が既定の M3 にする)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<String>,
+    /// 指定したねじ部の長さ。空なら穴の深さ全体で、寸法は mm。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_depth: Option<f64>,
     /// 穴の径
     pub diameter: f64,
     /// 穴の数(点の数)
@@ -137,5 +140,21 @@ mod tests {
             hole_face(&format!("f12:side:{}", edge_name(5, "counterbore")), h),
             Some((5, HolePart::Counterbore))
         );
+    }
+    #[test]
+    fn optional_thread_depth_keeps_the_legacy_hole_payload() {
+        let old = serde_json::json!({"diameter":3.3, "count":1, "tap":"tapped"});
+        let mut info: HoleInfo = serde_json::from_value(old).unwrap();
+        assert_eq!(info.thread_depth, None);
+        assert!(
+            serde_json::to_value(&info)
+                .unwrap()
+                .get("thread_depth")
+                .is_none()
+        );
+        info.thread_depth = Some(5.0);
+        let restored: HoleInfo =
+            serde_json::from_value(serde_json::to_value(&info).unwrap()).unwrap();
+        assert_eq!(restored, info);
     }
 }
