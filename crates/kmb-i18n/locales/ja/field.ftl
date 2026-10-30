@@ -2162,3 +2162,8 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-solid-thicken-body = ボディ
+field-solid-thicken-body-help = 厚みの無い面のボディを選ぶ
+field-solid-thicken-thickness = 厚み
+field-solid-thicken-side = 向き

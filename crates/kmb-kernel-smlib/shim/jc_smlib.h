@@ -193,6 +193,7 @@ int jc_set_face_tags(JcBrep* brep, const int64_t* tags, size_t count);
 int jc_edges(const JcBrep* brep, JcEdge** out, size_t* count);
 void jc_free_buffer(void* p);
 /* 面 face(jc_faces の添字)から点 p までの距離。 */
+int jc_face_normal(const JcBrep* brep, size_t face, const double p[3], double out[3]);
 int jc_face_distance(const JcBrep* brep, size_t face, const double p[3], double* out);
 /* 円の辺の一覧。*out は jc_free_buffer で消す。 */
 int jc_arc_edges(const JcBrep* brep, JcArcEdge** out, size_t* count);

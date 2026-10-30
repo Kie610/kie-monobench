@@ -102,6 +102,7 @@ cad.text@1	kmb-text
 cad.text_at_point	kmb-text
 cad.text_on_face	kmb-text
 cad.text_on_path	kmb-text
+cad.thicken	kmb-cad-surface
 cad.thread	kmb-cad-hole
 cad.timeline.read_latest_bodies	kmb-cad
 cad.timeline.read_latest_body	kmb-cad
@@ -263,6 +264,7 @@ solid.split@1	kmb-cad-modify
 solid.split_part@1	kmb-cad-modify
 solid.surface_patch@1	kmb-cad-surface
 solid.sweep@1	kmb-cad-sweep
+solid.thicken@1	kmb-cad-surface
 solid.thread@1	kmb-cad-hole
 study.cancel	kmb-study
 study.run	kmb-study

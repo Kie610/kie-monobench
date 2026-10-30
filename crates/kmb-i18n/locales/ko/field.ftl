@@ -2162,3 +2162,8 @@
 # field-solid-thread-size = Nominal Size
 # field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 # field-solid-thread-target = Target
+
+# field-solid-thicken-body = Body
+# field-solid-thicken-body-help = Select a sheet body without thickness
+# field-solid-thicken-thickness = Thickness
+# field-solid-thicken-side = Side

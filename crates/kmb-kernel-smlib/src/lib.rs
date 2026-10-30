@@ -625,6 +625,16 @@ impl Kernel for SmlibKernel {
         surface::patch(self, boundary, tag)
     }
 
+    fn thicken(
+        &self,
+        sheet: ShapeHandle,
+        thickness: f64,
+        side: k::ThickenSide,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        surface::thicken(self, sheet, thickness, side, tag)
+    }
+
     fn extrude(
         &self,
         profile: &Profile,
