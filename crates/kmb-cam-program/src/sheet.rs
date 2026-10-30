@@ -179,9 +179,7 @@ pub fn setup_sheet(s: &SetupPaths, machine: &MachineProfile) -> String {
         let _ = writeln!(
             o,
             "| 1 個あたりの費用 | {} |",
-            cost.replace('\n', " ")
-                .replace('\r', " ")
-                .replace('|', "\\|")
+            cost.replace(['\n', '\r'], " ").replace('|', "\\|")
         );
     }
     let _ = writeln!(
