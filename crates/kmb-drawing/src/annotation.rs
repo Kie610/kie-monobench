@@ -139,7 +139,7 @@ impl DimStyle {
         let convert = |v| if angle { v } else { unit.from_mm(v) };
         let mut s = number(convert(value));
         if angle {
-            s.push_str("°");
+            s.push('°');
         } else if unit != LengthUnit::Mm {
             s.push_str(&format!(" {}", unit.name()));
         }

@@ -361,32 +361,32 @@ action-io-export-obj-tip = Export visible bodies as OBJ with object names, verti
 action-drawing-dimension = Dimension
 action-drawing-dimension-tip = Place a dimension that refers to view edges and shows the model value
 
-action-drawing-dimension_set = Place dimensions
-action-drawing-dimension_set-tip = Place baseline, chain, or ordinate dimensions once from selected points
+action-drawing-dimension-set = Place dimensions
+action-drawing-dimension-set-tip = Place baseline, chain, or ordinate dimensions once from selected points
 
-action-drawing-import_dimensions = Import model dimensions
-action-drawing-import_dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
+action-drawing-import-dimensions = Import model dimensions
+action-drawing-import-dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
 
 action-drawing-note = Annotation
 action-drawing-note-tip = Place text with an optional leader on the sheet
 
-action-drawing-center_mark = Center mark
-action-drawing-center_mark-tip = Mark the center of a circle or arc
+action-drawing-center-mark = Center mark
+action-drawing-center-mark-tip = Mark the center of a circle or arc
 
-action-drawing-center_line = Centerline
-action-drawing-center_line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
+action-drawing-center-line = Centerline
+action-drawing-center-line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
 
 action-drawing-balloon = Balloon
 action-drawing-balloon-tip = Place a balloon linked to a parts table row at a chosen position
 
-action-drawing-renumber_balloons = Renumber balloons
-action-drawing-renumber_balloons-tip = Match balloon numbers to the current order of parts table rows
+action-drawing-renumber-balloons = Renumber balloons
+action-drawing-renumber-balloons-tip = Match balloon numbers to the current order of parts table rows
 
-action-drawing-align_balloons = Align balloons
-action-drawing-align_balloons-tip = Align selected balloons horizontally or vertically with the first balloon
+action-drawing-align-balloons = Align balloons
+action-drawing-align-balloons-tip = Align selected balloons horizontally or vertically with the first balloon
 
-action-drawing-parts_table = Parts table
-action-drawing-parts_table-tip = Place selected parts table columns on the sheet as lines and text
+action-drawing-parts-table = Parts table
+action-drawing-parts-table-tip = Place selected parts table columns on the sheet as lines and text
 
-action-drawing-set_style = Dimension style
-action-drawing-set_style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
+action-drawing-set-style = Dimension style
+action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
