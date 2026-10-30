@@ -71,7 +71,7 @@ fn hatch(loops: &[Vec<[f64; 2]>], angle: f64, spacing: f64) -> Result<Vec<Path>,
         if !xs.len().is_multiple_of(2) {
             return Err("ハッチの輪が閉じていません".into());
         }
-        for pair in xs.chunks_exact(2) {
+        for pair in xs.as_chunks::<2>().0 {
             if pair[1] - pair[0] > 1e-9 {
                 out.push(Path::Line {
                     a: back([pair[0], y]),
