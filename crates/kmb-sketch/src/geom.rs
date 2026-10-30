@@ -168,16 +168,26 @@ pub(crate) fn intersect(a: &Curve, b: &Curve) -> Vec<[f64; 2]> {
         (Curve::Seg(p, q), Curve::Arc(c, r, ..)) | (Curve::Arc(c, r, ..), Curve::Seg(p, q)) => {
             let d = sub(q, p);
             let f = sub(p, c);
-            let (aa, bb, cc) = (dot(d, d), 2.0 * dot(f, d), dot(f, f) - r * r);
-            let disc = bb * bb - 4.0 * aa * cc;
-            if aa < EPS || disc < 0.0 {
+            let aa = dot(d, d);
+            if aa < EPS {
                 vec![]
             } else {
-                let sq = disc.sqrt();
-                [(-bb - sq) / (2.0 * aa), (-bb + sq) / (2.0 * aa)]
-                    .into_iter()
-                    .map(|t| add(p, scale(d, t)))
-                    .collect()
+                // 直線への距離で接触を判定し、判別式の大きな項どうしの差を避ける。
+                // 接点の許しは、端や範囲の判定と同じ EPS を使う。
+                let t = -dot(f, d) / aa;
+                let distance = cross(f, d).abs() / aa.sqrt();
+                let gap = r - distance;
+                if gap < -EPS {
+                    vec![]
+                } else if gap.abs() <= EPS {
+                    vec![add(p, scale(d, t))]
+                } else {
+                    let dt = (gap * (r + distance) / aa).sqrt();
+                    [t - dt, t + dt]
+                        .into_iter()
+                        .map(|t| add(p, scale(d, t)))
+                        .collect()
+                }
             }
         }
         (Curve::Arc(c1, r1, ..), Curve::Arc(c2, r2, ..)) => {

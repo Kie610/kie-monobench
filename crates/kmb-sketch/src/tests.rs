@@ -1484,3 +1484,82 @@ fn points_and_circle_centers_align() {
     let back: Sketch = serde_json::from_value(text).unwrap();
     assert_eq!(back.constraints, s.constraints);
 }
+
+/// 確かめること: 接線の自由な端を引く時、弧の端を不要に動かさず、
+/// 拘束で動けない向きは引いた端も戻す。
+#[test]
+fn dragging_a_tangent_lines_free_end_keeps_the_arc_end_when_allowed() {
+    for constrained in [false, true] {
+        let mut s = Sketch::default();
+        let center = s.add_point(0.0, 0.0);
+        let contact = s.add_point(0.0, 10.0);
+        let other = s.add_point(-10.0, 0.0);
+        let free = s.add_point(10.0, 10.0);
+        let arc = s.add_arc(center, contact, other);
+        let line = s.add_line(contact, free);
+        s.add_constraint(ConstraintKind::Tangent { line, circle: arc });
+        if constrained {
+            s.add_constraint(ConstraintKind::Fix { point: center });
+            s.add_constraint(ConstraintKind::Fix { point: other });
+            s.add_constraint(ConstraintKind::Horizontal { line });
+        }
+        let sol = drag_along(
+            &s,
+            &HashMap::new(),
+            free,
+            (1..=10).map(|step| {
+                [
+                    10.0 + 0.5 * step as f64,
+                    10.0 + if constrained { 0.2 * step as f64 } else { 0.0 },
+                ]
+            }),
+            |sol| {
+                assert!(
+                    near(sol.points[&contact], [0.0, 10.0]),
+                    "弧に付いた端が動いた: {:?}",
+                    sol.points[&contact]
+                );
+                assert!(near(sol.points[&other], [-10.0, 0.0]));
+                assert!(near(sol.points[&center], [0.0, 0.0]));
+            },
+        );
+        assert!(
+            near(sol.points[&free], [15.0, 10.0]),
+            "{:?}",
+            sol.points[&free]
+        );
+    }
+}
+
+#[test]
+fn dragging_a_tangent_line_moves_its_contact_only_as_required_by_constraints() {
+    let mut s = Sketch::default();
+    let center = s.add_point(0.0, 0.0);
+    let contact = s.add_point(0.0, 10.0);
+    let other = s.add_point(-10.0, 0.0);
+    let free = s.add_point(10.0, 10.0);
+    let arc = s.add_arc(center, contact, other);
+    let line = s.add_line(contact, free);
+    s.add_constraint(ConstraintKind::Tangent { line, circle: arc });
+    s.add_constraint(ConstraintKind::Fix { point: center });
+    s.add_constraint(ConstraintKind::Fix { point: other });
+    let sol = drag_along(
+        &s,
+        &HashMap::new(),
+        free,
+        (1..=10).map(|step| [10.0 + 0.5 * step as f64, 10.0 + 0.2 * step as f64]),
+        |sol| {
+            let p = sol.points[&contact];
+            let q = sol.points[&free];
+            assert!(near(sol.points[&center], [0.0, 0.0]));
+            assert!(near(sol.points[&other], [-10.0, 0.0]));
+            assert!((p[0].hypot(p[1]) - 10.0).abs() < 1e-5);
+            assert!((p[0] * (q[0] - p[0]) + p[1] * (q[1] - p[1])).abs() < 1e-4);
+        },
+    );
+    assert!(near(sol.points[&free], [15.0, 12.0]));
+    assert!(
+        sol.points[&contact][0] < -1.0,
+        "接線の拘束に従って円弧の上を移る"
+    );
+}
