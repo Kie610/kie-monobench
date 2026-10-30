@@ -1146,4 +1146,28 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn a_spatial_surface_patch_becomes_a_named_solid_on_each_side() {
+        let kernel = SmlibKernel::new();
+        let sheet = kernel.patch_sheet(&saddle(4), "patch").unwrap();
+        let mut expected_names = None;
+        for side in [
+            k::ThickenSide::Front,
+            k::ThickenSide::Back,
+            k::ThickenSide::Both,
+        ] {
+            let thick = kernel.thicken(sheet, 2., side, "thick").unwrap();
+            assert_eq!(kernel.body_kind(thick).unwrap(), BodyKind::Solid);
+            let volume = kernel.volume(thick).unwrap();
+            assert!((190. ..220.).contains(&volume), "{side:?}: {volume}");
+            let mut names = kernel.face_names(thick).unwrap();
+            names.sort();
+            assert_eq!(names.len(), 6);
+            if let Some(previous) = &expected_names {
+                assert_eq!(previous, &names);
+            }
+            expected_names = Some(names);
+        }
+        assert_eq!(kernel.body_kind(sheet).unwrap(), BodyKind::Sheet);
+    }
 }
