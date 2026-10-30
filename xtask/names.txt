@@ -1,6 +1,6 @@
-# 名前(機能の種類・操作・設定の ID)と、それを名乗るモジュールの crate。
-# cargo xtask verify の層の点検が読む。手で直さず、
 # JC_BLESS=1 cargo test -p kmb-bundle --test ids で書き直す(crates/kmb-bundle/tests/ids.rs)。
+# cargo xtask verify の層の点検が読む。手で直さず、
+# 名前(機能の種類・操作・設定の ID)と、それを名乗るモジュールの crate。
 anim.appearance	kmb-asm
 anim.auto_explode_all	kmb-asm
 anim.auto_explode_one	kmb-asm
@@ -84,6 +84,7 @@ cad.revolve_axis	kmb-cad-revolve
 cad.revolve_regions	kmb-cad-revolve
 cad.revolve_to_face	kmb-cad-revolve
 cad.sketch.auto_constrain	kmb-sketch
+cad.sketch.dxf_layers	kmb-io-dxf
 cad.sketch.export_dxf	kmb-io-dxf
 cad.sketch.export_svg	kmb-io-svg
 cad.sketch.find	kmb-sketch
