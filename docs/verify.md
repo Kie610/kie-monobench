@@ -24,9 +24,17 @@
 | 配る exe に入る他者の部品の許諾文の一覧を作る(13 節) | `cargo xtask licenses` |
 
 - 「変えた」は `origin/main` との分かれ目からの差で、まだコミットしていないファイルと git に入れていないファイルも含む。比べる相手は `--base <ref>` で変えられる。
-- 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた時は、全体を検査する。`docs/` など crate の外のファイルはテストしない(何を飛ばしたかは表示する)。ただし下の点検はいつも流し、テストの段は「未実行」と出す(通過ではない)。
+- 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた時は、全体を検査する。`--dependents-lower` では、下位の全 crate を検査する。`docs/` など crate の外のファイルはテストしない(何を飛ばしたかは表示する)。ただし下の点検はいつも流し、テストの段は「未実行」と出す(通過ではない)。
 - `--all`・`--dependents`・`--dependents-lower` は cargo-nextest が無ければ失敗にする(件数が残らないため。nextest なしで流すなら `JC_VERIFY_NEXTEST=off`)。
-- 担当分と全体: 機能の crate はどれも組み立て(kmb-bundle)に依存されるので、`--dependents` はどの機能を変えても組み立て・session・画面・アプリまで届き、画面の GPU・両方のカーネル・WASM を全部組む(target は 15〜22 GB)。小さいディスクの作業場で並べて作業するため、プッシュの前の手元の検査は `--dependents-lower` にする。依存する側のうち、層が組み立て・session・画面・アプリ(`xtask/src/main.rs` の `UPPER_LAYERS`)の crate を足さず、そこを通って先へも進まない(変えた crate がその層なら、それ自身は検査する)。上の層と全体は PR の CI(14 節)が Linux と Windows で `--dependents` を流して確かめるので、CI が落ちたら直してプッシュし直す。加工の戦略や CAD の機能 1 つなら、空の target から数分・1〜2 GB で済む(2 節)。画面・session・アプリそのものを変えた時は今と同じ大きさになるので、クラウドでは下の `cloud-target-cache.sh` を使う。
+- 担当分と全体: 機能の crate はどれも組み立て(kmb-bundle)に依存されるので、`--dependents` は組み立て・session・画面・アプリまで届く。
+  画面の GPU・両方のカーネル・WASM を全部組むと、target は 15〜22 GB になる。
+  プッシュの前の手元の検査は `--dependents-lower` にする。
+  変更ファイルから自動で選ぶ時は、組み立て・session・画面・アプリの層を選ばない。
+  これらの層のファイルを直接変えた時も選ばず、依存を辿る時もそこを通って先へ進まない。
+  契約テストの利用側を後から足す時も、同じ層の範囲を守る。
+  crate の名前を明示した時は、その crate 自身を検査する。
+  上の層と全体は PR の CI(14 節)が Linux と Windows で `--dependents` を流して確かめる。
+  選んだ下位の crate の依存を組み立てる処理は、検査対象の選択と区別する。
 - 最後に段ごとの「通過/失敗」とかかった秒数を出す。失敗があれば終了コードが 1 になる。
 - clippy は警告を誤りとして扱う(`-D warnings`)。テストだけなら `--no-clippy`。
 - 普段の検査(手渡しの前・PC での取り込みを含む)は SMLib のカーネルだけで流し、`--truck` は付けない。truck の回は、公開の準備で truck のカーネルも配る前と、週に 1 回だけ流す(使うのは SMLib だけで、truck は戻すための控え)。
@@ -52,7 +60,7 @@
 - 骨格の資料(`xtask/src/agents.rs`): 直下の AGENTS.md と .claude/rules/ の分野の決まり。コードの印(`…`)に書いたパス・crate・型や関数の名前・xtask の命令と、「policy.md「節」」の節が無ければ落とす(名前を変えた PR が資料を直し忘れるのを防ぐ)。大きさの上限(AGENTS.md 12 KB、分野の決まり 1 つ 4 KB)、分野の決まりの `paths:` が無いか当たらない、CLAUDE.md が `@AGENTS.md` を読まない、も落とす。層の表は生成区画で、`cargo xtask docs` が `layers.rs` から作る(古いと落ちる)。決まりの行に付けた「(点検: 名前)」は `agents.rs` の `CHECKS` の名前で、その点検の所に印の字が無ければ落とす。点検の無い決まりと決まりの無い点検は落とさず数を出し、`cargo xtask docs` が一覧を出す。比べる前に CRLF を LF に直す。
 - 変えたら直す合図(`agents.rs` の `change_hints`): 分かれ目から層の表か docs/入出力.md の役割・文書の版・終了の番号・MCP の道具の節が変わったのに、AGENTS.md の本文(層の表の外)が変わっていなければ「合図:」を出す。落とさない。
 - 画面の再計算(`xtask/src/layers/code.rs` の `screen_recomputes`): 画面とアプリの層で `recompute_watched`・`take_cache`・`hold_shapes` を呼ばない(再計算は kmb-session の Headless を通す)。
-- コアの公開の項目(`xtask/src/api.rs`): crate を名指ししない時、kmb-core の公開の項目(`pub` の頭、`pub enum` の値、`pub trait` の項目。字面で読む)を分かれ目と比べ、変わっていれば契約テスト(kmb-contract)を使う crate を全部足して流す。項目は「ファイル: 項目」で数えるので、ファイルを分けただけでも変わったと見なす。`CORE_API_VERSION` は公開まで上げない(PR ごとに上げていた版は誰も読まず、衝突の元だった)。
+- コアの公開の項目(`xtask/src/api.rs`): crate を名指ししない時、kmb-core の公開の項目(`pub` の頭、`pub enum` の値、`pub trait` の項目。字面で読む)を分かれ目と比べ、変わっていれば契約テスト(kmb-contract)を使う crate を足して流す。`--dependents-lower` では下位の層に限り、ほかの指定では全部足す。項目は「ファイル: 項目」で数えるので、ファイルを分けただけでも変わったと見なす。`CORE_API_VERSION` は公開まで上げない(PR ごとに上げていた版は誰も読まず、衝突の元だった)。
 - 組み立ての名前の一意(kmb-bundle の試験 `tests/ids.rs`): 操作の ID・役割の印・設定の ID が重ならず、`then`・`before`・段の帯の操作が実際にある操作を指す。見本の文書 3 つで、何も選ばない時と機能を 1 つずつ選んだ時の操作を集める。
 
 整形(毎回、どの crate を選んでも全体): `cargo fmt --all --check`(rustfmt は `rust-toolchain.toml` の版)。崩れたファイルの名前を出して落とす。直すのは `cargo fmt --all`。CI(14 節)は組み立ての前にも Linux で流し、整形の崩れた PR を早く落とす。
