@@ -64,20 +64,37 @@ fn pose_of(cx: &Context<'_>, root: FeatureId) -> k::Matrix4 {
     .unwrap_or(k::IDENTITY)
 }
 
+type Poses = std::collections::BTreeMap<FeatureId, k::Matrix4>;
+
 /// 部品のボディを包む箱(動かす前の位置、世界座標)。
 fn part_bounds(cx: &Context<'_>, roots: &[FeatureId]) -> Option<(P3, P3)> {
+    part_bounds_at(cx, roots, None)
+}
+
+/// 各ボディを指定の姿勢に置き、8 隅を包む。姿勢が無ければ設計の位置を使う。
+fn part_bounds_at(
+    cx: &Context<'_>,
+    roots: &[FeatureId],
+    poses: Option<&Poses>,
+) -> Option<(P3, P3)> {
     let mut lo = [f64::INFINITY; 3];
     let mut hi = [f64::NEG_INFINITY; 3];
     for (id, h) in cx.visible_bodies() {
-        if !roots.contains(&body_root(cx.data, cx.registry, id)) {
+        let root = body_root(cx.data, cx.registry, id);
+        if !roots.contains(&root) {
             continue;
         }
         let Ok((a, b)) = cx.kernel.bounds(h) else {
             continue;
         };
-        for i in 0..3 {
-            lo[i] = lo[i].min(a[i]);
-            hi[i] = hi[i].max(b[i]);
+        let pose = poses.and_then(|p| p.get(&root));
+        for bits in 0..8 {
+            let corner = std::array::from_fn(|i| if bits & (1 << i) == 0 { a[i] } else { b[i] });
+            let point = pose.map_or(corner, |m| k::transform_point(m, corner));
+            for i in 0..3 {
+                lo[i] = lo[i].min(point[i]);
+                hi[i] = hi[i].max(point[i]);
+            }
         }
     }
     (lo[0] <= hi[0]).then_some((lo, hi))
@@ -467,7 +484,7 @@ struct Unit {
 
 /// 部品 `parent`(`None` は設計の全体)の直下で、分けて動かす物。部品の直下のボディは 1 つにまとめ、
 /// 設計の全体の直下(部品に入っていない)のボディは 1 つずつ。見えている物だけ。
-fn units_under(cx: &Context<'_>, parent: Option<u64>) -> Vec<Unit> {
+fn units_under(cx: &Context<'_>, parent: Option<u64>, poses: &Poses) -> Vec<Unit> {
     let data = cx.data;
     let mut groups: Vec<Vec<Target>> = data
         .components
@@ -498,7 +515,7 @@ fn units_under(cx: &Context<'_>, parent: Option<u64>) -> Vec<Unit> {
         .into_iter()
         .filter_map(|targets| {
             let roots: Vec<FeatureId> = targets.iter().flat_map(|t| t.roots(data)).collect();
-            let (lo, hi) = part_bounds(cx, &roots)?;
+            let (lo, hi) = part_bounds_at(cx, &roots, Some(poses))?;
             Some(Unit { targets, lo, hi })
         })
         .collect()
@@ -564,10 +581,31 @@ pub fn spread(boxes: &[(P3, P3)], scale: f64) -> Vec<P3> {
 /// なければ 2 つ以上ある所まで下りる)、真ならすべてのレベル(部品の中も、その部品の中心から離す。
 /// 中の物は外の部品の動きに足して動く)。並びは部品の木の上から順。
 pub fn auto_moves(cx: &Context<'_>, all: bool, scale: f64) -> Vec<(Vec<Target>, P3)> {
+    auto_moves_under(cx, all, scale, None)
+}
+
+fn auto_moves_under(
+    cx: &Context<'_>,
+    all: bool,
+    scale: f64,
+    component: Option<u64>,
+) -> Vec<(Vec<Target>, P3)> {
+    let steps = anim::steps(cx.data);
+    let poses = anim::poses(
+        cx.data,
+        cx.registry,
+        cx.report,
+        &steps,
+        anim::duration(&steps),
+    );
     let mut out = Vec::new();
-    let mut queue: std::collections::VecDeque<Option<u64>> = [None].into();
+    let mut queue: std::collections::VecDeque<Option<u64>> = [component].into();
     while let Some(parent) = queue.pop_front() {
-        let units = units_under(cx, parent);
+        let units = units_under(cx, parent, &poses);
+        // 指した部品の直下で分けられない時は、その中の別の部品を対象にしない。
+        if component.is_some() && parent == component && units.len() < 2 {
+            return Vec::new();
+        }
         let children = units.iter().filter_map(|u| match u.targets.as_slice() {
             [Target::Component { id }] => Some(Some(*id)),
             _ => None,
@@ -601,7 +639,29 @@ pub fn auto_explode(cx: &Context<'_>, all: bool) -> Result<Outcome, kmb_core::Pr
     if !(scale.is_finite() && scale > 0.0) {
         return Err(format!("分解の目盛({scale})は 0 より大きくしてください").into());
     }
-    let moves = auto_moves(cx, all, scale);
+    let component = match cx.arg("component") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(value) => {
+            let id = value
+                .as_u64()
+                .or_else(|| {
+                    value
+                        .as_f64()
+                        .filter(|n| {
+                            n.is_finite() && *n >= 0.0 && *n < u64::MAX as f64 && n.fract() == 0.0
+                        })
+                        .map(|n| n as u64)
+                })
+                .ok_or("部品の番号を 0 以上の整数で指定してください")?;
+            if cx.data.component(id).is_none() {
+                return Err(
+                    format!("部品 {id} がありません(部品の番号を選び直してください)").into(),
+                );
+            }
+            Some(id)
+        }
+    };
+    let moves = auto_moves_under(cx, all, scale, component);
     if moves.is_empty() {
         return Err(
             "分けて動かせる物が 2 つ以上ありません(部品か、部品に入っていないボディが 2 つ以上要ります)"

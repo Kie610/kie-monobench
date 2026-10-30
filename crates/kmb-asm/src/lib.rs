@@ -1075,6 +1075,7 @@ impl Extension for AsmCommands {
                 .disabled_if(none),
             Action::new(anim::AUTO_EXPLODE_ONE, "自動分解: 1 レベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1083,12 +1084,13 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode one level 1れべる いちれべる")
-                .hint("部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .at(&[Place::Toolbar])
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::AUTO_EXPLODE_ALL, "自動分解: すべてのレベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1097,7 +1099,7 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode all levels すべて")
-                .hint("部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::VISIBILITY, "表示/非表示", "anim")
@@ -1340,3 +1342,6 @@ pub fn module() -> kmb_core::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod auto_explode_tests;

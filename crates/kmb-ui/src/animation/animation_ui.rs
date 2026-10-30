@@ -59,6 +59,8 @@ pub(crate) const RECORD_SETTLE: f64 = 0.4;
 pub(crate) struct AutoTool {
     /// 操作(1 レベルか、すべてのレベル)
     action: String,
+    /// 道具を出した時に選んでいた部品。先に見せる間に選びが変わっても対象は保つ。
+    component: Option<u64>,
     /// 順次(部品ごとに 1 秒の段)か、ワンステップ(全部同時の段 1 つ)か
     pub(crate) sequential: bool,
     /// 跡の線を出すか
@@ -106,6 +108,7 @@ impl Workspace {
         self.cur.anim.draft = None;
         self.cur.anim.auto = Some(AutoTool {
             action: id.into(),
+            component: self.cur.selected_component,
             sequential: false,
             trail: true,
             scale: 1.0,
@@ -137,6 +140,7 @@ impl Workspace {
             return false;
         };
         let args = serde_json::json!({
+            "component": a.component,
             "sequential": a.sequential,
             "trail": a.trail,
             "scale": a.scale,
