@@ -2,3 +2,6 @@
 ### Translations for ko (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-cad-sketch-dxf-layers = List DXF layers
+# action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design

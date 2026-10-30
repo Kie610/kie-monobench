@@ -8,7 +8,7 @@ use kmb_format::dxf;
 use kmb_sketch::{
     Affine, Imported, Shape, Sketch, Solution, entity_segments, shapes_bounds, transform_shape,
 };
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::f64::consts::TAU;
 
 /// 書き出しの選び方。
@@ -148,8 +148,8 @@ struct Ent<'a> {
     verts: Vec<Vec<(i32, &'a str)>>,
 }
 
-impl Ent<'_> {
-    fn get(&self, code: i32) -> Option<&str> {
+impl<'a> Ent<'a> {
+    fn get(&self, code: i32) -> Option<&'a str> {
         self.codes.iter().find(|c| c.0 == code).map(|c| c.1)
     }
 }
@@ -252,9 +252,34 @@ const MAX_WORK: usize = 4_000_000;
 /// LINE・CIRCLE・ARC・LWPOLYLINE・POLYLINE・ELLIPSE・SPLINE・POINT と、BLOCK の INSERT
 /// (位置・倍率・回転・行列の配置)を読む。読めなかった要素は種類ごとに数える。
 pub fn from_dxf(text: &str) -> Result<Imported, String> {
+    from_dxf_with_layers(text, None).map(|read| read.imported)
+}
+
+/// ファイルにある画層と、その画層から展開した形の数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DxfLayer {
+    pub name: String,
+    pub shapes: usize,
+}
+
+/// 選んだ画層の形と、全画層の一覧、選ばずに除いた形の数。
+#[derive(Debug, Clone, PartialEq)]
+pub struct DxfRead {
+    pub imported: Imported,
+    pub layers: Vec<DxfLayer>,
+    pub excluded: usize,
+}
+
+/// 画層の名前の順に一覧を返す。ブロックの画層0は、その配置の画層として数える。
+pub fn dxf_layers(text: &str) -> Result<Vec<DxfLayer>, String> {
+    from_dxf_with_layers(text, None).map(|read| read.layers)
+}
+
+/// 指定した画層だけを読む。省略は全画層、空の並びは形なし。知らない名前は断る。
+pub fn from_dxf_with_layers(text: &str, selected: Option<&[String]>) -> Result<DxfRead, String> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     if text.starts_with("AutoCAD Binary DXF") {
-        return crate::from_dxf_bytes(text.as_bytes());
+        return crate::from_dxf_bytes_with_layers(text.as_bytes(), selected);
     }
     let lines: Vec<&str> = text.lines().collect();
     let mut pairs: Vec<(i32, &str)> = Vec::with_capacity(lines.len() / 2);
@@ -277,14 +302,18 @@ pub fn from_dxf(text: &str) -> Result<Imported, String> {
         }
         pairs.push((code, ch[1].trim()));
     }
-    from_pairs(&pairs)
+    from_pairs(&pairs, selected)
 }
 
-pub(crate) fn from_pairs(pairs: &[(i32, &str)]) -> Result<Imported, String> {
+pub(crate) fn from_pairs(
+    pairs: &[(i32, &str)],
+    selected: Option<&[String]>,
+) -> Result<DxfRead, String> {
     if !pairs.iter().any(|p| p.0 == 0 && p.1 == "SECTION") {
         return Err("DXF ではありません(SECTION がない)".into());
     }
 
+    let mut declared_layers = BTreeMap::new();
     let mut insunits = 0i64;
     let mut entities: Vec<Ent> = Vec::new();
     let mut blocks: HashMap<&str, Block> = HashMap::new();
@@ -309,6 +338,15 @@ pub(crate) fn from_pairs(pairs: &[(i32, &str)]) -> Result<Imported, String> {
                     }
                     i += 1;
                 }
+            }
+            "TABLES" => {
+                let (entries, j) = read_entities(pairs, i);
+                for entry in entries.iter().filter(|e| e.kind == "LAYER") {
+                    if let Some(name) = entry.get(2) {
+                        declared_layers.insert(name, 0usize);
+                    }
+                }
+                i = j;
             }
             "ENTITIES" => {
                 let (e, j) = read_entities(pairs, i);
@@ -354,6 +392,8 @@ pub(crate) fn from_pairs(pairs: &[(i32, &str)]) -> Result<Imported, String> {
     let mut cx = Ctx {
         blocks: &blocks,
         shapes: Vec::new(),
+        layer: "0",
+        layers: BTreeSet::new(),
         skipped: HashMap::new(),
         work: 0,
     };
@@ -362,41 +402,88 @@ pub(crate) fn from_pairs(pairs: &[(i32, &str)]) -> Result<Imported, String> {
             cx.skip("ペーパー空間の要素");
             continue;
         }
-        cx.entity(e, &Affine::IDENTITY, 0);
+        cx.entity(e, &Affine::IDENTITY, 0, "0");
     }
     let k = unit_scale(insunits);
     let scale = Affine::scale(k, k);
-    let shapes = cx
+    let shapes: Vec<_> = cx
         .shapes
-        .iter()
-        .map(|s| {
-            if k == 1.0 {
-                s.clone()
+        .into_iter()
+        .filter_map(|(shape, layer)| {
+            let shape = if k == 1.0 {
+                shape
             } else {
-                transform_shape(s, &scale)
+                transform_shape(&shape, &scale)
+            };
+            shape.is_finite().then_some((shape, layer))
+        })
+        .collect();
+    let mut counts = declared_layers;
+    for layer in cx.layers {
+        counts.entry(layer).or_default();
+    }
+    for (_, layer) in &shapes {
+        *counts.entry(*layer).or_default() += 1;
+    }
+    let wanted = selected.map(|names| names.iter().map(String::as_str).collect::<BTreeSet<_>>());
+    if let Some(names) = &wanted {
+        let unknown: Vec<_> = names
+            .iter()
+            .filter(|name| !counts.contains_key(**name))
+            .copied()
+            .collect();
+        if !unknown.is_empty() {
+            return Err(format!(
+                "DXF に画層 {} はありません。ある画層: {}",
+                unknown.join("・"),
+                counts.keys().copied().collect::<Vec<_>>().join("・")
+            ));
+        }
+    }
+    let layers = counts
+        .into_iter()
+        .map(|(name, shapes)| DxfLayer {
+            name: name.into(),
+            shapes,
+        })
+        .collect();
+    let mut excluded = 0;
+    let shapes = shapes
+        .into_iter()
+        .filter_map(|(shape, layer)| {
+            if wanted.as_ref().is_none_or(|names| names.contains(layer)) {
+                Some(shape)
+            } else {
+                excluded += 1;
+                None
             }
         })
-        .filter(Shape::is_finite)
         .collect();
-    Ok(Imported::new(shapes, cx.skipped))
+    Ok(DxfRead {
+        imported: Imported::new(shapes, cx.skipped),
+        layers,
+        excluded,
+    })
 }
 
 struct Ctx<'b, 'a> {
     blocks: &'b HashMap<&'a str, Block<'a>>,
-    shapes: Vec<Shape>,
+    shapes: Vec<(Shape, &'a str)>,
+    layer: &'a str,
+    layers: BTreeSet<&'a str>,
     skipped: HashMap<String, usize>,
     /// 展開した回数(空のブロックの入れ子で止まらなくならないように)
     work: usize,
 }
 
-impl Ctx<'_, '_> {
+impl<'b, 'a> Ctx<'b, 'a> {
     fn skip(&mut self, what: &str) {
         *self.skipped.entry(what.to_string()).or_default() += 1;
     }
 
     fn push(&mut self, s: Shape, m: &Affine) {
         if self.shapes.len() < MAX_SHAPES {
-            self.shapes.push(transform_shape(&s, m));
+            self.shapes.push((transform_shape(&s, m), self.layer));
         }
     }
 
@@ -415,15 +502,22 @@ impl Ctx<'_, '_> {
         })
     }
 
-    fn entity(&mut self, e: &Ent, m: &Affine, depth: usize) {
+    fn entity(&mut self, e: &Ent<'a>, m: &Affine, depth: usize, inherited: &'a str) {
+        let layer = e
+            .get(8)
+            .filter(|name| !name.is_empty() && *name != "0")
+            .unwrap_or(inherited);
+        let previous = std::mem::replace(&mut self.layer, layer);
+        self.layers.insert(layer);
         self.work += 1;
         if !self.try_entity(e, m, depth) {
             self.skip(e.kind);
         }
+        self.layer = previous;
     }
 
     /// 読めたら真
-    fn try_entity(&mut self, e: &Ent, m: &Affine, depth: usize) -> bool {
+    fn try_entity(&mut self, e: &Ent<'a>, m: &Affine, depth: usize) -> bool {
         let c = &e.codes;
         let xy = |cx: i32| -> Option<P2> { Some([f(c, cx, 0.0)?, f(c, cx + 10, 0.0)?]) };
         match e.kind {
@@ -632,7 +726,7 @@ impl Ctx<'_, '_> {
         true
     }
 
-    fn insert(&mut self, e: &Ent, m: &Affine, depth: usize) -> bool {
+    fn insert(&mut self, e: &Ent<'a>, m: &Affine, depth: usize) -> bool {
         let c = &e.codes;
         let Some(name) = e.get(2) else { return false };
         let Some(block) = self.blocks.get(name) else {
@@ -656,6 +750,7 @@ impl Ctx<'_, '_> {
         let cols = int(c, 70).clamp(1, 1000);
         let rows = int(c, 71).clamp(1, 1000);
         let base = block.base;
+        let layer = self.layer;
         for r in 0..rows {
             for k in 0..cols {
                 self.work += 1;
@@ -671,7 +766,7 @@ impl Ctx<'_, '_> {
                     .then_after(&Affine::scale(sx, sy))
                     .then_after(&Affine::translate(-base[0], -base[1]));
                 for be in &block.ents {
-                    self.entity(be, &t, depth + 1);
+                    self.entity(be, &t, depth + 1, layer);
                 }
             }
         }

@@ -26,6 +26,14 @@ fn inserted_test_outcome(
     bytes: &[u8],
     args: serde_json::Value,
 ) -> Result<kmb_core::Outcome, kmb_core::Problem> {
+    command_test_outcome(INSERT_DXF, bytes, args)
+}
+
+fn command_test_outcome(
+    action: &str,
+    bytes: &[u8],
+    args: serde_json::Value,
+) -> Result<kmb_core::Outcome, kmb_core::Problem> {
     use kmb_core::{Context, DocumentData, Extensions, NullKernel, RecomputeReport, Registry};
     use std::sync::Arc;
     let path = std::env::temp_dir().join(format!(
@@ -44,7 +52,7 @@ fn inserted_test_outcome(
     let mut cx = Context::new(&data, &report, &registry, &kernel);
     cx.file = Some(&path);
     cx.args = &args;
-    let result = Extensions(vec![Arc::new(DxfCommands)]).run(INSERT_DXF, &cx);
+    let result = Extensions(vec![Arc::new(DxfCommands)]).run(action, &cx);
     std::fs::remove_file(&path).unwrap();
     result
 }
@@ -871,4 +879,254 @@ proptest::proptest! {
             Err(reason) => proptest::prop_assert!(reason.contains("倍率") || reason.contains("形の大きさが 0")),
         }
     }
+}
+
+fn two_layer_dxf() -> String {
+    "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n輪郭\n10\n0\n20\n0\n11\n10\n21\n0\n0\nLINE\n8\n寸法\n10\n20\n20\n0\n11\n30\n21\n0\n0\nENDSEC\n0\nEOF\n".into()
+}
+
+#[test]
+fn inserting_only_the_requested_layer_excludes_the_other_shapes() {
+    let (sketch, label) = inserted_test_result(
+        two_layer_dxf().as_bytes(),
+        serde_json::json!({"layers":["輪郭"],"cleanup":false}),
+    );
+    let lines = sketch
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Line { .. }))
+        .count();
+    assert_eq!(lines, 1);
+    assert!(label.contains("1 個を除外"), "{label}");
+}
+
+#[test]
+fn layer_lists_and_selections_preserve_the_all_layers_reading() {
+    let text = two_layer_dxf();
+    assert_eq!(
+        dxf_layers(&text).unwrap(),
+        vec![
+            DxfLayer {
+                name: "寸法".into(),
+                shapes: 1
+            },
+            DxfLayer {
+                name: "輪郭".into(),
+                shapes: 1
+            }
+        ]
+    );
+    let all = from_dxf(&text).unwrap();
+    let selected = from_dxf_with_layers(&text, Some(&["輪郭".into(), "寸法".into()])).unwrap();
+    assert_eq!(selected.imported, all);
+    assert_eq!(selected.excluded, 0);
+    let one = from_dxf_with_layers(&text, Some(&["輪郭".into(), "輪郭".into()])).unwrap();
+    assert_eq!(one.imported.shapes.len(), 1);
+    assert_eq!(one.excluded, 1);
+    assert_eq!(one.imported.bounds, Some(([0.0, 0.0], [10.0, 0.0])));
+    let none = from_dxf_with_layers(&text, Some(&[])).unwrap();
+    assert!(none.imported.shapes.is_empty());
+    assert_eq!(none.excluded, 2);
+    let error = from_dxf_with_layers(&text, Some(&["ない画層".into()])).unwrap_err();
+    for name in ["ない画層", "輪郭", "寸法"] {
+        assert!(error.contains(name), "{error}");
+    }
+}
+
+#[test]
+fn declared_empty_layers_are_listed_and_can_be_selected() {
+    let text = "0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n0\nLAYER\n2\n空\n0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n";
+    let read = from_dxf_with_layers(text, Some(&["空".into()])).unwrap();
+    assert_eq!(
+        read.layers,
+        vec![DxfLayer {
+            name: "空".into(),
+            shapes: 0
+        }]
+    );
+    assert!(read.imported.shapes.is_empty());
+}
+
+#[test]
+fn nested_block_layer_zero_inherits_each_insert_and_restores_the_parent() {
+    let text = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\n内\n10\n0\n20\n0\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n1\n21\n0\n0\nLINE\n8\n印\n10\n0\n20\n1\n11\n1\n21\n1\n0\nENDBLK\n0\nBLOCK\n2\n外\n10\n0\n20\n0\n0\nINSERT\n2\n内\n8\n0\n10\n0\n20\n0\n0\nENDBLK\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\n外\n8\n板A\n10\n10\n20\n0\n0\nINSERT\n2\n外\n8\n板B\n10\n20\n20\n0\n0\nLINE\n10\n0\n20\n2\n11\n1\n21\n2\n0\nENDSEC\n0\nEOF\n";
+    let layers = dxf_layers(text).unwrap();
+    assert_eq!(
+        layers,
+        vec![
+            DxfLayer {
+                name: "0".into(),
+                shapes: 1
+            },
+            DxfLayer {
+                name: "印".into(),
+                shapes: 2
+            },
+            DxfLayer {
+                name: "板A".into(),
+                shapes: 1
+            },
+            DxfLayer {
+                name: "板B".into(),
+                shapes: 1
+            }
+        ]
+    );
+    let a = from_dxf_with_layers(text, Some(&["板A".into()])).unwrap();
+    assert_eq!(a.excluded, 4);
+    assert_eq!(
+        a.imported.shapes,
+        vec![Shape::Line {
+            a: [10.0, 0.0],
+            b: [11.0, 0.0]
+        }]
+    );
+    let zero = from_dxf_with_layers(text, Some(&["0".into()])).unwrap();
+    assert_eq!(
+        zero.imported.shapes,
+        vec![Shape::Line {
+            a: [0.0, 2.0],
+            b: [1.0, 2.0]
+        }]
+    );
+}
+
+#[test]
+fn binary_and_ascii_layer_selections_return_the_same_shapes() {
+    let text = two_layer_dxf();
+    let names = ["寸法".into()];
+    let expected = from_dxf_with_layers(&text, Some(&names)).unwrap();
+    for modern in [false, true] {
+        assert_eq!(
+            from_dxf_bytes_with_layers(&binary_dxf(&text, modern), Some(&names)).unwrap(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn layer_filtering_keeps_the_declared_length_unit() {
+    let text = two_layer_dxf().replacen(
+        "0\nSECTION",
+        "0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n1\n0\nENDSEC\n0\nSECTION",
+        1,
+    );
+    let read = from_dxf_with_layers(&text, Some(&["輪郭".into()])).unwrap();
+    let Shape::Line { a, b } = read.imported.shapes[0] else {
+        panic!("線分");
+    };
+    assert_eq!(a, [0.0, 0.0]);
+    assert!((b[0] - 254.0).abs() < 1e-9);
+}
+
+#[test]
+fn listing_file_layers_is_read_only_and_insertion_rejects_bad_names() {
+    let result = command_test_outcome(
+        LIST_DXF_LAYERS,
+        two_layer_dxf().as_bytes(),
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    let kmb_core::Outcome::Text { body, .. } = result else {
+        panic!("読むだけの一覧");
+    };
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!([
+        {"name":"寸法","shapes":1},{"name":"輪郭","shapes":1}])
+    );
+    assert!(
+        inserted_test_outcome(
+            two_layer_dxf().as_bytes(),
+            serde_json::json!({"layers":[42]})
+        )
+        .err()
+        .unwrap()
+        .message
+        .contains("文字列")
+    );
+    let err = inserted_test_outcome(
+        two_layer_dxf().as_bytes(),
+        serde_json::json!({"layers":["ない"]}),
+    )
+    .err()
+    .unwrap();
+    assert!(err.message.contains("輪郭") && err.message.contains("寸法"));
+}
+
+#[test]
+fn listing_layers_checks_explicit_file_arguments_before_reading() {
+    use kmb_core::{Context, DocumentData, Extensions, NullKernel, RecomputeReport, Registry};
+    use std::sync::Arc;
+    struct Deny;
+    impl kmb_core::FileGate for Deny {
+        fn open(&self, _: &std::path::Path) -> Result<std::path::PathBuf, String> {
+            Err("許したフォルダの外です".into())
+        }
+    }
+    impl std::fmt::Debug for Deny {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("Deny")
+        }
+    }
+    let data = DocumentData::default();
+    let report = RecomputeReport::default();
+    let registry = Registry::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let args = serde_json::json!({"file":"/not-opened.dxf"});
+    let mut cx = Context::new(&data, &report, &registry, &kernel);
+    cx.args = &args;
+    cx.files = Some(&Deny);
+    let ext = Extensions(vec![Arc::new(DxfCommands)]);
+    let action = ext.action(LIST_DXF_LAYERS, &cx).unwrap();
+    assert!(
+        action
+            .args
+            .iter()
+            .any(|a| a.key == "file" && a.kind == kmb_core::ArgKind::File)
+    );
+    let error = match ext.run(LIST_DXF_LAYERS, &cx) {
+        Err(e) => e,
+        _ => panic!("開かない"),
+    };
+    assert!(error.message.contains("許したフォルダの外"));
+}
+
+#[test]
+fn layers_with_only_unsupported_entities_are_still_named() {
+    let text = "0\nSECTION\n2\nENTITIES\n0\nTEXT\n8\n注記\n1\n文字\n0\nENDSEC\n0\nEOF\n";
+    let read = from_dxf_with_layers(text, Some(&["注記".into()])).unwrap();
+    assert_eq!(
+        read.layers,
+        vec![DxfLayer {
+            name: "注記".into(),
+            shapes: 0
+        }]
+    );
+    assert!(read.imported.shapes.is_empty());
+    assert_eq!(read.imported.skipped, vec![("TEXT".into(), 1)]);
+}
+
+#[test]
+fn an_explicit_file_argument_lists_layers_without_a_selected_document() {
+    use kmb_core::{Context, DocumentData, Extensions, NullKernel, RecomputeReport, Registry};
+    use std::sync::Arc;
+    let path = std::env::temp_dir().join(format!("dxf-layer-list-{}.dxf", std::process::id()));
+    std::fs::write(&path, two_layer_dxf()).unwrap();
+    let data = DocumentData::default();
+    let report = RecomputeReport::default();
+    let registry = Registry::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let args = serde_json::json!({"file":path});
+    let mut cx = Context::new(&data, &report, &registry, &kernel);
+    cx.args = &args;
+    let result = Extensions(vec![Arc::new(DxfCommands)]).run(LIST_DXF_LAYERS, &cx);
+    std::fs::remove_file(&path).unwrap();
+    let kmb_core::Outcome::Text { body, .. } = result.unwrap() else {
+        panic!("読むだけ");
+    };
+    let value: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(value.as_array().unwrap().len(), 2);
+    assert_eq!(value[0]["shapes"], 1);
+    assert!(data.features.is_empty());
 }
