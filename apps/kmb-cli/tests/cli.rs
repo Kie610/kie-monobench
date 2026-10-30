@@ -547,9 +547,9 @@ fn pack_writes_a_zip_that_the_cli_can_open() {
     assert_eq!(result["included"].as_array().unwrap().len(), 2);
     assert!(result["skipped"].as_array().unwrap().is_empty());
     ok(&dir, &["recompute", "delivery.zip", "--json"]);
-    let original = kmb_session::load(&dir.join(&file)).unwrap();
+    let original = kmb_session::Headless::open(kmb_bundle::modules(), &dir.join(&file)).unwrap();
     let reopened = kmb_session::load_design(&dir.join("delivery.zip")).unwrap();
-    assert_eq!(reopened.document.to_json(), original.to_json());
+    assert_eq!(reopened.document.to_json(), original.doc().to_json());
     assert!(reopened.path.is_none());
     std::fs::remove_dir_all(dir).unwrap();
 }
