@@ -535,3 +535,178 @@ fn expanded_thread_hole_actions_create_the_new_recess_defaults() {
     let expected = cyl(7.0, 40.0) + cyl(13.0, 17.0) - cyl(7.0, 17.0);
     assert!((removed - expected).abs() < 0.01, "{removed} vs {expected}");
 }
+
+fn thread_length_document(
+    length: Option<&str>,
+    depth: Option<&str>,
+    tip: Tip,
+) -> kmb_core::Document {
+    plate_with_hole(
+        &[[15.0, 10.0]],
+        |target, sketch, points| Hole {
+            points,
+            tap: Tap::Tapped,
+            size: Some("M4".into()),
+            depth: depth.map(str::to_string),
+            thread_depth: length.map(str::to_string),
+            tip,
+            ..Hole::new(target, sketch)
+        },
+        false,
+    )
+}
+
+fn thread_length_result(
+    doc: &mut kmb_core::Document,
+    k: &TestKernel,
+) -> (f64, kmb_interchange::HoleInfo, kmb_interchange::ThreadMarks) {
+    use kmb_core::Payload;
+    let reg = registry();
+    let report = doc.recompute(&reg, &**k);
+    assert_ok(&report);
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &report.features.last().unwrap().status
+    else {
+        panic!("穴が必要です")
+    };
+    let info =
+        kmb_interchange::HoleInfo::from_value(&outputs[kmb_interchange::HOLE_OUTPUT]).unwrap();
+    let marks =
+        kmb_interchange::ThreadMarks::from_value(&outputs[kmb_interchange::THREAD_MARKS_OUTPUT])
+            .unwrap();
+    let body = visible_bodies(doc.data(), &reg, &report)[0].1;
+    (k.volume(body).unwrap(), info, marks)
+}
+
+#[test]
+fn a_tapped_thread_length_is_saved_and_reported_without_changing_the_hole() {
+    let k = TestKernel::new();
+    let mut old = thread_length_document(None, Some("8 mm"), Tip::Flat);
+    let (volume, old_info, old_marks) = thread_length_result(&mut old, &k);
+    assert_eq!(old_info.thread_depth, None);
+    assert_eq!(old_marks.marks[0].length, 8.0);
+    let mut doc = thread_length_document(Some("5 mm"), Some("8 mm"), Tip::Flat);
+    let (after, info, marks) = thread_length_result(&mut doc, &k);
+    assert!((volume - after).abs() < 1e-8);
+    assert_eq!(info.thread_depth, Some(5.0));
+    assert_eq!(marks.marks[0].length, 5.0);
+    let saved = doc.to_json();
+    let mut restored = kmb_core::Document::from_json(&saved).unwrap();
+    let (reopened, restored_info, restored_marks) = thread_length_result(&mut restored, &k);
+    assert!((reopened - after).abs() < 1e-8);
+    assert_eq!(info, restored_info);
+    assert_eq!(marks, restored_marks);
+}
+
+#[test]
+fn tapped_thread_length_rejects_nonpositive_values_and_the_drill_point_allowance() {
+    let k = TestKernel::new();
+    let reg = registry();
+    for length in ["0 mm", "-1 mm", "8.1 mm"] {
+        let mut doc = thread_length_document(Some(length), Some("8 mm"), Tip::Angled);
+        let r = doc.recompute(&reg, &*k);
+        let kmb_core::FeatureStatus::Error { message } = &r.features.last().unwrap().status else {
+            panic!("{r:?}")
+        };
+        assert!(message.contains("ねじ部の長さ"), "{message}");
+        assert!(
+            message.contains(if length == "8.1 mm" {
+                "穴の深さ以下"
+            } else {
+                "0 より大きく"
+            }),
+            "{message}"
+        );
+    }
+    let mut equal = thread_length_document(Some("8 mm"), Some("8 mm"), Tip::Flat);
+    assert_eq!(
+        thread_length_result(&mut equal, &k).1.thread_depth,
+        Some(8.0)
+    );
+    // 貫通では外形の箱から穴の位置の材料の厚さを断定しない。
+    let mut through = thread_length_document(Some("100 mm"), None, Tip::Flat);
+    assert_eq!(
+        thread_length_result(&mut through, &k).1.thread_depth,
+        Some(100.0)
+    );
+}
+
+#[test]
+fn tapped_thread_length_follows_parameter_changes_and_renaming() {
+    let k = TestKernel::new();
+    let reg = registry();
+    let mut doc = thread_length_document(Some("tap_length"), Some("8 mm"), Tip::Flat);
+    let param = doc.alloc_param_id();
+    doc.apply(kmb_core::Transaction::new(
+        "長さ",
+        vec![kmb_core::Op::AddParam {
+            index: None,
+            param: kmb_core::Param::new(param, "tap_length", "4 mm"),
+        }],
+    ))
+    .unwrap();
+    let (volume, info, _) = thread_length_result(&mut doc, &k);
+    assert_eq!(info.thread_depth, Some(4.0));
+    doc.apply(kmb_core::Transaction::new(
+        "長さを変更",
+        vec![kmb_core::Op::SetParamExpr {
+            id: param,
+            expr: "6 mm".into(),
+        }],
+    ))
+    .unwrap();
+    let (changed, info, _) = thread_length_result(&mut doc, &k);
+    assert!((volume - changed).abs() < 1e-8);
+    assert_eq!(info.thread_depth, Some(6.0));
+    doc.rename_param(&reg, param, "thread_length").unwrap();
+    assert_eq!(
+        doc.data().features.last().unwrap().data["thread_depth"],
+        "thread_length"
+    );
+    assert_eq!(thread_length_result(&mut doc, &k).1.thread_depth, Some(6.0));
+}
+
+#[test]
+fn the_hole_action_accepts_a_unitful_thread_length() {
+    use kmb_core::{Context, Extensions, Kernel, Outcome};
+    use std::sync::Arc;
+    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let mut doc = thread_length_document(None, Some("8 mm"), Tip::Flat);
+    let reg = registry();
+    let report = doc.recompute(&reg, k.as_ref());
+    assert_ok(&report);
+    let body = doc
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == EXTRUDE)
+        .unwrap()
+        .id;
+    let actions = Extensions(vec![Arc::new(kmb_cad_hole::HoleCommands)]);
+    let args = serde_json::json!({
+        "feature":body, "face":format!("f{}:end",body.0), "point":[5.0,5.0,10.0],
+        "tap":"tapped", "size":"M4", "depth":"8 mm", "thread_depth":"0.2 in",
+    });
+    let cx = Context {
+        args: &args,
+        ..Context::new(doc.data(), &report, &reg, &k)
+    };
+    let Outcome::Change { label, edits } = actions.run(kmb_cad_hole::HOLE_ON_FACE, &cx).unwrap()
+    else {
+        panic!("穴を作る変更が必要です")
+    };
+    doc.apply_edits(&label, edits).unwrap();
+    assert_eq!(
+        doc.data().features.last().unwrap().data["thread_depth"],
+        "5.08 mm"
+    );
+    let r = doc.recompute(&reg, k.as_ref());
+    assert_ok(&r);
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &r.features.last().unwrap().status else {
+        panic!("穴が必要です")
+    };
+    let info = <kmb_interchange::HoleInfo as kmb_core::Payload>::from_value(
+        &outputs[kmb_interchange::HOLE_OUTPUT],
+    )
+    .unwrap();
+    assert_eq!(info.thread_depth, Some(5.08));
+}

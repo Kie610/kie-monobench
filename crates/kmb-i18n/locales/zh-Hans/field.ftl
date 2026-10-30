@@ -1979,6 +1979,8 @@
 # field-solid-hole-countersink-diameter-help = Blank uses the thread table, or twice the hole diameter when unavailable.
 # field-solid-hole-depth = Depth
 # field-solid-hole-depth-help = Blank makes a through hole.
+# field-solid-hole-thread-depth = Thread length
+# field-solid-hole-thread-depth-help = Blank uses the full hole depth, excluding the conical drill point.
 # field-solid-hole-diameter = Diameter
 # field-solid-hole-extent = Extent
 # field-solid-hole-extent-help = To Object starts picking a planar face or vertex to stop the hole. An inclined face produces an inclined bottom.
