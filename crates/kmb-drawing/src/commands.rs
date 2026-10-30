@@ -38,7 +38,7 @@ const ACTIONS: [(&str, &str, &str); 9] = [
     (
         "drawing.delete",
         "図面を削除",
-        "用紙かビューを削除する。子のビューがある時は先に子を削除する",
+        "用紙・ビュー・注記を削除する。子のビューがある時は先に子を削除する",
     ),
     (
         "drawing.picture",
@@ -62,7 +62,7 @@ fn args(id: &str) -> Vec<Arg> {
     if id == "drawing.picture" {
         return a;
     }
-    a.push(Arg::text("id", "ビューの id。削除は用紙の id も指定できる").required());
+    a.push(Arg::text("id", "ビュー・注記の id。削除は用紙の id も指定できる").required());
     match id {
         "drawing.base_view"
         | "drawing.projected_view"
@@ -121,7 +121,7 @@ fn args(id: &str) -> Vec<Arg> {
     }
     a
 }
-fn read<T: DeserializeOwned>(cx: &Context<'_>, key: &str) -> Result<T, Problem> {
+pub(super) fn read<T: DeserializeOwned>(cx: &Context<'_>, key: &str) -> Result<T, Problem> {
     serde_json::from_value(
         cx.arg(key)
             .ok_or_else(|| format!("{key} を指定してください"))?
@@ -129,7 +129,10 @@ fn read<T: DeserializeOwned>(cx: &Context<'_>, key: &str) -> Result<T, Problem> 
     )
     .map_err(|e| format!("{key}: {e}").into())
 }
-fn optional<T: DeserializeOwned + Default>(cx: &Context<'_>, key: &str) -> Result<T, Problem> {
+pub(super) fn optional<T: DeserializeOwned + Default>(
+    cx: &Context<'_>,
+    key: &str,
+) -> Result<T, Problem> {
     if cx.arg(key).is_some() {
         read(cx, key)
     } else {
@@ -140,11 +143,11 @@ fn run(id: &str, cx: &Context<'_>) -> Result<Outcome, Problem> {
     let mut drawings: Drawings = cx.data.section().map_err(|e| e.to_string())?;
     if id == "drawing.picture" {
         let sheet: String = read(cx, "sheet")?;
-        let picture = sheet_picture(cx, &sheet)?;
+        let (picture, lines) = sheet_picture_with_lines(cx, &sheet)?;
         return Ok(Outcome::File {
             suffix: "図面.json".into(),
             contents: serde_json::to_vec_pretty(&picture).map_err(|e| e.to_string())?,
-            info: serde_json::json!({"items":picture.items.len(),"problems":picture.problems.len()}),
+            info: serde_json::json!({"items":picture.items.len(),"problems":picture.problems.len(),"references":lines}),
         });
     }
     if id == "drawing.add_sheet" {
@@ -201,10 +204,16 @@ fn run(id: &str, cx: &Context<'_>) -> Result<Outcome, Problem> {
                     {
                         return Err("子のビューを先に削除してください".into());
                     }
-                    let n = sheet.views.len();
-                    sheet.views.retain(|v| v.id != target);
-                    if sheet.views.len() == n {
-                        return Err("ビューがありません".into());
+                    let note_count = sheet.notes.len();
+                    sheet
+                        .notes
+                        .retain(|n| n.get("id").and_then(|v| v.as_str()) != Some(&target));
+                    if sheet.notes.len() == note_count {
+                        let n = sheet.views.len();
+                        sheet.views.retain(|v| v.id != target);
+                        if sheet.views.len() == n {
+                            return Err("ビューか注記がありません".into());
+                        }
                     }
                 }
                 _ => {
