@@ -957,4 +957,50 @@ mod duplicate_tests {
         let b = line(3, [0.0, EPS * 2.0], [10.0, EPS * 2.0]).1;
         assert!(!same_segment(&a, &b));
     }
+    #[test]
+    fn duplicating_an_internal_divider_keeps_the_same_two_regions() {
+        let base = vec![
+            line(1, [0.0, 0.0], [20.0, 0.0]),
+            line(2, [20.0, 0.0], [20.0, 10.0]),
+            line(3, [20.0, 10.0], [0.0, 10.0]),
+            line(4, [0.0, 10.0], [0.0, 0.0]),
+            line(5, [10.0, 0.0], [10.0, 10.0]),
+        ];
+        let want = signature(&base);
+        assert_eq!(want.len(), 2);
+        let mut duplicate = base;
+        duplicate.push(line(20, [10.0, 10.0], [10.0, 0.0]));
+        assert_eq!(signature(&duplicate), want);
+    }
+
+    #[test]
+    fn touching_regions_keep_two_separate_names() {
+        let first = vec![
+            line(1, [0.0, 0.0], [10.0, 0.0]),
+            line(2, [10.0, 0.0], [10.0, 10.0]),
+            line(3, [10.0, 10.0], [0.0, 10.0]),
+            line(4, [0.0, 10.0], [0.0, 0.0]),
+        ];
+        let second = vec![
+            line(5, [10.0, 10.0], [20.0, 10.0]),
+            line(6, [20.0, 10.0], [20.0, 20.0]),
+            line(7, [20.0, 20.0], [10.0, 20.0]),
+            line(8, [10.0, 20.0], [10.0, 10.0]),
+        ];
+        let mut both = first.clone();
+        both.extend(second.clone());
+        let together = signature(&both);
+        assert_eq!(together.len(), 2, "1点だけ接する領域を結合しない");
+        let names = |items: Vec<(String, Region, bool)>| {
+            items
+                .into_iter()
+                .map(|(key, _, _)| key)
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let expected = names(signature(&first))
+            .union(&names(signature(&second)))
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(names(together), expected);
+    }
 }

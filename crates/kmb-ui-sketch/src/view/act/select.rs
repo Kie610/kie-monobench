@@ -30,6 +30,38 @@ pub(super) fn act(
         long_fired,
         ..
     } = input;
+    // 札だけを選んでいる時は、矢印で位置を微調整する。値の欄の入力は奪わない。
+    if input.free_keys
+        && editor.edit_dim.is_none()
+        && editor.placing.is_none()
+        && let Some((id, rect)) = editor.picked_constraint.and_then(|id| {
+            state
+                .labels
+                .iter()
+                .find(|(c, _)| *c == id)
+                .map(|(_, r)| (id, *r))
+        })
+        && let Some(delta) = ui.input_mut(|i| {
+            if !i.modifiers.is_none() {
+                return None;
+            }
+            [
+                (egui::Key::ArrowLeft, Vec2::new(-5.0, 0.0)),
+                (egui::Key::ArrowRight, Vec2::new(5.0, 0.0)),
+                (egui::Key::ArrowUp, Vec2::new(0.0, -5.0)),
+                (egui::Key::ArrowDown, Vec2::new(0.0, 5.0)),
+            ]
+            .into_iter()
+            .find_map(|(key, d)| i.consume_key(egui::Modifiers::NONE, key).then_some(d))
+        })
+    {
+        let mut s = base_sketch.clone();
+        s.adopt_solution(base_sol);
+        s.place_label(id, t.to_world(rect.center() + delta), base_sol);
+        out.result = Some(s);
+        ui.ctx().request_repaint();
+        return;
+    }
     // 長押し: 押した所に重なっている点・線・領域の一覧を出す(離した時のクリックは捨てる)
     if response.is_pointer_button_down_on()
         && primary_drag

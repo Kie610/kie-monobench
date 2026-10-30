@@ -90,6 +90,7 @@ cad.sketch.find	kmb-sketch
 cad.sketch.insert_dxf	kmb-io-dxf
 cad.sketch.insert_svg	kmb-io-svg
 cad.sketch.redefine_plane	kmb-sketch
+cad.sketch.regions	kmb-sketch
 cad.sketch3d@1	kmb-sketch-3d
 cad.sketch@1	kmb-sketch
 cad.sketch_on_face	kmb-sketch
