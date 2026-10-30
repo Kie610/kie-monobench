@@ -13,6 +13,8 @@
 use crate::result::{Derive, Geometry, Grid, Role, SimResult, Tets, Values, fmt, nice};
 use kmb_core::{Mesh, OverlayShape, ShapeInk};
 
+mod phase;
+pub(crate) use phase::PhaseMesh;
 mod section;
 mod stream;
 #[cfg(test)]
@@ -52,6 +54,8 @@ pub struct Look {
     pub smooth: bool,
     /// 変形を出す(変位の量があれば)
     pub deform: bool,
+    /// 揺れの変位に掛ける係数(-1〜1)。1 で最大、0 で変形なし。
+    pub phase: f64,
     /// 色の範囲を全部のコマで決める(偽なら今のコマだけ)
     pub legend_all: bool,
     /// 結果が古い(見出しに書く)
@@ -67,6 +71,7 @@ impl Default for Look {
             streamlines: false,
             smooth: true,
             deform: true,
+            phase: 1.0,
             legend_all: true,
             stale: false,
         }
@@ -161,7 +166,11 @@ impl Scale {
 #[derive(Default)]
 struct Builder {
     mesh: Mesh,
+    /// 色の区切りで分けた三角形候補。変形の使い回し用だけ、退化の判定より前に記録する。
+    candidates: Option<Vec<Candidate>>,
 }
+
+type Candidate = ([[f64; 3]; 3], u32);
 
 /// 三角形の向きの単位法線(面積が無ければ None)。
 fn facet(p: [[f64; 3]; 3]) -> Option<[f64; 3]> {
@@ -192,6 +201,9 @@ impl Builder {
 
     /// 点ごとの陰の法線 `n` で塗る三角形。長さの無い法線の点は三角形の向きにする。
     fn tri_n(&mut self, p: [[f64; 3]; 3], n: [[f64; 3]; 3], face: u32) {
+        if let Some(candidates) = &mut self.candidates {
+            candidates.push((p, face));
+        }
         let Some(f) = facet(p) else {
             return;
         };
@@ -274,6 +286,15 @@ fn clip(poly: &[ClipV], level: f64, keep_above: bool) -> Vec<ClipV> {
 
 /// 結果 `r` を見せ方 `look` で描いた形。`key` は画面の使い回しの番号。
 pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
+    draw_recorded(r, look, key, false).0
+}
+
+fn draw_recorded(
+    r: &SimResult,
+    look: &Look,
+    key: u64,
+    record: bool,
+) -> (OverlayShape, Vec<Candidate>) {
     let frame = look.frame.min(r.frames.len().saturating_sub(1));
     let levels = if look.smooth { SMOOTH } else { BANDS };
     let range_frame = (!look.legend_all).then_some(frame);
@@ -339,7 +360,10 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
     face_names.push("色なし".into());
     face_colors.push(Some(ShapeInk::Rgb(NO_COLOR)));
 
-    let mut b = Builder::default();
+    let mut b = Builder {
+        candidates: record.then(Vec::new),
+        ..Builder::default()
+    };
     // 表面(色を塗る網と灰色の網)
     let deform = look
         .deform
@@ -363,7 +387,7 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
         let k = disp.map(|(q, v)| {
             let k = deform_factor(r, q, points);
             deform_scale = Some(k);
-            (v, k)
+            (v, k * look.phase)
         });
         let painted = painted.and_then(|(q, s)| {
             let def = &r.quantities[q];
@@ -439,7 +463,12 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
         };
         let disp = deform
             .filter(|q| r.quantities[*q].part == m.part)
-            .and_then(|q| Some((r.values(frame, q)?, deform_factor(r, q, points))));
+            .and_then(|q| {
+                Some((
+                    r.values(frame, q)?,
+                    deform_factor(r, q, points) * look.phase,
+                ))
+            });
         let at = |i: u32| -> [f64; 3] {
             let mut p = points[i as usize].map(f64::from);
             if let Some((v, k)) = disp {
@@ -502,6 +531,7 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
             }
         }
     }
+    let candidates = b.candidates.unwrap_or_default();
     let mut mesh = b.mesh;
     mesh.face_names = face_names;
     // 見出しと凡例(最初の凡例は表面、無ければ断面)
@@ -570,15 +600,18 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
     if r.partial {
         badge.push_str("・中止までの結果");
     }
-    OverlayShape {
-        key,
-        label,
-        mesh,
-        face_colors,
-        legend,
-        more_legends: legends,
-        badge,
-    }
+    (
+        OverlayShape {
+            key,
+            label,
+            mesh,
+            face_colors,
+            legend,
+            more_legends: legends,
+            badge,
+        },
+        candidates,
+    )
 }
 
 /// 三角の網(点と三角)。
