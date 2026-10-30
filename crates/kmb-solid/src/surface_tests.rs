@@ -384,3 +384,149 @@ fn one_curve_whole_output_is_explicit_and_refuses_an_added_second_curve() {
         report.feature(id)
     );
 }
+
+#[test]
+fn thicken_follows_expressions_preserves_names_and_continues_the_same_body() {
+    use kmb_core::kernel::{BodyKind, ThickenSide};
+    let kernel = TestKernel::new();
+    if kernel.is_truck() {
+        let error = kernel
+            .thicken(
+                kmb_core::ShapeHandle(0),
+                2.,
+                ThickenSide::Front,
+                "unsupported",
+            )
+            .unwrap_err();
+        assert!(matches!(error, kmb_core::KernelError::Unsupported(_)));
+        assert!(error.to_string().contains("厚みを付ける"));
+    } else {
+        let (mut builder, sketch) = rectangle();
+        let sheet = builder.feature(
+            kmb_cad_surface::SURFACE_PATCH,
+            "面",
+            json!({"boundary":[{"source":"region","profile":sketch}]}),
+        );
+        let thick = builder.feature(
+            kmb_cad_surface::THICKEN,
+            "板厚",
+            json!({"body":sheet,"thickness":"width / 5","side":"both"}),
+        );
+        let mut doc = builder.finish("厚み");
+        let before = check(&mut doc, thick, &kernel);
+        assert!((kernel.volume(before).unwrap() - 200.).abs() < 1e-4);
+        assert_eq!(kernel.body_kind(before).unwrap(), BodyKind::Solid);
+        let names = kernel.face_names(before).unwrap();
+        let report = doc.recompute(&registry(), &*kernel);
+        assert_eq!(
+            kmb_core::visible_bodies(doc.data(), &registry(), &report).len(),
+            1
+        );
+        let width = doc.data().param_by_name("width").unwrap().id;
+        doc.apply(Transaction::new(
+            "幅",
+            vec![Op::SetParamExpr {
+                id: width,
+                expr: "20 mm".into(),
+            }],
+        ))
+        .unwrap();
+        let after = check(&mut doc, thick, &kernel);
+        assert!((kernel.volume(after).unwrap() - 800.).abs() < 1e-4);
+        assert_eq!(kernel.face_names(after).unwrap(), names);
+        let saved = doc.to_json();
+        let mut restored = Document::from_json(&saved).unwrap();
+        let reopened_kernel = TestKernel::new();
+        let reopened = check(&mut restored, thick, &reopened_kernel);
+        assert!((reopened_kernel.volume(reopened).unwrap() - 800.).abs() < 1e-4);
+        assert_eq!(
+            restored.data().feature(sheet).unwrap().data,
+            doc.data().feature(sheet).unwrap().data
+        );
+        assert!(doc.undo());
+        let undone = check(&mut doc, thick, &kernel);
+        assert!((kernel.volume(undone).unwrap() - 200.).abs() < 1e-4);
+    }
+}
+
+#[test]
+fn thicken_creation_rejects_unknown_arguments_solids_and_zero_thickness_and_undoes_once() {
+    if std::env::var("JC_KERNEL").as_deref() == Ok("truck") {
+        let kernel = TestKernel::new();
+        assert!(matches!(
+            kernel.thicken(
+                kmb_core::ShapeHandle(0),
+                1.,
+                kmb_core::kernel::ThickenSide::Both,
+                "no"
+            ),
+            Err(kmb_core::KernelError::Unsupported(_))
+        ));
+    } else {
+        let modules = kmb_core::Modules::assemble(
+            vec![kmb_sketch::module(), kmb_cad_surface::module()],
+            std::sync::Arc::new(kmb_kernel_smlib::SmlibKernel::new()),
+        );
+        let (mut builder, sketch) = rectangle();
+        let sheet = builder.feature(
+            kmb_cad_surface::SURFACE_PATCH,
+            "面",
+            json!({"boundary":[{"source":"region","profile":sketch}]}),
+        );
+        let mut doc = builder.finish("厚みの操作");
+        let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+        assert_ok(&report);
+        let args = json!({"body":sheet,"thickness":"2 mm","side":"back"});
+        let cx = kmb_core::Context {
+            args: &args,
+            ..kmb_core::Context::new(doc.data(), &report, &modules.registry, &modules.kernel)
+        };
+        let kmb_core::Outcome::Change { label, edits } = modules
+            .extensions
+            .run(kmb_cad_surface::ADD_THICKEN, &cx)
+            .unwrap()
+        else {
+            panic!("厚みを足す変更");
+        };
+        let added = doc.apply_edits(&label, edits).unwrap();
+        let thick = *added.last().unwrap();
+        let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+        assert_ok(&report);
+        assert!((modules.kernel.volume(shape(&report, thick)).unwrap() - 200.).abs() < 1e-4);
+        for args in [json!({"body":thick,"unknown":true}), json!({"body":thick})] {
+            let cx = kmb_core::Context {
+                args: &args,
+                ..kmb_core::Context::new(doc.data(), &report, &modules.registry, &modules.kernel)
+            };
+            assert!(
+                modules
+                    .extensions
+                    .run(kmb_cad_surface::ADD_THICKEN, &cx)
+                    .is_err()
+            );
+        }
+        doc.apply(Transaction::new(
+            "厚み0",
+            vec![Op::SetFeatureData {
+                id: thick,
+                data: json!({"body":sheet,"thickness":"0 mm"}),
+            }],
+        ))
+        .unwrap();
+        let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+        assert!(matches!(
+            report.feature(thick),
+            Some(FeatureStatus::Error { .. })
+        ));
+        assert!(doc.undo());
+        let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+        assert_ok(&report);
+        assert!(doc.undo());
+        let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+        assert_ok(&report);
+        assert_eq!(
+            modules.kernel.body_kind(shape(&report, sheet)).unwrap(),
+            kmb_core::kernel::BodyKind::Sheet
+        );
+    }
+}

@@ -51,3 +51,6 @@ feature-flow-volume = 3D Flow
 feature-flow-volume-tip = Solve the 3D flow and drag around a body to see surface pressure and streamlines, and speed, pressure and vorticity on a section (takes about a minute)
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
+
+feature-solid-thicken = Thicken
+feature-solid-thicken-tip = Add thickness to a sheet body to create a closed solid

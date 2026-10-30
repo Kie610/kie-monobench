@@ -866,6 +866,27 @@ static SmSurface* step_surface(const SmContext& ctx, const JcStepFace& f)
     }
 }
 
+// 解析式で厚みの体積を確かめる、単体試験用の円筒・球の面。
+extern "C" int jc_test_curved_sheet(int32_t kind, double radius, JcBrep** out)
+{
+    *out = nullptr;
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        JcStepFace f{};
+        f.kind = kind; f.r1 = radius;
+        f.frame[3] = f.frame[7] = f.frame[11] = 1;
+        SmSurface* surface = step_surface(ctx, f);
+        BrepPtr brep(new (ctx) SmBrep());
+        SmTArray<SmFace*> faces;
+        const double degrees = 180. / std::acos(-1.);
+        const SmExtent2d domain(0.2 * degrees, kind == 3 ? -0.4 * degrees : 0.,
+                                1.4 * degrees, kind == 3 ? 0.4 * degrees : 10.);
+        check(surface->AdjustSTEPUVDomain(domain), "試験の曲面の範囲");
+        check(brep->CreateFacesFromSurface(surface, surface->GetNaturalUVDomain(), SM_CT_C0, faces), "試験の曲面");
+        *out = J(brep.release());
+    });
+}
+
 int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32_t* failed, JcBrep** out)
 {
     *failed = -1;
@@ -1066,19 +1087,56 @@ int jc_shell_with(const JcBrep* brep, const size_t* open, size_t open_count, dou
             sel.Add(faces[ULONG(open[i])]);
         }
         SmBrep* r = nullptr;
-        const SmApiStatus st = SmApiShellBrepFull(B(brep), offset, (flags & 1) ? TRUE : FALSE,
-                                                  (flags & 2) ? TRUE : FALSE, FALSE, sel, r);
-        // SM_ERR(1001)は SMLib の一般の失敗で、理由は返らない(SmMessages.h)。実測では、厚みが角の丸めや
-        // 円柱の半径以上の時(半径 1 の丸めで厚み 1 以上、半径 3 の円柱で 3 以上)と、厚みが形の厚さを
-        // 超える時(高さ 10 の箱で 11)にこれになった(2026-10-21)。ほかの理由もありうるので断定しない。
-        // 状態の番号は括弧に数字だけで書く(画面の知らせは、この形の括弧を外す。kmb-ui の plain_error)
+        const bool solid = (flags & 4) != 0;
+        const auto thicken_failure = [&]() {
+            std::string message = "厚みが面の曲がりの半径以上の所があるかもしれません(SMLib の状態 1001)";
+            double radius = 0.;
+            for (ULONG i = 0; i < faces.GetSize(); ++i)
+            {
+                const SmSurface* surface = faces[i]->GetSurface();
+                if (!surface) continue;
+                SmAxis2Placement axes;
+                double r = 0.;
+                SmStatus status = SM_ERR;
+                if (surface->GetType() == SmCylinder_TYPE)
+                    status = static_cast<const SmCylinder*>(surface)->GetCanonical(axes, r);
+                else if (surface->GetType() == SmSphere_TYPE)
+                    status = static_cast<const SmSphere*>(surface)->GetCanonical(axes, r);
+                if (status == SM_SUCCESS && std::isfinite(r) && r > 0. && (radius == 0. || r < radius)) radius = r;
+            }
+            if (radius > 0.) message += "。半径 " + std::to_string(radius) + " mm より小さくしてください";
+            else message += "。厚みを小さくするか、面を張り直してください";
+            return message;
+        };
+        const SmBrep* input = B(brep);
+        BrepPtr shifted;
+        if (flags & 8)
+        {
+            SmBrep* copied = nullptr;
+            check(SmApiBrepCopy(input, copied), "面の複製");
+            BrepPtr copy(copied);
+            SmBrep* moved = nullptr;
+            const SmApiStatus status = SmApiOffsetBrepFull(copy.get(), -offset / 2, FALSE, FALSE, moved);
+            shifted.reset(moved);
+            if (status == SM_ERR) throw Failure{thicken_failure()};
+            check(status, "両側の厚みの基準面を動かす");
+            if (!shifted || !shifted->IsSheet())
+                throw Failure{"両側の厚みの基準面を作れません。片側を選ぶか厚みを小さくしてください"};
+            input = shifted.get();
+        }
+        const SmApiStatus st = SmApiShellBrepFull(input, offset, (flags & 1) ? TRUE : FALSE,
+                                                  (flags & 2) ? TRUE : FALSE, solid ? TRUE : FALSE, sel, r);
+        BrepPtr result(r);
+        // 状態 1001 は一般の失敗。曲率半径や形の厚さを超える場合もあるが、原因を断定しない。
         if (st == SM_ERR)
-            throw Failure{"厚みが角の丸めや曲面の半径以上の所か、形の厚さを超える所があるかもしれません"
-                          "(SMLib の状態 1001)"};
-        check(st, "シェル");
-        if (!r)
-            throw Failure{"シェルの結果がありません"};
-        *out = J(r);
+            throw Failure{solid ? thicken_failure()
+                                : "厚みが角の丸めや曲面の半径以上の所か、形の厚さを超える所があるかもしれません(SMLib の状態 1001)"};
+        check(st, solid ? "厚みを付ける" : "シェル");
+        if (!result)
+            throw Failure{solid ? "厚みを付けた結果がありません" : "シェルの結果がありません"};
+        if (solid && !result->IsManifoldSolid())
+            throw Failure{"厚みを付けた形が閉じていません。厚みを小さくするか、縁を閉じ直してください"};
+        *out = J(result.release());
     });
 }
 
@@ -1399,6 +1457,19 @@ static bool face_normal_at(SmFace* f, const SmPoint3d& p, SmVector3d& n)
     const double sg = outward_sign(f);
     n = SmVector3d(v.x * sg, v.y * sg, v.z * sg);
     return true;
+}
+
+int jc_face_normal(const JcBrep* brep, size_t face, const double p[3], double out[3])
+{
+    return guarded([&] {
+        const SmTArray<SmFace*> faces = faces_of(B(brep));
+        if (face >= faces.GetSize())
+            throw Failure{"面の番号が範囲の外です"};
+        SmVector3d n;
+        if (!face_normal_at(faces[ULONG(face)], SmPoint3d(p[0], p[1], p[2]), n))
+            throw Failure{"面の向きを求められません。面を張り直してください"};
+        out[0] = n.x; out[1] = n.y; out[2] = n.z;
+    });
 }
 
 int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** points, size_t* point_count)
