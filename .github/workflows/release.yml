@@ -1,24 +1,107 @@
-# タグ(v<版>)を押すと、配る物を Linux と Windows で組み立てる(docs/verify.md の 15 節)。
+# 配る物を Linux と Windows で組み立て、GitHub のリリースに載せる(docs/verify.md の 15 節)。
+# 回は 3 通り。
+# - 正式な版: 手で流す時に「版」を入れる(例 0.3.0)。main の先頭に注釈付きのタグ v<版> を付け、組み立てて
+#   リリースを下書きで作る。公開は中身を確かめてから手で行う。v<版> のタグを手で押しても同じ(タグは付けない)。
+# - ナイトリー: 毎晩の main の検査(verify.yml)が通った後、前のナイトリーから main が進んでいれば、検査した
+#   コミットを組み立て、プレリリース「nightly」を中身ごと差し替える。タグは nightly の 1 本だけを付け替える。
+#   手で流す時に「版」を空にすると、進んでいなくても今の main で出す。
 # - 組み立ては `cargo xtask release`(この PC のパスを exe に残さない引数と数え、許諾文の一覧)。
-#   タグはワークスペースの版と合うかを xtask が先に確かめる。
-# - 検査は取り込みの前の PR の回と毎晩の main の回(verify.yml)が済ませているので、ここでは流さない。
+#   正式な版はタグがワークスペースの版と合うかを xtask が先に確かめる。
+# - 検査は取り込みの前の PR の回と毎晩の main の回が済ませているので、ここでは流さない。
 # - OS ごとに「kie-monobench-<版>-<OS>-<arch>」にまとめ(Windows は zip、Linux は tar.gz)、
-#   全部の SHA256SUMS.txt を最後の回で作る。
-# - できた物は成果物(artifact)に置く。タグの回は GitHub のリリースを下書きで作って載せる。
-#   公開は中身を確かめてから手で行う。
+#   全部の SHA256SUMS.txt を最後の回で作る。ナイトリーの <版> は nightly-<日本時間の日付>。
+# - GitHub の道具(GITHUB_TOKEN)で押したタグはほかの回を起こさないので、タグ付けから載せるまでを 1 回で行う。
 name: リリース
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 正式な版(例 0.3.0)。空ならナイトリー
+        required: false
+        default: ''
+  workflow_run:
+    workflows: ['検査']
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
+  # 何を出すかを決める。正式な版を手で流した時は、ここでタグを付ける
+  plan:
+    name: 出す物を決める
+    # 毎晩の検査の回で、通った時だけ(PR の回や手で流した検査では出さない)
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      kind: ${{ steps.plan.outputs.kind }}
+      sha: ${{ steps.plan.outputs.sha }}
+      tag: ${{ steps.plan.outputs.tag }}
+      label: ${{ steps.plan.outputs.label }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 種類・コミット・名前を決める
+        id: plan
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -eu
+          git fetch -q --force --tags origin
+          ws=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
+          if [ "$EVENT" = push ]; then
+            kind=release; sha="$GITHUB_SHA"; tag="$GITHUB_REF_NAME"
+          elif [ "$EVENT" = workflow_dispatch ] && [ -n "$INPUT_VERSION" ]; then
+            kind=release; sha="$GITHUB_SHA"; tag="v$INPUT_VERSION"
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::正式な版は main から流してください($GITHUB_REF)"; exit 1
+            fi
+            if [ "$INPUT_VERSION" != "$ws" ]; then
+              echo "::error::版 $INPUT_VERSION がワークスペースの版 $ws と違います。先に Cargo.toml の版を上げる PR を取り込んでください"; exit 1
+            fi
+            if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+              echo "::error::タグ $tag はもうあります"; exit 1
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" "$sha" -m "kieMonoBench $INPUT_VERSION"
+            git push origin "refs/tags/$tag"
+          else
+            kind=nightly; tag=nightly
+            sha="${RUN_SHA:-$GITHUB_SHA}"
+            prev=$(git rev-parse -q --verify 'refs/tags/nightly^{commit}' || true)
+            if [ "$EVENT" = workflow_run ] && [ "$prev" = "$sha" ]; then
+              echo "前のナイトリーから main が進んでいないので出さない($sha)"
+              kind=skip
+            fi
+          fi
+          if [ "$kind" = release ]; then
+            label="${tag#v}"
+          else
+            label="nightly-$(TZ=Asia/Tokyo date +%Y%m%d)"
+          fi
+          echo "kind=$kind sha=$sha tag=$tag label=$label"
+          {
+            echo "kind=$kind"; echo "sha=$sha"; echo "tag=$tag"; echo "label=$label"
+          } >> "$GITHUB_OUTPUT"
+
   release:
     name: release (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.kind != 'skip'
     strategy:
       fail-fast: false
       matrix:
@@ -29,11 +112,13 @@ jobs:
       CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
 
       - name: Rust(rust-toolchain.toml の版)
         run: rustup toolchain install
 
-      # タグの回で残した物はほかのタグから使えないので、残すのは main で手で流した時だけ
+      # タグの回で残した物はほかのタグから使えないので、残すのは main の回(手で流した時とナイトリー)だけ
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -49,29 +134,29 @@ jobs:
         shell: bash
         env:
           SMLIB_CACHE_DIR: ${{ runner.temp }}/smlib-cache
+          KIND: ${{ needs.plan.outputs.kind }}
+          TAG: ${{ needs.plan.outputs.tag }}
         run: |
           set -eu
           tag=""
-          if [ "${{ github.ref_type }}" = tag ]; then
-            tag="--tag ${{ github.ref_name }}"
+          if [ "$KIND" = release ]; then
+            tag="--tag $TAG"
           fi
           cargo xtask release $tag -p kmb-app -p kmb-cli -p kmb-mcp
 
       - name: 配る物をまとめる
         id: dist
         shell: bash
+        env:
+          LABEL: ${{ needs.plan.outputs.label }}
         run: |
           set -eu
-          # 版はタグから v を外した物、手で流した時はブランチの名前
-          ver="${{ github.ref_name }}"
-          ver="${ver#v}"
-          ver="${ver//\//-}"
           ext=""
           if [ "${{ runner.os }}" = Windows ]; then
             ext=".exe"
-            name="kie-monobench-$ver-windows-x64"
+            name="kie-monobench-$LABEL-windows-x64"
           else
-            name="kie-monobench-$ver-linux-x86_64"
+            name="kie-monobench-$LABEL-linux-x86_64"
           fi
           mkdir -p "dist/$name"
           for b in kie-monobench kmb kmb-mcp; do cp "target/release/$b$ext" "dist/$name/"; done
@@ -95,54 +180,107 @@ jobs:
           if-no-files-found: error
 
   # 両方の OS の物がそろってから、まとめて 1 つの SHA256SUMS.txt を作る(`sha256sum -c SHA256SUMS.txt` で確かめられる形)。
-  # タグの回はリリースを下書きで作り、全部を載せる
+  # 正式な版はリリースを下書きで作り、ナイトリーは「nightly」を差し替える
   sums:
-    name: SHA256SUMS とリリースの下書き
-    needs: release
+    name: SHA256SUMS とリリース
+    needs: [plan, release]
     runs-on: ubuntu-latest
+    # 同じリリースを差し替える回は重ねない
+    concurrency:
+      group: release-${{ needs.plan.outputs.tag }}
+      cancel-in-progress: false
     permissions:
       contents: write
+    env:
+      KIND: ${{ needs.plan.outputs.kind }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      LABEL: ${{ needs.plan.outputs.label }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: kie-monobench-*
+          pattern: kie-monobench-${{ needs.plan.outputs.label }}-*
           path: dist
           merge-multiple: true
 
       - name: SHA256SUMS.txt を作る
-        id: sums
         shell: bash
         run: |
           set -eu
-          ver="${{ github.ref_name }}"
-          ver="${ver#v}"
-          ver="${ver//\//-}"
           cd dist
           sha256sum -- *.zip *.tar.gz > SHA256SUMS.txt
           cat SHA256SUMS.txt
-          echo "name=kie-monobench-$ver-SHA256SUMS" >> "$GITHUB_OUTPUT"
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.sums.outputs.name }}
+          name: kie-monobench-${{ needs.plan.outputs.label }}-SHA256SUMS
           path: dist/SHA256SUMS.txt
           if-no-files-found: error
 
-      - name: リリースを下書きで作る
-        if: github.ref_type == 'tag'
+      - name: 正式な版のリリースを下書きで作る
+        if: needs.plan.outputs.kind == 'release'
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
         run: |
           set -eu
-          ver="${{ steps.sums.outputs.ver }}"
           # 本文は .github/release-notes.md のひな型から作る(初めの説明の注を外し、{版} を埋める)。
           # 新しくできること・直したことの節は、公開の前に下書きで埋める
-          sed -e '1,/^-->$/d' -e "s/{版}/$ver/g" .github/release-notes.md > notes.md
-          gh release create "${{ github.ref_name }}" --draft --verify-tag \
-            --title "kieMonoBench $ver" --notes-file notes.md \
+          sed -e '1,/^-->$/d' -e "s/{版}/$LABEL/g" .github/release-notes.md > notes.md
+          gh release create "$TAG" --draft --verify-tag \
+            --title "kieMonoBench $LABEL" --notes-file notes.md \
+            dist/*.zip dist/*.tar.gz dist/SHA256SUMS.txt
+
+      - name: ナイトリーを差し替える
+        if: needs.plan.outputs.kind == 'nightly'
+        shell: bash
+        run: |
+          set -eu
+          git fetch -q --force --tags origin
+          # 変更の一覧の起点は前のナイトリー、無ければ最後の正式な版
+          prev=$(git rev-parse -q --verify 'refs/tags/nightly^{commit}' || git describe --tags --abbrev=0 --match 'v*' "$SHA")
+          d="${LABEL#nightly-}"
+          day="${d:0:4}-${d:4:2}-${d:6:2}"
+          # 取り込みのコミットは PR の題(本文の 1 行目)、それ以外は件名。頭の作業番号の印は外す
+          changes=$(git log --first-parent --format='%s%x1f%b%x1e' "$prev..$SHA" | python3 -c '
+          import re, sys
+          for rec in sys.stdin.read().split("\x1e"):
+              rec = rec.strip("\n")
+              if not rec:
+                  continue
+              subj, _, body = rec.partition("\x1f")
+              m = re.match(r"Merge pull request (#\d+)", subj)
+              line = (body.strip().splitlines() or [subj])[0] if m else subj
+              line = re.sub(r"^\[[^\]]*\]\s*", "", line)
+              print(f"- {line}" + (f" ({m.group(1)})" if m else ""))
+          ')
+          {
+            echo "kieMonoBench のナイトリー(毎日の開発版)です。main の \`${SHA:0:7}\` を $day に組み立てました。毎晩の検査を通った物ですが、正式な版より確かめが少ないので、困った時は正式な版を使ってください。"
+            echo
+            echo "## 前のナイトリーから入った変更"
+            echo
+            if [ -n "$changes" ]; then echo "$changes"; else echo "- (なし)"; fi
+            echo
+            echo "## 入っている物"
+            echo
+            echo "| ファイル | 中身 |"
+            echo "|---|---|"
+            echo "| \`kie-monobench-$LABEL-windows-x64.zip\` | Windows 10・11(x64)。\`kie-monobench.exe\`、\`kmb.exe\`、\`kmb-mcp.exe\`、許諾文 |"
+            echo "| \`kie-monobench-$LABEL-linux-x86_64.tar.gz\` | Linux(x86_64、glibc 2.39 以降)。\`kie-monobench\`、\`kmb\`、\`kmb-mcp\`、許諾文 |"
+            echo "| \`SHA256SUMS.txt\` | 上の 2 つの SHA-256 |"
+            echo
+            echo "- アプリが示す版の番号は、最後の正式な版の番号のままです。"
+            echo "- 実機で削る前に、必ずシミュレーション、Z を浮かせた空運転、ワックスや MDF での試し削りの順に確かめてください。"
+          } > notes.md
+          cat notes.md
+          # 前のナイトリーを消し(タグは残る)、タグを付け替えてから作り直す
+          gh release delete nightly --yes 2>/dev/null || true
+          git push --force origin "$SHA:refs/tags/nightly"
+          gh release create nightly --prerelease --latest=false --verify-tag \
+            --title "kieMonoBench ナイトリー $day" --notes-file notes.md \
             dist/*.zip dist/*.tar.gz dist/SHA256SUMS.txt
