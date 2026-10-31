@@ -14,6 +14,8 @@ pub const REDEFINE_PLANE: &str = "cad.sketch.redefine_plane";
 /// 選んでいるスケッチに、足りない拘束と寸法を付ける
 pub const AUTO_CONSTRAIN: &str = "cad.sketch.auto_constrain";
 
+pub const PROJECT_AXIS: &str = "cad.sketch.project_axis";
+
 const NEED_FACE: &str = "3D のビューで平らな面を選んでから使う";
 
 /// スケッチの操作。
@@ -193,6 +195,84 @@ pub fn insert_imported(
             format!("スケッチ{}", cx.count_of(SKETCH) + 1),
             data,
         ),
+    })
+}
+
+fn project_axis(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let id = cx
+        .arg("feature")
+        .and_then(serde_json::Value::as_u64)
+        .map(kmb_core::FeatureId)
+        .or(cx.selected)
+        .ok_or("投影先のスケッチを選んでください")?;
+    let entry = cx
+        .data
+        .feature(id)
+        .filter(|f| f.type_id == SKETCH)
+        .ok_or("投影先はスケッチを指定してください")?;
+    let axis_id = cx
+        .arg("axis")
+        .and_then(serde_json::Value::as_u64)
+        .map(kmb_core::FeatureId)
+        .ok_or("作業軸を指定してください")?;
+    if !cx
+        .data
+        .features
+        .iter()
+        .take_while(|f| f.id != id)
+        .any(|f| f.id == axis_id)
+    {
+        return Err("投影先より前の作業軸を指定してください".into());
+    }
+    let axis = cx
+        .output(axis_id, kmb_interchange::DATUM_OUTPUT)
+        .and_then(kmb_interchange::DatumAxis::from_value)
+        .ok_or("投影元の作業軸を計算できません。作業軸の誤りを直してください")?;
+    let plane = cx
+        .output(id, "profile")
+        .and_then(kmb_core::Profile::from_value)
+        .ok_or("投影先のスケッチを計算できません。先に誤りを直してください")?
+        .plane;
+    let item = crate::datum_axis_ref(axis, axis_id, &plane)?;
+    let mut sketch: Sketch =
+        serde_json::from_value(entry.data.clone()).map_err(|e| e.to_string())?;
+    if sketch
+        .projections
+        .iter()
+        .any(|p| p.source.same(&item.source))
+    {
+        return Err("この作業軸はもう写してあります".into());
+    }
+    let solution = cx
+        .output(id, "sketch")
+        .and_then(crate::solution_of)
+        .ok_or("スケッチの解がありません")?;
+    sketch.adopt_solution(&solution);
+    let entity = sketch.add_projection(&item);
+    if cx.arg("link").and_then(serde_json::Value::as_bool) == Some(false) {
+        sketch.projections.retain(|p| p.entity != entity);
+        let mut points = sketch.entity(entity).expect("写した要素").points();
+        if matches!(sketch.entity(entity), Some(crate::Entity::Point { .. })) {
+            points.push(entity);
+        }
+        let (projected, _) = sketch.projected_parts();
+        for point in points {
+            if !projected.contains(&point)
+                && !sketch
+                    .constraints
+                    .iter()
+                    .any(|c| matches!(c.kind, crate::ConstraintKind::Fix { point:p } if p == point))
+            {
+                sketch.add_constraint(crate::ConstraintKind::Fix { point });
+            }
+        }
+    }
+    Ok(Outcome::Change {
+        label: "作業軸を投影".into(),
+        edits: vec![Edit::SetData {
+            id,
+            data: serde_json::to_value(sketch).expect("JSON にできる"),
+        }],
     })
 }
 
@@ -387,6 +467,15 @@ impl Extension for SketchCommands {
                     &[]
                 })
                 .disabled_if(selected_sketch(cx).is_none().then_some("スケッチを選んでから使う")),
+            Action::new(PROJECT_AXIS, "作業軸を投影", "cad")
+                .args([
+                    kmb_core::Arg::feature("feature", "投影先のスケッチ(省くと選んでいるスケッチ)"),
+                    kmb_core::Arg::feature("axis", "投影する作業軸の機能の番号").required(),
+                    kmb_core::Arg::flag("link", "元の作業軸とのリンクを保つ").default(true),
+                ])
+                .role(kmb_interchange::role::action::PROJECT_DATUM_AXIS)
+                .keep_edit()
+                .hint("作業軸をスケッチへ投影し、軸を動かすと線や点も付いてくる"),
             Action::new(AUTO_CONSTRAIN, "自動拘束", "cad")
                 .args([
                     kmb_core::Arg::flag("dimensions", "寸法(直径・半径・長さと、原点からの横と縦の距離)も付ける").default(true),
@@ -447,6 +536,7 @@ impl Extension for SketchCommands {
             },
             REDEFINE_PLANE => redefine_plane(cx),
             AUTO_CONSTRAIN => auto_constrain(cx),
+            PROJECT_AXIS => project_axis(cx),
             _ => return None,
         })
     }

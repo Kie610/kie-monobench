@@ -694,6 +694,8 @@ pub enum ProjectionSource {
         feature: kmb_core::FeatureId,
         index: u32,
     },
+    /// 作業軸の宣言された出力。軸の位置と向きが変わると投影も取り直す。
+    DatumAxis { feature: kmb_core::FeatureId },
     /// 前のスケッチ `feature` の要素 `item`(線分・円・円弧・単独の点。寸法や拘束の道具で
     /// 別のスケッチの線を押すと写す)。元のスケッチを直すと付いて行く
     Sketch {
@@ -703,11 +705,13 @@ pub enum ProjectionSource {
 }
 
 impl ProjectionSource {
-    /// 元のボディの機能(原点と、別のスケッチから写した物は `None`。別のスケッチは
+    /// 元のボディの機能(原点・作業軸・別のスケッチから写した物は `None`。別のスケッチは
     /// [`Self::sketch`])。
     pub fn feature(&self) -> Option<kmb_core::FeatureId> {
         match self {
-            ProjectionSource::Origin | ProjectionSource::Sketch { .. } => None,
+            ProjectionSource::Origin
+            | ProjectionSource::Sketch { .. }
+            | ProjectionSource::DatumAxis { .. } => None,
             ProjectionSource::Vertex { feature, .. }
             | ProjectionSource::Edge { feature, .. }
             | ProjectionSource::Center { feature, .. }
@@ -720,6 +724,14 @@ impl ProjectionSource {
     pub fn sketch(&self) -> Option<kmb_core::FeatureId> {
         match self {
             ProjectionSource::Sketch { feature, .. } => Some(*feature),
+            _ => None,
+        }
+    }
+
+    /// 作業軸から写した物なら、その機能の番号。
+    pub fn datum_axis(&self) -> Option<kmb_core::FeatureId> {
+        match self {
+            Self::DatumAxis { feature } => Some(*feature),
             _ => None,
         }
     }

@@ -88,6 +88,7 @@ fn kind_of(source: &ProjectionSource) -> Kind {
         | ProjectionSource::Section { .. }
         | ProjectionSource::Silhouette { .. } => Kind::Edge,
         ProjectionSource::Sketch { .. } => Kind::SketchPoint,
+        ProjectionSource::DatumAxis { .. } => Kind::Edge,
     }
 }
 
@@ -129,7 +130,10 @@ pub(crate) fn augment(
     // 点(原点・角・中心)を先に足し、辺の端はそれを使い回す
     if wants.points || wants.edges {
         for (r, near) in refs.iter().zip(&near_real) {
-            if matches!(r.shape, RefShape::Point(_)) && !near && !projected(sketch, r) {
+            if matches!(r.shape, RefShape::Point(_))
+                && (!near || r.source.datum_axis().is_some())
+                && !projected(sketch, r)
+            {
                 let id = s.add_projection(r);
                 virtuals.insert(id, kind_of(&r.source));
             }

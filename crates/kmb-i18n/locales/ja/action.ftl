@@ -358,3 +358,6 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-cad-sketch-project-axis = 作業軸を投影
+action-cad-sketch-project-axis-tip = 作業軸をスケッチへ投影し、軸を動かすと線や点も付いてくる

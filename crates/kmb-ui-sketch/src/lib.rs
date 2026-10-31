@@ -43,13 +43,13 @@ pub struct SketchEditor {
     /// 置いた面の輪郭(ボディと面の名前ごとに作り置く)
     outline: Option<(FaceKey, Vec<[[f64; 2]; 2]>)>,
     /// 既存の形をスケッチの平面へ写したもの(平面と、元のボディ・前のスケッチごとに作り置く)
-    refs: Option<((RefsKey, SketchesKey), Vec<kmb_sketch::RefItem>)>,
+    refs: Option<(ProjectionKey, Vec<kmb_sketch::RefItem>)>,
     /// 前にできたボディの断面(スライスと交差の道具。平面と元のボディごとに作り置く)
     sections: Option<(RefsKey, Vec<view::Section>)>,
     /// 前にできたボディの網(投影の道具。平面と元のボディごとに作り置く)
     bodies: Option<(RefsKey, Vec<view::BodyMesh>)>,
     /// 写した交差とシルエットの元(元が見つかるかを見る。平面と、それを写したボディごと)
-    linked: Option<((RefsKey, SketchesKey), Vec<kmb_sketch::RefItem>)>,
+    linked: Option<(ProjectionKey, Vec<kmb_sketch::RefItem>)>,
     /// `名前=値` と打った寸法: 先にパラメータを作ってもらい、次の更新で置くスケッチ
     deferred: Option<(kmb_core::FeatureId, Sketch)>,
     /// 面の上のスケッチの原点の候補(ボディと面の名前ごとに作り置く)
@@ -68,6 +68,10 @@ struct FaceOrigins {
 
 /// 写した形の作り置きのキー(スケッチの平面と、元のボディ)。
 /// 前のスケッチと、その写せる要素(K8)。
+type ProjectionKey = (RefsKey, SketchesKey, AxesKey);
+
+type AxesKey = Vec<(kmb_core::FeatureId, kmb_interchange::DatumAxis)>;
+
 type SketchesKey = Vec<(kmb_core::FeatureId, kmb_sketch::SketchItems)>;
 
 type RefsKey = (
@@ -564,6 +568,25 @@ fn bodies_before(
     bodies
 }
 
+/// 出力の型で作業軸を探す。写す候補は目を開けた物、追従の確認は隠した元も読む。
+fn axes_before(host: &EditorHost<'_>, entry: &FeatureEntry, include_hidden: bool) -> AxesKey {
+    use kmb_core::Payload;
+    host.data
+        .features
+        .iter()
+        .take_while(|f| f.id != entry.id)
+        .filter(|f| !f.suppressed && (include_hidden || !host.hidden.contains(&f.id)))
+        .filter_map(|f| {
+            Some((
+                f.id,
+                kmb_interchange::DatumAxis::from_value(
+                    host.output(f.id, kmb_interchange::DATUM_OUTPUT)?,
+                )?,
+            ))
+        })
+        .collect()
+}
+
 /// 機能 `entry` より前の、隠していないスケッチと、その写せる要素(K8)。
 fn sketches_before(host: &EditorHost<'_>, entry: &FeatureEntry) -> SketchesKey {
     host.data
@@ -1010,6 +1033,7 @@ impl FeatureEditor for SketchEditor {
                 let key = (
                     (plane, bodies_before(host, entry, &sketch)),
                     sketches_before(host, entry),
+                    axes_before(host, entry, false),
                 );
                 if self.refs.as_ref().is_none_or(|(k, _)| *k != key) {
                     let mut items = vec![kmb_sketch::origin_ref(&plane)];
@@ -1019,6 +1043,11 @@ impl FeatureEditor for SketchEditor {
                     // 前のスケッチの線・円・点(寸法・拘束の道具で押すと写す。K8)
                     for (f, it) in &key.1 {
                         items.extend(kmb_sketch::sketch_refs(it, *f, &plane));
+                    }
+                    for (f, axis) in &key.2 {
+                        if let Ok(item) = kmb_sketch::datum_axis_ref(*axis, *f, &plane) {
+                            items.push(item);
+                        }
                     }
                     self.refs = Some((key, items));
                 }
@@ -1063,6 +1092,15 @@ impl FeatureEditor for SketchEditor {
                     .collect::<Vec<_>>(),
                 ),
                 sketches_used(host, entry, &used_sketches),
+                axes_before(host, entry, true)
+                    .into_iter()
+                    .filter(|(f, _)| {
+                        sketch
+                            .projections
+                            .iter()
+                            .any(|p| p.source.datum_axis() == Some(*f))
+                    })
+                    .collect::<Vec<_>>(),
             );
             if self.linked.as_ref().is_none_or(|(k, _)| *k != key) {
                 let mut items = Vec::new();
@@ -1085,6 +1123,11 @@ impl FeatureEditor for SketchEditor {
                 }
                 for (f, it) in &key.1 {
                     items.extend(kmb_sketch::sketch_refs(it, *f, &plane));
+                }
+                for (f, axis) in &key.2 {
+                    if let Ok(item) = kmb_sketch::datum_axis_ref(*axis, *f, &plane) {
+                        items.push(item);
+                    }
                 }
                 self.linked = Some((key, items));
             }
@@ -1200,6 +1243,15 @@ impl FeatureEditor for SketchEditor {
         }
         if let Some(role) = self.editor.run_action.take() {
             *host.then = Some((kmb_ui::APP_RUN.into(), serde_json::json!({ "role": role })));
+        }
+        if let Some((axis, link)) = self.editor.project_axis.take() {
+            *host.then = Some((
+                kmb_ui::APP_RUN.into(),
+                serde_json::json!({
+                    "role": kmb_interchange::role::action::PROJECT_DATUM_AXIS,
+                    "args": { "feature": entry.id.0, "axis": axis.0, "link": link },
+                }),
+            ));
         }
         // 文字の道具で置いた点: スケッチを終えて、その点を基準に文字を作る(K32)
         if std::mem::take(&mut self.editor.wants_text)
@@ -1795,3 +1847,6 @@ mod sketch_aids_tests;
 mod space_view_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod datum_axis_ui_tests;

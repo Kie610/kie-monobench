@@ -357,3 +357,6 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+
+action-cad-sketch-project-axis = Project Datum Axis
+action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
