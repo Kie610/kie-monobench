@@ -37,8 +37,11 @@ impl FrequencyGrid {
 }
 fn log_grid(low: f64, high: f64, resolution: u32) -> Vec<f64> {
     let count = ((high / low).log2() * f64::from(resolution)).ceil() as usize;
+    // 対数と指数の丸めで上限が刻みと一致しても、最後の区間を長さ 0 にしない。
     (0..=count)
-        .map(|i| (low * 2.0_f64.powf(i as f64 / f64::from(resolution))).min(high))
+        .map(|i| low * 2.0_f64.powf(i as f64 / f64::from(resolution)))
+        .take_while(|f| *f < high)
+        .chain(std::iter::once(high))
         .collect()
 }
 

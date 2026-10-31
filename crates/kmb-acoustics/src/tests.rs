@@ -397,3 +397,30 @@ fn inductance_raises_high_frequency_impedance_and_reduces_output() {
     assert!(with.impedance_phase_deg > 80.0);
     assert!(with.spl_db < without.spl_db - 20.0);
 }
+
+#[test]
+fn octave_grid_boundaries_keep_distinct_points_and_finite_delay() {
+    for steps in 1..=96 {
+        let high = 10.0 * 2.0_f64.powf(f64::from(steps) / 48.0);
+        for high_hz in [high.next_down(), high, high.next_up()] {
+            let a = analyze(
+                &driver(),
+                &sealed(),
+                &Excitation::default(),
+                &FrequencyGrid {
+                    high_hz,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(
+                a.response.freq.windows(2).all(|f| f[0] < f[1]),
+                "上限 {high_hz} の周波数が重複"
+            );
+            assert!(
+                a.response.group_delay_ms.iter().all(|d| d.is_finite()),
+                "上限 {high_hz} の群遅延が有限でない"
+            );
+        }
+    }
+}
