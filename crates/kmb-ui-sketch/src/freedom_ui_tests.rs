@@ -92,7 +92,12 @@ fn mcp_ui_tools_open_pick_and_hover_free_entities_without_changing_the_document(
     let (mut h, line, point, dir) = fixture("ja", true);
     let before = h.state().document().to_json();
     assert!(!line_is_lit(&h));
-    app(&mut h, &dir.0, "ui_click", json!({"target":"自由度"}));
+    app(
+        &mut h,
+        &dir.0,
+        "ui_click",
+        json!({"target":"拘束不足(自由度 3)"}),
+    );
     let row = format!("{line}   1");
     app(&mut h, &dir.0, "ui_click", json!({"target":row}));
     app(
@@ -123,7 +128,7 @@ fn the_read_only_freedom_field_uses_the_selected_language() {
         &mut h,
         &dir.0,
         "ui_click",
-        json!({"target":"Degrees of freedom"}),
+        json!({"target":"拘束不足(自由度 3)"}),
     );
     app(
         &mut h,
@@ -131,6 +136,7 @@ fn the_read_only_freedom_field_uses_the_selected_language() {
         "ui_expect",
         json!({"target":format!("{line}   1"),"state":"exists"}),
     );
+    assert!(h.query_by_label("Degrees of freedom").is_some());
     assert!(h.query_by_label("自由度").is_none());
     h.state_mut().live_disconnect();
     drop(h);
@@ -140,7 +146,7 @@ fn the_read_only_freedom_field_uses_the_selected_language() {
 fn the_picked_free_line_is_also_highlighted_after_turning_to_3d() {
     let (mut h, line, _, _dir) = fixture("ja", false);
     let before = h.state().document().to_json();
-    let script = format!("click \"自由度\"\nclick \"{line}   1\"");
+    let script = format!("click \"拘束不足(自由度 3)\"\nclick \"{line}   1\"");
     let batch = h.state_mut().run_script(&script).unwrap();
     let start = std::time::Instant::now();
     loop {
@@ -173,7 +179,10 @@ fn freedom_rows_remain_readable_in_the_visible_panel_at_large_text_scale() {
         h.state_mut().layout_mut().appearance.icon_scale = 2.5;
         h.set_size(egui::vec2(width, 800.0));
         h.run_steps(16);
-        let batch = h.state_mut().run_script("click \"自由度\"").unwrap();
+        let batch = h
+            .state_mut()
+            .run_script("click \"拘束不足(自由度 3)\"")
+            .unwrap();
         let start = std::time::Instant::now();
         loop {
             h.step();

@@ -5,6 +5,7 @@ use kmb_sketch::{EntityId, FreedomReport, Sketch, Solution, SolveStatus};
 #[derive(Default)]
 pub(crate) struct State {
     pub open: bool,
+    pub reveal: bool,
     pub hovered: Option<EntityId>,
     pub picked: Option<EntityId>,
     cache: Option<Cache>,
@@ -46,6 +47,13 @@ impl State {
     }
 }
 
+/// 専用の表示欄の宣言。文書に値を持たないため、汎用のデータの欄には登録しない。
+pub(crate) fn field(ctx: &egui::Context) -> kmb_core::Field {
+    let field = kmb_core::Field::info("freedom", "自由度")
+        .help("全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。");
+    kmb_ui::translated_field(ctx, kmb_sketch::SKETCH, &field)
+}
+
 pub(crate) fn panel(
     ui: &mut egui::Ui,
     state: &mut State,
@@ -53,6 +61,10 @@ pub(crate) fn panel(
     sol: &Solution,
     values: Option<&DimValues>,
 ) {
+    if !state.open {
+        state.hovered = None;
+        return;
+    }
     ui.scope(|ui| {
         if ui.clip_rect().height() < kmb_ui::theme::fs(80.0) {
             // 狭い表示範囲では、見出しと少なくとも 1 行を読めるように余白だけを縮める。
@@ -77,8 +89,7 @@ fn contents(
         state.picked = None;
         return;
     };
-    let field =
-        kmb_ui::translated_field(ui.ctx(), kmb_sketch::SKETCH, &kmb_sketch::freedom_field());
+    let field = field(ui.ctx());
     let panel_bottom = ui.clip_rect().bottom();
     let response = egui::CollapsingHeader::new(format!("{} {}", field.label, sol.dof))
         .id_salt(kmb_ui::doc_id(ui.ctx(), "sketch-freedom-list"))
@@ -131,6 +142,13 @@ fn contents(
                     }
                 });
         });
+    if state.reveal {
+        ui.scroll_to_rect(response.header_response.rect, Some(egui::Align::Min));
+        if response.fully_open() {
+            state.reveal = false;
+        }
+        ui.ctx().request_repaint();
+    }
     response
         .header_response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &field.label));

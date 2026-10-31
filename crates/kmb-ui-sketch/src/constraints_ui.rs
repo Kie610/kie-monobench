@@ -564,9 +564,31 @@ pub(crate) fn constraint_panel(
             )
             .on_hover_text(&status)
         } else {
-            theme::chip(ui, &status, Some(color))
+            theme::chip(ui, &status, Some(color)).interact(egui::Sense::click())
         };
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &status));
+        let can_show_freedom = !matches!(sol.status, SolveStatus::Inconsistent { .. });
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                if can_show_freedom {
+                    egui::WidgetType::Button
+                } else {
+                    egui::WidgetType::Label
+                },
+                true,
+                &status,
+            )
+        });
+        if can_show_freedom {
+            if response.clicked() {
+                editor.freedom.open = !editor.freedom.open;
+                editor.freedom.reveal = editor.freedom.open;
+                ui.ctx().request_repaint();
+            }
+            let field = crate::freedom_ui::field(ui.ctx());
+            response
+                .on_hover_text(field.help)
+                .on_hover_cursor(egui::CursorIcon::PointingHand);
+        }
         theme::chip(
             ui,
             &format!("拘束 {}", sketch.constraints.len() - dims),
@@ -574,7 +596,6 @@ pub(crate) fn constraint_panel(
         );
         theme::chip(ui, &format!("寸法 {dims}"), None);
     });
-    crate::freedom_ui::panel(ui, &mut editor.freedom, sketch, sol, values);
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         for (c, t) in [
