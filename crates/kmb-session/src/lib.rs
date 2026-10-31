@@ -108,17 +108,9 @@ fn copy_tree(from: &Path, to: &Path, skip: &[&str]) -> std::io::Result<()> {
 
 /// 文書のファイルを読む。
 pub fn load(path: &Path) -> Result<Document, kmb_core::Problem> {
-    use kmb_core::{Problem, ProblemKind};
-    let r = std::fs::read_to_string(path)
-        .map_err(|e| {
-            Problem::new(
-                ProblemKind::File,
-                format!("{} を読めません: {e}", path.display()),
-            )
-        })
-        .and_then(|s| {
-            Document::from_json(&s).map_err(|e| format!("{}: {e}", path.display()).into())
-        });
+    let r = std::fs::File::open(path)
+        .map_err(|error| document_read_error(path, error))
+        .and_then(|mut file| read_document(&mut file, path));
     match &r {
         Ok(d) => log::info!(
             "開いた: {} (機能 {} 個)",
@@ -128,6 +120,61 @@ pub fn load(path: &Path) -> Result<Document, kmb_core::Problem> {
         Err(e) => log::error!("開けない: {e}"),
     }
     r
+}
+
+fn document_read_error(path: &Path, error: impl std::fmt::Display) -> kmb_core::Problem {
+    kmb_core::Problem::new(
+        kmb_core::ProblemKind::File,
+        format!("{} を読めません: {error}", path.display()),
+    )
+}
+
+fn read_document(
+    reader: &mut impl std::io::Read,
+    path: &Path,
+) -> Result<Document, kmb_core::Problem> {
+    use std::io::Read;
+    let mut bytes = Vec::with_capacity(6);
+    reader
+        .by_ref()
+        .take(6)
+        .read_to_end(&mut bytes)
+        .map_err(|error| document_read_error(path, error))?;
+    if let Some(problem) = dwg_problem(&bytes) {
+        return Err(problem);
+    }
+    reader
+        .read_to_end(&mut bytes)
+        .map_err(|error| document_read_error(path, error))?;
+    let text = std::str::from_utf8(&bytes).map_err(|error| document_read_error(path, error))?;
+    Document::from_json(text).map_err(|error| format!("{}: {error}", path.display()).into())
+}
+
+/// ファイルの先頭の印を、文字コードや拡張子の解釈に先立って見分ける。
+fn dwg_problem(bytes: &[u8]) -> Option<kmb_core::Problem> {
+    let header = bytes.get(..6)?;
+    if !header.starts_with(b"AC10") {
+        return None;
+    }
+    let texts = kmb_i18n::Catalog::new();
+    // 共通の読み込み口は表示の言語を受け取らず、ファイルの誤りを日本語の既定で返す。
+    let lang = kmb_i18n::Lang::Ja;
+    let mut message = texts.text(lang, "common-open-dwg");
+    if let Ok(version) = std::str::from_utf8(header)
+        && header.iter().all(u8::is_ascii_alphanumeric)
+    {
+        message.push_str(" (");
+        message.push_str(&texts.text_with(
+            lang,
+            "common-open-dwg-version",
+            &[("version", version.into())],
+        ));
+        message.push(')');
+    }
+    Some(kmb_core::Problem::new(
+        kmb_core::ProblemKind::Unavailable,
+        message,
+    ))
 }
 
 /// `path` の直前の版の置き場所(`部品.json` なら `部品.json.bak`)。

@@ -5,3 +5,6 @@ common-ok = OK
 common-cancel = Cancel
 common-apply = Apply
 common-close = Close
+
+common-open-dwg = DWG files cannot be read. Export the file as DXF or STEP in the original application, then open the exported file.
+common-open-dwg-version = Version marker: { $version }

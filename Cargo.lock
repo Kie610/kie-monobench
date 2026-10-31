@@ -3059,6 +3059,7 @@ dependencies = [
  "kmb-bundle",
  "kmb-core",
  "kmb-format",
+ "kmb-i18n",
  "kmb-image",
  "kmb-interchange",
  "kmb-look",

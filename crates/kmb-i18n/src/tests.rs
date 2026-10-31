@@ -160,3 +160,20 @@ fn untranslated_field_languages_use_english() {
         }
     }
 }
+
+#[test]
+fn dwg_guidance_is_available_in_japanese_and_english_with_the_version_marker() {
+    let catalog = Catalog::new();
+    for lang in [Lang::Ja, Lang::En] {
+        let message = catalog.text(lang, "common-open-dwg");
+        assert!(message.contains("DWG") && message.contains("DXF") && message.contains("STEP"));
+        let version = catalog.text_with(
+            lang,
+            "common-open-dwg-version",
+            &[("version", "AC1032".into())],
+        );
+        assert!(version.contains("AC1032"));
+        assert!(!message.contains("common-open-dwg"));
+        assert!(!version.contains("common-open-dwg-version"));
+    }
+}

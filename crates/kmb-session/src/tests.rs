@@ -596,3 +596,96 @@ fn the_data_folder_of_the_old_name_is_carried_over_once_and_kept() {
     assert!(!fresh.exists());
     std::fs::remove_dir_all(d).ok();
 }
+
+#[test]
+fn dwg_headers_are_unavailable_with_conversion_guidance_through_both_open_paths() {
+    let dir = temp("dwg-guidance");
+    for suffix in ["dwg", "json", "dxf", "data"] {
+        for bytes in [b"AC1032".as_slice(), b"AC1099\x00\xff\x8f".as_slice()] {
+            let path = dir.join(format!("input.{suffix}"));
+            std::fs::write(&path, bytes).unwrap();
+            let problem = load(&path).err().expect("DWGは文書として開かない");
+            assert_eq!(problem.kind, kmb_core::ProblemKind::Unavailable);
+            assert_eq!(problem.kind.exit_code(), 4);
+            assert_eq!(
+                serde_json::to_value(&problem).unwrap()["kind"],
+                "unavailable"
+            );
+            assert!(
+                problem.message.starts_with("DWG は読めません。"),
+                "{problem}"
+            );
+            assert!(problem.message.contains("DXF か STEP"));
+            assert!(
+                problem
+                    .message
+                    .contains(std::str::from_utf8(&bytes[..6]).unwrap())
+            );
+            let headless = Headless::open(kmb_bundle::modules(), &path)
+                .err()
+                .expect("共通の開く口");
+            assert_eq!(
+                headless, problem,
+                "画面の読み込みとCLI・MCPの開く口は同じ誤り"
+            );
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn dwg_detection_does_not_replace_normal_document_or_file_errors() {
+    let dir = temp("dwg-other-inputs");
+    let path = dir.join("document.dwg");
+    let document = Document::new();
+    std::fs::write(&path, document.to_json()).unwrap();
+    assert_eq!(
+        load(&path).unwrap().to_json(),
+        document.to_json(),
+        "拡張子でDWGと決めない"
+    );
+    for bytes in [
+        b"AC10".as_slice(),
+        b"AC103".as_slice(),
+        b"AC2032".as_slice(),
+    ] {
+        std::fs::write(&path, bytes).unwrap();
+        assert_eq!(
+            load(&path).err().unwrap().kind,
+            kmb_core::ProblemKind::Input
+        );
+    }
+    std::fs::write(&path, [0xff, 0x00]).unwrap();
+    assert_eq!(load(&path).err().unwrap().kind, kmb_core::ProblemKind::File);
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(load(&path).err().unwrap().kind, kmb_core::ProblemKind::File);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn dwg_unknown_version_bytes_do_not_escape_into_the_guidance() {
+    let dir = temp("dwg-unknown-version");
+    let path = dir.join("unknown.bin");
+    std::fs::write(&path, b"AC10\x00\xfftail").unwrap();
+    let problem = load(&path).err().unwrap();
+    assert_eq!(problem.kind, kmb_core::ProblemKind::Unavailable);
+    assert!(problem.message.contains("DWG は読めません"));
+    assert!(!problem.message.contains('\0') && !problem.message.contains('\u{fffd}'));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn dwg_detection_reads_only_the_six_header_bytes() {
+    use std::io::Read;
+    struct UnreadBody;
+    impl Read for UnreadBody {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            panic!("DWGと見分けた後の本文は読まない");
+        }
+    }
+    let mut input = std::io::Cursor::new(b"AC1032").chain(UnreadBody);
+    let problem = read_document(&mut input, Path::new("large.dwg"))
+        .err()
+        .unwrap();
+    assert_eq!(problem.kind, kmb_core::ProblemKind::Unavailable);
+}
