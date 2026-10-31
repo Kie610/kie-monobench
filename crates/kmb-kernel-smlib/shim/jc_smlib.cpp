@@ -867,9 +867,11 @@ static SmSurface* step_surface(const SmContext& ctx, const JcStepFace& f)
 }
 
 // 曲面と境の曲線から面を作る。輪の解釈は呼ぶ側が宣言する。
-static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f, double tolerance, bool uv, bool whole)
+static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f, double tolerance, bool uv, bool importing_iges)
 {
-    SmSurface* srf = step_surface(ctx, f);
+    std::unique_ptr<SmSurface> ownedSurface(step_surface(ctx, f));
+    SmSurface* srf = ownedSurface.get();
+    std::vector<std::unique_ptr<SmBSplineCurve>> ownedCurves;
     SmTArray<ULONG> loops;
     SmTArray<SmCurve*> curves;
     SmTArray<SmOrientType> orients;
@@ -879,15 +881,43 @@ static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f
         loops.Add(f.loop_sizes[l]);
         for (uint32_t c = 0; c < f.loop_sizes[l]; ++c)
         {
-            curves.Add(step_curve(ctx, f.curves[at++]));
+            ownedCurves.emplace_back(step_curve(ctx, f.curves[at++]));
+            curves.Add(ownedCurves.back().get());
             orients.Add(SM_OT_SAME);
         }
     }
     SmTArray<SmPoint3d> points;
     for (uint32_t k = 0; k < f.point_count; ++k)
         points.Add(SmPoint3d(f.points[k * 3], f.points[k * 3 + 1], f.points[k * 3 + 2]));
+    if (importing_iges && !uv)
+    {
+        // 切り抜きは境を曲面へ投影するため、離れた境を黙って別の位置へ移さない。
+        for (size_t i = 0; i < at; ++i)
+        {
+            const JcCurve& c = f.curves[i];
+            const SmExtent1d interval(c.knots[c.degree], c.knots[c.count]);
+            double needed = tolerance, gap = 0;
+            check(SmApiStatus(srf->CurveMaxDistanceBetween(srf->GetNaturalUVDomain(), *curves[ULONG(i)], interval,
+                                                        0, &needed, gap)), "境と曲面の距離の検査");
+            if (!std::isfinite(gap) || gap > tolerance)
+                throw Failure{"境が曲面から離れています(距離 " + std::to_string(gap) + " mm)。境と曲面が一致する形で保存してください"};
+        }
+        for (ULONG i = 0; i < points.GetSize(); ++i)
+        {
+            SmPoint3d closest;
+            SmTArray<SmPoint2d> parameters;
+            double gap = 0;
+            check(SmApiSurfaceClosestPoint(srf, points[i], closest, parameters, gap), "境の点と曲面の距離の検査");
+            if (!std::isfinite(gap) || gap > tolerance)
+                throw Failure{"境の点が曲面から離れています。曲面の上の点で保存してください"};
+        }
+    }
+    // 曲面と曲線は、切り抜き・面の作成に渡す時点で所有を移す。
+    ownedSurface.release();
+    for (auto& curve : ownedCurves)
+        curve.release();
     SmTArray<SmFace*> made;
-    if (whole && f.loop_count == 0 && f.point_count == 0 && (f.kind == 3 || f.kind == 4))
+    if (importing_iges && f.loop_count == 0 && f.point_count == 0 && (f.kind == 3 || f.kind == 4))
     {
         check(SmApiStatus(brep->CreateFacesFromSurface(srf, srf->GetNaturalUVDomain(), SM_CT_C0, made)), "閉じた曲面から面を作る処理");
         if (!f.same_sense)

@@ -523,3 +523,49 @@ fn empty_boundaries_and_negative_plane_forms_cannot_create_an_unbounded_face() {
         assert!(read(&f.text()).is_err());
     }
 }
+
+#[test]
+fn a_model_space_boundary_off_the_surface_is_reported_instead_of_projected() {
+    let mut f = Fixture::new();
+    f.plane(&square(), [0., 0., 1.]);
+    let raised = square().map(|mut p| {
+        p[2] = 1.;
+        p
+    });
+    let plane = f.plane(&raised, [0., 0., 1.]);
+    let parameters = &mut f.entries[(plane / 2) as usize].3;
+    let mut fields = parameters.split(',').map(String::from).collect::<Vec<_>>();
+    fields[3] = "0".into();
+    *parameters = fields.join(",");
+    let kernel = SmlibKernel::new();
+    let (shape, warnings) = kernel.import_iges(&f.text()).unwrap();
+    assert_eq!(kernel.faces(shape).unwrap().len(), 1, "{warnings:?}");
+    assert!(
+        warnings.iter().any(|w| w.contains("曲面から離れ")),
+        "{warnings:?}"
+    );
+}
+#[test]
+fn parameter_space_boundary_coordinates_must_be_two_dimensional() {
+    let mut f = Fixture::new();
+    let surface = patch(&mut f, 0.);
+    let polygon = [[0., 0., 1.], [1., 0., 1.], [1., 1., 1.], [0., 1., 1.]];
+    let curves = (0..4)
+        .map(|i| f.line(polygon[i], polygon[(i + 1) % 4]))
+        .collect::<Vec<_>>();
+    let curve = f.add(
+        102,
+        format!(
+            "4,{}",
+            curves
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+    );
+    let boundary = f.add(142, format!("0,{surface},{curve},0,1"));
+    f.add(144, format!("{surface},1,0,{boundary}"));
+    let result = read(&f.text());
+    assert!(result.is_err(), "2次元でない境を通さない");
+}

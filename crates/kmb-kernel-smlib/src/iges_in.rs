@@ -269,6 +269,14 @@ curves,points:Vec::new(),uv}
         }
         let mut uv = uv;
         if uv {
+            if boundaries
+                .iter()
+                .flat_map(|b| &b.curves)
+                .flat_map(|c| &c.pts)
+                .any(|p| p[2].abs() > 1e-9)
+            {
+                return Err("面のパラメータの線は2次元で指定してください".into());
+            }
             if !surface.parameterized {
                 return Err("パラメータが定義されていない曲面にパラメータの境があります".into());
             }
