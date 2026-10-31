@@ -12,6 +12,7 @@
 
 pub mod base64;
 pub mod dxf;
+pub mod iges;
 pub mod png;
 pub mod step;
 pub mod svg;

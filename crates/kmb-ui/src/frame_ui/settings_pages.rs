@@ -113,14 +113,12 @@ impl Workspace {
 
     /// 設定の「読み込み」の節。
     pub(crate) fn import_settings(&mut self, ui: &mut egui::Ui) {
+        let words = self.win.words();
         ui.checkbox(
             &mut self.win.layout.ask_step_up,
-            "STEP を読み込んだら、立てるかを聞く",
+            words.t("settings-import-upright"),
         )
-        .on_hover_text(
-            "他の CAD(Y が上)で作った形は寝た向きで入るので、読み込んだすぐ後に\n\
-             「立てますか」と 1 回聞く。機能の欄の「Y が上の形を立てる」でもいつでも変えられる",
-        );
+        .on_hover_text(words.t("settings-import-upright-tip"));
     }
 
     /// 設定の「画面の配置」の節。

@@ -2162,3 +2162,7 @@ field-solid-thread-length-help = Blank uses the full face length.
 field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 field-solid-thread-target = Target
+
+field-solid-import-iges-file = File
+field-solid-import-iges-stand-up = Convert Y-up to Z-up
+field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.

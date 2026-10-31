@@ -2,3 +2,6 @@
 ### Translations for zh-Hant (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-cad-import-iges = Import IGES…
+# action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.

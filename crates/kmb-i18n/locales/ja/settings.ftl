@@ -80,3 +80,6 @@ settings-key-name-sketch-trim = スケッチ: トリム
 settings-key-name-sketch-offset = スケッチ: オフセット
 settings-key-name-sketch-dimension = スケッチ: 寸法(3D スケッチでは選んだ線に寸法を付ける)
 settings-key-name-sketch-construction = スケッチ: 選んだ線を補助線と切り替える。描く道具の中では次に描く線を補助線にする
+
+settings-import-upright = STEP・IGES を読み込んだら、立てるかを聞く
+settings-import-upright-tip = Y が上で作られた形が寝ている時、Z が上になるように立てるかを1回聞く。機能の欄でも変えられる

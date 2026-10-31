@@ -270,6 +270,15 @@ unsafe extern "C" {
         failed: *mut i32,
         out: *mut *mut JcBrep,
     ) -> i32;
+    fn jc_iges_face(face: *const JcStepFace, uv: i32, tolerance: f64, out: *mut *mut JcBrep)
+    -> i32;
+    fn jc_iges_stitch(
+        faces: *const *const JcBrep,
+        count: usize,
+        tolerance: f64,
+        mode: i32,
+        out: *mut *mut JcBrep,
+    ) -> i32;
     fn jc_brep_copy(brep: *const JcBrep, out: *mut *mut JcBrep) -> i32;
     fn jc_brep_free(brep: *mut JcBrep);
     fn jc_boolean(target: *mut JcBrep, tool: *mut JcBrep, op: i32) -> i32;
@@ -513,6 +522,17 @@ pub struct StepFace {
 
 /// STEP の面を切り抜いて縫い、閉じた立体にする(jc_step_solid)。失敗した面があればその添字も返す。
 pub fn step_solid(faces: &[StepFace], tolerance: f64) -> Result<Brep, (Option<usize>, String)> {
+    with_step_faces(faces, |raw| {
+        let mut out = std::ptr::null_mut();
+        let mut failed = -1i32;
+        // SAFETY: 面・輪・曲線の配列は faces と上の Vec が持ち、この呼び出しの間は生きている
+        let code =
+            unsafe { jc_step_solid(raw.as_ptr(), raw.len(), tolerance, &mut failed, &mut out) };
+        take(code, out).map_err(|e| ((failed >= 0).then_some(failed as usize), e))
+    })
+}
+
+fn with_step_faces<T>(faces: &[StepFace], f: impl FnOnce(&[JcStepFace]) -> T) -> T {
     let empty = Patch {
         degree_u: 0,
         degree_v: 0,
@@ -582,11 +602,26 @@ pub fn step_solid(faces: &[StepFace], tolerance: f64) -> Result<Brep, (Option<us
             }
         })
         .collect();
+    f(&raw)
+}
+
+/// IGES の面を1枚ずつ作り、失敗を面ごとに報告できるようにする。
+pub fn iges_face(face: &StepFace, uv: bool, tolerance: f64) -> Result<Brep, String> {
+    with_step_faces(std::slice::from_ref(face), |raw| {
+        let mut out = std::ptr::null_mut();
+        // SAFETY: 曲面・曲線の配列は with_step_faces と face が呼び出し中保持する。
+        let code = unsafe { jc_iges_face(raw.as_ptr(), i32::from(uv), tolerance, &mut out) };
+        take(code, out)
+    })
+}
+
+/// 全面を複製して縫う。入力の面は変更しない。
+pub fn iges_stitch(faces: &[Brep], tolerance: f64, mode: i32) -> Result<Brep, String> {
+    let raw: Vec<_> = faces.iter().map(Brep::raw).collect();
     let mut out = std::ptr::null_mut();
-    let mut failed = -1i32;
-    // SAFETY: 面・輪・曲線の配列は faces と上の Vec が持ち、この呼び出しの間は生きている
-    let code = unsafe { jc_step_solid(raw.as_ptr(), raw.len(), tolerance, &mut failed, &mut out) };
-    take(code, out).map_err(|e| ((failed >= 0).then_some(failed as usize), e))
+    // SAFETY: 入力の B-rep とポインタの配列は呼び出し中保持し、出力は独立に所有する。
+    let code = unsafe { jc_iges_stitch(raw.as_ptr(), raw.len(), tolerance, mode, &mut out) };
+    take(code, out)
 }
 
 fn p_count(knots: &[f64], degree: u32) -> u32 {
