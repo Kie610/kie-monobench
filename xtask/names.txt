@@ -69,6 +69,7 @@ cad.fillet	kmb-cad-edge
 cad.hole_add	kmb-cad-hole
 cad.hole_on_face	kmb-cad-hole
 cad.hole_to_face	kmb-cad-hole
+cad.import_iges	kmb-cad-import-step
 cad.import_step	kmb-cad-import-step
 cad.loft	kmb-cad-sweep
 cad.loft_point	kmb-cad-sweep
@@ -248,6 +249,7 @@ solid.draft@1	kmb-cad-modify
 solid.extrude@1	kmb-cad-extrude
 solid.fillet@1	kmb-cad-edge
 solid.hole@1	kmb-cad-hole
+solid.import_iges@1	kmb-cad-import-step
 solid.import_step@1	kmb-cad-import-step
 solid.linear_pattern@1	kmb-cad-pattern
 solid.loft@1	kmb-cad-sweep

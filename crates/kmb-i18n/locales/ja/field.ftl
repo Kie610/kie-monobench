@@ -2162,3 +2162,7 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-solid-import-iges-file = ファイル
+field-solid-import-iges-stand-up = Y が上の形を立てる
+field-solid-import-iges-stand-up-help = Y が上で作られた形を、X 軸のまわりに 90 度回して Z が上に立てる

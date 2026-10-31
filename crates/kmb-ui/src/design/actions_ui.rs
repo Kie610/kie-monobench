@@ -489,11 +489,17 @@ impl Workspace {
         } else {
             None
         };
-        // STEP の読み込みなら、読み込んだ後に立てるかを聞く(U12)
-        let import = self
-            .actions()
-            .iter()
-            .any(|a| a.id == id && a.role == Some(kmb_interchange::role::action::IMPORT_STEP));
+        // 読み込みの役割を持つ操作は、上向きの軸を変えるかを読み込んだ後に聞く。
+        let import = self.actions().iter().any(|a| {
+            a.id == id
+                && matches!(
+                    a.role,
+                    Some(
+                        kmb_interchange::role::action::IMPORT_STEP
+                            | kmb_interchange::role::action::IMPORT_IGES
+                    )
+                )
+        });
         let before = self.settings_values();
         let args = args.unwrap_or(serde_json::Value::Null);
         let r = self.run_through(id, self.cur.selected, file.as_deref(), &args);

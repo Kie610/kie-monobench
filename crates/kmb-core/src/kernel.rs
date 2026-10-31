@@ -611,6 +611,13 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("STEP の読み込み".into()))
     }
 
+    /// IGES の面を読み、縫って閉じれば立体、開いていれば面のボディを返す。
+    /// 読めない要素と欠けた面・縫えない面の理由は警告に残す。
+    fn import_iges(&self, iges: &str) -> Result<(ShapeHandle, Vec<String>), KernelError> {
+        let _ = iges;
+        Err(KernelError::Unsupported("IGES の読み込み".into()))
+    }
+
     /// 立体をくり抜いて殻にする(シェル)。面 `open`(名前)は取り除いて開ける(空なら閉じた空洞)。
     /// `thickness` が正なら今の外形の内側へ、負なら外側へ厚みを付ける。新しくできた内側の面は
     /// `{tag}:in:{元の面の名前}` と名付ける。

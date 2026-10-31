@@ -866,6 +866,68 @@ static SmSurface* step_surface(const SmContext& ctx, const JcStepFace& f)
     }
 }
 
+// 曲面と境の曲線から面を作る。輪の解釈は呼ぶ側が宣言する。
+static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f, double tolerance, bool uv, bool whole)
+{
+    SmSurface* srf = step_surface(ctx, f);
+    SmTArray<ULONG> loops;
+    SmTArray<SmCurve*> curves;
+    SmTArray<SmOrientType> orients;
+    size_t at = 0;
+    for (uint32_t l = 0; l < f.loop_count; ++l)
+    {
+        loops.Add(f.loop_sizes[l]);
+        for (uint32_t c = 0; c < f.loop_sizes[l]; ++c)
+        {
+            curves.Add(step_curve(ctx, f.curves[at++]));
+            orients.Add(SM_OT_SAME);
+        }
+    }
+    SmTArray<SmPoint3d> points;
+    for (uint32_t k = 0; k < f.point_count; ++k)
+        points.Add(SmPoint3d(f.points[k * 3], f.points[k * 3 + 1], f.points[k * 3 + 2]));
+    SmTArray<SmFace*> made;
+    if (whole && f.loop_count == 0 && f.point_count == 0 && (f.kind == 3 || f.kind == 4))
+    {
+        check(SmApiStatus(brep->CreateFacesFromSurface(srf, srf->GetNaturalUVDomain(), SM_CT_C0, made)), "閉じた曲面から面を作る処理");
+        if (!f.same_sense)
+            for (ULONG i = 0; i < made.GetSize(); ++i)
+                check(SmApiStatus(made[i]->FlipFaceOrientation()), "面の向き");
+    }
+    else if (uv)
+    {
+        SmTArray<SmBSplineCurve*> parameterCurves;
+        for (ULONG i = 0; i < curves.GetSize(); ++i)
+            parameterCurves.Add(static_cast<SmBSplineCurve*>(curves[i]));
+        check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithParameterSpaceCurves(
+                  ctx, brep->GetInfiniteRegion(), tolerance, loops, parameterCurves, orients, points,
+                  srf, srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, FALSE)),
+              "パラメータの境で面の切り抜き");
+        brep->GetFaces(made);
+    }
+    else
+    {
+    check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
+              ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
+              srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
+              &made)),
+          "面の切り抜き");
+    }
+    if (made.GetSize() == 0)
+        throw Failure{"面の切り抜き: 面ができませんでした"};
+    for (ULONG k = 0; k < made.GetSize(); ++k)
+    {
+        // 面の範囲を切り抜いた輪の範囲にする(平面や円筒の曲面そのものは無限に広いので、
+        // そのままだと面の内側の点を探す処理などが面を見つけられない)
+        SmExtent2d dom;
+        if (made[k]->CalculateUVDomainFromUVTrimCurves(dom, TRUE) == SM_SUCCESS)
+            made[k]->SetUVDomain(dom);
+        if (SmAttribute* old = made[k]->FindAttribute(kTagAttribute))
+            made[k]->RemoveAttribute(old);
+        made[k]->AddAttribute(new (ctx) SmLongAttribute(kTagAttribute, long(f.tag), SM_AB_COPY));
+    }
+}
+
 int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32_t* failed, JcBrep** out)
 {
     *failed = -1;
@@ -878,42 +940,7 @@ int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32
         {
             *failed = int32_t(i);
             const JcStepFace& f = faces[i];
-            SmSurface* srf = step_surface(ctx, f);
-            SmTArray<ULONG> loops;
-            SmTArray<SmCurve*> curves;
-            SmTArray<SmOrientType> orients;
-            size_t at = 0;
-            for (uint32_t l = 0; l < f.loop_count; ++l)
-            {
-                loops.Add(f.loop_sizes[l]);
-                for (uint32_t c = 0; c < f.loop_sizes[l]; ++c)
-                {
-                    curves.Add(step_curve(ctx, f.curves[at++]));
-                    orients.Add(SM_OT_SAME);
-                }
-            }
-            SmTArray<SmPoint3d> points;
-            for (uint32_t k = 0; k < f.point_count; ++k)
-                points.Add(SmPoint3d(f.points[k * 3], f.points[k * 3 + 1], f.points[k * 3 + 2]));
-            SmTArray<SmFace*> made;
-            check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
-                      ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
-                      srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
-                      &made)),
-                  "面の切り抜き");
-            if (made.GetSize() == 0)
-                throw Failure{"面の切り抜き: 面ができませんでした"};
-            for (ULONG k = 0; k < made.GetSize(); ++k)
-            {
-                // 面の範囲を切り抜いた輪の範囲にする(平面や円筒の曲面そのものは無限に広いので、
-                // そのままだと面の内側の点を探す処理などが面を見つけられない)
-                SmExtent2d dom;
-                if (made[k]->CalculateUVDomainFromUVTrimCurves(dom, TRUE) == SM_SUCCESS)
-                    made[k]->SetUVDomain(dom);
-                if (SmAttribute* old = made[k]->FindAttribute(kTagAttribute))
-                    made[k]->RemoveAttribute(old);
-                made[k]->AddAttribute(new (ctx) SmLongAttribute(kTagAttribute, long(f.tag), SM_AB_COPY));
-            }
+            trimmed_face(ctx, brep.get(), f, tolerance, false, false);
         }
         *failed = -1;
         // 縫う。SmApiStitchIntoSolid と同じく許容差を倍にしながら縫うが、辺を頂点で分ける
@@ -946,6 +973,41 @@ int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32
         const bool solid = lamina == 0 && regions.GetSize() > 1;
         if (!solid)
             throw Failure{"面を縫っても閉じた立体になりませんでした(隙間 " + std::to_string(std::max(vgap, egap)) + ")"};
+        *out = J(brep.release());
+    });
+}
+
+int jc_iges_face(const JcStepFace* face, int32_t uv, double tolerance, JcBrep** out)
+{
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        BrepPtr brep(new (ctx) SmBrep());
+        brep->m_bEditingEnabled = TRUE;
+        SmTemporaryChangeValue<SmBoolean> doing(SM_CONST_CAST(SmContext*, &ctx)->GetDoingBooleanRef(), TRUE);
+        trimmed_face(ctx, brep.get(), *face, tolerance, uv != 0, true);
+        *out = J(brep.release());
+    });
+}
+
+int jc_iges_stitch(const JcBrep* const* faces, size_t count, double tolerance, int32_t mode, JcBrep** out)
+{
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        BrepPtr brep(new (ctx) SmBrep());
+        brep->m_bEditingEnabled = TRUE;
+        for (size_t i = 0; i < count; ++i)
+            check(SmApiStatus(brep->MergeBrep(*B(faces[i]))), "面を集める処理");
+        if (mode >= 0)
+        {
+            SmStitchCallback cb;
+            SmStitch st(cb, tolerance, TRUE, FALSE);
+            st.m_bFastEdgeCompare = TRUE;
+            st.m_bSplitEdgesWithVertices = TRUE;
+            st.m_bMakingManifoldSolid = mode ? TRUE : FALSE;
+            ULONG stitched = 0, lamina = 0;
+            double vertexGap = 0, edgeGap = 0;
+            check(SmApiStatus(st.DoStitching(brep.get(), NULL, NULL, stitched, lamina, vertexGap, edgeGap)), "面を縫う処理");
+        }
         *out = J(brep.release());
     });
 }
@@ -1420,6 +1482,9 @@ int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** po
             SmTArray<SmFace*> ef;
             e->GetFaces(ef);
             if ((ef.GetSize() != 2 && ef.GetSize() != 1) || (ef.GetSize() == 2 && (ef[0] == ef[1] || splits_one_surface(e))))
+                continue;
+            // 同じ面の両側を縫った周期の継ぎ目は、片側だけの開いた縁ではない。
+            if (ef.GetSize() == 1 && e->IsManifold())
                 continue;
             const SmCurve* c = e->GetCurve();
             double t0 = 0, t1 = 0;

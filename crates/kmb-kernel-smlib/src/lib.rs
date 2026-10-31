@@ -18,6 +18,7 @@
 //! そのカーネルが持つ(網として表示・計測・加工に使える)。
 
 mod ffi;
+mod iges_in;
 mod names;
 mod skin;
 mod step_in;
@@ -598,13 +599,12 @@ impl Kernel for SmlibKernel {
             return k.body_kind(inner);
         }
         let _g = ffi::lock();
+        let store = self.lock();
+        let shape = store.get(shape)?;
+        // 開いた縁を持つ面が混ざる時は、閉じた部分だけの体積を返さない。
         Ok(
-            if self
-                .lock()
-                .get(shape)?
-                .brep
-                .is_sheet()
-                .map_err(failed("ボディの種類"))?
+            if shape.rims.iter().any(Option::is_some)
+                || shape.brep.is_sheet().map_err(failed("ボディの種類"))?
             {
                 k::BodyKind::Sheet
             } else {
@@ -1743,6 +1743,10 @@ impl Kernel for SmlibKernel {
         };
         let names: Vec<&str> = names.iter().map(String::as_str).collect();
         ffi::export_step(&breps, &names, product).map_err(failed("STEP の書き出し"))
+    }
+
+    fn import_iges(&self, text: &str) -> Result<(ShapeHandle, Vec<String>), KernelError> {
+        iges_in::import(self, text).map_err(failed("IGES の読み込み"))
     }
 
     fn import_step(&self, step: &str) -> Result<ShapeHandle, KernelError> {
