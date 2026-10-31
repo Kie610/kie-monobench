@@ -140,10 +140,10 @@ fn step_each(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })
 }
 
+type StepBodies = (Vec<(String, ShapeHandle)>, Vec<String>);
+
 /// STEP は曲面を持つボディだけを書く。網を黙って落としたり、空のファイルにしない。
-fn step_bodies(
-    cx: &Context<'_>,
-) -> Result<(Vec<(String, ShapeHandle)>, Vec<String>), kmb_core::Problem> {
+fn step_bodies(cx: &Context<'_>) -> Result<StepBodies, kmb_core::Problem> {
     let mut bodies = Vec::new();
     let mut count = 0;
     for b in named_bodies(cx)? {
