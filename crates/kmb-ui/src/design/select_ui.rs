@@ -705,6 +705,59 @@ impl Workspace {
         self.pick_field_put(r, hit_body, add);
     }
 
+    /// 輪郭を受ける間は、行の機能が出した輪郭の全部を足し外しする。
+    /// 領域と穴の判断は出力を作る側に任せ、画面は輪郭の線を描くデータに直すだけ。
+    pub(crate) fn pick_field_profile_row(&mut self, id: FeatureId) -> bool {
+        let Some(h) = self.cur.gesture.as_ref().and_then(|g| g.current()) else {
+            return false;
+        };
+        if !matches!(h.gesture, kmb_core::Gesture::Regions)
+            || !h.choices.iter().any(|c| {
+                c.group == id.0 && c.value.get("profile").and_then(|v| v.as_u64()) == Some(id.0)
+            })
+        {
+            return false;
+        }
+        let Some(profile) = self
+            .output(id, "profile")
+            .and_then(kmb_core::Profile::from_value)
+        else {
+            return false;
+        };
+        // 領域の鍵を省いた値は、穴を含む輪郭の全体を指す。
+        let value = serde_json::json!({"profile": id.0});
+        let outline = profile
+            .regions
+            .iter()
+            .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
+            .map(|l| {
+                let mut line: Vec<_> = l
+                    .polyline()
+                    .into_iter()
+                    .map(|p| profile.plane.to_world(p))
+                    .collect();
+                if let Some(first) = line.first().copied() {
+                    line.push(first);
+                }
+                line
+            })
+            .collect();
+        let g = self.cur.gesture.as_mut().expect("輪郭を選ぶ手順");
+        if g.picks == [value.clone()] {
+            g.picks.clear();
+            g.whole_profile = None;
+        } else {
+            g.picks = vec![value.clone()];
+            g.whole_profile = Some(kmb_core::HandleChoice {
+                value,
+                outline,
+                group: id.0,
+                ..Default::default()
+            });
+        }
+        true
+    }
+
     /// ブラウザのボディの行を、選ぶ欄が受けている間に押した(`root` はボディを最初に作った機能)。
     /// 作っている途中の機能を決めて終えず、ボディを受ける欄ならそのボディを入れる。受けていれば
     /// `true`(行を選ぶことはしない)。ブラウザは最後までの形のボディを並べるので、直している機能の

@@ -24,6 +24,8 @@ pub struct Run {
     pub typed: String,
     /// 候補を足す・外す手順([`Gesture::Regions`])で選んだ候補の値
     pub picks: Vec<Json>,
+    /// ブラウザの行で選んだ輪郭の全体。分けた領域の候補とは別に、穴を保って描く。
+    pub whole_profile: Option<HandleChoice>,
     /// 距離の手順で、マウスを載せている止める面(`{"feature", "face"}`。[`Handle::stop_key`])。
     /// 決めるとその指定に入れる。数字を打っている間とほかの手順では空
     pub stop: Option<Json>,
