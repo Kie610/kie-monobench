@@ -2162,3 +2162,6 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-cad-sketch-freedom = 自由度
+field-cad-sketch-freedom-help = 全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。

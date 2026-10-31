@@ -14,6 +14,7 @@ pub(crate) struct Editor {
     /// 寸法の見せ方(スケッチの設定。画面の更新ごとに組み立ての共有の値から読む)
     pub(crate) fmt: kmb_sketch::DimFormat,
     pub tool: Tool,
+    pub(crate) freedom: crate::freedom_ui::State,
     pub selection: BTreeSet<EntityId>,
     /// クリックで選んだ順。まとめて選んだ要素は番号順で後に続く。
     pub(crate) selection_order: Vec<EntityId>,
@@ -237,6 +238,7 @@ impl Default for Editor {
             in_space: false,
             infer: crate::infer::State::default(),
             hud: crate::hud::Hud::default(),
+            freedom: crate::freedom_ui::State::default(),
             arc_turn: None,
             picked_constraint: None,
             show_marks: true,

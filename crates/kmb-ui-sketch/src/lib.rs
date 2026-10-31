@@ -10,6 +10,7 @@ mod dim_choice;
 mod display;
 mod drag;
 mod ends_ui;
+mod freedom_ui;
 mod group_ui;
 mod hud;
 mod infer;
@@ -1351,6 +1352,13 @@ impl FeatureEditor for SketchEditor {
         .map(to_value);
         // 選んだボディの辺や角(まだ写していない物)は、ここで仮に写してパネルの相手にする。
         // パネルで何かを付けた時だけ文書に入る(網羅版 G10)
+        crate::freedom_ui::panel(
+            ui,
+            &mut self.editor.freedom,
+            &sketch,
+            &solution,
+            values.as_ref(),
+        );
         let saved = self.editor.selection.clone();
         let (sketch, solution) = self.with_selected_refs(&sketch, &solution, values.as_ref());
         let out = constraints_ui::constraint_panel(
@@ -1795,3 +1803,6 @@ mod sketch_aids_tests;
 mod space_view_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod freedom_ui_tests;
