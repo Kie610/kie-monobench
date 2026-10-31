@@ -525,3 +525,27 @@ fn obj_export_writes_indexed_triangles_without_a_material_file() {
     }));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn invalid_parameter_expressions_exit_with_input_error_and_keep_the_saved_bytes() {
+    let dir = temp_dir("invalid-param-expression");
+    ok(&dir, &["new", "part.json"]);
+    ok(&dir, &["param", "add", "part.json", "w", "10 mm"]);
+    let path = dir.join("part.json");
+    let before = std::fs::read(&path).unwrap();
+    for expr in ["missing_name + 1 mm", "1 mm + 1 deg", "w + 1 mm"] {
+        assert_eq!(
+            exit_code(&dir, &["param", "set", "part.json", "w", expr]),
+            1,
+            "{expr}"
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "拒否した式を保存しない"
+        );
+    }
+    ok(&dir, &["param", "set", "part.json", "w", "20 mm"]);
+    assert_ne!(std::fs::read(&path).unwrap(), before);
+    std::fs::remove_dir_all(dir).unwrap();
+}

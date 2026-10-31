@@ -542,6 +542,8 @@ impl Headless {
 
     /// 組み立てた変更([`crate::edit`])を適用して再計算する。
     pub fn apply(&mut self, tx: Transaction) -> Result<(), String> {
+        self.check_param_transaction(&tx)
+            .map_err(|e| e.to_string())?;
         let touched: Vec<FeatureId> = tx
             .ops
             .iter()
@@ -840,6 +842,7 @@ impl Headless {
         label: &str,
         edits: Vec<kmb_core::Edit>,
     ) -> Result<Vec<FeatureId>, String> {
+        self.check_param_edits(&edits).map_err(|e| e.to_string())?;
         let added = self.commit(Self::edited(&edits), |doc| doc.apply_edits(label, edits))?;
         self.recompute();
         Ok(added)
