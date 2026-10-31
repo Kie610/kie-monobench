@@ -111,3 +111,9 @@ view-mark-leftover = 紫の点: 削り残し { $count } か所(大きいほど�
 ## 重なった面の候補(長押し)
 
 view-candidates = 重なっているもの(手前から)
+
+view-candidate-edge = 辺({ $faces })
+view-candidate-vertex = 頂点({ $position })
+
+view-others = ほかを選ぶ…(長押しでも)
+view-others-help = 右クリックした所に重なっている面・辺・頂点の一覧から選びます。左ボタンの長押しでも開けます。

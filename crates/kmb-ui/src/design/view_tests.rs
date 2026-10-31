@@ -1327,3 +1327,236 @@ fn the_view_and_review_follow_the_display_language() {
     h.get_by_label("今は計算できています");
     h.get_by_label("ブラウザを出す");
 }
+
+fn overlap_boxes() -> (Workspace, FeatureId, FeatureId) {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let mut b = DocBuilder::new();
+    let mut roots = vec![];
+    for (name, offset) in [("奥の箱", "0 mm"), ("手前の箱", "20 mm")] {
+        let mut s = SketchBuilder::xy();
+        let p = s.fixed_point(0.0, 0.0);
+        s.rectangle(p, "20 mm", "20 mm", [0.0, 0.0, 20.0, 20.0]);
+        let mut sketch = s.build();
+        sketch.offset = Some(offset.into());
+        let sk = b.feature(kmb_sketch::SKETCH, "輪郭", sketch);
+        roots.push(b.feature(
+            kmb_cad_extrude::EXTRUDE,
+            name,
+            serde_json::json!({"profile":sk.0,"distance":"10 mm","operation":"new"}),
+        ));
+    }
+    (
+        Workspace::new(b.finish("重なった箱"), None, reg()),
+        roots[0],
+        roots[1],
+    )
+}
+
+#[test]
+fn overlap_candidates_include_the_back_box_faces_but_not_a_hidden_body() {
+    let (mut ws, back, front) = overlap_boxes();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+    ws.cur.camera.set_view(-90.0, 90.0);
+    ws.cur.camera.fit(&ws.cur.scene, rect);
+    let p = ws.cur.camera.project([10.0, 10.0, 30.0], rect).0;
+    ws.context_pick(rect, p);
+    let list = &ws.view_menu.context_others.1;
+    assert_eq!(list.first().unwrap().feature(), front);
+    assert!(list.iter().any(|p| p.feature() == back), "奥の箱の面も含む");
+    ws.set_body_hidden(back, true);
+    ws.context_pick(rect, p);
+    assert!(
+        !ws.view_menu
+            .context_others
+            .1
+            .iter()
+            .any(|p| p.feature() == back),
+        "目で隠したボディは除く"
+    );
+}
+
+#[test]
+fn overlap_candidates_long_popup_keeps_cancel_inside_the_window() {
+    for (width, scale) in [(1280.0, 1.0), (1920.0, 1.0), (1280.0, 2.5), (1920.0, 2.5)] {
+        let mut ws = Workspace::new(kmb_core::Document::new(), None, reg());
+        ws.win.layout.appearance.language = "ja".into();
+        ws.win.layout.appearance.text_scale = scale;
+        ws.win.layout.appearance.icon_scale = scale;
+        ws.view_menu.candidates = Some((
+            egui::pos2(width - 2.0, 758.0),
+            (0..100)
+                .map(|i| {
+                    crate::select_ui::Hit::Face(view3d::Pick {
+                        feature: FeatureId(1),
+                        face: format!("candidate.{i}"),
+                    })
+                })
+                .collect(),
+        ));
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(width, 760.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        let cancel = h.get_by_label("キャンセル").rect();
+        assert!(
+            egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(width, 760.0))
+                .contains_rect(cancel),
+            "長い一覧でもキャンセルが窓内にある: {cancel:?}"
+        );
+        overlap_ui_request(
+            &mut h,
+            "script",
+            serde_json::json!({"lines":[
+                "scroll \"button:~candidate.0\" 100000",
+                "expect \"button:~candidate.99\""
+            ]}),
+        );
+        let last = h.get_by_label_contains("candidate.99").rect();
+        assert!(
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 760.0))
+                .contains_rect(last)
+        );
+        overlap_ui_click(&mut h, "キャンセル");
+        assert!(h.state().view_menu.candidates.is_none());
+    }
+}
+
+#[test]
+fn overlap_candidates_include_edges_and_vertices_behind_the_front_box() {
+    let (mut ws, _, _) = overlap_boxes();
+    ws.win.layout.appearance.language = "ja".into();
+    ws.cur.camera.set_view(-90.0, 90.0);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 900.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let rect = h.state().win.view_rect;
+    let p = h.state().cur.camera.project([0.0, 0.0, 30.0], rect).0;
+    h.state_mut().context_pick(rect, p);
+    h.state_mut().view_menu.candidates = Some(h.state().view_menu.context_others.clone());
+    h.run();
+    let missing: Vec<_> = ["奥の箱: 辺", "奥の箱: 頂点"]
+        .into_iter()
+        .filter(|label| h.query_all_by_label_contains(label).next().is_none())
+        .collect();
+    assert!(missing.is_empty(), "奥の候補が足りない: {missing:?}");
+}
+
+fn overlap_ui_click(h: &mut Harness<'_, Workspace>, target: &str) {
+    overlap_ui_request(h, "ui_click", serde_json::json!({"target":target}));
+}
+
+fn overlap_ui_request(h: &mut Harness<'_, Workspace>, tool: &str, args: serde_json::Value) {
+    let crate::live_ui::Answer::AfterScript(batch) =
+        h.state_mut().live_request(tool, &args).unwrap()
+    else {
+        panic!("台本で操作する");
+    };
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 60, "候補を押せません");
+    }
+}
+
+#[test]
+fn overlap_candidates_choose_deep_edges_and_vertices_through_ui_tools() {
+    for perspective in [false, true] {
+        let (mut ws, back, front) = overlap_boxes();
+        ws.win.layout.appearance.language = "ja".into();
+        ws.cur.camera.set_view(-90.0, 90.0);
+        ws.cur.camera.perspective = perspective;
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 900.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        let saved = h.state().cur.work.doc().to_json();
+        for (label, vertex) in [
+            ("button:~奥の箱: 辺#1", false),
+            ("button:~奥の箱: 頂点#1", true),
+        ] {
+            let rect = h.state().win.view_rect;
+            let p = h.state().cur.camera.project([0.0, 0.0, 30.0], rect).0;
+            h.state_mut().context_pick(rect, p);
+            let list = &h.state().view_menu.context_others.1;
+            assert!(
+                list.iter().rposition(|p| p.feature() == front).unwrap()
+                    < list.iter().position(|p| p.feature() == back).unwrap(),
+                "手前の箱から並ぶ"
+            );
+            h.state_mut().view_menu.candidates = Some(h.state().view_menu.context_others.clone());
+            h.run();
+            overlap_ui_click(&mut h, label);
+            if vertex {
+                assert_eq!(h.state().cur.picked_vertices[0].feature, back);
+            } else {
+                assert_eq!(h.state().cur.picked_edges[0].feature, back);
+            }
+            assert!(h.state().view_menu.candidates.is_none());
+            assert_eq!(h.state().cur.work.doc().to_json(), saved);
+        }
+        h.state_mut().set_body_hidden(back, true);
+        let rect = h.state().win.view_rect;
+        let p = h.state().cur.camera.project([0.0, 0.0, 30.0], rect).0;
+        h.state_mut().context_pick(rect, p);
+        assert!(
+            h.state()
+                .view_menu
+                .context_others
+                .1
+                .iter()
+                .all(|p| p.feature() != back)
+        );
+    }
+}
+
+#[test]
+fn overlap_candidates_keep_pick_filters_and_section_clipping() {
+    let (mut ws, back, front) = overlap_boxes();
+    let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0));
+    ws.cur.camera.set_view(-90.0, 90.0);
+    let pos = ws.cur.camera.project([0.0, 0.0, 30.0], rect).0;
+    for (filter, kind) in [
+        (PickFilter::FACE, kmb_core::RefKind::Face),
+        (PickFilter::EDGE, kmb_core::RefKind::Edge),
+        (PickFilter::VERTEX, kmb_core::RefKind::Vertex),
+        (PickFilter::BODY, kmb_core::RefKind::Face),
+    ] {
+        ws.set_pick_filter(filter);
+        ws.context_pick(rect, pos);
+        assert!(!ws.view_menu.context_others.1.is_empty());
+        assert!(
+            ws.view_menu
+                .context_others
+                .1
+                .iter()
+                .all(|p| p.kind() == kind)
+        );
+    }
+    ws.set_pick_filter(PickFilter::default());
+    ws.cur.scene.section = Some(view3d::Section {
+        normal: [0.0, 0.0, 1.0],
+        offset: 15.0,
+        by_body: false,
+        outside: false,
+    });
+    ws.context_pick(rect, pos);
+    assert!(
+        ws.view_menu
+            .context_others
+            .1
+            .iter()
+            .any(|p| p.feature() == back)
+    );
+    assert!(
+        ws.view_menu
+            .context_others
+            .1
+            .iter()
+            .all(|p| p.feature() != front)
+    );
+}
