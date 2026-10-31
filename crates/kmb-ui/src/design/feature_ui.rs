@@ -601,10 +601,19 @@ fn value_ui(
                         .iter()
                         .filter(|c| !f.hidden.contains(&c.value) || cur.as_ref() == Some(&c.value))
                     {
-                        if ui
-                            .selectable_label(cur.as_ref() == Some(&c.value), &c.label)
-                            .clicked()
+                        let response =
+                            ui.selectable_label(cur.as_ref() == Some(&c.value), &c.label);
+                        if response.hovered()
+                            && let Some(draw) = f.illustration
                         {
+                            let lines = (draw.0)(&ws.context(), data, &f.key, &c.value);
+                            if !lines.is_empty() {
+                                response
+                                    .clone()
+                                    .on_hover_ui(|ui| choice_illustration(ui, &lines));
+                            }
+                        }
+                        if response.clicked() {
                             f.set(data, Some(Json::String(c.value.clone())));
                         }
                     }
@@ -1706,4 +1715,152 @@ fn feature_form(ui: &mut egui::Ui, ws: &mut Workspace, entry: &FeatureEntry) -> 
         ui.label(s);
     }
     out
+}
+
+/// 説明図の座標と描き方の役割だけを読み、縦横比を保ってツールチップに収める。
+fn choice_illustration(ui: &mut egui::Ui, lines: &kmb_core::ChoiceLines) {
+    let points: Vec<_> = lines
+        .iter()
+        .flat_map(|(p, _)| p)
+        .filter(|p| p.iter().all(|v| v.is_finite()))
+        .collect();
+    if points.is_empty() {
+        return;
+    }
+    let mut lo = [f64::INFINITY; 2];
+    let mut hi = [f64::NEG_INFINITY; 2];
+    for p in points {
+        for i in 0..2 {
+            lo[i] = lo[i].min(p[i]);
+            hi[i] = hi[i].max(p[i]);
+        }
+    }
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(64.0, 64.0), egui::Sense::hover());
+    let scale = 56.0 / (hi[0] - lo[0]).max(hi[1] - lo[1]).max(1e-12);
+    let at = |p: [f64; 2]| {
+        rect.center()
+            + egui::vec2(
+                ((p[0] - (hi[0] + lo[0]) / 2.0) * scale) as f32,
+                ((p[1] - (hi[1] + lo[1]) / 2.0) * scale) as f32,
+            )
+    };
+    let look = crate::theme::look(ui.ctx());
+    for (points, ink) in lines {
+        let color = if *ink == kmb_interchange::ink::line::FAINT {
+            look.pal.ink2
+        } else {
+            look.pal.ink
+        };
+        for pair in points
+            .windows(2)
+            .filter(|p| p.iter().flatten().all(|v| v.is_finite()))
+        {
+            ui.painter()
+                .line_segment([at(pair[0]), at(pair[1])], egui::Stroke::new(1.2, color));
+        }
+    }
+}
+
+#[cfg(test)]
+mod illustration_tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    fn draw(_: &kmb_core::Context<'_>, _: &Json, key: &str, choice: &str) -> kmb_core::ChoiceLines {
+        assert_eq!((key, choice), ("choice", "other"));
+        vec![(
+            vec![[0.0, 0.0], [1.0, 2.0], [2.0, 0.0]],
+            kmb_interchange::ink::line::MAIN,
+        )]
+    }
+
+    #[test]
+    fn a_choice_tooltip_draws_the_modules_lines_without_changing_the_value() {
+        let ws = Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules());
+        let entry = FeatureEntry {
+            id: FeatureId(1),
+            type_id: "test.choice@1".into(),
+            name: "choice".into(),
+            data: Json::Null,
+            suppressed: false,
+            pin_bodies: false,
+        };
+        let field = Field::choice(
+            "choice",
+            "choice",
+            &[("first", "First"), ("other", "Other")],
+        )
+        .illustrate(kmb_core::ChoiceIllustration(draw));
+        let mut h = Harness::builder().build_ui_state(
+            move |ui, state: &mut Json| value_ui(ui, &ws, &entry, &field, state, false),
+            serde_json::json!({"choice":"first"}),
+        );
+        h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
+        h.run();
+        h.query_all(egui_kittest::kittest::by().role(egui::accesskit::Role::ComboBox))
+            .next()
+            .unwrap()
+            .click();
+        h.run();
+        let count = |h: &Harness<'_, Json>| {
+            h.output()
+                .shapes
+                .iter()
+                .filter(|s| matches!(s.shape, egui::Shape::LineSegment { .. }))
+                .count()
+        };
+        let before = count(&h);
+        h.query_by_label("Other").unwrap().hover();
+        for _ in 0..6 {
+            h.step();
+        }
+        assert!(count(&h) >= before + 2, "説明図の線がツールチップに出る");
+        assert_eq!(h.state()["choice"], "first", "かざすだけでは値は変わらない");
+    }
+    #[test]
+    fn a_live_ui_script_can_hover_a_hole_choice_and_leave_the_document_unchanged() {
+        let dir = crate::tests::temp_dir("choice-illustration-live");
+        let mut ws = Workspace::new(
+            kmb_samples::reference_part().doc,
+            None,
+            kmb_bundle::modules(),
+        )
+        .with_data_dir(dir.join("data"));
+        ws.win.layout.ai_live = true;
+        ws.win.layout.appearance.language = "ja".into();
+        ws.clear_selection();
+        ws.add_described(kmb_cad_hole::HOLE).unwrap();
+        let before = ws.document().to_json();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 1200.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
+        h.run();
+        let count = |h: &Harness<'_, Workspace>| {
+            h.output()
+                .shapes
+                .iter()
+                .filter(|s| matches!(s.shape, egui::Shape::LineSegment { .. }))
+                .count()
+        };
+        let old = count(&h);
+        let data = dir.join("data");
+        let thread = std::thread::spawn(move || {
+            kmb_session::live::call(
+                &data,
+                "script",
+                serde_json::json!({"text":"click \"穴のタイプ\"\nhover \"ザグリ\"\nwait 4"}),
+            )
+        });
+        let start = std::time::Instant::now();
+        while !thread.is_finished() {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(start.elapsed().as_secs() < 60);
+        }
+        let result = thread.join().unwrap().unwrap();
+        assert_eq!(result["ok"], true, "{result}");
+        assert!(count(&h) > old, "ツールチップの線が増える");
+        assert_eq!(h.state().document().to_json(), before);
+    }
 }

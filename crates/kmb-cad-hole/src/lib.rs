@@ -1,5 +1,6 @@
 //! スケッチの点にあける穴(`solid.hole@1`)。種類(単純・ザグリ・皿)、止まり穴の先端の角度、
 //! ネジ(通し穴・ネジ穴。ネジ山の形は作らず、径を表から決めて属性として残す)を持つ。
+mod illustration;
 mod shape;
 pub mod thread;
 pub use shape::{Fit, HoleKind, Piece, Section, THREADS, Tap, ThreadSize, Tip, pieces, thread};
@@ -248,28 +249,6 @@ impl Hole {
         Ok(v)
     }
 
-    fn opt_length(
-        ctx: &EvalCtx<'_>,
-        src: &Option<String>,
-        what: &str,
-    ) -> Result<Option<f64>, EvalError> {
-        src.as_deref()
-            .filter(|s| !s.trim().is_empty())
-            .map(|s| Self::positive(ctx, s, what))
-            .transpose()
-    }
-
-    fn opt_angle(
-        ctx: &EvalCtx<'_>,
-        src: &Option<String>,
-        what: &str,
-    ) -> Result<Option<f64>, EvalError> {
-        src.as_deref()
-            .filter(|s| !s.trim().is_empty())
-            .map(|s| angle(ctx, s, what))
-            .transpose()
-    }
-
     /// ネジのサイズの名前(省いたら欄の最初の選択肢。画面は項目がなければ最初の選択肢を出す)。
     fn size_name(&self) -> &str {
         self.size
@@ -316,6 +295,13 @@ impl Hole {
 
     /// 穴の径(ネジを選んだ時は表から)。
     fn diameter(&self, ctx: &EvalCtx<'_>) -> Result<f64, EvalError> {
+        self.diameter_with(&|src, what| Self::positive(ctx, src, what))
+    }
+
+    fn diameter_with(
+        &self,
+        read: &impl Fn(&str, &str) -> Result<f64, EvalError>,
+    ) -> Result<f64, EvalError> {
         match self.thread()? {
             Some((s, _)) if self.tap == Tap::Tapped => Ok(s.tap_drill()),
             Some((_, Some(t))) => Ok(t.clearance[self.fit as usize]),
@@ -327,7 +313,7 @@ impl Hole {
             None if self.diameter.trim().is_empty() => {
                 Err(EvalError::InvalidData("穴の径を入れてください".into()))
             }
-            None => Self::positive(ctx, &self.diameter, "穴の径"),
+            None => read(&self.diameter, "穴の径"),
         }
     }
 
@@ -370,13 +356,35 @@ impl Hole {
 
     /// 深さと形以外の寸法(径・ザグリ・皿・先端)。
     fn section(&self, ctx: &EvalCtx<'_>, depth: f64) -> Result<Section, EvalError> {
-        let dia = self.diameter(ctx)?;
+        self.section_with(
+            depth,
+            &|src, what| Self::positive(ctx, src, what),
+            &|src, what| angle(ctx, src, what),
+        )
+    }
+
+    fn section_with(
+        &self,
+        depth: f64,
+        length: &impl Fn(&str, &str) -> Result<f64, EvalError>,
+        angle: &impl Fn(&str, &str) -> Result<f64, EvalError>,
+    ) -> Result<Section, EvalError> {
+        let optional =
+            |src: &Option<String>,
+             what: &str,
+             read: &dyn Fn(&str, &str) -> Result<f64, EvalError>| {
+                src.as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| read(s, what))
+                    .transpose()
+            };
+        let dia = self.diameter_with(length)?;
         let t = self.thread()?.and_then(|(_, row)| row);
-        let cb_d = Self::opt_length(ctx, &self.counterbore_diameter, "ザグリの径")?;
-        let cb_h = Self::opt_length(ctx, &self.counterbore_depth, "ザグリの深さ")?;
-        let cs_d = Self::opt_length(ctx, &self.countersink_diameter, "皿の径")?;
-        let cs_a = Self::opt_angle(ctx, &self.countersink_angle, "皿の角度")?;
-        let tip_a = Self::opt_angle(ctx, &self.tip_angle, "先端の角度")?;
+        let cb_d = optional(&self.counterbore_diameter, "ザグリの径", length)?;
+        let cb_h = optional(&self.counterbore_depth, "ザグリの深さ", length)?;
+        let cs_d = optional(&self.countersink_diameter, "皿の径", length)?;
+        let cs_a = optional(&self.countersink_angle, "皿の角度", angle)?;
+        let tip_a = optional(&self.tip_angle, "先端の角度", angle)?;
         Ok(Section {
             diameter: dia,
             depth,
@@ -734,8 +742,8 @@ pub fn hole_fields() -> Vec<Field> {
     );
     let names: Vec<&str> = sizes.iter().map(String::as_str).collect();
     vec![
-        Field::choice("kind", "穴のタイプ", KINDS),
-        Field::choice("tap", "ねじ穴のタイプ", TAPS)
+        Field::choice("kind", "穴のタイプ", KINDS).illustrate(illustration::DRAW),
+        Field::choice("tap", "ねじ穴のタイプ", TAPS).illustrate(illustration::DRAW)
             .help("ネジ山の形は作らない。径を表から決め、ネジの属性として残す"),
         Field::text("size", "サイズ")
             .suggest(&names)
@@ -753,6 +761,7 @@ pub fn hole_fields() -> Vec<Field> {
                 ("to_face", "対象まで"),
             ],
         )
+        .illustrate(illustration::DRAW)
         .help("「対象まで」にすると、穴を止める平らな面か頂点をクリックする手順に入る。斜めの面なら底が面に沿う")
         .pick_on("to_face", HOLE_TO_FACE),
         Field::opt_expr("depth", "深さ").length()
@@ -774,7 +783,7 @@ pub fn hole_fields() -> Vec<Field> {
         Field::opt_expr("countersink_angle", "皿の角度").angle()
             .only("kind", "countersink", "simple")
             .help("空なら 90 deg"),
-        Field::choice("tip", "先端", TIPS).help("止まり穴の底。貫通では使わない"),
+        Field::choice("tip", "先端", TIPS).illustrate(illustration::DRAW).help("止まり穴の底。貫通では使わない"),
         Field::opt_expr("tip_angle", "先端の角度").angle()
             .only("tip", "angled", "flat")
             .help("空なら 118 deg"),
