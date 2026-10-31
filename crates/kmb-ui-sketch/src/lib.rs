@@ -10,6 +10,7 @@ mod dim_choice;
 mod display;
 mod drag;
 mod ends_ui;
+mod freedom_ui;
 mod group_ui;
 mod hud;
 mod infer;
@@ -1795,3 +1796,6 @@ mod sketch_aids_tests;
 mod space_view_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod freedom_ui_tests;

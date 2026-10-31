@@ -574,6 +574,7 @@ pub(crate) fn constraint_panel(
         );
         theme::chip(ui, &format!("寸法 {dims}"), None);
     });
+    crate::freedom_ui::panel(ui, &mut editor.freedom, sketch, sol, values);
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         for (c, t) in [

@@ -288,8 +288,11 @@ pub(super) fn draw(
             }
         };
         let is_construction = e.is_construction();
-        // 出さない物(切った補助線・写した形)は、選んでいる時だけ描く
-        if editor.display.hides(sketch, id) && !editor.selection.contains(&id) {
+        // 隠した補助線・投影は、選択中か自由度の一覧で強調している間だけ描く
+        if editor.display.hides(sketch, id)
+            && !editor.selection.contains(&id)
+            && !editor.freedom.lights(id)
+        {
             continue;
         }
         if let Some(h) = halo(id) {
@@ -321,10 +324,11 @@ pub(super) fn draw(
         })
         .collect();
     for (id, p) in &sol.points {
-        // 「点」を切った時は、選んだ点とカーソルの下の点だけ描く
+        // 隠した点は、選択中・カーソルの下・自由度の一覧で強調中なら描く
         if editor.display.hides(sketch, *id)
             && !editor.selection.contains(id)
             && hovered != Some(*id)
+            && !editor.freedom.lights(*id)
         {
             continue;
         }

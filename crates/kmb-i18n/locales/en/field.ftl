@@ -2162,3 +2162,6 @@ field-solid-thread-length-help = Blank uses the full face length.
 field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 field-solid-thread-target = Target
+
+field-cad-sketch-freedom = Degrees of freedom
+field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
