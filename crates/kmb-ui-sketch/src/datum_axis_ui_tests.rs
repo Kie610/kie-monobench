@@ -21,13 +21,29 @@ fn script(h: &mut Harness<'static, Workspace>, text: &str) {
     h.run();
 }
 
-#[test]
-fn the_project_tool_uses_the_declared_datum_axis_action() {
+fn project_fixture(points: serde_json::Value, at: [f64; 2], has_point: bool) {
     let mut doc = Document::new();
-    let ids = doc.apply_edits("見本", vec![
-        Edit::Insert { type_id:"cad.datum_axis@1".into(),name:"基準の軸".into(), data:json!({"points":[{"kind":"at","at":[15,20,5]},{"kind":"at","at":[25,20,5]}]}) },
-        Edit::Insert { type_id:kmb_sketch::SKETCH.into(),name:"投影先".into(),data:serde_json::to_value(Sketch::default()).unwrap() },
-    ]).unwrap();
+    let mut initial = Sketch::default();
+    if has_point {
+        initial.add_point(0.0, 0.0);
+    }
+    let ids = doc
+        .apply_edits(
+            "見本",
+            vec![
+                Edit::Insert {
+                    type_id: "cad.datum_axis@1".into(),
+                    name: "基準の軸".into(),
+                    data: json!({"points":points}),
+                },
+                Edit::Insert {
+                    type_id: kmb_sketch::SKETCH.into(),
+                    name: "投影先".into(),
+                    data: serde_json::to_value(initial).unwrap(),
+                },
+            ],
+        )
+        .unwrap();
     let mut ws = ws_of(doc, None, reg());
     ws.open_edit(ids[1]);
     let mut h = Harness::builder()
@@ -47,7 +63,7 @@ fn the_project_tool_uses_the_declared_datum_axis_action() {
         &mut h,
         "click \"作成 ▾\"\nhover \"投影/取り込み\"\nclick \"投影\"",
     );
-    click_at(&mut h, [18.0, 20.0]);
+    click_at(&mut h, at);
     h.run();
     let data = &h.state().document().data().feature(ids[1]).unwrap().data;
     let saved: Sketch = serde_json::from_value(data.clone()).unwrap();
@@ -59,6 +75,20 @@ fn the_project_tool_uses_the_declared_datum_axis_action() {
         "{data}"
     );
     assert_eq!(h.state().report().error_count(), 0);
+    if has_point {
+        let Some(FeatureStatus::Ok { outputs, .. }) = h.state().report().feature(ids[1]) else {
+            panic!("投影を計算する");
+        };
+        let sol = outputs
+            .get("sketch")
+            .and_then(kmb_sketch::solution_of)
+            .unwrap();
+        assert_eq!(
+            saved.hit_test(&sol, 0.0, 0.0, 0.1).unwrap().entity,
+            kmb_sketch::EntityId(1),
+            "描く時は自分の点が先"
+        );
+    }
     script(&mut h, "key Esc");
     h.state_mut().undo();
     h.run();
@@ -73,4 +103,31 @@ fn the_project_tool_uses_the_declared_datum_axis_action() {
     )
     .unwrap();
     assert!(saved.projections.is_empty());
+}
+
+#[test]
+fn the_project_tool_uses_the_declared_datum_axis_action() {
+    project_fixture(
+        json!([{"kind":"at","at":[15,20,5]},{"kind":"at","at":[25,20,5]}]),
+        [18.0, 20.0],
+        false,
+    );
+}
+
+#[test]
+fn a_normal_axis_can_be_projected_at_the_sketch_origin() {
+    project_fixture(
+        json!([{"kind":"at","at":[0,0,5]},{"kind":"at","at":[0,0,15]}]),
+        [0.0, 0.0],
+        false,
+    );
+}
+
+#[test]
+fn a_normal_axis_can_be_projected_over_a_drawn_point() {
+    project_fixture(
+        json!([{"kind":"at","at":[0,0,5]},{"kind":"at","at":[0,0,15]}]),
+        [0.0, 0.0],
+        true,
+    );
 }

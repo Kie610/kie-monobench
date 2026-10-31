@@ -340,13 +340,17 @@ impl Sketch {
         let mine = section(&item.source);
         let point = |s: &mut Sketch, p: P2| -> crate::EntityId {
             let (projected, _) = s.projected_parts();
-            // 点を使う投影が、どれも同じ種類(断面かそれ以外か)
+            // 断面は断面とだけ点を共有する。独立して動く作業軸は、別の元の点を使い回さない。
             let fits = |s: &Sketch, id: crate::EntityId| {
                 s.projections.iter().all(|pr| {
                     let uses = pr.entity == id
                         || s.entity(pr.entity)
                             .is_some_and(|e| e.points().contains(&id));
-                    !uses || section(&pr.source) == mine
+                    !uses
+                        || (section(&pr.source) == mine
+                            && ((pr.source.datum_axis().is_none()
+                                && item.source.datum_axis().is_none())
+                                || pr.source.same(&item.source)))
                 })
             };
             let near = s.entities.iter().find_map(|e| match e {

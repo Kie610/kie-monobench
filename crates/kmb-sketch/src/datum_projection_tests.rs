@@ -159,8 +159,7 @@ fn a_missing_or_changed_axis_stops_without_retargeting() {
 fn unknown_projection_data_survives_document_round_trip() {
     let (mut doc, _, sketch) = fixture([1.0, 0.0, 0.0]);
     let mut data = doc.data().feature(sketch).unwrap().data.clone();
-    data["projections"] =
-        json!([{"entity":4,"source":{"from":"future_projection","extra":{"key":17}}}]);
+    data["projections"] = json!([{"entity":4,"from":"future_projection","extra":{"key":17}}]);
     doc.apply(Transaction::new(
         "未知の投影",
         vec![Op::SetFeatureData {
@@ -257,4 +256,36 @@ fn an_unlinked_axis_projection_is_fixed_and_no_longer_reads_the_axis() {
             .count(),
         2
     );
+}
+
+#[test]
+fn a_normal_axis_does_not_move_an_overlapping_origin_reference() {
+    let mut sketch = Sketch::default();
+    let origin = origin_ref(&Plane::XY);
+    let origin_point = sketch.add_projection(&origin);
+    let axis = DatumAxis {
+        at: [0.0, 0.0, 4.0],
+        dir: [0.0, 0.0, 1.0],
+        span: [-5.0, 5.0],
+    };
+    let axis_point =
+        sketch.add_projection(&datum_axis_ref(axis, FeatureId(1), &Plane::XY).unwrap());
+    assert_ne!(origin_point, axis_point, "独立して動く参照は点を共有しない");
+    let moved = DatumAxis {
+        at: [5.0, 0.0, 4.0],
+        ..axis
+    };
+    assert!(
+        refresh_projections(
+            &mut sketch,
+            &[
+                origin,
+                datum_axis_ref(moved, FeatureId(1), &Plane::XY).unwrap()
+            ]
+        )
+        .is_empty()
+    );
+    let sol = solve(&sketch, &Default::default()).unwrap();
+    assert_eq!(sol.points[&origin_point], [0.0, 0.0]);
+    assert_eq!(sol.points[&axis_point], [5.0, 0.0]);
 }
