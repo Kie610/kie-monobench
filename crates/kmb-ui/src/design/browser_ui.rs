@@ -595,7 +595,13 @@ impl Workspace {
         } else {
             r.on_hover_text(detail)
         };
-        if r.double_clicked() && !tw {
+        if (r.clicked() || r.double_clicked())
+            && !tw
+            && body.is_none()
+            && self.pick_field_profile_row(f.id)
+        {
+            // 続けたクリックも、スケッチの編集を開かずに輪郭の足し外しにする。
+        } else if r.double_clicked() && !tw {
             // ボディは機能ではないので、ダブルクリックは名前の変更(最後の機能を開かない)
             match body {
                 Some(root) => self.start_rename_body(root),
