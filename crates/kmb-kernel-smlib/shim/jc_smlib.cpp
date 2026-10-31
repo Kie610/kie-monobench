@@ -907,11 +907,11 @@ static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f
     }
     else
     {
-    check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
-              ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
-              srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
-              &made)),
-          "面の切り抜き");
+        check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
+                  ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
+                  srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
+                  &made)),
+              "面の切り抜き");
     }
     if (made.GetSize() == 0)
         throw Failure{"面の切り抜き: 面ができませんでした"};

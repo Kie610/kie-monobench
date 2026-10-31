@@ -241,51 +241,161 @@ impl Data {
             return Ok(found);
         }
         let surface=self.with(id,|e|{
-            let mut p=Params::new(e);let mm=self.file.global.mm;
-            let mut domain=None;let mut boundary=0;
+
+            let mut p=Params::new(e);
+let mm=self.file.global.mm;
+
+            let mut domain=None;
+let mut boundary=0;
+
             let geo=match e.kind {
+
                 108=>{
-                    let n=p.point()?;let distance=p.number()?*mm;boundary=p.integer()?;
-                    if e.form == -1 { return Err("平面の外側を残す形式は無限に広がるため読めません。境のある面で保存してください".into()); }
-                    if !matches!(e.form,0|1) || (e.form==0 && boundary!=0) || (e.form==1 && boundary==0) { return Err("平面の形式と境の指定が合いません".into()); }
-                    let length=n[0].hypot(n[1]).hypot(n[2]);let z=unit(n)?;
+
+                    let n=p.point()?;
+let distance=p.number()?*mm;
+boundary=p.integer()?;
+
+                    if e.form == -1 {
+ return Err("平面の外側を残す形式は無限に広がるため読めません。境のある面で保存してください".into());
+ }
+
+                    if !matches!(e.form,0|1) || (e.form==0 && boundary!=0) || (e.form==1 && boundary==0) {
+ return Err("平面の形式と境の指定が合いません".into());
+ }
+
+                    let length=n[0].hypot(n[1]).hypot(n[2]);
+let z=unit(n)?;
+
                     Surf::Plane(frame(checked(k::scale(z,distance/length))?,z,None)?)
                 }
+
                 128=>{
-                    let nu=p.count(MAX_CONTROL-1)?+1;let nv=p.count(MAX_CONTROL-1)?+1;
+
+                    let nu=p.count(MAX_CONTROL-1)?+1;
+let nv=p.count(MAX_CONTROL-1)?+1;
+
                     let size=nu.checked_mul(nv).filter(|n|*n<=MAX_CONTROL).ok_or("曲面の制御点が多すぎます")?;
-                    let du=p.count(MAX_DEGREE)?;let dv=p.count(MAX_DEGREE)?;for _ in 0..5 {p.flag()?;}
-                    let ku=vectors(&mut p,nu+du+1)?;let kv=vectors(&mut p,nv+dv+1)?;
-                    knots(&ku,du,nu)?;knots(&kv,dv,nv)?;
-                    let mut w=vectors(&mut p,size)?;weights(&mut w)?;
-                    let mut points=vec![[0.;4];size];
-                    for j in 0..nv {for i in 0..nu {let at=checked(k::scale(p.point()?,mm))?;points[i*nv+j]=[at[0],at[1],at[2],w[j*nu+i]];}}
-                    let u0=p.number()?;let u1=p.number()?;let v0=p.number()?;let v1=p.number()?;
-                    if u0<ku[du] || u1>ku[nu] || v0<kv[dv] || v1>kv[nv] || u1-u0<=1e-12 || v1-v0<=1e-12 {return Err("曲面の範囲がノットと合いません".into());}
+
+                    let du=p.count(MAX_DEGREE)?;
+let dv=p.count(MAX_DEGREE)?;
+for _ in 0..5 {
+p.flag()?;
+}
+
+                    let ku=vectors(&mut p,nu+du+1)?;
+let kv=vectors(&mut p,nv+dv+1)?;
+
+                    knots(&ku,du,nu)?;
+knots(&kv,dv,nv)?;
+
+                    let mut w=vectors(&mut p,size)?;
+weights(&mut w)?;
+
+                    let mut points=vec![[0.;
+4];
+size];
+
+                    for j in 0..nv {
+for i in 0..nu {
+let at=checked(k::scale(p.point()?,mm))?;
+points[i*nv+j]=[at[0],at[1],at[2],w[j*nu+i]];
+}
+}
+
+                    let u0=p.number()?;
+let u1=p.number()?;
+let v0=p.number()?;
+let v1=p.number()?;
+
+                    if u0<ku[du] || u1>ku[nu] || v0<kv[dv] || v1>kv[nv] || u1-u0<=1e-12 || v1-v0<=1e-12 {
+return Err("曲面の範囲がノットと合いません".into());
+}
+
                     domain=Some([u0,u1,v0,v1]);
-                    Surf::BSpline(NurbsSurf{degree_u:du,degree_v:dv,knots_u:ku,knots_v:kv,pts:points})
+
+                    Surf::BSpline(NurbsSurf{
+degree_u:du,degree_v:dv,knots_u:ku,knots_v:kv,pts:points}
+)
                 }
+
                 190|192|194|196|198=>{
-                    if !matches!(e.form,0|1) {return Err("解析曲面の形式は0か1にしてください".into());}
+
+                    if !matches!(e.form,0|1) {
+return Err("解析曲面の形式は0か1にしてください".into());
+}
+
                     let origin=self.point(p.integer()?)?;
-                    let (z,radius)=if e.kind==196 {let r=p.number()?*mm;let z=if e.form==1 {self.direction(p.integer()?)?}else{[0.,0.,1.]};(z,r)}else{
-                        let z=self.direction(p.integer()?)?;let r=if e.kind==190{0.}else{p.number()?*mm};(z,r)
-                    };
-                    let second=if e.kind==194 {p.number()?.to_radians()}else if e.kind==198 {p.number()?*mm}else{0.};
-                    let x=if e.form==1 {Some(self.direction(p.integer()?)?)}else{None};
-                    let f=frame(origin,z,x)?;
-                    if e.kind!=190 && (!radius.is_finite() || radius<0. || (radius==0. && e.kind!=194)) {return Err("曲面の半径が不正です".into());}
-                    match e.kind {
-                        190=>Surf::Plane(f),192=>Surf::Cylinder(f,radius),
-                        194=>{if !(0. ..std::f64::consts::FRAC_PI_2).contains(&second) || second==0. {return Err("円すいの半頂角は0度より大きく90度より小さくしてください".into());}Surf::Cone(f,radius,second)},
-                        196=>Surf::Sphere(f,radius),
-                        _=>{if second<=0. || second>=radius {return Err("円環の小さい半径は0より大きく、大きい半径より小さくしてください".into());}Surf::Torus(f,radius,second)},
+
+                    let (z,radius)=if e.kind==196 {
+let r=p.number()?*mm;
+let z=if e.form==1 {
+self.direction(p.integer()?)?}
+else{
+[0.,0.,1.]}
+;
+(z,r)}
+else{
+
+                        let z=self.direction(p.integer()?)?;
+let r=if e.kind==190{
+0.}
+else{
+p.number()?*mm}
+;
+(z,r)
                     }
+;
+
+                    let second=if e.kind==194 {
+p.number()?.to_radians()}
+else if e.kind==198 {
+p.number()?*mm}
+else{
+0.}
+;
+
+                    let x=if e.form==1 {
+Some(self.direction(p.integer()?)?)}
+else{
+None}
+;
+
+                    let f=frame(origin,z,x)?;
+
+                    if e.kind!=190 && (!radius.is_finite() || radius<0. || (radius==0. && e.kind!=194)) {
+return Err("曲面の半径が不正です".into());
+}
+
+                    match e.kind {
+
+                        190=>Surf::Plane(f),192=>Surf::Cylinder(f,radius),
+                        194=>{
+if !(0. ..std::f64::consts::FRAC_PI_2).contains(&second) || second==0. {
+return Err("円すいの半頂角は0度より大きく90度より小さくしてください".into());
+}
+Surf::Cone(f,radius,second)}
+,
+                        196=>Surf::Sphere(f,radius),
+                        _=>{
+if second<=0. || second>=radius {
+return Err("円環の小さい半径は0より大きく、大きい半径より小さくしてください".into());
+}
+Surf::Torus(f,radius,second)}
+,
+                    }
+
                 }
+
                 kind=>return Err(format!("曲面の種類 {kind} には対応していません")),
-            };
-            Ok(Arc::new(Surface{geo,place:self.matrix(e.transform,false)?,domain,boundary,parameterized:e.kind==128 || (e.kind!=108 && e.form==1)}))
-        })?;
+            }
+;
+
+            Ok(Arc::new(Surface{
+geo,place:self.matrix(e.transform,false)?,domain,boundary,parameterized:e.kind==128 || (e.kind!=108 && e.form==1)}
+))
+        }
+)?;
         self.surfaces.borrow_mut().insert(id, surface.clone());
         Ok(surface)
     }
@@ -348,7 +458,7 @@ impl Surface {
         let Surf::BSpline(s) = &self.geo else {
             return Err("曲面のパラメータの境を読めません".into());
         };
-        let lines = vec![
+        let lines = [
             iso(s, true, v0, u0, u1)?,
             iso(s, false, u1, v0, v1)?,
             step_in::reverse(&iso(s, true, v1, u0, u1)?),

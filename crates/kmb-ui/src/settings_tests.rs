@@ -130,7 +130,11 @@ fn ctrl_comma_opens_the_settings_whose_pages_and_search_box_find_settings() {
     h.state_mut().settings.query = "STEP".into();
     h.run();
     h.get_by_label("一般 › ファイル");
-    h.get_by_label("STEP を読み込んだら、立てるかを聞く");
+    h.get_by_label("STEP・IGES を読み込んだら、立てるかを聞く");
+    h.state_mut().settings.query = "IGES".into();
+    h.run();
+    h.get_by_label("一般 › ファイル");
+    h.get_by_label("STEP・IGES を読み込んだら、立てるかを聞く");
     // 当たらなければそう出す
     h.state_mut().settings.query = "存在しない設定".into();
     h.run();

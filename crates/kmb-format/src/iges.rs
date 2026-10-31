@@ -278,7 +278,7 @@ pub fn read(text: &str) -> Result<File, String> {
         }
         rows.push((seq, record.get(..72).ok_or("レコードの文字の境が不正です")?));
     }
-    for key in [b'S', b'G', b'D', b'P', b'T'] {
+    for key in *b"SGDPT" {
         if sections.get(&key).is_none_or(Vec::is_empty) {
             return Err(format!("IGES に {} の節がありません", char::from(key)));
         }
@@ -287,7 +287,7 @@ pub fn read(text: &str) -> Result<File, String> {
         return Err("終わりの節は1レコードにしてください".into());
     }
     let term = sections[&b'T'][0].1;
-    for (i, key) in [b'S', b'G', b'D', b'P'].iter().enumerate() {
+    for (i, key) in b"SGDP".iter().enumerate() {
         if term.as_bytes().get(i * 8) != Some(key)
             || unsigned(
                 term.get(i * 8 + 1..i * 8 + 8)
@@ -304,7 +304,7 @@ pub fn read(text: &str) -> Result<File, String> {
     }
     let global = global(&sections[&b'G'].iter().map(|(_, s)| *s).collect::<String>())?;
     let d = &sections[&b'D'];
-    if d.len() % 2 != 0 || d.len() / 2 > MAX_ENTRIES {
+    if !d.len().is_multiple_of(2) || d.len() / 2 > MAX_ENTRIES {
         return Err("ディレクトリの2行組が不正か、要素が10万件を超えています".into());
     }
     let mut data = BTreeMap::new();

@@ -41,7 +41,7 @@ pub(crate) enum Sec {
     Keys,
     Keycast,
     Autosave,
-    /// 読み込み(STEP を立てるか聞く)
+    /// 読み込み(上向きの軸を変えるか聞く)
     Import,
     /// 描画(3D のビューの描き方・細かさ。U26)
     Render,
@@ -90,7 +90,10 @@ fn sec_words(s: &Sec) -> (&'static str, &'static str) {
             "操作の表示 押したキー キー マウス 3D マウス 録画 動画 解説 画面に出す",
         ),
         Sec::Autosave => ("自動保存", "保存 間隔 分 写し 落ちた 戻す"),
-        Sec::Import => ("読み込み", "STEP 読み込む 立てる Y が上 Z が上 向き"),
+        Sec::Import => (
+            "読み込み",
+            "STEP IGES 読み込む 立てる Y が上 Z が上 向き import upright",
+        ),
         Sec::Render => (
             "描画",
             "描画 グラフィックス 軽さ優先 標準 見た目優先 GPU CPU 細かさ アンチエイリアス \

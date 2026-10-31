@@ -144,36 +144,109 @@ impl Data {
             });
         }
         self.with(id,|e|{
+
             let mut p=Params::new(e);
+
             let (mut curves,uv)=match e.kind {
+
                 142=>{
-                    p.integer()?;if p.integer()?!=surface{return Err("境が別の曲面を指しています".into());}
-                    let parameter=p.integer()?;let model=p.integer()?;p.integer()?;
-                    if model!=0{self.mark_curve(parameter,0);(self.curve(model,false)?,false)}
-                    else if parameter!=0{(self.curve(parameter,true)?,true)}else{return Err("境の曲線がありません".into());}
+
+                    p.integer()?;
+if p.integer()?!=surface{
+return Err("境が別の曲面を指しています".into());
+}
+
+                    let parameter=p.integer()?;
+let model=p.integer()?;
+p.integer()?;
+
+                    if model!=0{
+self.mark_curve(parameter,0);
+(self.curve(model,false)?,false)}
+
+                    else if parameter!=0{
+(self.curve(parameter,true)?,true)}
+else{
+return Err("境の曲線がありません".into());
+}
+
                 }
+
                 141=>{
-                    p.integer()?;p.integer()?;if p.integer()?!=surface{return Err("境が別の曲面を指しています".into());}
-                    let count=p.count(100_000)?;let mut curves=Vec::new();let mut mode=None;
+
+                    p.integer()?;
+p.integer()?;
+if p.integer()?!=surface{
+return Err("境が別の曲面を指しています".into());
+}
+
+                    let count=p.count(100_000)?;
+let mut curves=Vec::new();
+let mut mode=None;
+
                     for _ in 0..count{
-                        let model=p.integer()?;let sense=p.integer()?;let n=p.count(100_000)?;
-                        let mut parameter=Vec::with_capacity(n);for _ in 0..n{parameter.push(p.integer()?);}
-                        let (mut part,uv)=if model!=0{for &id in &parameter{self.mark_curve(id,0);}(self.curve(model,false)?,false)}else{
-                            let mut part=Vec::new();for id in parameter{part.extend(self.curve(id,true)?);} (part,true)
-                        };
-                        if mode.is_some_and(|m|m!=uv){return Err("1つの境に3Dとパラメータの曲線が混在しています。3Dの境で保存してください".into());}mode=Some(uv);
-                        match sense{1=>{},2=>{part.reverse();part=part.iter().map(crate::step_in::reverse).collect();},_=>return Err("境の向きの印が不正です".into())}
+
+                        let model=p.integer()?;
+let sense=p.integer()?;
+let n=p.count(100_000)?;
+
+                        let mut parameter=Vec::with_capacity(n);
+for _ in 0..n{
+parameter.push(p.integer()?);
+}
+
+                        let (mut part,uv)=if model!=0{
+for &id in &parameter{
+self.mark_curve(id,0);
+}
+(self.curve(model,false)?,false)}
+else{
+
+                            let mut part=Vec::new();
+for id in parameter{
+part.extend(self.curve(id,true)?);
+}
+ (part,true)
+                        }
+;
+
+                        if mode.is_some_and(|m|m!=uv){
+return Err("1つの境に3Dとパラメータの曲線が混在しています。3Dの境で保存してください".into());
+}
+mode=Some(uv);
+
+                        match sense{
+1=>{
+}
+,2=>{
+part.reverse();
+part=part.iter().map(crate::step_in::reverse).collect();
+}
+,_=>return Err("境の向きの印が不正です".into())}
+
                         curves.extend(part);
-                    }(curves,mode.unwrap_or(false))
+
+                    }
+(curves,mode.unwrap_or(false))
                 }
+
                 100|102|110|126=>(self.curve(id,false)?,false),
                 kind=>return Err(format!("境の種類 {kind} には対応していません")),
-            };
+            }
+;
+
             let matrix=self.matrix(e.transform,uv)?;
+
             // 曲線そのものの要素は curve が変換を適用する。
-            if matches!(e.kind,141|142){curves=curves.iter().map(|c|moved(c,&matrix)).collect::<Result<_,_>>()?;}
-            Ok(Boundary{curves,points:Vec::new(),uv})
-        })
+            if matches!(e.kind,141|142){
+curves=curves.iter().map(|c|moved(c,&matrix)).collect::<Result<_,_>>()?;
+}
+
+            Ok(Boundary{
+curves,points:Vec::new(),uv}
+)
+        }
+)
     }
     fn finish_face(
         &self,
@@ -649,14 +722,21 @@ pub(super) fn import(
         match result {
             Ok(brep) => faces.push(brep),
             Err(why) => {
-                let at = face
+                let first = face
                     .loops
                     .first()
                     .and_then(|l| l.first())
-                    .and_then(|c| c.pts.first())
-                    .map(|p| k::transform_point(&face.place, [p[0], p[1], p[2]]));
+                    .and_then(|c| c.pts.first());
+                let location = if face.uv {
+                    format!("境のパラメータ {:?}", first.map(|p| [p[0], p[1]]))
+                } else {
+                    format!(
+                        "境の位置 {:?} mm",
+                        first.map(|p| k::transform_point(&face.place, [p[0], p[1], p[2]]))
+                    )
+                };
                 model.warnings.push(format!(
-                    "面 {} を作れませんでした(境の位置 {at:?}): {why}",
+                    "面 {} を作れませんでした({location}): {why}",
                     face.name
                 ));
             }
@@ -715,13 +795,13 @@ pub(super) fn import(
     for (i, e) in all.iter().enumerate() {
         if e.faces[1] == u32::MAX as usize {
             // 球の極など、1点に縮む境は開いた縁ではない。
-            if let Some(first) = e.points.first() {
-                if e.points.iter().all(|p| {
+            if let Some(first) = e.points.first()
+                && e.points.iter().all(|p| {
                     let d = k::sub(*p, *first);
                     d[0].hypot(d[1]).hypot(d[2]) <= model.tolerance
-                }) {
-                    continue;
-                }
+                })
+            {
+                continue;
             }
             let at = *e
                 .points
