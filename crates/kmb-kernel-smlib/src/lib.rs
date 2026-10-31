@@ -593,6 +593,14 @@ impl Kernel for SmlibKernel {
         "smlib"
     }
 
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let k = self
+            .step_import
+            .as_deref()
+            .ok_or_else(|| KernelError::Unsupported("網のボディ".into()))?;
+        Ok(self.adopt_imported(k.import_mesh(mesh, tag)?))
+    }
+
     fn body_kind(&self, shape: ShapeHandle) -> Result<k::BodyKind, KernelError> {
         if let Some((k, inner)) = self.imported(shape) {
             return k.body_kind(inner);
@@ -1033,6 +1041,7 @@ impl Kernel for SmlibKernel {
         to: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "面の縁のままの押し出し")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Unsupported(
                 "STEP から読み込んだ形の面の縁のままの押し出し".into(),

@@ -3140,6 +3140,7 @@ name = "kmb-solid"
 version = "0.2.0"
 dependencies = [
  "kmb-asm",
+ "kmb-bundle",
  "kmb-cad",
  "kmb-cad-boolean",
  "kmb-cad-datum",
@@ -3152,6 +3153,7 @@ dependencies = [
  "kmb-cad-revolve",
  "kmb-cad-surface",
  "kmb-cad-sweep",
+ "kmb-cam-commands",
  "kmb-contract",
  "kmb-core",
  "kmb-interchange",

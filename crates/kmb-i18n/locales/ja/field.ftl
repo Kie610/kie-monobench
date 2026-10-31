@@ -2162,3 +2162,11 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-solid-import-mesh-file = ファイル
+field-solid-import-mesh-object = 物の名前
+field-solid-import-mesh-triangles = 三角形の数
+field-solid-import-mesh-unit = 単位
+field-solid-import-mesh-crease-angle = 折れ目の角度
+field-solid-import-mesh-crease-angle-help = 隣り合う三角形の角度がこの値以下なら、なめらかに見せる
+field-solid-import-mesh-notes = 注記

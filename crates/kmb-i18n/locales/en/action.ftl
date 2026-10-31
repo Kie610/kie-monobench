@@ -357,3 +357,6 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining

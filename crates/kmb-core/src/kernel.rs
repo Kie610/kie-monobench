@@ -374,6 +374,7 @@ fn order_by_position(mut idx: Vec<usize>, at: &dyn Fn(usize) -> P3, axis: usize)
 pub enum BodyKind {
     Solid,
     Sheet,
+    Mesh,
 }
 
 /// 面を張る縁の 1 区間(世界座標)。並びの端と端がつながって閉じる。
@@ -408,6 +409,12 @@ pub struct BoundarySegment {
 /// `tag` は面の名前の接頭辞で、ふつうは機能の ID(例: `f3`)を渡す。
 pub trait Kernel: Send + Sync {
     fn name(&self) -> &str;
+
+    /// 三角形の網をそのまま預かる。面の名前は `{tag}:mesh`、辺は渡された物を使う。
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let _ = (mesh, tag);
+        Err(KernelError::Unsupported("網のボディ".into()))
+    }
 
     /// 厚みのある立体か、厚みの無い面のボディか。
     fn body_kind(&self, shape: ShapeHandle) -> Result<BodyKind, KernelError> {

@@ -81,6 +81,7 @@ mod fillet_rows_tests;
 mod hole_tests;
 #[cfg(test)]
 mod link_tests;
+mod mesh_import_tests;
 mod modify_tests;
 mod multi_pick_tests;
 mod occurrence_tests;

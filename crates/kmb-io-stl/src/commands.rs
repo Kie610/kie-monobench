@@ -121,7 +121,8 @@ fn stl_each(cx: &Context<'_>, tol: f64, ascii: bool) -> Result<Outcome, kmb_core
 /// ボディごとの STEP。
 fn step_each(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let mut files = Vec::new();
-    for (name, h) in named_bodies(cx)? {
+    let (bodies, warnings) = step_bodies(cx)?;
+    for (name, h) in bodies {
         let s = cx
             .kernel
             .export_step_named(&[h], std::slice::from_ref(&name), &name)
@@ -130,9 +131,47 @@ fn step_each(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     }
     log::info!("STEP をボディごとに {} 個書き出す", files.len());
     Ok(Outcome::Files {
-        info: json!({"bodies": files.len()}),
+        info: if warnings.is_empty() {
+            json!({"bodies":files.len()})
+        } else {
+            json!({"bodies": files.len(),"warnings":warnings})
+        },
         files,
     })
+}
+
+/// STEP は曲面を持つボディだけを書く。網を黙って落としたり、空のファイルにしない。
+fn step_bodies(
+    cx: &Context<'_>,
+) -> Result<(Vec<(String, ShapeHandle)>, Vec<String>), kmb_core::Problem> {
+    let mut bodies = Vec::new();
+    let mut count = 0;
+    for b in named_bodies(cx)? {
+        if cx.kernel.body_kind(b.1).map_err(|e| e.to_string())? == kmb_core::kernel::BodyKind::Mesh
+        {
+            count += 1;
+        } else {
+            bodies.push(b);
+        }
+    }
+    let warnings = if count > 0 {
+        vec![format!(
+            "網のボディ {count} 個は書き出しませんでした(STEP は面の形が要ります。STL・3MF・OBJ で書けます)"
+        )]
+    } else {
+        vec![]
+    };
+    for warning in &warnings {
+        log::warn!("{warning}");
+    }
+    if bodies.is_empty() {
+        return Err(warnings
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "書き出すボディがありません".into())
+            .into());
+    }
+    Ok((bodies, warnings))
 }
 
 fn stl(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
@@ -164,7 +203,8 @@ fn step(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
         return step_each(cx);
     }
     // 立体の名前はブラウザのボディの名前(日本語もそのまま残す)
-    let (names, hs): (Vec<String>, Vec<ShapeHandle>) = named_bodies(cx)?.into_iter().unzip();
+    let (bodies, warnings) = step_bodies(cx)?;
+    let (names, hs): (Vec<String>, Vec<ShapeHandle>) = bodies.into_iter().unzip();
     let s = cx
         .kernel
         .export_step_named(&hs, &names, "kieMonoBench")
@@ -172,7 +212,11 @@ fn step(cx: &Context<'_>, id: &str) -> Result<Outcome, kmb_core::Problem> {
     Ok(Outcome::File {
         suffix: "形状.step".into(),
         contents: s.into_bytes(),
-        info: json!({"bodies": hs.len()}),
+        info: if warnings.is_empty() {
+            json!({"bodies":hs.len()})
+        } else {
+            json!({"bodies": hs.len(),"warnings":warnings})
+        },
     })
 }
 

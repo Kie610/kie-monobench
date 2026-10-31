@@ -11,6 +11,8 @@ use truck_topology::compress::{CompressedEdge, CompressedEdgeIndex};
 /// 読み込んだ形(面ごとの網、向きは外向きにそろえ済み)。
 #[derive(Clone)]
 pub(crate) struct Imported {
+    /// 三角形の網を直接預かった時は、頂点・法線・表示の辺を分け直さずに保つ。
+    pub raw: Option<kmb_core::Mesh>,
     pub meshes: Vec<Option<PolygonMesh>>,
     pub names: Vec<String>,
     /// 面の境目の辺を折れ線にしたもの(表示と、測る道具の点・辺に使う)
@@ -19,6 +21,8 @@ pub(crate) struct Imported {
     pub max: P3,
     pub volume: f64,
     pub area: f64,
+    pub open_edges: usize,
+    pub centroid: Option<P3>,
 }
 
 /// 読み込みを待つ時間の上限。
@@ -136,7 +140,16 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         .flat_map(triangles)
         .map(|t| tri_area(&t))
         .sum();
+    let mut geometry = kmb_format::mesh::Geometry::default();
+    for t in meshes.iter().flatten().flat_map(triangles) {
+        let base = geometry.vertices.len() as u32;
+        geometry.vertices.extend(t.map(|p| p.map(|x| x as f32)));
+        geometry.triangles.push([base, base + 1, base + 2]);
+    }
+    let (open_edges, _, _, centroid) =
+        kmb_format::mesh::properties(&geometry).map_err(KernelError::Failed)?;
     Ok(Imported {
+        raw: None,
         meshes,
         names,
         edges,
@@ -144,6 +157,8 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         max,
         volume,
         area,
+        open_edges,
+        centroid,
     })
 }
 

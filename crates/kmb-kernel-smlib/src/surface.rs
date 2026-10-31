@@ -11,7 +11,13 @@ impl SmlibKernel {
         shape: ShapeHandle,
         operation: &str,
     ) -> Result<(), KernelError> {
-        if self.body_kind(shape)? == BodyKind::Sheet {
+        let kind = self.body_kind(shape)?;
+        if kind == BodyKind::Mesh && operation != "体積" {
+            return Err(KernelError::Failed(format!(
+                "網のボディは{operation}に使えません(三角形の網で、面と辺の形を持たないため)"
+            )));
+        }
+        if kind == BodyKind::Sheet {
             let message = if operation == "体積" {
                 NO_VOLUME.into()
             } else {

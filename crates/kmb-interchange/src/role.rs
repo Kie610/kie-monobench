@@ -25,6 +25,8 @@ pub mod action {
     /// 名前で出す)。テンプレートごとに付く([`super::MARKERS`])
     pub const USE_TEMPLATE: ActionRole = ActionRole("use_template");
     /// STEP のファイルを読み込む(CLI・MCP の短い命令が使う)
+    /// STL・3MF の網を読み込む。
+    pub const IMPORT_MESH: ActionRole = ActionRole("import_mesh");
     pub const IMPORT_STEP: ActionRole = ActionRole("import_step");
     /// タイムラインのロールバックの位置を動かす。引数 `position`(先頭から効かせる機能の数。省くと
     /// 最後まで進める)。CLI・MCP の短い命令が使う
@@ -85,6 +87,7 @@ pub mod action {
         EXPORT_BODIES,
         USE_TEMPLATE,
         IMPORT_STEP,
+        IMPORT_MESH,
         ROLL_BACK,
         EXPORT_GCODE,
         SETUP_SHEET,
