@@ -322,6 +322,9 @@ impl Package {
                 }
             }
             let count = g.vertices.len() - base as usize;
+            let columns: [[f64; 3]; 3] =
+                std::array::from_fn(|j| std::array::from_fn(|i| place[i][j]));
+            let reflected = super::dot(columns[0], super::cross(columns[1], columns[2])) < 0.0;
             for t in mesh
                 .child("triangles")
                 .ok_or("3MF の triangles がありません")?
@@ -339,6 +342,10 @@ impl Package {
                         return Err("3MF の頂点番号が範囲の外です".into());
                     }
                     ids[i] = base + n as u32;
+                }
+                // 鏡映で座標の向きが返る時は、三角形の並びも返して表向きを保つ。
+                if reflected {
+                    ids.swap(1, 2);
                 }
                 g.triangles.push(ids);
             }

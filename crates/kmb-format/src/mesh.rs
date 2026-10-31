@@ -516,4 +516,13 @@ mod tests {
         assert_eq!(o.len(), 1);
         assert!(o[0].notes.iter().any(|n| n.contains("beamlattice")));
     }
+
+    #[test]
+    fn reflected_threemf_components_keep_their_outward_winding() {
+        let model=br#"<model><resources><object id="1"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/><vertex x="0" y="0" z="1"/></vertices><triangles><triangle v1="0" v2="2" v3="1"/><triangle v1="0" v2="1" v3="3"/><triangle v1="0" v2="3" v3="2"/><triangle v1="1" v2="2" v3="3"/></triangles></mesh></object><object id="2"><components><component objectid="1"/><component objectid="1" transform="-1 0 0 0 1 0 0 0 1 3 0 0"/></components></object></resources><build><item objectid="2"/></build></model>"#;
+        let o = read_3mf(&crate::zip::write(&[("3D/3dmodel.model", model)])).unwrap();
+        let (open, volume, _, _) = properties(&o[0].geometry).unwrap();
+        assert_eq!(open, 0);
+        assert!((volume - 1. / 3.).abs() < 1e-12, "{volume}");
+    }
 }
