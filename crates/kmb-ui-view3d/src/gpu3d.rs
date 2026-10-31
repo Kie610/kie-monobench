@@ -1957,3 +1957,7 @@ mod tests {
         assert!(clip_line(&u, [1e6, 1e6, 0.0], [1e6 + 1.0, 1e6, 0.0]).is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "section_gpu_tests.rs"]
+mod section_gpu_tests;
