@@ -525,3 +525,68 @@ fn occurrences_reuse_the_mesh_of_their_source() {
     assert_eq!(mirrored.triangles, [[0, 2, 1]], "鏡に映したら向きを裏返す");
     assert_eq!(mirrored.normals[0], [0.0, 0.0, 1.0]);
 }
+
+/// 確かめること: 円・円弧の長さは表示の弦から独立し、円の式で求まる。
+#[test]
+fn round_edges_use_the_circle_formula_instead_of_the_display_chords() {
+    // 半径の推定の丸めと長さの式を分けて確かめるため、f32 でも正確な四方向の点を使う。
+    let circle = vec![
+        [10.0, 0.0, 0.0],
+        [0.0, 10.0, 0.0],
+        [-10.0, 0.0, 0.0],
+        [0.0, -10.0, 0.0],
+        [10.0, 0.0, 0.0],
+    ];
+    let arc = circle[..4].to_vec();
+    let meshes = vec![(
+        FeatureId(1),
+        Mesh {
+            edges: vec![circle, arc],
+            ..Default::default()
+        },
+    )];
+    for (edge, closed, angle, label, text) in [
+        (0, true, std::f64::consts::TAU, "周の長さ", "62.832 mm"),
+        (
+            1,
+            false,
+            1.5 * std::f64::consts::PI,
+            "弧の長さ",
+            "47.124 mm",
+        ),
+    ] {
+        let mut geo = resolve(
+            &meshes,
+            &Target::Edge {
+                feature: FeatureId(1),
+                edge,
+            },
+        )
+        .unwrap();
+        let Kind::Circle(c) = &geo.kind else {
+            panic!("円として計測する: {:?}", geo.kind)
+        };
+        assert_eq!(c.closed, closed);
+        let exact = 10.0 * angle;
+        let measured = c.radius
+            * if c.closed {
+                std::f64::consts::TAU
+            } else {
+                c.sweep.abs()
+            };
+        assert!(
+            (measured - exact).abs() / exact < 1e-9,
+            "{measured} != {exact}"
+        );
+        let chord_length: f64 = geo.segs.iter().map(|s| dist(s[0], s[1])).sum();
+        assert!(
+            (chord_length - exact).abs() / exact > 1e-9,
+            "弦の和なら厳しい比較で差が出る"
+        );
+        let before = describe(&geo);
+        assert_eq!(before.iter().find(|(key, _)| key == label).unwrap().1, text);
+        // 距離を測るための線分を変えても、長さの表示は円の式を使う。
+        geo.segs.truncate(1);
+        assert_eq!(describe(&geo), before);
+    }
+}
