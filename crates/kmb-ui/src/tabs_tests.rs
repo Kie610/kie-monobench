@@ -727,3 +727,130 @@ fn undo_on_home_puts_back_the_last_move_and_the_open_path() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 確かめること: 初回表示とタブで開く場合の両方で、原点から離れた全ボディが収まる。
+#[test]
+fn offset_documents_fit_on_open_without_a_fit_command() {
+    use egui_kittest::Harness;
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let dir = temp_dir("offset-open-fit");
+    let path = dir.join("離れた部品.kmb");
+    let mut builder = DocBuilder::new();
+    for x in [12000.0, 12200.0] {
+        let mut s = SketchBuilder::xy();
+        let p = s.fixed_point(x, -9000.0);
+        s.rectangle(p, "40 mm", "30 mm", [x, -9000.0, 40.0, 30.0]);
+        let profile = builder.sketch("離れた輪郭", s);
+        builder.feature(
+            kmb_cad_extrude::EXTRUDE,
+            "部品",
+            serde_json::json!({
+                "profile":profile.0,"distance":"20 mm","operation":"new"
+            }),
+        );
+    }
+    kmb_session::save(&path, &builder.finish("離れた部品")).unwrap();
+    for opening in 0..3 {
+        let ws = match opening {
+            0 => Workspace::new(kmb_session::load(&path).unwrap(), Some(path.clone()), reg()),
+            1 => Workspace::new(Document::new(), None, reg()),
+            _ => Workspace::new(reference_document(), None, reg()),
+        }
+        .with_kernel_factory(Arc::new(kmb_bundle::kernel));
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 900.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        if opening != 0 {
+            assert!(h.state_mut().open_in_tab(&path));
+            h.run();
+        }
+        let ws = h.state();
+        assert_eq!(ws.cur.scene.bodies.len(), 2);
+        let rect = ws.win.view_rect.shrink(2.0);
+        assert!(rect.width() > 100.0 && rect.height() > 100.0);
+        for b in &ws.cur.scene.bodies {
+            for p in &b.mesh.positions {
+                let at = ws.cur.camera.project(*p, ws.win.view_rect).0;
+                assert!(
+                    rect.contains(at),
+                    "開き方 {opening}: {p:?} が画面の外 {at:?}, {rect:?}"
+                );
+            }
+        }
+        assert!(!ws.is_modified(), "表示を合わせても文書は変更しない");
+        assert!(!ws.document().can_undo());
+        assert_eq!(ws.tab_count(), if opening == 2 { 2 } else { 1 });
+    }
+    let ws = Workspace::new(Document::new(), None, reg());
+    let before = ws.cur.camera;
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 900.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let after = h.state().cur.camera;
+    assert_eq!(
+        (after.target, after.zoom, after.pan, after.yaw, after.pitch),
+        (
+            before.target,
+            before.zoom,
+            before.pan,
+            before.yaw,
+            before.pitch
+        ),
+        "空の文書は既定の視点のまま"
+    );
+    drop(h);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// 保存した視点を選んだ後の描画とタブの切り替えは、その見方を保つ。
+#[test]
+fn a_saved_view_is_not_refitted_by_later_frames_or_returning_to_its_tab() {
+    use egui_kittest::Harness;
+    let dir = temp_dir("saved-open-fit");
+    let path = dir.join("視点つき.kmb");
+    let mut doc = reference_document();
+    let view = kmb_core::NamedView {
+        id: 0,
+        name: "細部の視点".into(),
+        target: [35.0, 25.0, 8.0],
+        yaw: -20.0,
+        pitch: 15.0,
+        roll: 0.0,
+        height: 14.0,
+        perspective: false,
+    };
+    let (tx, id) = kmb_session::edit::save_named_view(&mut doc, view.clone());
+    doc.apply(tx).unwrap();
+    kmb_session::save(&path, &doc).unwrap();
+    let mut ws = Workspace::new(Document::new(), None, reg())
+        .with_kernel_factory(Arc::new(kmb_bundle::kernel));
+    assert!(ws.open_in_tab(&path));
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 900.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    assert!(h.state_mut().apply_named_view(id));
+    h.state_mut().cur.camera.step_turn(0.0);
+    h.state_mut().cur.camera.step_turn(1e6);
+    h.run();
+    let expected = h.state().cur.camera.snapshot(h.state().win.view_rect);
+    assert_eq!(expected.0, view.target.map(|v| v as f32));
+    assert!((expected.3 - view.height as f32).abs() < 1e-3);
+    h.state_mut().new_tab();
+    h.run();
+    h.state_mut().switch_tab(0);
+    for _ in 0..3 {
+        h.run();
+    }
+    let actual = h.state().cur.camera.snapshot(h.state().win.view_rect);
+    assert_eq!(actual, expected);
+    assert_eq!(
+        h.state().document().data().named_views,
+        doc.data().named_views
+    );
+    assert!(!h.state().is_modified());
+    drop(h);
+    std::fs::remove_dir_all(dir).unwrap();
+}
