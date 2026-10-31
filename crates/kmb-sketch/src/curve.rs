@@ -94,8 +94,43 @@ impl Sketch {
     /// 吸着や、接する拘束の向きの予告に使う。曲線でなければ `None`。
     pub fn curve_closest(&self, sol: &Solution, id: EntityId, p: P2) -> Option<(P2, P2, f64)> {
         let s = self.solved_shape(sol, id)?;
-        let (t, d) = s.closest(p);
-        Some((s.at(t), s.tangent(t), d))
+        Some(closest_on_shape(&s, p))
+    }
+
+    /// 自由曲線と線分・円・円弧の交点。解いた形で求め、離れた外形の箱は調べない。
+    /// 曲線どうしの交点は対象にしない。
+    pub fn free_curve_crossings(&self, sol: &Solution) -> Vec<(P2, EntityId, EntityId)> {
+        use crate::geom::Curve;
+        let shapes: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|e| {
+                let shape = self.solved_shape(sol, e.id())?;
+                let bounds = shape_bounds(&shape)?;
+                let curve = match shape {
+                    Shape::Line(a, b) => Curve::Seg(a, b),
+                    Shape::Arc {
+                        c, r, a0, sweep, ..
+                    } => Curve::Arc(c, r, a0, sweep),
+                    other => Curve::Free(Box::new(other)),
+                };
+                Some((e.id(), is_free(e), bounds, curve))
+            })
+            .collect();
+        let mut out = Vec::new();
+        for (i, (a, free_a, ba, ca)) in shapes.iter().enumerate() {
+            for (b, free_b, bb, cb) in &shapes[i + 1..] {
+                if free_a == free_b
+                    || (0..2).any(|k| ba[1][k] + 1e-8 < bb[0][k] || bb[1][k] + 1e-8 < ba[0][k])
+                {
+                    continue;
+                }
+                for p in crate::geom::intersect(ca, cb) {
+                    out.push((p, *a, *b));
+                }
+            }
+        }
+        out
     }
 
     /// 曲線 `id` の端(`at_end` が偽なら始点、真なら終点)での、たどる向きの単位ベクトルと
@@ -109,6 +144,80 @@ impl Sketch {
         let t = if at_end { hi } else { lo };
         Some((s.tangent(t), s.curvature(t)))
     }
+}
+
+/// 曲線を囲む箱。スプラインと有理曲線は制御点の凸包に入り、楕円は軸の成分から囲む。
+pub(crate) fn shape_bounds(shape: &Shape) -> Option<[P2; 2]> {
+    let points = match shape {
+        Shape::Line(a, b) => vec![*a, *b],
+        Shape::Arc { c, r, .. } => vec![[c[0] - r, c[1] - r], [c[0] + r, c[1] + r]],
+        Shape::Ellipse { c, u, v, .. } => {
+            let extent = [u[0].hypot(v[0]), u[1].hypot(v[1])];
+            vec![sub(*c, extent), add(*c, extent)]
+        }
+        Shape::Spline { s, .. } => s.ctrl.clone(),
+        Shape::Conic { p, .. } => p.to_vec(),
+    };
+    let mut bounds = [[f64::INFINITY; 2], [f64::NEG_INFINITY; 2]];
+    for p in points {
+        if p.iter().any(|v| !v.is_finite()) {
+            return None;
+        }
+        for (i, value) in p.into_iter().enumerate() {
+            bounds[0][i] = bounds[0][i].min(value);
+            bounds[1][i] = bounds[1][i].max(value);
+        }
+    }
+    bounds
+        .iter()
+        .flatten()
+        .all(|v| v.is_finite())
+        .then_some(bounds)
+}
+
+/// 折れ線で得たパラメータを、曲線の式の上の距離で詰める。
+/// 接線と点への向きが直角になる所を探し、距離が増える一歩は小さくする。
+pub(crate) fn closest_on_shape(shape: &Shape, p: P2) -> (P2, P2, f64) {
+    let (lo, hi) = shape.domain();
+    let (mut t, _) = shape.closest(p);
+    let distance = |t| len(sub(shape.at(t), p));
+    let mut best = distance(t);
+    for _ in 0..24 {
+        let [at, first, second] = shape.ders(t);
+        let toward = sub(at, p);
+        let derivative = dot(first, first) + dot(toward, second);
+        if derivative.abs() < 1e-300 {
+            break;
+        }
+        let mut step = (-dot(toward, first) / derivative).clamp(-(hi - lo) / 4.0, (hi - lo) / 4.0);
+        let mut next = t;
+        for _ in 0..16 {
+            let trial = if shape.closed() {
+                lo + (t + step - lo).rem_euclid(hi - lo)
+            } else {
+                (t + step).clamp(lo, hi)
+            };
+            if distance(trial) <= best {
+                next = trial;
+                break;
+            }
+            step *= 0.5;
+        }
+        if next == t {
+            break;
+        }
+        t = next;
+        best = distance(t);
+    }
+    if !shape.closed() {
+        for end in [lo, hi] {
+            if distance(end) < best {
+                t = end;
+                best = distance(t);
+            }
+        }
+    }
+    (shape.at(t), shape.tangent(t), best)
 }
 
 /// 短軸の端の位置: 中心 `center` と長軸の端 `major` の楕円で、点 `p` を通る大きさの短軸
