@@ -349,3 +349,86 @@ fn rows_out_of_view_are_not_built_but_scroll_in_and_can_be_edited() {
     h.run();
     assert_eq!(param_expr(&h, "p119"), "3 mm");
 }
+
+#[test]
+fn mcp_keys_open_the_empty_expression_list_in_the_table_and_feature_panel() {
+    use serde_json::json;
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    fn app(
+        h: &mut Harness<'static, Workspace>,
+        dir: &std::path::Path,
+        tool: &str,
+        args: serde_json::Value,
+    ) {
+        let (dir, tool) = (dir.to_owned(), tool.to_owned());
+        let request = std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args));
+        let start = std::time::Instant::now();
+        while !request.is_finished() {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            assert!(start.elapsed().as_secs() < 20, "画面の要求が時間切れ");
+        }
+        let result = request.join().unwrap().unwrap();
+        assert_eq!(result["ok"], true, "{result}");
+        h.run_steps(12);
+    }
+    for table in [true, false] {
+        let part = kmb_samples::reference_part();
+        let plate = part.plate;
+        let dir = Scratch(
+            std::env::temp_dir().join(format!("empty-completion-{}-{table}", std::process::id())),
+        );
+        let mut ws =
+            Workspace::new(part.doc, None, kmb_bundle::modules()).with_data_dir(dir.0.clone());
+        ws.layout_mut().ai_live = true;
+        ws.win.show_params = table;
+        if !table {
+            ws.open_edit(plate);
+        }
+        let mut h = harness(ws);
+        h.run();
+        let target = if table { "label:式#1" } else { "label:距離" };
+        let before = h.state().document().to_json();
+        app(
+            &mut h,
+            &dir.0,
+            "ui_type",
+            json!({"target":target,"text":"","commit":"none"}),
+        );
+        app(&mut h, &dir.0, "ui_key", json!({"keys":"Down"}));
+        app(
+            &mut h,
+            &dir.0,
+            "ui_expect",
+            json!({"target":"↑↓ で選び Tab・Enter で入れる。Esc で閉じる"}),
+        );
+        assert_eq!(
+            before,
+            h.state().document().to_json(),
+            "候補を見るだけでは文書を変えない"
+        );
+        assert!(
+            h.query_all_by_label_contains("3.4 mm")
+                .any(|n| n.accesskit_node().role() != egui::accesskit::Role::TextInput),
+            "値と単位を添える"
+        );
+        app(&mut h, &dir.0, "ui_key", json!({"keys":"Enter"}));
+        app(&mut h, &dir.0, "ui_key", json!({"keys":"Tab"}));
+        if table {
+            assert_eq!(param_expr(&h, "width"), "corner_hole");
+        } else {
+            assert_eq!(
+                h.state().document().data().feature(plate).unwrap().data["distance"],
+                "corner_hole"
+            );
+        }
+        h.state_mut().live_disconnect();
+        drop(h);
+        drop(dir);
+    }
+}
