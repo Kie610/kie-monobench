@@ -94,6 +94,8 @@ pub struct Controls {
     pub left: LeftDrag,
     /// マウスの下の面を色付けしない(辺を選ぶ時。面全体が色付くと辺が見えにくい)
     pub no_face_hover: bool,
+    /// マウスの下の面が属するボディの、全部の面と稜線を強調する。
+    pub body_hover: bool,
     /// 空の文書の基準面の目安を描かない(スケッチを描く平面を選ぶ板と重ならないように)
     pub no_guide_planes: bool,
     /// 左ドラッグで範囲を囲まない(2D スケッチが点を引く・自分の範囲で選ぶのに使う)
