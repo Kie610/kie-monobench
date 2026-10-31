@@ -41,6 +41,8 @@ pub mod action {
     pub const INSERT_LINK: ActionRole = ActionRole("insert_link");
     /// DXF のファイルを、選んでいるスケッチへ挿入する(スケッチの編集器の「挿入」が使う)
     pub const INSERT_DXF: ActionRole = ActionRole("insert_dxf");
+    /// 作業軸をスケッチへ投影する。引数 feature(投影先)・axis(元の作業軸)・link(リンクを保つか)。
+    pub const PROJECT_DATUM_AXIS: ActionRole = ActionRole("project_datum_axis");
     /// SVG のファイルを、選んでいるスケッチへ挿入する(スケッチの編集器の「挿入」が使う)
     pub const INSERT_SVG: ActionRole = ActionRole("insert_svg");
     /// 選んでいるスケッチを DXF で保存する(スケッチの編集器の右クリックが使う)
@@ -91,6 +93,7 @@ pub mod action {
         SIMULATE,
         INSERT_LINK,
         INSERT_DXF,
+        PROJECT_DATUM_AXIS,
         INSERT_SVG,
         EXPORT_SKETCH_DXF,
         TEXT_AT_POINT,

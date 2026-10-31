@@ -2,3 +2,6 @@
 ### Translations for zh-Hant (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-cad-sketch-project-axis = Project Datum Axis
+# action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis

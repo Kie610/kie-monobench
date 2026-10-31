@@ -89,6 +89,7 @@ cad.sketch.export_svg	kmb-io-svg
 cad.sketch.find	kmb-sketch
 cad.sketch.insert_dxf	kmb-io-dxf
 cad.sketch.insert_svg	kmb-io-svg
+cad.sketch.project_axis	kmb-sketch
 cad.sketch.redefine_plane	kmb-sketch
 cad.sketch3d@1	kmb-sketch-3d
 cad.sketch@1	kmb-sketch

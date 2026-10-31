@@ -700,7 +700,11 @@ impl Workspace {
                             self.start_action_with(&a, args["args"].clone());
                         }
                         Some(a) => {
-                            self.run_action(&a);
+                            if args["args"].is_object() {
+                                self.run_action_args(&a, args["args"].clone());
+                            } else {
+                                self.run_action(&a);
+                            }
                         }
                         None => {}
                     }

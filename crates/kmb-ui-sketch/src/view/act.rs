@@ -250,6 +250,22 @@ pub(super) fn act(
                     .map(|h| h.entity)
                     .collect();
                 let part = hits.iter().copied().find(|id| aug.kind(*id).is_some());
+                let axis = part
+                    .and_then(|id| sketch.projections.iter().find(|p| p.entity == id))
+                    .and_then(|p| p.source.datum_axis());
+                if editor.project_pick == ProjectPick::Parts
+                    && let Some(axis) = axis
+                {
+                    out.to_project = refs
+                        .iter()
+                        .filter(|r| r.source.datum_axis() == Some(axis))
+                        .cloned()
+                        .collect();
+                    if response.clicked() {
+                        editor.project_axis = Some((axis, editor.project_link));
+                    }
+                    return out;
+                }
                 let feature = part.into_iter().chain(hits.iter().copied()).find_map(|id| {
                     sketch
                         .projections

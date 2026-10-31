@@ -88,6 +88,7 @@ fn kind_of(source: &ProjectionSource) -> Kind {
         | ProjectionSource::Section { .. }
         | ProjectionSource::Silhouette { .. } => Kind::Edge,
         ProjectionSource::Sketch { .. } => Kind::SketchPoint,
+        ProjectionSource::DatumAxis { .. } => Kind::Edge,
     }
 }
 
