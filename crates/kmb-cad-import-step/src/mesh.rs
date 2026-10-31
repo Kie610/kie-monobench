@@ -152,15 +152,15 @@ pub fn display_mesh(g: &Geometry, mm: f64, crease: f64) -> Result<Mesh, String> 
     let mut parents = (0..g.triangles.len() * 3).collect::<Vec<_>>();
     let cos = crease.cos();
     for sides in edges.values() {
-        if let [(a, ae), (b, be)] = sides.as_slice() {
-            if k::dot(k::normalize(normals[*a]), k::normalize(normals[*b])) + 1e-12 >= cos {
-                for ac in [*ae, (*ae + 1) % 3] {
-                    for bc in [*be, (*be + 1) % 3] {
-                        if g.triangles[*a][ac] == g.triangles[*b][bc] {
-                            let x = root(&mut parents, a * 3 + ac);
-                            let y = root(&mut parents, b * 3 + bc);
-                            parents[y] = x;
-                        }
+        if let [(a, ae), (b, be)] = sides.as_slice()
+            && k::dot(k::normalize(normals[*a]), k::normalize(normals[*b])) + 1e-12 >= cos
+        {
+            for ac in [*ae, (*ae + 1) % 3] {
+                for bc in [*be, (*be + 1) % 3] {
+                    if g.triangles[*a][ac] == g.triangles[*b][bc] {
+                        let x = root(&mut parents, a * 3 + ac);
+                        let y = root(&mut parents, b * 3 + bc);
+                        parents[y] = x;
                     }
                 }
             }
