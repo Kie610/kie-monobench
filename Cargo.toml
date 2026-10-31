@@ -35,6 +35,7 @@ kmb-ui-view3d = { path = "crates/kmb-ui-view3d" }
 kmb-measure = { path = "crates/kmb-measure" }
 kmb-fea = { path = "crates/kmb-fea" }
 kmb-flow = { path = "crates/kmb-flow" }
+kmb-acoustics = { path = "crates/kmb-acoustics" }
 kmb-study = { path = "crates/kmb-study" }
 kmb-render = { path = "crates/kmb-render" }
 kmb-kernel-truck = { path = "crates/kmb-kernel-truck" }

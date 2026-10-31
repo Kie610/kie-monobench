@@ -2286,6 +2286,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-acoustics"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-app"
 version = "0.2.0"
 dependencies = [
@@ -2330,6 +2340,7 @@ dependencies = [
 name = "kmb-bundle"
 version = "0.2.0"
 dependencies = [
+ "kmb-acoustics",
  "kmb-asm",
  "kmb-cad",
  "kmb-cad-boolean",
