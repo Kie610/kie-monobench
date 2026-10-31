@@ -17,6 +17,7 @@ pub(super) fn previews(
     hover: &Option<Hover>,
     hud_on: bool,
     selected_color: Color32,
+    prompt_box: Option<Rect>,
 ) {
     // 描画中の線・円の見本と、寸法の欄(固定した値に合わせた位置で描く)
     if let (Some(start), Some(cur)) = (editor.pending, cursor) {
@@ -263,6 +264,10 @@ pub(super) fn previews(
         }
         if hud_on {
             let mut last: Option<Rect> = None;
+            let mut placed: Vec<Rect> = prompt_box.into_iter().collect();
+            let pointer = ui
+                .input(|i| i.pointer.latest_pos())
+                .filter(|_| !editor.hud.pinned());
             for (k, (f, (at, live))) in editor.hud.fields.iter().zip(spots).enumerate() {
                 last = Some(crate::hud::draw_field(
                     painter,
@@ -272,7 +277,9 @@ pub(super) fn previews(
                     k == editor.hud.active,
                     l,
                     selected_color,
+                    pointer.map(|p| (p, placed.as_slice())),
                 ));
+                placed.push(last.unwrap());
             }
             // 値を打ったら、欄の脇に確定の ✓ を出す(Enter と同じ)
             if let Some(r) = last.filter(|_| editor.hud.pinned()) {

@@ -271,6 +271,7 @@ impl Hud {
 }
 
 /// 欄の札を描く。`live` はマウスの位置で測った値(固定していない欄に出す)。札の場所を返す。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_field(
     painter: &egui::Painter,
     at: Pos2,
@@ -279,6 +280,7 @@ pub(crate) fn draw_field(
     active: bool,
     look: &kmb_ui::theme::Look,
     accent: Color32,
+    avoid: Option<(Pos2, &[Rect])>,
 ) -> Rect {
     let shown = if f.text.is_empty() {
         live.map_or_else(|| "—".to_string(), |v| fmt(v, f.unit))
@@ -295,7 +297,7 @@ pub(crate) fn draw_field(
     let g = painter.layout_no_wrap(shown, kmb_ui::theme::prop(12.5), ink);
     let lock_w = if f.locked { 14.0 } else { 0.0 };
     let size = g.size() + Vec2::new(14.0 + lock_w + caret, 6.0);
-    let r = Rect::from_center_size(at, size);
+    let r = field_rect(Rect::from_center_size(at, size), painter.clip_rect(), avoid);
     let (fill, stroke) = if active {
         (look.pal.paper, Stroke::new(1.6, accent))
     } else {
@@ -326,6 +328,58 @@ pub(crate) fn draw_field(
     }
     painter.galley(text_at, g, ink);
     r
+}
+
+/// 入力前の札は矢印の占める範囲と、同時に描く札を避ける。入力中は形の脇の位置を使う。
+fn field_rect(r: Rect, bounds: Rect, avoid: Option<(Pos2, &[Rect])>) -> Rect {
+    let Some((pointer, placed)) = avoid else {
+        return r;
+    };
+    let bounds = bounds.shrink(2.0);
+    let size = r.size();
+    let clamp = |r: Rect| {
+        Rect::from_min_size(
+            Pos2::new(
+                r.left()
+                    .clamp(bounds.left(), (bounds.right() - size.x).max(bounds.left())),
+                r.top()
+                    .clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top())),
+            ),
+            size,
+        )
+    };
+    // OS の矢印は先端から右下へ延びる。24 px と周りの 4 px を空ける。
+    let arrow = Rect::from_min_size(pointer, Vec2::splat(24.0)).expand(4.0);
+    let clear =
+        |r: Rect| !r.intersects(arrow) && placed.iter().all(|p| !r.intersects(p.expand(2.0)));
+    let natural = clamp(r);
+    if clear(natural) {
+        return natural;
+    }
+    let right = arrow.right() + 2.0;
+    let below = arrow.bottom() + 2.0;
+    let left = arrow.left() - size.x - 2.0;
+    let above = arrow.top() - size.y - 2.0;
+    let corners = [
+        Pos2::new(right, below),
+        Pos2::new(left, below),
+        Pos2::new(right, above),
+        Pos2::new(left, above),
+    ];
+    let after_labels = placed.iter().flat_map(|p| {
+        [
+            Pos2::new(right, p.bottom() + 4.0),
+            Pos2::new(left, p.bottom() + 4.0),
+            Pos2::new(right, p.top() - size.y - 4.0),
+            Pos2::new(left, p.top() - size.y - 4.0),
+        ]
+    });
+    std::iter::once(corners[0])
+        .chain(after_labels)
+        .chain(corners.into_iter().skip(1))
+        .map(|p| clamp(Rect::from_min_size(p, size)))
+        .find(|r| bounds.contains_rect(*r) && clear(*r))
+        .unwrap_or(natural)
 }
 
 /// 欄に出す値。
@@ -426,6 +480,22 @@ mod tests {
             h.keys(&[key(egui::Key::Enter, false)]),
             Key::EnterEmpty,
             "何も打たない Enter"
+        );
+    }
+}
+
+#[cfg(test)]
+mod field_placement_tests {
+    use super::*;
+
+    #[test]
+    fn typing_keeps_the_dimension_label_at_its_original_position() {
+        let label = Rect::from_min_size(Pos2::new(90.0, 90.0), Vec2::new(40.0, 20.0));
+        let view = Rect::from_min_max(Pos2::ZERO, Pos2::new(200.0, 150.0));
+        assert_eq!(field_rect(label, view, None), label);
+        assert_ne!(
+            field_rect(label, view, Some((Pos2::new(95.0, 90.0), &[]))),
+            label
         );
     }
 }
