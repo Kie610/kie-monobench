@@ -114,7 +114,7 @@ pub fn to_dxf(sketch: &Sketch, sol: &Solution, opts: &DxfOptions) -> Result<Stri
     for p in &points {
         o.point(&opts.layer, *p);
     }
-    crate::r2000::upgrade(&o.finish())
+    crate::r2000::upgrade(&o.finish(), lo, hi)
 }
 
 fn segment_finite(s: &Segment) -> bool {
