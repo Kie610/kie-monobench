@@ -27,6 +27,47 @@ pub use threads::{THREAD_TILT, thread_bands};
 /// 選んだ面。
 pub type Pick = kmb_core::FacePick;
 
+/// マウスの下で強調する物。選択する面の参照とは別に、ボディ全体も表せる。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hover {
+    Face(Pick),
+    Body(FeatureId),
+}
+
+impl std::hash::Hash for Hover {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Face(p) => (p.feature, &p.face).hash(state),
+            Self::Body(id) => id.hash(state),
+        }
+    }
+}
+
+impl Hover {
+    pub(crate) fn matches_face(&self, feature: FeatureId, face: &str) -> bool {
+        match self {
+            Self::Face(p) => p.feature == feature && p.face == face,
+            Self::Body(id) => *id == feature,
+        }
+    }
+}
+
+/// ボディ全体のホバーは稜線も同じ役の色にする。面のホバーは稜線を変えない。
+pub(crate) fn hover_edge_color(
+    hover: Option<&Hover>,
+    feature: FeatureId,
+    body: Color32,
+    colors: &Colors,
+) -> Color32 {
+    let tint = if matches!(hover, Some(Hover::Body(id)) if *id == feature) {
+        colors.hover
+    } else {
+        body
+    };
+    line_color(tint, colors.dark)
+}
+
 /// 設定の回し方(拘束オービットかフリーオービット)で回す。
 fn orbit(cam: &mut Camera, controls: Controls, d: Vec2) {
     if controls.free_orbit {
@@ -222,7 +263,14 @@ pub fn view3d(
     let hover = ev
         .hover
         .filter(|_| !controls.no_face_hover)
-        .and_then(|p| pick_at(scene, cam, rect, p));
+        .and_then(|p| pick_at(scene, cam, rect, p))
+        .map(|p| {
+            if controls.body_hover {
+                Hover::Body(p.feature)
+            } else {
+                Hover::Face(p)
+            }
+        });
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, crate::corner(0.0), colors.background);
@@ -518,7 +566,7 @@ fn paint_scene(
     cam: &Camera,
     scene: &Scene,
     picked: &[Pick],
-    hover: &Option<Pick>,
+    hover: &Option<Hover>,
     overlay: &kmb_core::Overlay,
     ghosts: &[Ghost],
     behind: &Behind,
@@ -609,10 +657,7 @@ fn paint_scene(
             .iter()
             .map(|p| (p.feature, p.face.clone()))
             .for_each(|k| k.hash(&mut h));
-        hover
-            .as_ref()
-            .map(|p| (p.feature, p.face.clone()))
-            .hash(&mut h);
+        hover.hash(&mut h);
         [
             colors.background,
             colors.background_low,

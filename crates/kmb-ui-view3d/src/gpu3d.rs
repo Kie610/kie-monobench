@@ -10,7 +10,7 @@
 //! PC によらず同じ辺を拾うため、GPU の有無にかかわらず CPU で選ぶ。
 
 use crate::Shading;
-use crate::view3d::{Behind, Camera, Colors, Ghost, GhostLayer, Guides, Pick, Scene};
+use crate::view3d::{Behind, Camera, Colors, Ghost, GhostLayer, Guides, Hover, Pick, Scene};
 use egui::Rect;
 use egui_wgpu::wgpu;
 use std::collections::HashMap;
@@ -507,7 +507,7 @@ impl Gpu {
         size: [usize; 2],
         ppp: f32,
         picked: &[Pick],
-        hover: Option<&Pick>,
+        hover: Option<&Hover>,
         colors: &Colors,
         shading: Shading,
         guides: Guides,
@@ -585,8 +585,13 @@ impl Gpu {
         // 稜線はボディごとの色(ボディの色から作る。CPU の描画と同じ)
         let ec: Vec<[u8; 4]> = (0..scene.bodies.len())
             .map(|bi| {
-                crate::view3d::line_color(scene.body_color(bi, colors), colors.dark)
-                    .to_srgba_unmultiplied()
+                crate::view3d::hover_edge_color(
+                    hover,
+                    scene.bodies[bi].feature,
+                    scene.body_color(bi, colors),
+                    colors,
+                )
+                .to_srgba_unmultiplied()
             })
             .collect();
         if sb.edge_color != ec
@@ -1581,7 +1586,7 @@ fn normalize3(a: [f32; 3]) -> [f32; 3] {
 fn color_key(
     scene: &Scene,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
 ) -> u64 {
@@ -1603,7 +1608,7 @@ fn color_key(
     for p in picked {
         (p.feature, &p.face).hash(&mut h);
     }
-    hover.map(|p| (p.feature, &p.face)).hash(&mut h);
+    hover.hash(&mut h);
     [
         colors.body,
         colors.picked,
@@ -1629,7 +1634,7 @@ fn color_key(
 fn face_colors(
     scene: &Scene,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
 ) -> Vec<[u8; 4]> {
@@ -1661,7 +1666,7 @@ fn face_colors(
                 let is = |p: &Pick| p.feature == b.feature && p.face == *name;
                 let c = if picked.iter().any(is) {
                     colors.picked
-                } else if hover.is_some_and(is) {
+                } else if hover.is_some_and(|h| h.matches_face(b.feature, name)) {
                     colors.hover
                 } else if shading.faces() {
                     match b.colors.get(k).copied().flatten() {
@@ -1905,6 +1910,68 @@ const MODE: &str = "kmb-ui::gpu3d::mode";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn body_hover_colors_all_its_faces_and_edges_without_changing_other_bodies() {
+        use egui::Color32;
+        use kmb_core::{FeatureId, Mesh};
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.], [0., 0., 1.]],
+            normals: vec![[0., 0., 1.]; 4],
+            triangles: vec![[0, 1, 2], [0, 3, 1]],
+            triangle_faces: vec![0, 1],
+            face_names: vec!["top".into(), "front".into()],
+            edges: vec![],
+        };
+        let mut scene = Scene::default();
+        let (a, b) = (FeatureId(1), FeatureId(2));
+        scene.set(&[], vec![(a, mesh.clone()), (b, mesh)]);
+        let colors = Colors::from_look(crate::view3d::Palette {
+            dark: true,
+            canvas: Color32::BLACK,
+            ink: Color32::WHITE,
+            ink2: Color32::WHITE,
+            ink3: Color32::GRAY,
+            err: Color32::RED,
+            warn: Color32::YELLOW,
+            design: Color32::GREEN,
+            cam: Color32::GREEN,
+            shade3: Color32::GRAY,
+            accent: Color32::BLUE,
+            inks: crate::Inks::DARK,
+        });
+        let plain = face_colors(&scene, &[], None, &colors, Shading::ShadedEdges);
+        let body = Hover::Body(a);
+        let all = face_colors(&scene, &[], Some(&body), &colors, Shading::ShadedEdges);
+        let hover = colors.hover.to_srgba_unmultiplied();
+        assert!(all[..6].iter().all(|c| *c == hover));
+        assert_eq!(all[6..], plain[6..], "別のボディは変えない");
+        let face = Pick {
+            feature: a,
+            face: "top".into(),
+        };
+        let single = Hover::Face(face.clone());
+        let one = face_colors(&scene, &[], Some(&single), &colors, Shading::ShadedEdges);
+        assert!(one[..3].iter().all(|c| *c == hover));
+        assert_eq!(one[3..], plain[3..], "面のホバーは1面だけ");
+        let selected = face_colors(&scene, &[face], Some(&body), &colors, Shading::ShadedEdges);
+        assert!(
+            selected[..3]
+                .iter()
+                .all(|c| *c == colors.picked.to_srgba_unmultiplied())
+        );
+        assert!(selected[3..6].iter().all(|c| *c == hover));
+        let edge = |hover, id, bi| {
+            crate::view3d::hover_edge_color(hover, id, scene.body_color(bi, &colors), &colors)
+        };
+        assert_ne!(edge(Some(&body), a, 0), edge(None, a, 0));
+        assert_eq!(edge(Some(&body), b, 1), edge(None, b, 1));
+        assert_eq!(edge(Some(&single), a, 0), edge(None, a, 0));
+        assert_ne!(
+            color_key(&scene, &[], Some(&body), &colors, Shading::ShadedEdges),
+            color_key(&scene, &[], Some(&single), &colors, Shading::ShadedEdges)
+        );
+    }
 
     /// GPU の写し方が CPU の [`Camera::project`] と同じ画面の位置になる(平行・透視)。
     #[test]

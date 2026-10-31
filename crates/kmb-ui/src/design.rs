@@ -22,6 +22,8 @@ pub(crate) mod value_box_ui;
 pub(crate) mod view_ui;
 
 #[cfg(test)]
+mod body_hover_tests;
+#[cfg(test)]
 mod browser_tests;
 #[cfg(test)]
 mod canvas_tests;
