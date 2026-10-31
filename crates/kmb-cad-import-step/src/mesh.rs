@@ -3,7 +3,7 @@ use kmb_cad::{Exprs, angle, expr_refs, kernel_err, parse, rename, solid};
 use kmb_core::kernel::{self as k, Mesh};
 use kmb_core::{
     Action, Arg, Context, Edit, EvalCtx, EvalError, Extension, Feature, Field, Input, InputRef,
-    Outcome, Outputs, Place, Problem, ProblemKind, Registry, Value,
+    Outcome, Outputs, Problem, ProblemKind, Registry, Value,
 };
 use kmb_format::mesh::{self as format, Geometry};
 use serde::{Deserialize, Serialize};
@@ -221,7 +221,6 @@ impl Extension for ImportMeshCommands {
                 .role(kmb_interchange::role::action::IMPORT_MESH)
                 .menu("挿入")
                 .icon("mesh-import")
-                .at(&[Place::Toolbar])
                 .aliases("網 よみこみ import mesh stl 3mf")
                 .hint("STL・3MF の三角形の網を読み込み、表示・計測・加工に使う")
                 .args(vec![

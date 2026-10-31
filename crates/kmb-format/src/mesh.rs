@@ -73,7 +73,10 @@ fn key(p: [f32; 3]) -> [u32; 3] {
 
 /// 頂点番号の分かれに依存せず、位置が同じ辺の使用回数と向きを調べる。
 /// 戻り値は(閉じない辺の数、符号つき体積、表面積、重心)。
-pub fn properties(g: &Geometry) -> Result<(usize, f64, f64, Option<[f64; 3]>), String> {
+pub type MeshProperties = (usize, f64, f64, Option<[f64; 3]>);
+
+/// 網の辺と量を位置から調べる。
+pub fn properties(g: &Geometry) -> Result<MeshProperties, String> {
     check_count(g.triangles.len())?;
     if g.triangles.is_empty() || g.vertices.iter().flatten().any(|x| !x.is_finite()) {
         return Err("網の頂点か三角形が不正です".into());
@@ -195,9 +198,9 @@ pub fn read_stl(bytes: &[u8], unit: Unit) -> Result<Vec<Object>, String> {
     {
         check_count(n)?;
         let mut geometry = Geometry::default();
-        for facet in bytes[84..].chunks_exact(50) {
+        for facet in bytes[84..].as_chunks::<50>().0 {
             let base = geometry.vertices.len() as u32;
-            for p in facet[12..48].chunks_exact(12) {
+            for p in facet[12..48].as_chunks::<12>().0 {
                 geometry.vertices.push(std::array::from_fn(|i| {
                     f32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().expect("4 bytes"))
                 }));
@@ -326,7 +329,9 @@ pub fn decode(text: &str) -> Result<Geometry, String> {
         return Err("埋め込んだ網の大きさが合いません".into());
     }
     let vertices = b[16..16 + n * 12]
-        .chunks_exact(12)
+        .as_chunks::<12>()
+        .0
+        .iter()
         .map(|p| {
             std::array::from_fn(|i| {
                 f32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().expect("4 bytes"))
@@ -334,7 +339,9 @@ pub fn decode(text: &str) -> Result<Geometry, String> {
         })
         .collect();
     let triangles = b[16 + n * 12..]
-        .chunks_exact(12)
+        .as_chunks::<12>()
+        .0
+        .iter()
         .map(|p| {
             std::array::from_fn(|i| {
                 u32::from_le_bytes(p[i * 4..i * 4 + 4].try_into().expect("4 bytes"))

@@ -11,21 +11,10 @@ use std::{
 };
 
 fn kernel() -> Arc<dyn Kernel> {
-    if std::env::var("JC_KERNEL").as_deref() == Ok("truck") {
-        Arc::new(kmb_kernel_truck::TruckKernel::new())
-    } else {
-        Arc::new(
-            kmb_kernel_smlib::SmlibKernel::new()
-                .with_step_import(kmb_kernel_truck::TruckKernel::new()),
-        )
-    }
+    kmb_bundle::kernel()
 }
 fn registry() -> kmb_core::Registry {
-    let mut r = crate::tests::registry();
-    kmb_cam_tool::register(&mut r);
-    kmb_cam_setup::register(&mut r);
-    kmb_strategy_face::register(&mut r);
-    r
+    kmb_bundle::registry()
 }
 fn shape(r: &kmb_core::RecomputeReport, id: FeatureId) -> kmb_core::ShapeHandle {
     let Some(FeatureStatus::Ok { outputs, .. }) = r.feature(id) else {
@@ -283,7 +272,6 @@ fn an_imported_mesh_can_be_the_model_of_a_machining_setup() {
     let face = data.feature(reference.face).unwrap();
     let mut sd = setup.data.clone();
     sd["body"] = json!(ids[0]);
-    sd["machine"] = json!(kmb_post::machines::GENERIC_GRBL);
     let mut fd = face.data.clone();
     fd["setup"] = json!({"$new":1});
     fd["tools"] = json!({"$new":0});
@@ -311,13 +299,20 @@ fn an_imported_mesh_can_be_the_model_of_a_machining_setup() {
         .unwrap();
     let r = doc.recompute(&reg, k.as_ref());
     crate::tests::assert_ok(&r);
-    let Some(FeatureStatus::Ok { outputs, .. }) = r.feature(ids[2]) else {
-        panic!()
+    let modules = kmb_bundle::modules();
+    let cx = Context {
+        selected: Some(ids[1]),
+        ..Context::new(doc.data(), &r, &reg, &k)
     };
-    let (_, path) = outputs
-        .values()
-        .find_map(kmb_cam_setup::toolpath_of)
-        .unwrap();
-    assert!(!path.moves.is_empty());
+    let action = modules
+        .extensions
+        .actions(&cx)
+        .into_iter()
+        .find(|a| a.role == Some(kmb_interchange::role::action::EXPORT_GCODE))
+        .expect("G-code の役割");
+    let Outcome::File { contents, .. } = modules.extensions.run(&action.id, &cx).unwrap() else {
+        panic!("G-code のファイル")
+    };
+    assert!(String::from_utf8(contents).unwrap().contains("G21"));
     std::fs::remove_dir_all(folder).unwrap();
 }

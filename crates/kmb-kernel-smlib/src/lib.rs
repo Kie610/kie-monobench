@@ -1042,7 +1042,7 @@ impl Kernel for SmlibKernel {
         to: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
-        self.require_solid(shape, "面の縁のままの押し出し")?;
+        self.require_brep(shape, "面の縁のままの押し出し")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Unsupported(
                 "網のボディは面の縁のままの押し出しに使えません(三角形の網で、面と辺の形を持たないため)".into(),
