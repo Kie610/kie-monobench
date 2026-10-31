@@ -89,7 +89,7 @@ fn check_volume(op: BooleanOp, target: f64, tool: f64, result: f64) -> Result<()
 struct Store {
     next: u64,
     bodies: HashMap<u64, Body>,
-    /// STEP から読み込んだ形(網だけを持つ)
+    /// 読み込んだ網のボディ。問い合わせでは Arc の参照だけを複製する
     imported: HashMap<u64, Arc<import::Imported>>,
     /// 作った網(形と許容差ごと)。形は作った後に変わらないので、同じ網を加工ごとに作り直さない
     meshes: HashMap<(u64, u64), Mesh>,
@@ -144,7 +144,7 @@ impl TruckKernel {
             return Err(KernelError::Failed(why.into()));
         }
         if let Some(im) = self.imported(shape) {
-            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(U12 の立てる。回すと
+            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(回すと
             // 動かすだけなので、体積と面積はそのまま)
             let moved = transform_imported(&im, m, suffix)?;
             let mut s = self.lock();
@@ -174,6 +174,15 @@ impl TruckKernel {
 
     fn imported(&self, h: ShapeHandle) -> Option<Arc<import::Imported>> {
         self.lock().imported.get(&h.0).cloned()
+    }
+
+    fn require_editable(&self, h: ShapeHandle, operation: &str) -> Result<(), KernelError> {
+        if self.imported(h).is_some() {
+            return Err(KernelError::Failed(format!(
+                "網のボディは{operation}に使えません(三角形の網で、面と辺の形を持たないため)"
+            )));
+        }
+        Ok(())
     }
 
     fn put(&self, body: Body) -> ShapeHandle {
@@ -687,6 +696,7 @@ impl Kernel for TruckKernel {
         _to: f64,
         _tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "面の縁のままの押し出し")?;
         self.get(shape)?;
         Err(KernelError::Unsupported("面の縁のままの押し出し".into()))
     }
@@ -696,6 +706,7 @@ impl Kernel for TruckKernel {
         _blends: &[k::EdgeBlend],
         _tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "辺の丸め")?;
         self.get(shape)?;
         Err(KernelError::Unsupported("辺の丸め".into()))
     }
@@ -706,6 +717,7 @@ impl Kernel for TruckKernel {
         _thickness: f64,
         _tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "シェル")?;
         self.get(shape)?;
         Err(KernelError::Unsupported("シェル".into()))
     }
@@ -716,6 +728,7 @@ impl Kernel for TruckKernel {
         _distance: f64,
         _tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "面のオフセット")?;
         self.get(shape)?;
         Err(KernelError::Unsupported("面のオフセット".into()))
     }
@@ -869,6 +882,8 @@ impl Kernel for TruckKernel {
         target: ShapeHandle,
         tool: ShapeHandle,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(target, "足し引き")?;
+        self.require_editable(tool, "足し引き")?;
         let target = self.get(target)?;
         let tool = self.get(tool)?;
         let body = guard("ブーリアン", || {

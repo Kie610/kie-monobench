@@ -368,7 +368,7 @@ fn order_by_position(mut idx: Vec<usize>, at: &dyn Fn(usize) -> P3, axis: usize)
     out
 }
 
-/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。
+/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。網は閉じている時だけ体積を持つ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BodyKind {
@@ -416,7 +416,7 @@ pub trait Kernel: Send + Sync {
         Err(KernelError::Unsupported("網のボディ".into()))
     }
 
-    /// 厚みのある立体か、厚みの無い面のボディか。
+    /// 厚みのある立体・厚みの無い面・三角形の網のボディの区分。
     fn body_kind(&self, shape: ShapeHandle) -> Result<BodyKind, KernelError> {
         let _ = shape;
         Ok(BodyKind::Solid)

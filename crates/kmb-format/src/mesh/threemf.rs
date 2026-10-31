@@ -243,6 +243,30 @@ struct Package {
     models: BTreeMap<String, Node>,
     skipped: BTreeMap<String, usize>,
 }
+
+fn note_extensions(n: &Node, out: &mut BTreeMap<String, usize>) {
+    const CORE: &[&str] = &[
+        "model",
+        "resources",
+        "object",
+        "metadata",
+        "mesh",
+        "vertices",
+        "vertex",
+        "triangles",
+        "triangle",
+        "components",
+        "component",
+        "build",
+        "item",
+    ];
+    if !CORE.contains(&n.name.as_str()) {
+        *out.entry(n.name.clone()).or_default() += 1;
+    }
+    for child in &n.children {
+        note_extensions(child, out);
+    }
+}
 impl Package {
     fn object(&self, path: &str, id: &str) -> Result<&Node, String> {
         self.models
@@ -268,6 +292,11 @@ impl Package {
         if kind != "model" {
             notes.insert(format!("3MF の物の種類 {kind} は読みませんでした"));
         } else if let Some(mesh) = node.child("mesh") {
+            if mesh.child("triangles").is_none() && mesh.child("beamlattice").is_some() {
+                notes.insert("3MF の beamlattice の物は読みませんでした".into());
+                seen.remove(&(path.into(), id.into()));
+                return Ok(());
+            }
             let base = g.vertices.len() as u32;
             let verts = mesh
                 .child("vertices")
@@ -382,6 +411,7 @@ pub fn read_3mf(bytes: &[u8]) -> Result<Vec<Object>, String> {
                 return Err("3MF の model の根が違います".into());
             }
             unit(&n)?;
+            note_extensions(&n, &mut package.skipped);
             if let Some(resources) = n.child("resources") {
                 let mut ids = BTreeSet::new();
                 for r in &resources.children {
@@ -400,9 +430,6 @@ pub fn read_3mf(bytes: &[u8]) -> Result<Vec<Object>, String> {
                                 .entry(format!("物の種類 {kind}"))
                                 .or_default() += 1;
                         }
-                    }
-                    if r.name != "object" {
-                        *package.skipped.entry(r.name.clone()).or_default() += 1;
                     }
                 }
             }
@@ -461,7 +488,15 @@ pub fn read_3mf(bytes: &[u8]) -> Result<Vec<Object>, String> {
         }
     }
     if out.is_empty() {
-        return Err("3MF に読み込める三角形の網がありません".into());
+        return Err(format!(
+            "3MF に読み込める三角形の網がありません(読まない種類: {})",
+            package
+                .skipped
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("、")
+        ));
     }
     Ok(out)
 }

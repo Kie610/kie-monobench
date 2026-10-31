@@ -11,7 +11,21 @@ use std::{
 };
 
 fn kernel() -> Arc<dyn Kernel> {
-    kmb_bundle::kernel()
+    if std::env::var("JC_KERNEL").as_deref() == Ok("truck") {
+        Arc::new(kmb_kernel_truck::TruckKernel::new())
+    } else {
+        Arc::new(
+            kmb_kernel_smlib::SmlibKernel::new()
+                .with_step_import(kmb_kernel_truck::TruckKernel::new()),
+        )
+    }
+}
+fn registry() -> kmb_core::Registry {
+    let mut r = crate::tests::registry();
+    kmb_cam_tool::register(&mut r);
+    kmb_cam_setup::register(&mut r);
+    kmb_strategy_face::register(&mut r);
+    r
 }
 fn shape(r: &kmb_core::RecomputeReport, id: FeatureId) -> kmb_core::ShapeHandle {
     let Some(FeatureStatus::Ok { outputs, .. }) = r.feature(id) else {
@@ -33,7 +47,7 @@ fn import(
     path: &Path,
     args: serde_json::Value,
 ) -> Vec<FeatureId> {
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let report = doc.recompute(&reg, k.as_ref());
     let ex = Extensions(vec![Arc::new(ImportMeshCommands)]);
     let mut args = args;
@@ -67,7 +81,7 @@ fn stl(path: &Path, reverse: bool) {
 #[test]
 fn imported_stl_is_embedded_named_and_undoable_from_the_common_action() {
     let k = kernel();
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let mut doc = Document::new();
     let folder = dir("roundtrip");
     let path = folder.join("箱.STL");
@@ -115,7 +129,15 @@ fn threemf_objects_keep_names_and_units_and_share_one_component() {
     let bodies = (0..2)
         .map(|_| kmb_io_stl::threemf::Body3mf {
             name: "同じ & 部品".into(),
-            mesh: kmb_contract::kernel::mesh_cube(),
+            mesh: {
+                let mut m = kmb_contract::kernel::mesh_cube();
+                for p in &mut m.positions {
+                    for x in p {
+                        *x *= 12.7;
+                    }
+                }
+                m
+            },
             color: [100, 120, 140],
             material: "試験".into(),
             faces: BTreeMap::new(),
@@ -126,7 +148,7 @@ fn threemf_objects_keep_names_and_units_and_share_one_component() {
     let path = folder.join("組.3MF");
     std::fs::write(&path, bytes).unwrap();
     let k = kernel();
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let mut doc = Document::new();
     let ids = import(&mut doc, &k, &path, json!({"unit":"m"}));
     assert_eq!(ids.len(), 2);
@@ -137,7 +159,8 @@ fn threemf_objects_keep_names_and_units_and_share_one_component() {
     assert_eq!(doc.data().body_names[&ids[1]], "同じ & 部品(2)");
     let r = doc.recompute(&reg, k.as_ref());
     for id in &ids {
-        assert!((k.volume(shape(&r, *id)).unwrap() - 8.).abs() < 1e-5);
+        let side = f64::from(25.4_f32);
+        assert!((k.volume(shape(&r, *id)).unwrap() - side.powi(3)).abs() < 1e-8);
         assert_eq!(doc.data().feature(*id).unwrap().data["unit"], "in");
     }
     let next = import(&mut doc, &k, &path, json!({}));
@@ -160,7 +183,7 @@ impl kmb_core::FileGate for Deny {
 #[test]
 fn mesh_import_rejects_unknown_arguments_and_paths_outside_the_allowed_roots() {
     let k = kernel();
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let mut doc = Document::new();
     let report = doc.recompute(&reg, k.as_ref());
     let ex = Extensions(vec![Arc::new(ImportMeshCommands)]);
@@ -197,7 +220,7 @@ fn mesh_import_rejects_unknown_arguments_and_paths_outside_the_allowed_roots() {
 fn mesh_bodies_export_as_stl_and_are_omitted_with_a_reason_from_step() {
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
     let k = kernel();
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let mut b = DocBuilder::new();
     let mut s = SketchBuilder::xy();
     let o = s.fixed_point(10., 0.);
@@ -250,7 +273,7 @@ fn an_imported_mesh_can_be_the_model_of_a_machining_setup() {
     let path = folder.join("箱.stl");
     stl(&path, false);
     let k = kernel();
-    let reg = kmb_bundle::registry();
+    let reg = registry();
     let mut doc = Document::new();
     let ids = import(&mut doc, &k, &path, json!({}));
     let reference = kmb_samples::reference_cam();
@@ -260,6 +283,7 @@ fn an_imported_mesh_can_be_the_model_of_a_machining_setup() {
     let face = data.feature(reference.face).unwrap();
     let mut sd = setup.data.clone();
     sd["body"] = json!(ids[0]);
+    sd["machine"] = json!(kmb_post::machines::GENERIC_GRBL);
     let mut fd = face.data.clone();
     fd["setup"] = json!({"$new":1});
     fd["tools"] = json!({"$new":0});
@@ -292,7 +316,7 @@ fn an_imported_mesh_can_be_the_model_of_a_machining_setup() {
     };
     let (_, path) = outputs
         .values()
-        .find_map(kmb_cam_commands::toolpath_of)
+        .find_map(kmb_cam_setup::toolpath_of)
         .unwrap();
     assert!(!path.moves.is_empty());
     std::fs::remove_dir_all(folder).unwrap();

@@ -81,8 +81,9 @@ pub fn properties(g: &Geometry) -> Result<(usize, f64, f64, Option<[f64; 3]>), S
     let mut edges = BTreeMap::<([u32; 3], [u32; 3]), (usize, i32)>::new();
     // 網の近くを四面体の基準にする。大きな世界座標どうしの差し引きによる桁落ちを避ける。
     let origin = g
-        .vertices
+        .triangles
         .first()
+        .and_then(|t| g.vertices.get(t[0] as usize))
         .copied()
         .unwrap_or([0.0; 3])
         .map(f64::from);
@@ -506,5 +507,13 @@ mod tests {
                 .unwrap_err()
                 .contains("宣言")
         );
+    }
+
+    #[test]
+    fn threemf_skips_beam_lattice_objects_and_reports_their_kind() {
+        let model=br#"<model xmlns:b="urn:beam"><resources><object id="1"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices><triangles><triangle v1="0" v2="1" v3="2"/></triangles></mesh></object><object id="2"><mesh><vertices/><b:beamlattice><b:beams/></b:beamlattice></mesh></object></resources><build><item objectid="1"/><item objectid="2"/></build></model>"#;
+        let o = read_3mf(&crate::zip::write(&[("3D/3dmodel.model", model)])).unwrap();
+        assert_eq!(o.len(), 1);
+        assert!(o[0].notes.iter().any(|n| n.contains("beamlattice")));
     }
 }

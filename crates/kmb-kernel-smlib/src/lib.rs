@@ -948,7 +948,8 @@ impl Kernel for SmlibKernel {
             }
             _ => {
                 return Err(KernelError::Failed(
-                    "STEP から読み込んだ形と、ここで作った形は足し引きできません".into(),
+                    "網のボディは足し引きに使えません(三角形の網で、面と辺の形を持たないため)"
+                        .into(),
                 ));
             }
         }
@@ -1044,7 +1045,7 @@ impl Kernel for SmlibKernel {
         self.require_solid(shape, "面の縁のままの押し出し")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Unsupported(
-                "STEP から読み込んだ形の面の縁のままの押し出し".into(),
+                "網のボディは面の縁のままの押し出しに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         if !(to - from).is_finite() || to <= from {
@@ -1113,7 +1114,7 @@ impl Kernel for SmlibKernel {
         self.require_solid(shape, "シェル")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形はシェルにできません".into(),
+                "網のボディはシェルに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1151,7 +1152,8 @@ impl Kernel for SmlibKernel {
         self.require_solid(shape, "面のオフセット")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形は面をオフセットできません".into(),
+                "網のボディは面のオフセットに使えません(三角形の網で、面と辺の形を持たないため)"
+                    .into(),
             ));
         }
         if faces.is_empty() {
@@ -1275,7 +1277,7 @@ impl Kernel for SmlibKernel {
     ) -> Result<ShapeHandle, KernelError> {
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形の丸めは消せません".into(),
+                "網のボディの丸めは消せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1499,7 +1501,7 @@ impl Kernel for SmlibKernel {
         self.require_solid(shape, "辺の丸め")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形の辺は丸められません".into(),
+                "網のボディは辺の丸めに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1734,7 +1736,7 @@ impl Kernel for SmlibKernel {
         }
         if imported.iter().any(Option::is_some) {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形は、ここで作った形と一緒に STEP へ書き出せません".into(),
+                "網のボディは STEP に書き出せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();

@@ -1,6 +1,6 @@
 //! STEP の読み込み。truck の STEP の曲面は truck-modeling の曲面と型が違い、そのままでは
 //! ブーリアンに使えないので、読み込んだ形は三角形の網として持つ。加工(網から作る)、
-//! 体積の計測、表示には使えるが、足し引き・移動・フィレットには使えない。
+//! 体積の計測、表示と移動に使える。面の形を持たず、足し引きやフィレットには使えない。
 
 use crate::{bounds, signed_volume, tri_area, triangles};
 use kmb_core::kernel::{KernelError, P3};
