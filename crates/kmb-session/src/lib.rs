@@ -27,6 +27,7 @@ pub mod near;
 pub use inspect::{MeasurePick, PictureSpec, body_material};
 pub mod logging;
 pub mod organize;
+pub mod param_batch;
 pub mod param_io;
 pub mod params;
 pub mod projects;
@@ -42,6 +43,11 @@ use kmb_core::Document;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
+
+/// 文書を管理する共通の操作。
+pub fn module() -> kmb_core::Module {
+    kmb_core::Module::commands("kmb-session").with_extension(param_batch::Commands)
+}
 
 /// 最近使ったファイルの数の上限。
 pub const RECENT_MAX: usize = 10;

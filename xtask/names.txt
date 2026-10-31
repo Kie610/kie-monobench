@@ -228,6 +228,7 @@ io.export_stl_each	kmb-io-stl
 io.export_view_dxf	kmb-io-view
 io.export_view_dxf_hidden	kmb-io-view
 io.export_view_svg	kmb-io-view
+params.apply_batch	kmb-session
 render.animation_video	kmb-io-render
 render.appearance	kmb-io-render
 render.decal@1	kmb-scene

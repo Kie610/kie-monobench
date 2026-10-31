@@ -3,8 +3,94 @@
 use crate::theme::RightMenu as _;
 use crate::*;
 
+/// この文書の表で、まだ適用していない式。文書・履歴には保存しない。
+#[derive(Default)]
+pub(crate) struct BatchDraft {
+    pub(crate) enabled: bool,
+    pub(crate) inputs: std::collections::BTreeMap<kmb_core::ParamKey, String>,
+    pub(crate) errors: std::collections::BTreeMap<kmb_core::ParamKey, String>,
+}
+
+impl BatchDraft {
+    pub(crate) fn input(&self, key: &kmb_core::ParamKey, otherwise: String) -> String {
+        self.inputs.get(key).cloned().unwrap_or(otherwise)
+    }
+
+    pub(crate) fn remember(
+        &mut self,
+        key: &kmb_core::ParamKey,
+        base: &str,
+        value: String,
+        changed: bool,
+    ) {
+        if changed || self.inputs.get(key).is_some_and(|old| old != &value) {
+            self.errors.remove(key);
+        }
+        if value == base {
+            self.inputs.remove(key);
+        } else {
+            self.inputs.insert(key.clone(), value);
+        }
+    }
+
+    fn changes(&self) -> Vec<kmb_session::param_batch::Change> {
+        self.inputs
+            .iter()
+            .map(|(row, expr)| kmb_session::param_batch::Change {
+                row: row.clone(),
+                expr: expr.clone(),
+            })
+            .collect()
+    }
+}
+
+pub(crate) fn feature_labels(
+    data: &kmb_core::DocumentData,
+    ids: impl IntoIterator<Item = FeatureId>,
+) -> std::collections::BTreeMap<FeatureId, String> {
+    ids.into_iter()
+        .map(|id| {
+            (
+                id,
+                data.feature(id)
+                    .map_or_else(|| id.to_string(), |f| f.name.clone()),
+            )
+        })
+        .collect()
+}
+
+pub(crate) fn pending_mark(ui: &egui::Ui, response: &egui::Response, pending: bool) {
+    if pending {
+        ui.painter().text(
+            response.rect.right_top() + egui::vec2(theme::fs(1.0), 0.0),
+            egui::Align2::LEFT_TOP,
+            "*",
+            egui::FontId::proportional(theme::fs(11.0)),
+            theme::look(ui.ctx()).pal.ink2,
+        );
+    }
+}
+
+/// 表の式の欄を、読み上げと画面の操作から行の名前で指せるようにする。
+pub(crate) fn expression_info(
+    ui: &egui::Ui,
+    response: &egui::Response,
+    name: &str,
+    before: &str,
+    now: &str,
+) {
+    let label = crate::window_state::Words::of(ui.ctx())
+        .t_with("common-param-expression-label", &[("name", name.into())]);
+    response.widget_info(|| {
+        let mut info = egui::WidgetInfo::text_edit(response.enabled(), before, now, "");
+        info.label = Some(label.clone());
+        info
+    });
+}
+
 impl Workspace {
     pub(crate) fn params_ui(&mut self, ui: &mut egui::Ui) {
+        let apply_batch = self.param_batch_bar(ui);
         // 表のタブ(全部・作った表。U50)。作った表では、その表の行だけを出す
         self.param_tabs_ui(ui);
         // 作った表とお気に入りでは、その表の行を表の並び(手で並べた順)で出す
@@ -148,16 +234,25 @@ impl Workspace {
                             row_act = Some((key.clone(), a));
                         }
                     });
-                    let expr = FieldEdit::text(self.cur.expr_edits.entry(p.id), &p.expr);
+                    let normal = FieldEdit::text(self.cur.expr_edits.entry(p.id), &p.expr).clone();
+                    let batching = self.cur.param_batch.enabled;
+                    let mut expr = if batching { self.cur.param_batch.input(&key, normal) } else { normal };
                     // 打っている名前の候補を欄の下に出す(U51)
                     let c = complete::begin(ui, crate::doc_id(ui.ctx(), ("param_expr", p.id)));
-                    let r = ui.add_sized([w_expr, h], c.filter(egui::TextEdit::singleline(expr)));
-                    c.end(ui, &r, expr, &[]);
+                    let edit = egui::TextEdit::singleline(&mut expr);
+                    let edit = if batching && self.cur.param_batch.errors.contains_key(&key) { edit.text_color(err) } else { edit };
+                    let r = ui.add_sized([w_expr, h], c.filter(edit));
+                    c.end(ui, &r, &mut expr, &[]);
+                    expression_info(ui, &r, &p.name, &p.expr, &expr);
                     if r.changed() {
                         ui.data_mut(|d| d.remove::<String>(failed_id(p.id)));
                     }
-                    if r.lost_focus() && *expr != p.expr {
-                        commit_expr = Some((p.id, expr.clone()));
+                    if batching {
+                        self.cur.param_batch.remember(&key, &p.expr, expr, r.changed());
+                        pending_mark(ui, &r, self.cur.param_batch.inputs.contains_key(&key));
+                    } else {
+                        if r.lost_focus() && expr != p.expr { commit_expr = Some((p.id, expr.clone())); }
+                        self.cur.expr_edits.insert(p.id, FieldEdit::new(&p.expr, expr));
                     }
                     let value = match self.cur.work.report().params.iter().find(|r| r.id == p.id) {
                         Some(r) => match &r.status {
@@ -230,11 +325,13 @@ impl Workspace {
                 // 通らない式の理由は、吹き出しにせず欄の下に出す(U48)
                 let failed: Option<String> = ui.data(|d| d.get_temp(failed_id(p.id)));
                 let status = self.cur.work.report().params.iter().find(|r| r.id == p.id).map(|r| &r.status);
-                match (failed, status) {
+                let batch_error = self.cur.param_batch.errors.get(&kmb_core::ParamKey::User { id: p.id });
+                if let Some(why) = batch_error { reason_label(ui, err, why); }
+                else { match (failed, status) {
                     (Some(why), _) => reason_label(ui, err, &format!("通りません: {why}")),
                     (None, Some(ParamStatus::Error { message })) => reason_label(ui, err, message),
                     _ => {}
-                }
+                } }
                 if open {
                     users_list(ui, &users);
                 }
@@ -360,6 +457,109 @@ impl Workspace {
         // 構成表は文書に 1 つなので、「全部」の表の時だけ出す
         if self.cur.param_tab == 0 {
             self.config_ui(ui);
+        }
+        if apply_batch {
+            self.apply_param_batch(ui.ctx());
+        }
+    }
+
+    fn param_batch_bar(&mut self, ui: &mut egui::Ui) -> bool {
+        let words = self.win.words();
+        let was = self.cur.param_batch.enabled;
+        let mut apply = false;
+        let mut discard = false;
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(
+                &mut self.cur.param_batch.enabled,
+                words.t("common-param-batch-enable"),
+            )
+            .on_hover_text(words.t("common-param-batch-enable-tip"));
+            if self.cur.param_batch.enabled {
+                let n = self.cur.param_batch.inputs.len();
+                apply = ui
+                    .add_enabled(
+                        n > 0,
+                        egui::Button::new(words.t("common-param-batch-apply")),
+                    )
+                    .clicked();
+                discard = ui
+                    .add_enabled(
+                        n > 0,
+                        egui::Button::new(words.t("common-param-batch-discard")),
+                    )
+                    .clicked();
+                if n > 0 {
+                    ui.weak(words.t_with(
+                        "common-param-batch-pending",
+                        &[("count", kmb_i18n::Arg::Number(n as f64))],
+                    ));
+                }
+                if !self.cur.param_batch.errors.is_empty() {
+                    ui.colored_label(self.win.look.pal.err, words.t("common-param-batch-errors"));
+                }
+            }
+        });
+        if discard || was && !self.cur.param_batch.enabled {
+            self.discard_param_batch(ui.ctx());
+        }
+        apply
+    }
+
+    fn discard_param_batch(&mut self, ctx: &egui::Context) {
+        for key in self.cur.param_batch.inputs.keys() {
+            match key {
+                kmb_core::ParamKey::User { id } => {
+                    self.cur.expr_edits.remove(id);
+                }
+                kmb_core::ParamKey::Model { feature, key } => {
+                    if let Some(p) = self.cur.work.report().model_params.iter().find(|p| {
+                        p.feature == *feature
+                            && (p.key == *key || p.key.is_empty() && p.name == *key)
+                    }) {
+                        let id = crate::doc_id(ctx, ("model_param", p.feature, p.name.as_str()))
+                            .with("expr");
+                        ctx.data_mut(|d| d.remove::<FieldEdit>(id));
+                    }
+                }
+                kmb_core::ParamKey::Field { feature, key } => {
+                    let id = crate::doc_id(ctx, ("feature_value", feature, key.as_str()));
+                    ctx.data_mut(|d| d.remove::<FieldEdit>(id));
+                }
+            }
+        }
+        self.cur.param_batch.inputs.clear();
+        self.cur.param_batch.errors.clear();
+        ctx.request_repaint();
+    }
+
+    fn apply_param_batch(&mut self, ctx: &egui::Context) {
+        let changes = self.cur.param_batch.changes();
+        if changes.is_empty() {
+            return;
+        }
+        self.cur.param_batch.errors.clear();
+        for error in self.cur.work.check_param_batch(&changes) {
+            self.cur
+                .param_batch
+                .errors
+                .entry(error.row)
+                .and_modify(|s| {
+                    s.push('\n');
+                    s.push_str(&error.reason);
+                })
+                .or_insert(error.reason);
+        }
+        if !self.cur.param_batch.errors.is_empty() {
+            ctx.request_repaint();
+            return;
+        }
+        let result = self
+            .cur
+            .work
+            .set_param_batch(&changes)
+            .map_err(|e| e.to_string());
+        if self.after_change(result) {
+            self.discard_param_batch(ctx);
         }
     }
 }
@@ -493,14 +693,9 @@ impl Workspace {
             return None;
         }
         let mut act = None;
-        let feature_name = |id: FeatureId| {
-            self.cur
-                .work
-                .doc()
-                .data()
-                .feature(id)
-                .map_or_else(|| id.to_string(), |f| f.name.clone())
-        };
+        let feature_names =
+            feature_labels(self.cur.work.doc().data(), rows.iter().map(|p| p.feature));
+        let feature_name = |id: FeatureId| feature_names[&id].clone();
         if !query.is_empty() {
             rows.retain(|p| {
                 p.name.to_lowercase().contains(query)
@@ -598,23 +793,47 @@ impl Workspace {
                     let mut expr = ui
                         .data(|d| d.get_temp::<FieldEdit>(key.with("expr")))
                         .map_or_else(|| p.expr.clone(), |e| e.text_on(&p.expr));
+                    let batching = self.cur.param_batch.enabled;
+                    if batching {
+                        expr = self.cur.param_batch.input(&k, expr);
+                    }
                     let c = complete::begin(ui, key.with("expr_edit"));
+                    let edit = egui::TextEdit::singleline(&mut expr);
+                    let edit = if batching && self.cur.param_batch.errors.contains_key(&k) {
+                        edit.text_color(err)
+                    } else {
+                        edit
+                    };
                     let r = ui
-                        .add_sized([w_expr, h], c.filter(egui::TextEdit::singleline(&mut expr)))
+                        .add_sized([w_expr, h], c.filter(edit))
                         .on_hover_text(&place);
                     c.end(ui, &r, &mut expr, &[]);
-                    if r.lost_focus() && expr != p.expr {
-                        set = Some((p.name.clone(), expr.clone()));
+                    expression_info(ui, &r, &p.name, &p.expr, &expr);
+                    if batching {
+                        self.cur
+                            .param_batch
+                            .remember(&k, &p.expr, expr, r.changed());
+                        pending_mark(ui, &r, self.cur.param_batch.inputs.contains_key(&k));
+                    } else {
+                        if r.lost_focus() && expr != p.expr {
+                            set = Some((p.name.clone(), expr.clone()));
+                        }
+                        ui.data_mut(|d| {
+                            d.insert_temp(key.with("expr"), FieldEdit::new(&p.expr, expr))
+                        });
                     }
-                    ui.data_mut(|d| d.insert_temp(key.with("expr"), FieldEdit::new(&p.expr, expr)));
-                    match &p.status {
-                        ParamStatus::Ok { value } => {
-                            ui.label(self.shown(*value));
+                    if let Some(why) = self.cur.param_batch.errors.get(&k) {
+                        reason_label(ui, err, why);
+                    } else {
+                        match &p.status {
+                            ParamStatus::Ok { value } => {
+                                ui.label(self.shown(*value));
+                            }
+                            ParamStatus::Text { value } => {
+                                ui.label(value);
+                            }
+                            ParamStatus::Error { message } => reason_label(ui, err, message),
                         }
-                        ParamStatus::Text { value } => {
-                            ui.label(value);
-                        }
-                        ParamStatus::Error { message } => reason_label(ui, err, message),
                     }
                     let users = users_of(&p.name);
                     let open = users_cell(

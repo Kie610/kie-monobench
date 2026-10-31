@@ -40,6 +40,8 @@ mod material_tests;
 #[cfg(test)]
 mod modify_tests;
 #[cfg(test)]
+mod param_batch_tests;
+#[cfg(test)]
 mod param_table_tests;
 #[cfg(test)]
 mod param_views_tests;

@@ -77,8 +77,12 @@ pub mod action {
     /// (見せるか。省くと、対象が 1 つでも見えていれば全部隠し、全部隠れていれば全部出す)
     pub const SET_VISIBILITY: ActionRole = ActionRole("set_visibility");
 
+    /// パラメータの表の式をまとめて検査し、1回の変更として適用する。
+    pub const APPLY_PARAM_BATCH: ActionRole = ActionRole("apply_param_batch");
+
     /// 全部(名前の重なりの試験に使う)。
     pub const ALL: &[ActionRole] = &[
+        APPLY_PARAM_BATCH,
         EXTRUDE,
         FILLET_EDGES,
         HOLE_ON_FACE,
