@@ -42,6 +42,8 @@ mod modify_tests;
 #[cfg(test)]
 mod param_table_tests;
 #[cfg(test)]
+mod param_validation_tests;
+#[cfg(test)]
 mod param_views_tests;
 #[cfg(test)]
 mod pick_tests;

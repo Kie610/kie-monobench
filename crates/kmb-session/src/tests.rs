@@ -596,3 +596,228 @@ fn the_data_folder_of_the_old_name_is_carried_over_once_and_kept() {
     assert!(!fresh.exists());
     std::fs::remove_dir_all(d).ok();
 }
+
+fn semantic_guard_refuses_before_save(expr: &str, suffix: &str) {
+    let mut h = Headless::with_document(kmb_bundle::modules(), doc_with("10 mm"), None);
+    let before = h.doc().to_json();
+    let result = h.set_param("w", expr);
+    if result.is_ok() {
+        let dir = temp(&format!("semantic-guard-{suffix}"));
+        let path = dir.join("shape.json");
+        save(&path, h.doc()).unwrap();
+        let saved = load(&path).unwrap();
+        assert_eq!(
+            saved.data().param_by_name("w").unwrap().expr,
+            expr,
+            "誤った式の保存まで通る"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    assert!(result.is_err(), "誤った式を保存前に断る: {expr}");
+    assert_eq!(h.doc().to_json(), before, "誤りなら文書を変えない");
+}
+
+#[test]
+fn semantic_guard_refuses_unknown_names_before_saving() {
+    semantic_guard_refuses_before_save("missing_name + 1 mm", "unknown");
+}
+
+#[test]
+fn semantic_guard_refuses_incompatible_units_before_saving() {
+    semantic_guard_refuses_before_save("1 mm + 1 deg", "units");
+}
+
+#[test]
+fn semantic_guard_refuses_a_self_reference_before_saving() {
+    semantic_guard_refuses_before_save("w + 1 mm", "cycle");
+}
+
+#[test]
+fn semantic_guard_refuses_an_invalid_configuration_cell_before_saving() {
+    let mut h = Headless::with_document(kmb_bundle::modules(), doc_with("10 mm"), None);
+    h.run(
+        "cad.config.add_column",
+        None,
+        None,
+        &serde_json::json!({"param":"w"}),
+    )
+    .unwrap();
+    h.run(
+        "cad.config.add_row",
+        None,
+        None,
+        &serde_json::json!({"name":"row"}),
+    )
+    .unwrap();
+    let before = h.doc().to_json();
+    let result = h.run(
+        "cad.config.set",
+        None,
+        None,
+        &serde_json::json!({"row":"row","column":1,"value":"missing_name + 1 mm"}),
+    );
+    let problem = result.unwrap_err();
+    assert_eq!(problem.kind, kmb_core::ProblemKind::Input);
+    assert_eq!(h.doc().to_json(), before);
+}
+
+#[test]
+fn semantic_guard_rejects_a_new_parameter_without_consuming_an_id() {
+    let mut h = Headless::with_document(kmb_bundle::modules(), doc_with("10 mm"), None);
+    let before = h.doc().to_json();
+    let mark = h.mark();
+    let why = h.add_param("new_value", "missing_name + 1 mm").unwrap_err();
+    assert!(why.contains("missing_name"), "{why}");
+    assert_eq!(h.doc().to_json(), before);
+    assert_eq!(h.mark(), mark);
+    h.add_param("new_value", "w * 2").unwrap();
+    let before: serde_json::Value = serde_json::from_str(&before).unwrap();
+    assert_eq!(
+        h.param_id("new_value").unwrap().0,
+        before["next_id"].as_u64().unwrap()
+    );
+}
+
+struct GuardDimensions(serde_json::Value);
+impl kmb_core::Feature for GuardDimensions {
+    fn inputs(&self) -> Result<Vec<kmb_core::InputRef>, kmb_core::EvalError> {
+        Ok(vec![])
+    }
+    fn evaluate(
+        &self,
+        _: &mut kmb_core::EvalCtx<'_>,
+    ) -> Result<kmb_core::Outputs, kmb_core::EvalError> {
+        for key in ["size", "extra"] {
+            let q = kmb_core::eval_str(self.0[key].as_str().unwrap(), &|_| None)?;
+            kmb_core::ParamUnit::Length
+                .check(q.dim)
+                .map_err(kmb_core::EvalError::InvalidData)?;
+        }
+        Ok(Default::default())
+    }
+    fn model_params(&self) -> Vec<kmb_core::ModelParam> {
+        vec![kmb_core::ModelParam {
+            key: "size".into(),
+            name: "size_dim".into(),
+            expr: self.0["size"].as_str().unwrap().into(),
+            label: "寸法".into(),
+        }]
+    }
+    fn set_model_param(&self, name: &str, expr: &str) -> Option<serde_json::Value> {
+        if name != "size_dim" {
+            return None;
+        }
+        let mut data = self.0.clone();
+        data["size"] = expr.into();
+        Some(data)
+    }
+}
+
+fn guard_modules() -> kmb_core::Modules {
+    let module = kmb_core::Module::new("test", |r| {
+        r.register_described(
+            kmb_core::Descriptor::new("test.sized@1", kmb_core::category::SOLID, "寸法の見本")
+                .field(kmb_core::Field::expr("extra", "追加の長さ").length()),
+            |data| Ok(Box::new(GuardDimensions(data.clone()))),
+        );
+    });
+    kmb_core::Modules::assemble(vec![module], std::sync::Arc::new(kmb_core::NullKernel))
+}
+
+fn guard_dimensions() -> (Headless, kmb_core::FeatureId) {
+    let mut h = Headless::new(guard_modules());
+    let id = h
+        .add_feature(
+            "test.sized@1",
+            Some("寸法の見本"),
+            serde_json::json!({"size":"2 mm","extra":"3 mm"}),
+        )
+        .unwrap();
+    (h, id)
+}
+
+#[test]
+fn semantic_guard_refuses_bad_model_dimension_expressions() {
+    let (mut h, _) = guard_dimensions();
+    let before = h.doc().to_json();
+    for expr in ["30 deg", "missing_name", "size_dim + 1 mm"] {
+        assert!(h.set_model_param("size_dim", expr).is_err(), "{expr}");
+        assert_eq!(h.doc().to_json(), before);
+    }
+}
+
+#[test]
+fn semantic_guard_refuses_bad_feature_value_expressions() {
+    let (mut h, id) = guard_dimensions();
+    let before = h.doc().to_json();
+    for expr in ["30 deg", "1 mm + 1 deg"] {
+        assert!(h.set_value(id, "extra", expr).is_err(), "{expr}");
+        assert_eq!(h.doc().to_json(), before);
+    }
+}
+
+#[test]
+fn semantic_guard_keeps_legacy_errors_readable_and_allows_repair() {
+    let (h, id) = guard_dimensions();
+    let mut data = h.doc().data().clone();
+    data.features[0].data["size"] = "30 deg".into();
+    data.features[0].data["extra"] = "30 deg".into();
+    let json = serde_json::to_string(&data).unwrap();
+    let doc = Document::from_json(&json).unwrap();
+    let saved = doc.to_json();
+    let mut h = Headless::with_document(guard_modules(), doc, None);
+    assert_eq!(h.doc().to_json(), saved);
+    assert!(h.report().error_count() > 0);
+    let rows = crate::params::feature_values(h.doc().data(), &h.modules().registry, h.report());
+    assert!(matches!(
+        rows[0].status,
+        kmb_core::ParamStatus::Error { .. }
+    ));
+    h.set_value(id, "extra", "4 mm").unwrap();
+    h.set_model_param("size_dim", "5 mm").unwrap();
+    assert_eq!(h.report().error_count(), 0);
+}
+
+#[test]
+fn semantic_guard_legacy_parameter_errors_do_not_block_comments_or_other_rows() {
+    let mut h = Headless::with_document(kmb_bundle::modules(), doc_with("missing_name"), None);
+    h.set_param_info(
+        "w",
+        None,
+        &crate::edit::ParamInfo {
+            comment: Some("直す必要のある式".into()),
+            unit: None,
+        },
+    )
+    .unwrap();
+    h.add_param("other", "2 mm").unwrap();
+    assert_eq!(h.doc().data().params[0].expr, "missing_name");
+    assert!(matches!(
+        h.report().params[0].status,
+        kmb_core::ParamStatus::Error { .. }
+    ));
+    h.set_param("w", "3 mm").unwrap();
+    assert_eq!(h.report().error_count(), 0);
+}
+
+#[test]
+fn semantic_guard_importing_bad_new_rows_keeps_the_document_and_id_counter() {
+    let mut h = Headless::with_document(kmb_bundle::modules(), doc_with("10 mm"), None);
+    let before = h.doc().to_json();
+    let mark = h.mark();
+    let bad = "row,expr\nw,20 mm\nfresh,missing_name + 1 mm\n";
+    assert!(h.import_params(bad, crate::param_io::Format::Csv).is_err());
+    assert_eq!(h.doc().to_json(), before);
+    assert_eq!(h.mark(), mark);
+    let done = h
+        .import_params(
+            "row,expr\nw,20 mm\nfresh,w * 2\n",
+            crate::param_io::Format::Csv,
+        )
+        .unwrap();
+    assert_eq!((done.added, done.changed), (1, 1));
+    assert_eq!(h.mark(), mark + 1);
+    assert!(
+        matches!(h.report().params.iter().find(|p| p.name=="fresh").unwrap().status,kmb_core::ParamStatus::Ok { value } if value.value==40.0)
+    );
+}

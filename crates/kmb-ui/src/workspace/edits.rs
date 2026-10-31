@@ -150,25 +150,15 @@ impl Workspace {
 
     /// 単位つきでパラメータを足す(パラメータの表の追加の行)。
     pub fn add_param_with(&mut self, name: &str, expr: &str, unit: kmb_core::ParamUnit) -> bool {
-        // 寸法の名前(d1 など)と重ねない
-        if self
-            .cur
-            .work
-            .report()
-            .model_params
-            .iter()
-            .any(|p| p.name == name)
-        {
-            self.win
-                .fail(format!("寸法の名前 {name} と同じ名前は使えません"));
-            return false;
-        }
-        log::info!("パラメータを足す: {name} = {expr}({unit:?})");
-        let tx = self
-            .cur
-            .work
-            .prepare(|d| edit::add_param_with(d, name, expr, unit));
-        self.apply(tx)
+        let result = self.cur.work.add_param_info(
+            name,
+            expr,
+            &kmb_session::edit::ParamInfo {
+                comment: None,
+                unit: Some(unit),
+            },
+        );
+        self.after_change(result)
     }
 
     /// 寸法の名前(モデルのパラメータ)を変え、参照する式も書き換える。
