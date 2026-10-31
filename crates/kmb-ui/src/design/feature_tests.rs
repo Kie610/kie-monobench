@@ -1014,7 +1014,7 @@ fn renaming_a_parameter_in_the_list_rewrites_the_name_where_it_is_used() {
     let mut ws = Workspace::new(reference_document(), None, reg());
     ws.win.show_params = true;
     let mut h = Harness::builder()
-        .with_size(egui::vec2(1400.0, 900.0))
+        .with_size(egui::vec2(1400.0, 1200.0))
         .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
     h.run();
     let before = param_fields(&h);

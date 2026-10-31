@@ -357,3 +357,6 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+
+action-params-apply-batch = Apply expressions together
+action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid

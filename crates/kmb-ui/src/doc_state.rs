@@ -23,6 +23,7 @@ pub(crate) struct DocState {
     pub(crate) selected: Option<FeatureId>,
     /// 編集中のパラメータの式・名前(確定前)
     pub(crate) expr_edits: HashMap<ParamId, FieldEdit>,
+    pub(crate) param_batch: crate::design::params_ui::BatchDraft,
     pub(crate) name_edits: HashMap<ParamId, FieldEdit>,
     pub(crate) new_param: (String, String),
     /// パラメータの表の追加の行の単位
@@ -224,6 +225,7 @@ impl DocState {
             work: kmb_session::Headless::in_background(modules, doc, path),
             selected: None,
             expr_edits: HashMap::new(),
+            param_batch: Default::default(),
             name_edits: HashMap::new(),
             new_param: (String::new(), String::new()),
             new_param_unit: kmb_core::ParamUnit::Length,
