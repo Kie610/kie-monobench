@@ -541,6 +541,10 @@ fn a_model_space_boundary_off_the_surface_is_reported_instead_of_projected() {
     let (shape, warnings) = kernel.import_iges(&f.text()).unwrap();
     assert_eq!(kernel.faces(shape).unwrap().len(), 1, "{warnings:?}");
     assert!(
+        warnings.iter().any(|w| w.contains("読めなかった面 1 枚")),
+        "{warnings:?}"
+    );
+    assert!(
         warnings.iter().any(|w| w.contains("曲面から離れ")),
         "{warnings:?}"
     );

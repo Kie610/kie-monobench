@@ -177,9 +177,12 @@ impl Data {
                 let name = format!("iges{number}:f{ordinal}");
                 match self.face(face, same == orientation, place, name.clone()) {
                     Ok(face) => model.faces.push(face),
-                    Err(why) => model
-                        .warnings
-                        .push(format!("面 {name} を読めませんでした: {why}")),
+                    Err(why) => {
+                        model.missing_faces += 1;
+                        model
+                            .warnings
+                            .push(format!("面 {name} を読めませんでした: {why}"));
+                    }
                 }
             }
             Ok(())

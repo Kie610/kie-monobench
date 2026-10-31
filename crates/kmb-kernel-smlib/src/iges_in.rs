@@ -24,6 +24,20 @@ struct Model {
     pub warnings: Vec<String>,
     pub tolerance: f64,
 }
+impl Model {
+    fn summarize_missing(&mut self) {
+        if self.missing_faces > 0 {
+            self.warnings.insert(
+                0,
+                format!(
+                    "読めなかった面 {} 枚があります。各面の理由を確認してください",
+                    self.missing_faces
+                ),
+            );
+        }
+    }
+}
+
 struct Boundary {
     curves: Vec<Nurbs>,
     points: Vec<P3>,
@@ -567,6 +581,7 @@ fn read(text: &str) -> Result<Model, String> {
     let mut model = Model {
         faces: Vec::new(),
         warnings: Vec::new(),
+        missing_faces: 0,
         tolerance: data.file.global.tolerance_mm.max(1e-7),
     };
     if data.file.global.tolerance_mm < 1e-7 {
@@ -653,9 +668,12 @@ fn read(text: &str) -> Result<Model, String> {
         let name = format!("iges{}:f{number}", shells.len() + 1);
         match data.face(e.id, true, k::IDENTITY, name.clone()) {
             Ok(face) => model.faces.push(face),
-            Err(why) => model
-                .warnings
-                .push(format!("面 {name} を読めませんでした: {why}")),
+            Err(why) => {
+                model.missing_faces += 1;
+                model
+                    .warnings
+                    .push(format!("面 {name} を読めませんでした: {why}"));
+            }
         }
     }
     let unused = data
@@ -697,6 +715,7 @@ fn read(text: &str) -> Result<Model, String> {
         ));
     }
     if model.faces.is_empty() {
+        model.summarize_missing();
         return Err(format!(
             "IGES に読み込める面・立体がありません。{}",
             model.warnings.join("。")
@@ -730,6 +749,7 @@ pub(super) fn import(
         match result {
             Ok(brep) => faces.push(brep),
             Err(why) => {
+                model.missing_faces += 1;
                 let first = face
                     .loops
                     .first()
@@ -751,6 +771,7 @@ pub(super) fn import(
         }
     }
     if faces.is_empty() {
+        model.summarize_missing();
         return Err(format!(
             "面を1枚も作れませんでした。{}",
             model.warnings.join("。")
@@ -858,6 +879,7 @@ pub(super) fn import(
         .get_mut(&handle.0)
         .ok_or("形を保存できませんでした")?
         .rims = rims;
+    model.summarize_missing();
     Ok((handle, model.warnings))
 }
 
