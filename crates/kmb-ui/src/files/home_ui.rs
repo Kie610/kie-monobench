@@ -202,6 +202,7 @@ impl Workspace {
     pub fn show_home(&mut self) {
         if !self.home.start {
             self.home.start = true;
+            self.home.discard_recoveries = None;
             self.check_recent();
         }
     }
@@ -210,17 +211,105 @@ impl Workspace {
     pub(crate) fn home_ui(&mut self, ui: &mut egui::Ui) {
         let shown = !self.home.drawn;
         self.home.drawn = true;
+        let has_recovery_bar = self.recovery_bulk_ui(ui);
         let Some(mut page) = self.home.page.take() else {
             self.plain_home(ui);
             return;
         };
         let mut host = self.home_host(shown);
-        page.ui(ui, &mut host);
+        if has_recovery_bar {
+            // 拡張が最大の矩形を使っても、復旧の帯に重ならないよう残りの領域を渡す。
+            let mut content = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("home_below_recoveries")
+                    .max_rect(ui.available_rect_before_wrap()),
+            );
+            page.ui(&mut content, &mut host);
+        } else {
+            page.ui(ui, &mut host);
+        }
         let requests = std::mem::take(&mut host.requests);
         self.home.page = Some(page);
         for r in requests {
             self.home_request(r);
         }
+    }
+
+    /// 復旧の一覧の上の一括操作。確認は帯の中に置き、写しの中身は変更しない。
+    fn recovery_bulk_ui(&mut self, ui: &mut egui::Ui) -> bool {
+        let files: Vec<_> = self
+            .home
+            .recoveries
+            .iter()
+            .map(|r| r.file.clone())
+            .collect();
+        if self
+            .home
+            .discard_recoveries
+            .as_ref()
+            .is_some_and(|old| *old != files)
+        {
+            self.home.discard_recoveries = None;
+        }
+        if files.len() < 2 {
+            self.home.discard_recoveries = None;
+            return false;
+        }
+        if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            self.home.discard_recoveries = None;
+        }
+        let confirming = self.home.discard_recoveries.is_some();
+        let label = self.win.t_with(
+            if confirming {
+                "common-recovery-confirm"
+            } else {
+                "common-recovery-count"
+            },
+            &[("count", files.len().to_string().into())],
+        );
+        let discard = self.win.t("common-recovery-discard-all");
+        let cancel = self.win.t("common-cancel");
+        let look = crate::theme::look(ui.ctx());
+        let mut pressed = false;
+        let mut canceled = false;
+        egui::Frame::group(ui.style())
+            .fill(look.pal.panel)
+            .stroke(egui::Stroke::new(
+                1.0,
+                if confirming {
+                    look.pal.warn
+                } else {
+                    look.pal.edge
+                },
+            ))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(label);
+                    pressed = ui.button(discard).clicked();
+                    if confirming {
+                        canceled = ui.button(cancel).clicked();
+                    }
+                });
+            });
+        if canceled {
+            self.home.discard_recoveries = None;
+        } else if pressed {
+            if confirming {
+                self.home.discard_recoveries = None;
+                let mut errors = Vec::new();
+                for i in (0..self.home.recoveries.len()).rev() {
+                    if let Err(problem) = self.discard_recovery_at(i) {
+                        errors.push(problem.message);
+                    }
+                }
+                if !errors.is_empty() {
+                    self.win.fail(errors.join("\n"));
+                }
+            } else {
+                self.home.discard_recoveries = Some(files);
+            }
+        }
+        true
     }
 
     /// データパネルの中身を描く(ホームと同じ拡張の細い形)。

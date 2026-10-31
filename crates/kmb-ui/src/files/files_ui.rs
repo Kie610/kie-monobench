@@ -571,9 +571,44 @@ impl Workspace {
     }
 
     pub fn discard_recovery(&mut self, i: usize) {
-        if i < self.home.recoveries.len() {
-            kmb_session::discard(&self.home.recoveries.remove(i));
+        if let Err(problem) = self.discard_recovery_at(i) {
+            self.win.fail(problem);
         }
+    }
+
+    /// 一つずつ捨てる共通の口。削除の結果を確認してから一覧から外す。
+    pub(crate) fn discard_recovery_at(&mut self, i: usize) -> Result<(), kmb_core::Problem> {
+        let Some(recovery) = self.home.recoveries.get(i).cloned() else {
+            return Ok(());
+        };
+        kmb_session::discard(&recovery);
+        // 削除の口は戻り値を持たないため、ファイルが残っている時も成功としない。
+        let detail = match recovery.file.try_exists() {
+            Ok(false) => {
+                self.home.recoveries.remove(i);
+                log::info!("自動保存の写しを捨てた: {}", recovery.file.display());
+                return Ok(());
+            }
+            Ok(true) => self.win.t("common-recovery-remains"),
+            Err(error) => error.to_string(),
+        };
+        let name = recovery
+            .original
+            .as_ref()
+            .unwrap_or(&recovery.file)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let problem = kmb_core::Problem::new(
+            kmb_core::ProblemKind::File,
+            self.win.t_with(
+                "common-recovery-discard-error",
+                &[("name", name.into()), ("reason", detail.into())],
+            ),
+        );
+        log::error!("{}: {}", recovery.file.display(), problem);
+        Err(problem)
     }
 
     fn remember(&mut self, path: &Path) {
