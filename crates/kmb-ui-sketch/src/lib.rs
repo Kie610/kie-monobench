@@ -1795,3 +1795,6 @@ mod sketch_aids_tests;
 mod space_view_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod overlap_trim_tests;
