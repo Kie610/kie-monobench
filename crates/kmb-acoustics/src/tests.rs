@@ -255,11 +255,15 @@ fn invalid_numbers_and_box_values_do_not_enter_the_circuit() {
     let mut b = Vented::default();
     b.port.count = 0;
     assert!(result_error(&Enclosure::Vented(b)));
-    let mut b = Sealed::default();
-    b.absorption = -0.1;
+    let b = Sealed {
+        absorption: -0.1,
+        ..Default::default()
+    };
     assert!(result_error(&Enclosure::Sealed(b)));
-    let mut b = Vented::default();
-    b.ql = 0.0;
+    let b = Vented {
+        ql: 0.0,
+        ..Default::default()
+    };
     assert!(result_error(&Enclosure::Vented(b)));
     assert!(
         analyze(
