@@ -116,3 +116,6 @@ toolbar-pick-field = 欄「{ $name }」が受ける物
 toolbar-pick-now-body = 面を押すとボディごと選ぶ
 toolbar-pick-now-mixed = 頂点・辺・面を混ぜて選ぶ
 toolbar-pick-all = すべて選べるようにする
+
+toolbar-pick-now-part = 部品を選択中: { $name }
+toolbar-pick-stop-part = 部品の選択を終える

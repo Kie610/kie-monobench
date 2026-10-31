@@ -804,8 +804,18 @@ impl Workspace {
         if self.win.layout.appearance.tool_labels {
             theme::band_height()
         } else {
-            3.0 + icon_tile_size(false).y + theme::fs(19.0)
+            let status = if self.picking_body_field() {
+                theme::fs(20.0)
+            } else {
+                0.0
+            };
+            3.0 + icon_tile_size(false).y + theme::fs(19.0) + status
         }
+    }
+
+    /// ボディを受ける欄がクリックを受け付けている状態。普段の選ぶ種類とは別に扱う。
+    fn picking_body_field(&self) -> bool {
+        self.field_filter().is_some_and(|(now, _)| now.body)
     }
 
     /// どのタブにも右端に出す「選択」のまとまり: 選べる種類(頂点・辺・面・ボディ)を常に見せ、
@@ -826,7 +836,10 @@ impl Workspace {
             .zip(&names)
             .map(|((_, on, enabled), name)| (name.as_str(), *on, *enabled))
             .collect();
-        let field = self.active_pick_field().map(|(_, f)| f.label);
+        let field = self.active_pick_field().map(|(entry, f)| {
+            crate::field_text::translate(&self.win.words(), &entry.type_id, &f, "").label
+        });
+        let body_field = self.picking_body_field();
         let labels = self.win.layout.appearance.tool_labels;
         let (rect, _) = ui.allocate_exact_size(
             egui::vec2(196.0 * theme::band(), self.band_height()),
@@ -841,21 +854,50 @@ impl Workspace {
         if let Some(k) = theme::segmented(&mut col, &items, l.pal.panel) {
             self.toggle_pick_kind(k);
         }
-        // 名前を出さない低い帯には、今の選び方の説明は入れない(▾ の説明に出す)
-        if labels {
+        // 欄で部品を選ぶ状態は、アイコンだけの帯でも名前と終了のボタンを残す。
+        if labels || body_field {
             col.add_space(3.0);
             let now = match &field {
+                Some(label) if body_field => self
+                    .win
+                    .t_with("toolbar-pick-now-part", &[("name", label.as_str().into())]),
                 Some(label) => self
                     .win
                     .t_with("toolbar-pick-field", &[("name", label.as_str().into())]),
                 None if self.win.pick_filter.body => self.win.t("toolbar-pick-now-body"),
                 None => self.win.t("toolbar-pick-now-mixed"),
             };
-            col.label(
-                egui::RichText::new(now)
-                    .size(crate::theme::fs(10.5))
-                    .color(l.pal.ink3),
-            );
+            if body_field {
+                let finish = self.win.t("toolbar-pick-stop-part");
+                col.horizontal(|ui| {
+                    let button_width = theme::fs(22.0);
+                    let width = (ui.available_width() - button_width - ui.spacing().item_spacing.x)
+                        .max(1.0);
+                    ui.add_sized(
+                        egui::vec2(width, ui.spacing().interact_size.y),
+                        egui::Label::new(
+                            egui::RichText::new(&now)
+                                .size(theme::fs(10.5))
+                                .color(l.pal.ink2),
+                        )
+                        .truncate(),
+                    )
+                    .on_hover_text(&now);
+                    let r = ui.small_button("×").on_hover_text(&finish);
+                    r.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &finish)
+                    });
+                    if r.clicked() {
+                        self.leave_pick_field();
+                    }
+                });
+            } else {
+                col.label(
+                    egui::RichText::new(now)
+                        .size(theme::fs(10.5))
+                        .color(l.pal.ink3),
+                );
+            }
         }
         let title = self.win.t("toolbar-group-select");
         let r = group_label(ui, rect, "select_group", &title, false)

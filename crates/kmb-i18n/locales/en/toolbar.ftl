@@ -116,3 +116,6 @@ toolbar-pick-field = What the field "{ $name }" accepts
 toolbar-pick-now-body = Clicking a face selects its whole body
 toolbar-pick-now-mixed = Select vertices, edges and faces together
 toolbar-pick-all = Allow Selecting Everything
+
+toolbar-pick-now-part = Picking parts: { $name }
+toolbar-pick-stop-part = Finish picking parts
