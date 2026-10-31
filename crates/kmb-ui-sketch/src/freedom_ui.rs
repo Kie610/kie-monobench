@@ -47,11 +47,8 @@ impl State {
     }
 }
 
-/// 専用の表示欄の宣言。文書に値を持たないため、汎用のデータの欄には登録しない。
 pub(crate) fn field(ctx: &egui::Context) -> kmb_core::Field {
-    let field = kmb_core::Field::info("freedom", "自由度")
-        .help("全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。");
-    kmb_ui::translated_field(ctx, kmb_sketch::SKETCH, &field)
+    kmb_ui::translated_field(ctx, kmb_sketch::SKETCH, &kmb_sketch::freedom_field())
 }
 
 pub(crate) fn panel(

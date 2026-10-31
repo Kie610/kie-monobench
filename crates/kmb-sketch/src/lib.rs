@@ -125,6 +125,7 @@ pub fn register(reg: &mut Registry) {
             .retarget(kmb_core::Retarget::Plane {
                 key: "plane".into(),
             })
+            .field(freedom_field())
             .no_raw_editor(),
         |d| {
             let s: Sketch = serde_json::from_value(d.clone())
@@ -132,6 +133,12 @@ pub fn register(reg: &mut Registry) {
             Ok(Box::new(s))
         },
     );
+}
+
+/// 専用の編集器で、解から求めた自由度を表示する読み取り専用の欄。文書へ値は保存しない。
+pub fn freedom_field() -> kmb_core::Field {
+    kmb_core::Field::info("freedom","自由度")
+        .help("全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。")
 }
 
 /// 出力の値から輪郭を取り出す。
