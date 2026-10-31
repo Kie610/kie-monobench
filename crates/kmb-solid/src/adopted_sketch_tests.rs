@@ -1,9 +1,9 @@
 //! 他のソフトのスケッチで起きた不具合が、JC では起きないことを確かめる(採用分の点検で「試験だけ」と
 //! 判定した物のうち、形のカーネルが要る物)。面に置いたスケッチの投影と、スケッチを変えた後の
-//! フィレットの辺。
+//! フィレットの辺、元の形を大きく変えた時に写した縁・外形とオフセットが付いて行くこと。
 
 use super::*;
-use crate::tests::{EdgeBench, TestKernel, assert_ok, final_mass, rect_sketch, registry};
+use crate::tests::{EdgeBench, TestKernel, assert_ok, close, final_mass, rect_sketch, registry};
 use kmb_core::{Document, FeatureId, FeatureStatus, Kernel, Op, Value};
 use kmb_samples::sample::{DocBuilder, SketchBuilder, reference_part};
 use kmb_sketch::{Projection, ProjectionSource, SketchPlane};
@@ -178,4 +178,175 @@ fn a_fillet_keeps_its_edge_after_the_sketch_is_resized() {
     widen(&mut plain);
     let before = final_mass(&mut plain, &TestKernel::new()).volume;
     assert!((before - after - rounded).abs() < 0.5, "{before} - {after}");
+}
+
+/// 10-31 t5: 板の手前の面に置いたスケッチで、面の縁(4 本の辺)を写して内へ 2 mm オフセットし、
+/// その輪郭を手前へ押し出す。板の厚み(押し出しの距離)を 10 から 60、さらに 5 へ大きく変えても、
+/// 写した縁は新しい面に付いて行き、オフセットした輪郭も同じ 2 mm の内側に作り直されて、後の押し出しが
+/// 失敗しない(他のソフトでは、元の形を大きく変えると写した輪郭が付いて来ず、オフセットが失敗した)。
+#[test]
+fn a_projected_face_outline_and_its_offset_follow_a_large_thickness_change() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let s = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 30.0, 20.0);
+    let plate = b.feature(
+        EXTRUDE,
+        "板",
+        Extrude {
+            profile: Some(s),
+            distance: "10 mm".into(),
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("面の縁のオフセット");
+    let report = doc.recompute(&registry(), &*k);
+    assert_ok(&report);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(plate) else {
+        panic!()
+    };
+    let Value::Shape(h) = outputs["body"] else {
+        panic!()
+    };
+    let front = face(&*k, h, [0.0, -1.0, 0.0]);
+
+    // 画面と同じに、新しい面のスケッチは面の左下の角を原点にし、面の縁の辺を写す
+    let origin = kmb_sketch::default_origin(&*k, h, &front);
+    let (plane, _) = kmb_sketch::face_plane(&*k, h, &front, &origin).unwrap();
+    let rim: Vec<_> = kmb_sketch::body_edge_refs(&*k, plate, h, &plane)
+        .into_iter()
+        .filter(
+            |r| matches!(&r.source, ProjectionSource::Edge { faces, .. } if faces.contains(&front)),
+        )
+        .collect();
+    assert_eq!(rim.len(), 4, "{rim:?}");
+    let mut sketch = SketchBuilder::new(SketchPlane::Face {
+        feature: plate,
+        face: front.clone(),
+        origin,
+    })
+    .build();
+    let edges: Vec<_> = rim.iter().map(|r| sketch.add_projection(r)).collect();
+    let made = sketch.offset(&edges, 2.0, "2 mm", false);
+    assert_eq!(made.len(), 4, "{:?}", sketch.entities);
+    let sketch = push(
+        &mut doc,
+        kmb_sketch::SKETCH,
+        serde_json::to_value(sketch).unwrap(),
+    );
+    push(
+        &mut doc,
+        EXTRUDE,
+        serde_json::to_value(Extrude {
+            profile: Some(sketch),
+            distance: "5 mm".into(),
+            operation: Operation::Join,
+            target: Some(plate),
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    let volume = |t: f64| 30.0 * 20.0 * t + (30.0 - 4.0) * (t - 4.0) * 5.0;
+    let v = final_mass(&mut doc, &k).volume;
+    assert!((v - volume(10.0)).abs() < 1e-3, "{v}");
+
+    for t in [60.0, 5.0] {
+        set_distance(&mut doc, plate, &format!("{t} mm"));
+        let report = doc.recompute(&registry(), &*k);
+        assert_ok(&report);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(sketch) else {
+            panic!("{report:?}")
+        };
+        let warnings = kmb_core::warnings_of(outputs);
+        assert!(warnings.is_empty(), "厚み {t}: {warnings:?}");
+        let v = final_mass(&mut doc, &k).volume;
+        assert!(
+            (v - volume(t)).abs() < 1e-3,
+            "厚み {t}: {v} != {}",
+            volume(t)
+        );
+    }
+}
+
+/// 10-31 t5 の端から見た面: 立てた円柱(直径 20、中心 x=15)を YZ 平面のスケッチから横に見ると、
+/// 外形は辺に当たらない線(側面の外形と、端から見た上下の円の面)になる。その外形を写して内へ 2 mm
+/// オフセットし、円柱へ向けて押し出す。円柱の高さを 10 から 60、さらに 6 へ大きく変えても、写した
+/// 外形とオフセットが新しい高さに付いて行き、後の押し出しが失敗しない。
+#[test]
+fn a_projected_silhouette_and_its_offset_follow_a_large_height_change() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(SketchPlane::Xy);
+    let o = s.fixed_point(0.0, 0.0);
+    let c = s.point_from(o, "15 mm", "0 mm", [15.0, 0.0]);
+    s.circle(c, "20 mm", 10.0);
+    let disc = b.feature(kmb_sketch::SKETCH, "円", s.build());
+    let pin = b.feature(
+        EXTRUDE,
+        "円柱",
+        Extrude {
+            profile: Some(disc),
+            distance: "10 mm".into(),
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("横から見た外形のオフセット");
+    let report = doc.recompute(&registry(), &*k);
+    assert_ok(&report);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(pin) else {
+        panic!()
+    };
+    let Value::Shape(h) = outputs["body"] else {
+        panic!()
+    };
+    let plane = SketchPlane::Yz;
+    let p = kmb_core::Plane::YZ;
+    let body = kmb_sketch::body_refs(&*k, pin, h, &p);
+    let mesh = k.mesh(h, kmb_sketch::BODY_MESH_TOL).unwrap();
+    let outline: Vec<_> = kmb_sketch::silhouette_refs(&mesh, &p, pin, &body)
+        .into_iter()
+        .filter(|r| matches!(r.source, ProjectionSource::Silhouette { .. }))
+        .collect();
+    assert_eq!(outline.len(), 4, "{outline:?}");
+    let mut sketch = SketchBuilder::new(plane).build();
+    let lines: Vec<_> = outline.iter().map(|r| sketch.add_projection(r)).collect();
+    let made = sketch.offset(&lines, 2.0, "2 mm", false);
+    assert_eq!(made.len(), 4, "{:?}", sketch.entities);
+    let sketch = push(
+        &mut doc,
+        kmb_sketch::SKETCH,
+        serde_json::to_value(sketch).unwrap(),
+    );
+    push(
+        &mut doc,
+        EXTRUDE,
+        serde_json::to_value(Extrude {
+            profile: Some(sketch),
+            distance: "30 mm".into(),
+            operation: Operation::Join,
+            target: Some(pin),
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    // 板(x 0〜30・y −8〜8・z 2〜t−2)と円柱の和。重なりは円の |y| ≤ 8 の部分 × 板の高さ
+    let lens = 2.0 * (8.0 * 6.0 + 100.0 * 0.8f64.asin());
+    let volume = |t: f64| {
+        let cyl = std::f64::consts::PI * 100.0 * t;
+        cyl + (30.0 * 16.0 - lens) * (t - 4.0)
+    };
+    let v = final_mass(&mut doc, &k).volume;
+    assert!(close(v, volume(10.0), 1e-2), "{v} != {}", volume(10.0));
+
+    for t in [60.0, 6.0] {
+        set_distance(&mut doc, pin, &format!("{t} mm"));
+        let report = doc.recompute(&registry(), &*k);
+        assert_ok(&report);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(sketch) else {
+            panic!("{report:?}")
+        };
+        let warnings = kmb_core::warnings_of(outputs);
+        assert!(warnings.is_empty(), "高さ {t}: {warnings:?}");
+        let v = final_mass(&mut doc, &k).volume;
+        assert!(close(v, volume(t), 1e-2), "高さ {t}: {v} != {}", volume(t));
+    }
 }
