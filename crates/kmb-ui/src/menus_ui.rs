@@ -1043,10 +1043,8 @@ impl Workspace {
         // 重なった物から選ぶ(長押しと同じ一覧。長押しを知らない人への入口で、使い方も添える)
         let in_command = self.cur.gesture.is_some() || self.cur.creating.is_some();
         if !in_command && self.view_menu.context_others.1.len() > 1 {
-            if crate::theme::menu_row(ui, "layers", "ほかを選ぶ…(長押しでも)", "", true)
-                .on_hover_text(
-                    "右クリックした所に重なっている面の一覧から選ぶ。左ボタンの長押しでも出る",
-                )
+            if crate::theme::menu_row(ui, "layers", &self.win.t("view-others"), "", true)
+                .on_hover_text(self.win.t("view-others-help"))
                 .clicked()
             {
                 self.view_menu.candidates = Some(self.view_menu.context_others.clone());
