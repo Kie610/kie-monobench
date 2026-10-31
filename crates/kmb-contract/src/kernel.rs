@@ -1014,7 +1014,7 @@ pub fn instances_place_the_same_shape_and_fold_into_one_step<K: Kernel>(
 
 /// 2 mm の立方体。角の頂点を分けても位置から閉じた網だと分かる契約の入力。
 pub fn mesh_cube() -> kmb_core::Mesh {
-    let p = vec![
+    let p = [
         [0., 0., 0.],
         [2., 0., 0.],
         [2., 2., 0.],
