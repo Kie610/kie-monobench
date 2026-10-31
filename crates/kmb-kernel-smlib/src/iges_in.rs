@@ -22,6 +22,7 @@ struct Face {
 struct Model {
     pub faces: Vec<Face>,
     pub warnings: Vec<String>,
+    missing_faces: usize,
     pub tolerance: f64,
 }
 impl Model {
