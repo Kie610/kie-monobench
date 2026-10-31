@@ -26,6 +26,8 @@ pub(crate) struct State {
     pub recent: Vec<EntityId>,
     /// 曲線の上に置いた位置と、その曲線(できた点に線上・円周上を付ける)
     pub placed: Vec<([f64; 2], EntityId)>,
+    /// 形が同じ間の交点。カーソルを動かすだけでは計算し直さない。
+    pub crossings: CrossingCache,
 }
 
 impl State {
@@ -83,7 +85,7 @@ pub(crate) fn shape(sketch: &Sketch, sol: &Solution, id: EntityId) -> Option<Sha
             }
             Shape::Arc(c, (s[0] - c[0]).hypot(s[1] - c[1]), a0, span)
         }
-        // 楕円・スプライン・円錐曲線との交わりと吸い付きは、まだ線と円だけで求める
+        // 自由曲線はスケッチの曲線の式で最近点と交点を求める。
         Entity::Point { .. }
         | Entity::Ellipse { .. }
         | Entity::Spline { .. }
@@ -190,6 +192,33 @@ fn intersect(a: &Shape, b: &Shape) -> Vec<[f64; 2]> {
 /// 吸い付く点 1 つ: 位置と種類、乗っている曲線。
 pub(crate) type Crossing = (([f64; 2], Kind), Vec<EntityId>);
 
+/// 解いた形で決まる吸い付く先。座標・半径・曲線の定義が変わった時に作り直す。
+#[derive(Default)]
+pub(crate) struct CrossingCache {
+    ready: bool,
+    entities: Vec<Entity>,
+    points: std::collections::BTreeMap<EntityId, [f64; 2]>,
+    radii: std::collections::BTreeMap<EntityId, f64>,
+    found: Vec<Crossing>,
+}
+
+impl CrossingCache {
+    pub(crate) fn get(&mut self, sketch: &Sketch, sol: &Solution) -> &[Crossing] {
+        if !self.ready
+            || self.entities != sketch.entities
+            || self.points != sol.points
+            || self.radii != sol.radii
+        {
+            self.found = crossings(sketch, sol);
+            self.entities.clone_from(&sketch.entities);
+            self.points.clone_from(&sol.points);
+            self.radii.clone_from(&sol.radii);
+            self.ready = true;
+        }
+        &self.found
+    }
+}
+
 /// 曲線どうしの交点と、円・円弧の四分点。
 pub(crate) fn crossings(sketch: &Sketch, sol: &Solution) -> Vec<Crossing> {
     let curves: Vec<(EntityId, Shape)> = sketch
@@ -212,6 +241,9 @@ pub(crate) fn crossings(sketch: &Sketch, sol: &Solution) -> Vec<Crossing> {
                 push(p, Kind::Intersection, vec![*a, *b]);
             }
         }
+    }
+    for (p, a, b) in sketch.free_curve_crossings(sol) {
+        push(p, Kind::Intersection, vec![a, b]);
     }
     for (id, s) in &curves {
         if let Shape::Arc(c, r, ..) = s {
@@ -255,18 +287,29 @@ pub(crate) fn snap_cursor(
     if sketch.nearest_point(sol, w[0], w[1], tol).is_some() {
         return plain;
     }
-    if let Some(h) = sketch.hit_test(sol, w[0], w[1], tol)
-        && let Some(s) = shape(sketch, sol, h.entity)
-    {
-        return Snapped {
-            pos: s.nearest(w),
-            on: Some(h.entity),
-            label: Some(match s {
-                Shape::Seg(..) => "線上",
-                Shape::Arc(..) => "円周上",
-            }),
-            guides: vec![],
+    if let Some(h) = sketch.hit_test(sol, w[0], w[1], tol) {
+        let found = if let Some(s) = shape(sketch, sol, h.entity) {
+            Some((
+                s.nearest(w),
+                match s {
+                    Shape::Seg(..) => "線上",
+                    Shape::Arc(..) => "円周上",
+                },
+            ))
+        } else {
+            sketch
+                .curve_closest(sol, h.entity, w)
+                .filter(|(_, _, distance)| *distance <= tol)
+                .map(|(point, _, _)| (point, "線上"))
         };
+        if let Some((pos, label)) = found {
+            return Snapped {
+                pos,
+                on: Some(h.entity),
+                label: Some(label),
+                guides: vec![],
+            };
+        }
     }
     let mut out = plain;
     // 縦に並ぶ(x がそろう)点と、横に並ぶ(y がそろう)点。近い方を 1 つずつ
@@ -518,6 +561,9 @@ pub(crate) fn add_line_rel(
     s.add_constraint(k);
     Some(rel.label())
 }
+
+#[cfg(test)]
+mod curve_snap_tests;
 
 #[cfg(test)]
 mod tests {

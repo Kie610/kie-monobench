@@ -261,12 +261,21 @@ impl Sketch {
                     _ => continue,
                 },
                 Entity::Point { .. } => continue,
-                Entity::Ellipse { .. } | Entity::Spline { .. } | Entity::Conic { .. } => {
-                    match self.solved_shape(sol, e.id()) {
-                        Some(s) => s.closest([x, y]).1,
-                        None => continue,
+                Entity::Ellipse { .. } | Entity::Spline { .. } | Entity::Conic { .. } => match self
+                    .solved_shape(sol, e.id())
+                {
+                    Some(s) => {
+                        let Some([lo, hi]) = crate::curve::shape_bounds(&s) else {
+                            continue;
+                        };
+                        if x < lo[0] - tol || x > hi[0] + tol || y < lo[1] - tol || y > hi[1] + tol
+                        {
+                            continue;
+                        }
+                        crate::curve::closest_on_shape(&s, [x, y]).2
                     }
-                }
+                    None => continue,
+                },
             };
             if d <= tol {
                 out.push(Hit {

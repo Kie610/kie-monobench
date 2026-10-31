@@ -255,7 +255,10 @@ pub(crate) fn sketch_view(
     let shift = ui.input(|i| i.modifiers.shift);
     let mut wants = snap_wants(editor.tool);
     wants.crossings &= !ctrl;
-    let mut aug = crate::snap::augment(sketch, sol, refs, wants);
+    let crossings = wants
+        .crossings
+        .then(|| editor.infer.crossings.get(sketch, sol));
+    let mut aug = crate::snap::augment_with_crossings(sketch, sol, refs, wants, crossings);
     if editor.tool == Tool::Line
         && !ctrl
         && !editor.hud.pinned()
