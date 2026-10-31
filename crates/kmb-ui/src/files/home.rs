@@ -8,6 +8,8 @@ pub(crate) struct HomeState {
     pub(crate) start: bool,
     /// 自動保存の写しから戻せる文書
     pub(crate) recoveries: Vec<kmb_session::Recovery>,
+    /// 全部捨てると確かめた写しのパス。対象が変われば確認をやり直す。
+    pub(crate) discard_recoveries: Option<Vec<std::path::PathBuf>>,
     /// 登録したプロジェクト(PC のフォルダ)
     pub(crate) projects: kmb_session::projects::Projects,
     /// 最近使ったファイル
