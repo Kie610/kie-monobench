@@ -358,3 +358,6 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う

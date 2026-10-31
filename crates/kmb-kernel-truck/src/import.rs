@@ -1,6 +1,6 @@
 //! STEP の読み込み。truck の STEP の曲面は truck-modeling の曲面と型が違い、そのままでは
 //! ブーリアンに使えないので、読み込んだ形は三角形の網として持つ。加工(網から作る)、
-//! 体積の計測、表示には使えるが、足し引き・移動・フィレットには使えない。
+//! 体積の計測、表示と移動に使える。面の形を持たず、足し引きやフィレットには使えない。
 
 use crate::{bounds, signed_volume, tri_area, triangles};
 use kmb_core::kernel::{KernelError, P3};
@@ -11,6 +11,8 @@ use truck_topology::compress::{CompressedEdge, CompressedEdgeIndex};
 /// 読み込んだ形(面ごとの網、向きは外向きにそろえ済み)。
 #[derive(Clone)]
 pub(crate) struct Imported {
+    /// 三角形の網を直接預かった時は、頂点・法線・表示の辺を分け直さずに保つ。
+    pub raw: Option<kmb_core::Mesh>,
     pub meshes: Vec<Option<PolygonMesh>>,
     pub names: Vec<String>,
     /// 面の境目の辺を折れ線にしたもの(表示と、測る道具の点・辺に使う)
@@ -19,6 +21,8 @@ pub(crate) struct Imported {
     pub max: P3,
     pub volume: f64,
     pub area: f64,
+    pub open_edges: usize,
+    pub centroid: Option<P3>,
 }
 
 /// 読み込みを待つ時間の上限。
@@ -57,7 +61,49 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         // 網はファイルの単位で作るので、許容差もファイルの単位にする。ただし 1e-4 より細かくしない
         // (m の STEP で 0.01 mm を求めると、40 mm の板 1 枚でも網づくりに数十秒かかる。m の物は
         // 0.1 mm の網になる)
-        let meshed = cshell.robust_triangulation((IMPORT_TOLERANCE / unit).max(1e-4));
+        let mut meshed = cshell.robust_triangulation((IMPORT_TOLERANCE / unit).max(1e-4));
+        // 面ごとの曲面評価の丸め差を共有する境界の座標へ戻す。共有する頂点と辺だけを
+        // 基準にし、無関係な面どうしや読み込んだ生の三角形の網は寄せない。
+        for edge in &mut meshed.edges {
+            if let Some(p) = edge.curve.first_mut() {
+                *p = meshed.vertices[edge.vertices.0];
+            }
+            if let Some(p) = edge.curve.last_mut() {
+                *p = meshed.vertices[edge.vertices.1];
+            }
+        }
+        let magnitude = meshed.vertices.iter().fold(1.0_f64, |m, p| {
+            m.max(p.x.abs()).max(p.y.abs()).max(p.z.abs())
+        });
+        // 曲面への逆写像の収束誤差も含める。網の許容差の一万分の一以内で、
+        // その面自身が参照する共有辺の標本へだけ合わせる。
+        let epsilon =
+            (256.0 * f64::EPSILON * magnitude).max((IMPORT_TOLERANCE / unit).max(1e-4) * 1e-4);
+        for face in &mut meshed.faces {
+            let mut boundary: Vec<Point3> = face
+                .boundaries
+                .iter()
+                .flatten()
+                .flat_map(|e| meshed.edges[e.index].curve.iter().copied())
+                .collect();
+            boundary.sort_by(|a, b| a.x.total_cmp(&b.x));
+            if let Some(mesh) = &mut face.surface {
+                for point in mesh.positions_mut() {
+                    let start = boundary.partition_point(|p| p.x < point.x - epsilon);
+                    let nearest = boundary[start..]
+                        .iter()
+                        .take_while(|p| p.x <= point.x + epsilon)
+                        .filter_map(|p| {
+                            let distance = p.distance2(*point);
+                            (distance <= epsilon * epsilon).then_some((distance, *p))
+                        })
+                        .min_by(|a, b| a.0.total_cmp(&b.0));
+                    if let Some((_, canonical)) = nearest {
+                        *point = canonical;
+                    }
+                }
+            }
+        }
         // 円柱などの閉じた曲面の継ぎ目(1 つの面の境界に 2 回出る辺)は、曲面の作り方の都合で
         // できる線で、形の上に特別な所は無い。描かない(選ぶ・吸い付く対象にもしない)
         let mut seams = std::collections::HashSet::new();
@@ -136,7 +182,16 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         .flat_map(triangles)
         .map(|t| tri_area(&t))
         .sum();
+    let mut geometry = kmb_format::mesh::Geometry::default();
+    for t in meshes.iter().flatten().flat_map(triangles) {
+        let base = geometry.vertices.len() as u32;
+        geometry.vertices.extend(t.map(|p| p.map(|x| x as f32)));
+        geometry.triangles.push([base, base + 1, base + 2]);
+    }
+    let (open_edges, _, _, centroid) =
+        kmb_format::mesh::properties(&geometry).map_err(KernelError::Failed)?;
     Ok(Imported {
+        raw: None,
         meshes,
         names,
         edges,
@@ -144,6 +199,8 @@ pub(crate) fn read_step(text: &str) -> Result<Imported, KernelError> {
         max,
         volume,
         area,
+        open_edges,
+        centroid,
     })
 }
 
@@ -320,26 +377,27 @@ fn cone_fan(
     for e in boundaries.iter().flatten() {
         *count.entry(e.index).or_insert(0) += 1;
     }
-    let mut rings: Vec<Vec<Point3>> = boundaries
-        .iter()
-        .map(|wire| {
-            let mut ring: Vec<Point3> = Vec::new();
-            for e in wire.iter().filter(|e| count[&e.index] == 1) {
-                let mut pts: Vec<Point3> = edges.get(e.index)?.curve.iter().copied().collect();
-                if !e.orientation {
-                    pts.reverse();
-                }
-                if ring
-                    .last()
-                    .is_some_and(|q| pts.first().is_some_and(|p| p.near(q)))
-                {
-                    pts.remove(0);
-                }
-                ring.extend(pts);
+    let mut rings: Vec<Vec<Point3>> = Vec::new();
+    for wire in boundaries {
+        let mut ring: Vec<Point3> = Vec::new();
+        for e in wire.iter().filter(|e| count[&e.index] == 1) {
+            let mut pts: Vec<Point3> = edges.get(e.index)?.curve.iter().copied().collect();
+            if !e.orientation {
+                pts.reverse();
             }
-            Some(ring)
-        })
-        .collect::<Option<Vec<_>>>()?;
+            if let (Some(last), Some(first)) = (ring.last(), pts.first()) {
+                if first.near(last) {
+                    pts.remove(0);
+                } else {
+                    // 継ぎ目を除いて分かれる輪は別々に持つ。円錐台の上下の輪を
+                    // ひと続きにすると、円錐の頂点まで余分な三角形が張られる。
+                    rings.push(std::mem::take(&mut ring));
+                }
+            }
+            ring.extend(pts);
+        }
+        rings.push(ring);
+    }
     rings.retain(|r| r.len() >= 3);
     let [ring] = rings.as_mut_slice() else {
         return None;

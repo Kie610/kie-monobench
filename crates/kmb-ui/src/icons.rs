@@ -120,6 +120,10 @@ const PATHS: &[(&str, &str)] = &[
     // 面をオフセット: 曲がった面と、外へ出す矢印と、動かした先の面
     ("offset_face", "M3 20c4-7 14-7 18 0"),
     ("textf", "M3 18l4-12h14l-4 12z"),
+    (
+        "mesh-import",
+        "M3 18L7 5l9 2 5 11H3zM7 5l4 13 5-11M12 2v7M9 6l3 3 3-3",
+    ),
     ("step", "M12 3v11M8 10l4 4 4-4M4 16v4h16v-4"),
     // DXF(図面の紙と線)・SVG(曲線と端の点)
     ("dxf", "M5 3h9l5 5v13H5zM14 3v5h5M8 17l3-5 2 3 3-4"),
@@ -844,6 +848,7 @@ pub(crate) const ONE_LAYER: &[&str] = &[
     "play",
     // 取り込む(読み込んだ物を置くだけで、形を作る道具ではない)
     "step",
+    "mesh-import",
     "svg",
     "dxf",
     "canvas",

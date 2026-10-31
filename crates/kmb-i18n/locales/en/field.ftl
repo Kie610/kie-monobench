@@ -2162,3 +2162,11 @@ field-solid-thread-length-help = Blank uses the full face length.
 field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 field-solid-thread-target = Target
+
+field-solid-import-mesh-file = File
+field-solid-import-mesh-object = Object name
+field-solid-import-mesh-triangles = Triangles
+field-solid-import-mesh-unit = Unit
+field-solid-import-mesh-crease-angle = Crease angle
+field-solid-import-mesh-crease-angle-help = Smooth the shading between adjacent triangles whose angle is at most this value
+field-solid-import-mesh-notes = Notes

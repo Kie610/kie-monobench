@@ -52,3 +52,6 @@ feature-flow-volume = 3D の流れ
 feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)
 feature-solid-surface-patch = 面を張る
 feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る
+
+feature-solid-import-mesh = 網の読み込み
+feature-solid-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う

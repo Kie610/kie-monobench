@@ -34,6 +34,8 @@ pub enum Edit {
         parent: Option<u64>,
         bodies: Vec<(usize, String)>,
     },
+    /// この変更で足した何番目の機能かを指定し、部品に入れずにボディの名前を付ける。
+    NameBodies { bodies: Vec<(usize, String)> },
     /// モジュールの区画を置き換える(`None` なら外す)。モジュールは
     /// [`DocumentData::set_section`](crate::DocumentData::set_section) で作る
     SetSection {

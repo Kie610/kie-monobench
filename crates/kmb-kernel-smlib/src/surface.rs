@@ -6,12 +6,31 @@ const GAP: f64 = 1e-4;
 const NO_VOLUME: &str = "面のボディには体積がありません。厚みを付けると体積と重さが求まります";
 
 impl SmlibKernel {
+    pub(super) fn require_brep(
+        &self,
+        shape: ShapeHandle,
+        operation: &str,
+    ) -> Result<BodyKind, KernelError> {
+        let kind = self.body_kind(shape)?;
+        if kind == BodyKind::Mesh {
+            return Err(KernelError::Failed(format!(
+                "網のボディは{operation}に使えません(三角形の網で、面と辺の形を持たないため)"
+            )));
+        }
+        Ok(kind)
+    }
+
     pub(super) fn require_solid(
         &self,
         shape: ShapeHandle,
         operation: &str,
     ) -> Result<(), KernelError> {
-        if self.body_kind(shape)? == BodyKind::Sheet {
+        let kind = if operation == "体積" {
+            self.body_kind(shape)?
+        } else {
+            self.require_brep(shape, operation)?
+        };
+        if kind == BodyKind::Sheet {
             let message = if operation == "体積" {
                 NO_VOLUME.into()
             } else {
