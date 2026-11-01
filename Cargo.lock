@@ -2763,6 +2763,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-hrtf"
+version = "0.2.0"
+dependencies = [
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-i18n"
 version = "0.2.0"
 dependencies = [
