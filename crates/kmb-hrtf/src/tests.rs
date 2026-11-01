@@ -337,3 +337,106 @@ fn regrid_needs_onset_removed_to_mix() {
     assert!(s["a"].same_dirs(&s["b"]));
     assert_eq!(s["b"].grid, Grid::GaussLegendre { el: 7, az: 12 });
 }
+
+/// 確かめること: normalize(拡散音場)の後は、below_hz の 1 オクターブ上より高い所で全方向の平均の
+/// 大きさが 0 dB にそろい、below_hz より下は元の大きさのまま、立ち上がりは 0 番に残る。基準に自分を
+/// 渡しても同じになる。
+#[test]
+fn normalize_flattens_the_average() {
+    let mut s = sets(&[("a", synth(1.0))]);
+    let r = run(
+        &recipe(
+            r#"{"steps":[{"op":"onset","set":"a"},{"op":"normalize","set":"a","below_hz":1000}]}"#,
+        ),
+        &mut s,
+    )
+    .unwrap();
+    assert!(r.is_empty());
+    let mut before = sets(&[("a", synth(1.0))]);
+    run(
+        &recipe(r#"{"steps":[{"op":"onset","set":"a"}]}"#),
+        &mut before,
+    )
+    .unwrap();
+    let (a, b) = (&s["a"], &before["a"]);
+    let f = a.taps();
+    let fft = Fft::new(f);
+    for ear in 0..2 {
+        let mean = |set: &HrirSet| -> Vec<f64> {
+            let mut p = vec![0.0; f / 2 + 1];
+            for pair in &set.ir {
+                for (k, v) in fft.spectrum(&pair[ear]).iter().take(f / 2 + 1).enumerate() {
+                    p[k] += v.norm_sqr() / set.ir.len() as f64;
+                }
+            }
+            p
+        };
+        let (pa, pb) = (mean(a), mean(b));
+        for k in 0..=f / 2 {
+            let hz = k as f64 * FS / f as f64;
+            let db = 10.0 * pa[k].log10();
+            if (2500.0..=20000.0).contains(&hz) {
+                assert!(db.abs() < 0.5, "耳 {ear} {hz} Hz: {db} dB");
+            }
+            if hz < 900.0 {
+                assert!(
+                    (db - 10.0 * pb[k].log10()).abs() < 0.5,
+                    "耳 {ear} {hz} Hz が変わった"
+                );
+            }
+        }
+        for pair in &a.ir {
+            let peak = (0..f)
+                .max_by(|&i, &j| pair[ear][i].abs().total_cmp(&pair[ear][j].abs()))
+                .unwrap();
+            assert!(peak < 8, "立ち上がりが動いた({peak})");
+        }
+    }
+    let mut same = sets(&[("a", synth(1.0)), ("r", synth(1.0))]);
+    run(
+        &recipe(r#"{"steps":[{"op":"onset","set":"a"},{"op":"onset","set":"r"},{"op":"normalize","set":"a","reference":"r","below_hz":1000}]}"#),
+        &mut same,
+    )
+    .unwrap();
+    for (x, y) in same["a"].ir.iter().zip(&a.ir) {
+        for ear in 0..2 {
+            for (u, v) in x[ear].iter().zip(&y[ear]) {
+                assert!((u - v).abs() < 1e-12);
+            }
+        }
+    }
+    // 輪の枠でない集まりには使えない
+    let mut lin = sets(&[("a", synth(1.0))]);
+    let e = run(
+        &recipe(r#"{"steps":[{"op":"normalize","set":"a"}]}"#),
+        &mut lin,
+    )
+    .unwrap_err();
+    assert_eq!(e.kind, ErrorKind::Input);
+}
+
+/// 確かめること: credits は集まりごとに題・許諾などの属性と処理の記録を書き、無い属性は
+/// 「(記載なし)」と書く。名前にフォルダの区切りを使えば誤り。
+#[test]
+fn credits_lists_attribution_and_changes() {
+    let mut s = sets(&[("a", synth(1.0)), ("b", synth(0.5))]);
+    let files = run(
+        &recipe(r#"{"steps":[{"op":"onset","set":"b"},{"op":"credits","sets":["a","b"]}]}"#),
+        &mut s,
+    )
+    .unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].name, "帰属.txt");
+    let t = String::from_utf8(files[0].bytes.clone()).unwrap();
+    assert!(t.contains("== a ==") && t.contains("== b =="));
+    assert!(t.contains("題(Title): 合成 1"));
+    assert!(t.contains("許諾(License): 試験用"));
+    assert!(t.contains("組織(Organization): (記載なし)"));
+    assert!(t.contains("- onset: 立ち上がりを外して遅れへ移した"));
+    let e = run(
+        &recipe(r#"{"steps":[{"op":"credits","sets":["a"],"name":"x/帰属.txt"}]}"#),
+        &mut s,
+    )
+    .unwrap_err();
+    assert_eq!(e.kind, ErrorKind::Input);
+}

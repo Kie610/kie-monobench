@@ -19,7 +19,9 @@
 //!   {"op": "resample", "set": "d1", "fs": 48000},
 //!   {"op": "onset", "set": "d1"},
 //!   {"op": "regrid", "set": "d1", "to": {"kind": "gauss_legendre", "el": 89, "az": 180}},
-//!   {"op": "write", "set": "d1", "name": "d1-48k.sofa"}
+//!   {"op": "normalize", "set": "d1"},
+//!   {"op": "write", "set": "d1", "name": "d1-48k.sofa"},
+//!   {"op": "credits", "sets": ["d1"]}
 //! ]}
 //! ```
 
@@ -51,6 +53,14 @@ fn yes() -> bool {
 
 fn default_cutoff() -> f64 {
     0.95
+}
+
+fn default_below_hz() -> f64 {
+    200.0
+}
+
+fn default_credits_name() -> String {
+    "帰属.txt".into()
 }
 
 /// 処理の 1 段。
@@ -99,6 +109,23 @@ pub enum Step {
         fade_after: Option<usize>,
         #[serde(default)]
         rolloff_hz: Option<f64>,
+    },
+    /// 大きさを平らにそろえる。`reference` が無ければ自分の全方向の平均(拡散音場)、あれば
+    /// その集まりの全方向の平均(頭の無い時に測った物を渡せば自由音場)で、耳ごとに割る。割る量は
+    /// 最小位相のフィルタにして掛ける(立ち上がりを動かさない)。`below_hz` より低い所は割らず
+    /// (0 dB)、その 1 オクターブ上までで滑らかにつなぐ。輪の枠の集まりだけに使える。
+    Normalize {
+        set: String,
+        #[serde(default)]
+        reference: Option<String>,
+        #[serde(default = "default_below_hz")]
+        below_hz: f64,
+    },
+    /// 帰属の文書(作者・出典・許諾・変更したこと)を書き出す。集まりごとに元の属性と処理の記録を並べる。
+    Credits {
+        sets: Vec<String>,
+        #[serde(default = "default_credits_name")]
+        name: String,
     },
     /// 方向の格子を替える(`regrid` の説明を見る)。`out` が無ければ `set` を置き換える。
     Regrid {
@@ -154,6 +181,8 @@ impl Step {
             Step::Regrid { .. } => "regrid",
             Step::Resample { .. } => "resample",
             Step::Write { .. } => "write",
+            Step::Normalize { .. } => "normalize",
+            Step::Credits { .. } => "credits",
         }
     }
 }
@@ -174,6 +203,15 @@ fn frame_ok(frame: usize) -> Result<(), HrtfError> {
             "枠の長さ {frame} は 16〜65536 の 2 の累乗にする"
         )))
     }
+}
+
+fn check_name(name: &str) -> Result<(), HrtfError> {
+    if name.is_empty() || name.contains(['/', '\\']) || name.starts_with('.') {
+        return Err(HrtfError::input(format!(
+            "書き出しの名前「{name}」を空にせず、フォルダの区切りや頭の . を使わない"
+        )));
+    }
+    Ok(())
 }
 
 fn get<'a>(sets: &'a BTreeMap<String, HrirSet>, name: &str) -> Result<&'a HrirSet, HrtfError> {
@@ -263,14 +301,67 @@ fn apply(
                 now: opts.now.clone(),
             };
             let name = name.clone().unwrap_or_else(|| format!("{set}.sofa"));
-            if name.contains(['/', '\\']) || name.starts_with('.') {
-                return Err(HrtfError::input(format!(
-                    "書き出しの名前「{name}」にフォルダの区切りや頭の . を使わない"
-                )));
-            }
+            check_name(&name)?;
             files.push(OutFile {
                 name,
                 bytes: crate::sofa::write(s, &spec)?,
+            });
+        }
+        Step::Normalize {
+            set,
+            reference,
+            below_hz,
+        } => {
+            if !(below_hz.is_finite() && *below_hz >= 0.0) {
+                return Err(HrtfError::input(format!(
+                    "below_hz {below_hz} は 0 以上の数にする"
+                )));
+            }
+            let s = get(sets, set)?;
+            if s.frame != Frame::Circular {
+                return Err(HrtfError::input(
+                    "輪の枠でない(先に onset の段で立ち上がりを外す)",
+                ));
+            }
+            let r = match reference {
+                Some(r) => get(sets, r)?,
+                None => s,
+            };
+            if r.fs != s.fs {
+                return Err(HrtfError::input(format!(
+                    "サンプリング周波数が違う({set} は {} Hz、基準は {} Hz)",
+                    s.fs, r.fs
+                )));
+            }
+            let f = s.taps();
+            if r.taps() > f {
+                return Err(HrtfError::input(format!(
+                    "基準の IR の長さ {} が枠の長さ {f} を超える",
+                    r.taps()
+                )));
+            }
+            let by = reference.as_ref().map_or(
+                "自分の全方向の平均(拡散音場)".to_string(),
+                |r| format!("{r} の全方向の平均"),
+            );
+            let mut out = normalize(s, r, *below_hz);
+            out.history.push(format!(
+                "normalize: 大きさを {by} で割った({below_hz} Hz より下は割らない)"
+            ));
+            sets.insert(set.clone(), out);
+        }
+        Step::Credits { sets: names, name } => {
+            check_name(name)?;
+            let list: Vec<(&str, &HrirSet)> = names
+                .iter()
+                .map(|n| get(sets, n).map(|s| (n.as_str(), s)))
+                .collect::<Result<_, _>>()?;
+            if list.is_empty() {
+                return Err(HrtfError::input("帰属を書く集まりが無い"));
+            }
+            files.push(OutFile {
+                name: name.clone(),
+                bytes: credits(&list).into_bytes(),
             });
         }
         Step::Onset { set, remove, frame } => {
@@ -494,4 +585,82 @@ fn apply(
         }
     }
     Ok(())
+}
+
+/// `s` の大きさを、`r` の全方向の平均の大きさ(耳ごと)で割る。割る量は最小位相の FIR にして
+/// 輪の枠のまま掛けるので、立ち上がりは 0 番に残る(FIR の尾の分だけ後ろへ伸びる)。
+fn normalize(s: &HrirSet, r: &HrirSet, below_hz: f64) -> HrirSet {
+    // ponytail: 方向の平均は重みなし。輪の格子なら 1 方向あたりの面積がほぼ等しいので足りる。
+    // 面積の偏った格子(Gauss–Legendre の極の近くなど)を厳密にそろえるなら、先に輪へ regrid する。
+    let f = s.taps();
+    let fft = Fft::new(f);
+    let mp = MinPhase::new(f);
+    let mut out = s.clone();
+    for ear in 0..2 {
+        let mut power = vec![0.0; f];
+        for pair in &r.ir {
+            for (p, v) in power.iter_mut().zip(fft.spectrum(&pair[ear])) {
+                *p += v.norm_sqr();
+            }
+        }
+        let n = r.ir.len() as f64;
+        // 割る量の大きさ(0 Hz を中心に左右対称)。below_hz から 1 オクターブで、対数の大きさを
+        // 半ハンの重みで 0 dB からつなぐ。
+        let gain: Vec<C> = (0..f)
+            .map(|k| {
+                let hz = k.min(f - k) as f64 * s.fs / f as f64;
+                let w = if below_hz <= 0.0 || hz >= 2.0 * below_hz {
+                    1.0
+                } else if hz <= below_hz {
+                    0.0
+                } else {
+                    0.5 - 0.5 * (std::f64::consts::PI * (hz / below_hz).log2()).cos()
+                };
+                let db = -0.5 * (power[k] / n).max(1e-30).ln();
+                C::new((w * db).exp(), 0.0)
+            })
+            .collect();
+        // 0 位相の FIR を時間の並びへ回してから最小位相にする(MinPhase は大きさだけを見る)。
+        let mut zero = fft.real(gain);
+        zero.rotate_right(f / 2);
+        let g = fft.spectrum(&mp.ir(&zero, f));
+        for pair in out.ir.iter_mut() {
+            let h: Vec<C> = fft
+                .spectrum(&pair[ear])
+                .into_iter()
+                .zip(&g)
+                .map(|(a, b)| a * *b)
+                .collect();
+            pair[ear] = fft.real(h);
+        }
+    }
+    out
+}
+
+/// 帰属の文書。SOFA の決まりの属性のうち、表示に要る物(題・データベース・作者・組織・許諾・出典)と、
+/// 通した処理の記録(変更したこと)を集まりごとに並べる。無い属性は「(記載なし)」と書き、黙って省かない。
+fn credits(list: &[(&str, &HrirSet)]) -> String {
+    const KEYS: [(&str, &str); 7] = [
+        ("Title", "題"),
+        ("DatabaseName", "データベース"),
+        ("ListenerShortName", "測った頭"),
+        ("AuthorContact", "作者の連絡先"),
+        ("Organization", "組織"),
+        ("License", "許諾"),
+        ("References", "出典"),
+    ];
+    let mut t = String::new();
+    for (name, s) in list {
+        t.push_str(&format!("== {name} ==\n"));
+        for (key, label) in KEYS {
+            let v = s.meta.get(key).map_or("(記載なし)", |v| v.trim());
+            t.push_str(&format!("{label}({key}): {v}\n"));
+        }
+        t.push_str("変更したこと:\n");
+        for h in &s.history {
+            t.push_str(&format!("- {h}\n"));
+        }
+        t.push('\n');
+    }
+    t
 }
