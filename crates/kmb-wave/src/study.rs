@@ -820,6 +820,8 @@ impl RadiateJob {
             .map(|v| [0, 1, 2].map(|a| (at[a] + rd * v[a]) as f32))
             .collect();
         let axis = self.axis(s);
+        let on = axis_index(&dirs, axis);
+        let mut curve = Vec::new();
         let mut frames = Vec::new();
         let mut numbers = Vec::new();
         let mut coarse = Vec::new();
@@ -844,6 +846,9 @@ impl RadiateJob {
                 values,
             });
             numbers.push((hz_label(f.frequency), on_axis(&dirs, &dir_level, axis)));
+            if let Some(v) = on.and_then(|i| dir_level.get(i)) {
+                curve.push([f.frequency, *v as f64]);
+            }
             if f.elements_per_wavelength < 6.0 {
                 coarse.push(hz_label(f.frequency));
             }
@@ -976,8 +981,24 @@ impl RadiateJob {
                 ..Start::default()
             }
         };
+        // 周波数ごとの軸の上の音圧レベル(実行の欄の小さなグラフ。横は対数の目盛りで描かれる)
+        let series = if curve.len() > 1 {
+            vec![kmb_core::Series {
+                name: if far {
+                    "軸の上の音圧レベル(1 m、dB)".into()
+                } else {
+                    "軸の上の音圧レベル(受け取りの球、dB)".into()
+                },
+                x_name: "周波数 Hz".into(),
+                points: curve,
+                note: "周波数ごとの、軸の向きの音圧レベル".into(),
+            }]
+        } else {
+            Vec::new()
+        };
         SimResult {
             kind: "radiate".into(),
+            series,
             parts,
             quantities,
             frames,
@@ -1030,16 +1051,24 @@ impl RadiateJob {
 
 pub const NOTE: &str = "境界要素法(区分一定の三角形・Burton–Miller の結合)の値です。空気は止まっていて、壁は振動する面のほか動かず音を通しません。振動する面は全体が同じ速さ・同じ位相で動くとしています。受け取りの球は見やすいようにボディの横に描いています(向きはボディと同じ)。断面は来た音と散った音を足した音圧で、点音源のすぐそばは塗りません。";
 
+/// 軸 `axis` からの角度(度)。
+fn angle_to(d: [f64; 3], axis: [f64; 3]) -> f64 {
+    let l = norm(d);
+    dot(d.map(|v| v / l), axis)
+        .clamp(-1.0, 1.0)
+        .acos()
+        .to_degrees()
+}
+
+/// 軸に一番近い受け取りの向きの番号。
+fn axis_index(dirs: &[[f64; 3]], axis: [f64; 3]) -> Option<usize> {
+    (0..dirs.len()).min_by(|a, b| angle_to(dirs[*a], axis).total_cmp(&angle_to(dirs[*b], axis)))
+}
+
 /// 軸の上の音圧レベルと、軸から最初に 6 dB 下がる角度。
 fn on_axis(dirs: &[[f64; 3]], levels: &[f32], axis: [f64; 3]) -> String {
-    let unit = |d: [f64; 3]| {
-        let l = norm(d);
-        d.map(|v| v / l)
-    };
-    let angle = |d: [f64; 3]| dot(unit(d), axis).clamp(-1.0, 1.0).acos().to_degrees();
-    let Some(i) = (0..dirs.len().min(levels.len()))
-        .min_by(|a, b| angle(dirs[*a]).total_cmp(&angle(dirs[*b])))
-    else {
+    let angle = |d: [f64; 3]| angle_to(d, axis);
+    let Some(i) = axis_index(&dirs[..dirs.len().min(levels.len())], axis) else {
         return "—".into();
     };
     let on = levels[i];
@@ -1397,6 +1426,31 @@ mod tests {
         assert!(r.note.contains("中止"));
         // 散乱だけなら軸は平面波の向き
         assert_eq!(j.axis(&s), [1.0, 0.0, 0.0]);
+    }
+
+    /// 周波数ごとの軸の上の音圧レベルを、グラフの線 1 本で返す(点は周波数の順、値は指向性の軸の向き)。
+    #[test]
+    fn on_axis_level_per_frequency_becomes_a_curve() {
+        let j = job(Vec::new(), Some([1.0, 0.0, 0.0]), vec![300.0, 600.0]);
+        let r = j.solve(&Control::new()).expect("解ける");
+        assert_eq!(r.series.len(), 1);
+        let c = &r.series[0];
+        assert_eq!(c.x_name, "周波数 Hz");
+        assert_eq!(
+            c.points.iter().map(|p| p[0]).collect::<Vec<_>>(),
+            [300.0, 600.0]
+        );
+        let dirs = icosphere(1.0, 2).vertices;
+        let i = axis_index(&dirs, [1.0, 0.0, 0.0]).unwrap();
+        for (f, p) in r.frames.iter().zip(&c.points) {
+            let Values::F32(v) = &f.values[2] else {
+                panic!("値の形")
+            };
+            assert_eq!(p[1], v[i] as f64);
+        }
+        // 1 点だけならグラフは出さない
+        let one = job(Vec::new(), Some([1.0, 0.0, 0.0]), vec![300.0]);
+        assert!(one.solve(&Control::new()).unwrap().series.is_empty());
     }
 
     /// 脈動する球の断面: 球の中のセルは塗らず、外のセルの音圧は単極の解析解(|F|/r)に合う。

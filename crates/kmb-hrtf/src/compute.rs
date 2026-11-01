@@ -279,6 +279,7 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
                 directions: directions.clone(),
                 distance: job.distance,
             },
+            field_points: Vec::new(),
             medium: job.medium,
             solver: job.solver,
         };

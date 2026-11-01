@@ -7,6 +7,8 @@ use kmb_core::{FeatureId, Kernel, Mesh, ShapeHandle};
 use std::collections::HashSet;
 
 mod camera;
+#[cfg(test)]
+mod fit_tests;
 mod hit;
 mod look;
 #[cfg(test)]
@@ -65,6 +67,36 @@ fn take_nav(ctx: &egui::Context, view: egui::Id, hovered: bool) -> Option<Nav> {
     })
 }
 
+/// 全体表示で収める箱。見えるボディに、部品の代わりに描く形(加工の途中の形・解析の結果の
+/// 断面や受け取りの球)を足す。どちらも無ければ重ねる線(スケッチだけの時)。何も無ければ `None`。
+fn fit_bounds(scene: &Scene, overlay: &kmb_core::Overlay) -> Option<([f32; 3], [f32; 3])> {
+    let mut b = ([f32::MAX; 3], [f32::MIN; 3]);
+    let grow = |b: &mut ([f32; 3], [f32; 3]), p: [f32; 3]| {
+        for (i, v) in p.into_iter().enumerate() {
+            b.0[i] = b.0[i].min(v);
+            b.1[i] = b.1[i].max(v);
+        }
+    };
+    if !scene.is_empty() {
+        let (lo, hi) = scene.bounds();
+        grow(&mut b, lo);
+        grow(&mut b, hi);
+    }
+    if let Some(sh) = &overlay.shape
+        && !sh.mesh.triangles.is_empty()
+    {
+        for p in &sh.mesh.positions {
+            grow(&mut b, *p);
+        }
+    }
+    if b.0[0] > b.1[0] {
+        for p in overlay.lines.iter().flat_map(|(l, _)| l) {
+            grow(&mut b, p.map(|v| v as f32));
+        }
+    }
+    (b.0[0] <= b.1[0]).then_some(b)
+}
+
 /// 3D のビューを描き、視点の操作を受け付ける。選びに関わる出来事は [`ViewEvents`] で返す。
 ///
 /// マウス: 右ドラッグ=回す、ホイール押しドラッグ=動かす(設定で回すと入れ替え、Shift で逆)、
@@ -86,22 +118,10 @@ pub fn view3d(
 ) -> (ViewEvents, egui::Response, Rect) {
     let mut ev = ViewEvents::default();
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
-    if !cam.fitted {
-        if scene.is_empty() {
-            let pts = overlay.lines.iter().flat_map(|(l, _)| l);
-            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-            for p in pts {
-                for i in 0..3 {
-                    lo[i] = lo[i].min(p[i] as f32);
-                    hi[i] = hi[i].max(p[i] as f32);
-                }
-            }
-            if lo[0] <= hi[0] {
-                cam.fit_box(lo, hi, rect);
-            }
-        } else {
-            cam.fit(scene, rect);
-        }
+    if !cam.fitted
+        && let Some((lo, hi)) = fit_bounds(scene, overlay)
+    {
+        cam.fit_box(lo, hi, rect);
     }
     let (mods, pointer) = ui.input(|i| (i.modifiers, i.pointer.clone()));
     // 回す量は押した時の向きからの全部の量で決める(押した所へ戻すと元の向き。10-20 u9)
