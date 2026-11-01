@@ -1,0 +1,18 @@
+[package]
+name = "kmb-hrtf"
+description = "頭部伝達関数(HRTF)のデータの型と、形式をそろえる処理の手順(onset・位相の組み合わせ・切り出し・分けた表の書き出し)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "analysis"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true
