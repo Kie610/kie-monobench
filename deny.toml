@@ -1,4 +1,4 @@
-# cargo-deny の設定。GPL 系(GPL・LGPL・AGPL)は allow に入れないことで拒否する。
+# cargo-deny の設定。GPL 系(GPL・LGPL・AGPL)と EUPL は allow に入れないことで拒否する。
 # `cargo xtask verify --all` が `cargo deny check licenses bans sources` を流す(docs/verify.md の 1 節)。
 [licenses]
 allow = [
