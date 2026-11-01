@@ -2787,6 +2787,7 @@ dependencies = [
  "hdf5-pure",
  "kmb-core",
  "kmb-fea",
+ "kmb-study",
  "kmb-wave",
  "kmb-workspace-hack",
  "log",

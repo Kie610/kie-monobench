@@ -219,6 +219,8 @@ fea.topology@1	kmb-fea
 flow.section@1	kmb-flow
 flow.volume@1	kmb-flow
 flow.wing@1	kmb-flow
+hrtf.compute	kmb-hrtf
+hrtf.compute@1	kmb-hrtf
 hrtf.process	kmb-hrtf
 io.export_3mf	kmb-io-stl
 io.export_obj	kmb-io-stl

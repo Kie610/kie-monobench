@@ -624,6 +624,7 @@ const JSON_NAME_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-cam-tool", "src/exchange.rs", 2),  // 工具ライブラリのファイル
     ("kmb-drawing", "src/commands.rs", 1),   // 用紙の計算結果。文書の保存形式ではない
     ("kmb-hrtf", "src/table.rs", 1),         // 分けた表の大きさ layout.json
+    ("kmb-hrtf", "src/commands.rs", 1),      // 頭の網の仕事の JSON。文書の保存形式ではない
     ("kmb-wave", "src/action.rs", 2),        // 音の仕事と結果の JSON。文書の保存形式ではない
     ("kmb-core", "src/document.rs", 1),      // 文書の拡張子の定数そのもの
     ("kmb-post-carvera-air", "src/machine.rs", 1), // 機械の台の穴の表

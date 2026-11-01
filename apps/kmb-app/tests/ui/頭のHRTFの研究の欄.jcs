@@ -1,0 +1,18 @@
+# 音の研究「頭の HRTF」を足すと、頭のボディ・両耳の入口・顔の向き・網の作り直しの欄が並び、
+# 網の作り直しを「そのまま」にすると辺の長さの欄が隠れること。
+#! sample part
+
+click ~作業空間:
+click "解析"
+click "音 ▾"
+click "頭の HRTF"
+expect "頭のボディ"
+expect "左の耳の入口"
+expect "右の耳の入口"
+expect "顔の向き"
+expect "耳の近くの辺の長さ"
+expect "方向の格子"
+shot 頭のHRTFの欄
+select "網の作り直し" "そのまま"
+expect "耳の近くの辺の長さ" missing
+expect "遠くの辺の長さ" missing
