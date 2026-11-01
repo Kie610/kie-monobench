@@ -2368,8 +2368,8 @@ fn write_study_screens() {
     s.write(&dir, "107-解析-3Dの流れ-断面も出す");
 }
 
-/// 108〜110. 音の放射・散乱: 解析のツールバーのまとまり「音」から足した研究を「実行」で解き、
-/// 指向性(ボディの横の受け取りの球)と表面の音圧レベルを周波数のコマで見る。
+/// 108〜110・115・116. 音の放射・散乱: 解析のツールバーのまとまり「音」から足した研究を「実行」で解き、
+/// 指向性(ボディの横の受け取りの球)と表面の音圧レベルを周波数のコマで見る。点音源の断面の音圧レベル(115・116)。
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
 fn write_sound_screens() {
@@ -2406,6 +2406,22 @@ fn write_sound_screens() {
     s.write(&dir, "109-解析-音の放射・散乱-指向性");
     assert!(s.click_exact("最初のコマ"));
     s.write(&dir, "110-解析-音の放射・散乱-最初のコマ");
+
+    // 箱の左に点音源を置き、真ん中を通る XY 平面の断面で音圧レベルを見る(8 kHz)
+    let (ws, id) = study_workspace(
+        false,
+        "wave.radiate@1",
+        serde_json::json!({"source": "point", "point": [-40.0, 10.0, 8.0], "detail": "normal", "section": "xy", "f_start": "8000", "f_end": "8000"}),
+    );
+    let mut s = Screen::new(ws);
+    s.h.state_mut().wait();
+    s.h.state_mut().select(id);
+    s.settle();
+    s.write(&dir, "115-解析-音の放射・散乱-点音源と断面-実行前");
+    assert!(s.click_exact("▶  実行") || s.click_exact("実行"));
+    wait_run(&mut s, id);
+    assert!(s.click_exact("全体表示"));
+    s.write(&dir, "116-解析-音の放射・散乱-点音源と断面");
 }
 
 /// 120〜123. 強度の網は形に沿った 2 次の四面体(穴とボスが残り、曲面に沿う)。断面で切ると中の応力、「網の質」で要素の形の良し悪しを色で見る。
