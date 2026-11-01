@@ -33,7 +33,7 @@ indexmap = { version = "2", features = ["serde"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 memchr = { version = "2" }
 miniz_oxide = { version = "0.9", features = ["simd"] }
-num-complex = { version = "0.4" }
+num-complex = { version = "0.4", features = ["serde"] }
 num-rational = { version = "0.4" }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 once_cell = { version = "1" }
