@@ -225,23 +225,37 @@ mod tests {
         ]
     }
 
-    /// 辺の多い形でも待たない: 細かく分けた輪(どの継ぎ目も 1° 未満で曲がる)の 4000 本と、つながらない
-    /// 辺 4000 本から、全部の辺をたどる。前は辺ごとに全部の辺を見ていたので本数の 2 乗で重かった。
+    /// 辺の多い形でも待たない: 細かく分けた輪(どの継ぎ目も 1° 未満で曲がる)と、同じ本数のつながらない
+    /// 辺から、全部の辺をたどる。前は辺ごとに全部の辺を見ていたので本数の 2 乗で重かった。
+    /// 時間の上限で決めると、検査の機械が混んだ時に落ちる(CI で 300 ms を超えた)。なので本数を
+    /// 8 倍にした時の時間の比で確かめる。本数に比例なら約 8 倍、2 乗なら約 64 倍。混み具合のぶれを
+    /// 除くため、小さい形と大きい形を交互に 5 回ずつ測り、それぞれ最も速い回を使う。
     #[test]
     fn a_ring_of_many_edges_is_followed_quickly() {
-        let n = 4000;
-        let at = |k: usize| {
-            let t = std::f64::consts::TAU * (k % n) as f64 / n as f64;
-            [100.0 * t.cos(), 100.0 * t.sin(), 0.0]
+        let shape = |n: usize| {
+            let at = |k: usize| {
+                let t = std::f64::consts::TAU * (k % n) as f64 / n as f64;
+                [100.0 * t.cos(), 100.0 * t.sin(), 0.0]
+            };
+            let mut edges: Vec<EdgeInfo> = (0..n).map(|k| line(at(k), at(k + 1))).collect();
+            edges.extend((0..n).map(|k| line([k as f64, 0.0, 10.0], [k as f64, 0.5, 10.0])));
+            (n, edges)
         };
-        let mut edges: Vec<EdgeInfo> = (0..n).map(|k| line(at(k), at(k + 1))).collect();
-        edges.extend((0..n).map(|k| line([k as f64, 0.0, 10.0], [k as f64, 0.5, 10.0])));
-        let started = std::time::Instant::now();
-        let chain = tangent_chains(&edges, &[0, n + 1], TANGENT_DEG);
-        let took = started.elapsed();
-        assert_eq!(chain.len(), n + 1);
-        // 速い PC で数 ms。遅い検査の機械でも十分に収まる上限
-        assert!(took.as_millis() < 300, "{took:?}");
+        let time = |(n, edges): &(usize, Vec<EdgeInfo>)| {
+            let started = std::time::Instant::now();
+            let chain = tangent_chains(edges, &[0, n + 1], TANGENT_DEG);
+            let took = started.elapsed();
+            assert_eq!(chain.len(), n + 1);
+            took
+        };
+        let (small, large) = (shape(500), shape(4000));
+        let (mut s, mut l) = (std::time::Duration::MAX, std::time::Duration::MAX);
+        for _ in 0..5 {
+            s = s.min(time(&small));
+            l = l.min(time(&large));
+        }
+        let ratio = l.as_secs_f64() / s.as_secs_f64().max(1e-6);
+        assert!(ratio < 24.0, "8 倍の本数で {ratio:.1} 倍({s:?} → {l:?})");
     }
 
     #[test]
