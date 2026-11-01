@@ -337,3 +337,47 @@ fn regrid_needs_onset_removed_to_mix() {
     assert!(s["a"].same_dirs(&s["b"]));
     assert_eq!(s["b"].grid, Grid::GaussLegendre { el: 7, az: 12 });
 }
+
+/// 確かめること: 遅延の表を集まりより細かい格子で作る時、`onset_method` が `bilinear` なら間の方向の
+/// 立ち上がりは仰角に線形な値をそのまま補う。既定の最近傍では隣の方向の値の段になる。手順の JSON の
+/// `onset_method` で選べる。
+#[test]
+fn onset_table_interpolates_between_directions() {
+    let mut s = sets(&[("a", synth(1.0))]);
+    run(&recipe(r#"{"steps":[{"op":"onset","set":"a"}]}"#), &mut s).unwrap();
+    let mut a = s["a"].clone();
+    let f = |el: f64| [20.0 + el / 10.0, 30.0 - el / 20.0];
+    a.delay = vec![[0.0, 0.0]; a.dirs.len()];
+    a.onset = Some(a.dirs.iter().map(|d| f(d.el)).collect());
+    let mut spec = crate::table::TableSpec {
+        spectrum_step: 30.0,
+        onset_step: 10.0,
+        ..Default::default()
+    };
+    let near = crate::table::build(&a, &spec).unwrap();
+    spec.onset_method = crate::regrid::Method::Bilinear;
+    let lin = crate::table::build(&a, &spec).unwrap();
+    let mut stepped = 0;
+    for (i, (_, el)) in Rings::new(10.0).unwrap().dirs().into_iter().enumerate() {
+        let want = f(el);
+        for (ear, w) in want.iter().enumerate() {
+            assert!((lin.onset[i][ear] - w).abs() < 1e-9, "{el} {ear}");
+            if (near.onset[i][ear] - w).abs() > 0.1 {
+                stepped += 1;
+            }
+        }
+    }
+    assert!(stepped > 0);
+    s.insert("a".into(), a);
+    let files = run(
+        &recipe(
+            r#"{"steps":[{"op":"table","sets":["a"],"spectrum_step":30,"onset_step":10,"onset_method":"bilinear"}]}"#,
+        ),
+        &mut s,
+    )
+    .unwrap();
+    assert_eq!(
+        layout_of(&files).onset_entries,
+        Rings::new(10.0).unwrap().len()
+    );
+}
