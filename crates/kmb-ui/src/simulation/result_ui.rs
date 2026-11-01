@@ -403,9 +403,10 @@ pub(crate) fn run_header(ui: &mut egui::Ui, st: &RunState, look: &theme::Look) -
                     out = Some(st.run.clone());
                 }
                 if let Some(s) = st.series.as_ref().filter(|s| s.points.len() > 1) {
+                    // 周波数ごとの結果(等比の横軸)は、解き終えたら開いて見せる
                     egui::CollapsingHeader::new(&s.name)
                         .id_salt("run_series")
-                        .default_open(false)
+                        .default_open(log_axis(&s.points))
                         .show(ui, |ui| series_plot(ui, s, look));
                 }
             }
@@ -446,7 +447,8 @@ fn series_plot(ui: &mut egui::Ui, s: &Series, look: &theme::Look) {
             .color(l.pal.ink2),
     );
     let w = ui.available_width();
-    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, 70.0), Sense::hover());
+    let h = if log_axis(&s.points) { 100.0 } else { 70.0 };
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
     let p = ui.painter_at(rect);
     p.rect(
         rect,
@@ -465,43 +467,172 @@ fn series_plot(ui: &mut egui::Ui, s: &Series, look: &theme::Look) {
         y0 = y0.min(*y);
         y1 = y1.max(*y);
     }
-    // 始めの大きな揺れで潰れないよう、後ろ 3/4 の範囲で縦を決める
-    let tail = &s.points[s.points.len() / 4..];
-    let (ty0, ty1) = tail
-        .iter()
-        .filter(|p| p[1].is_finite())
-        .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p[1]), a.1.max(p[1])));
-    if ty1 > ty0 {
-        let m = 0.25 * (ty1 - ty0).max(1e-9);
-        y0 = y0.max(ty0 - 2.0 * m);
-        y1 = y1.min(ty1 + 2.0 * m);
+    let log = log_axis(&s.points);
+    let top = y1;
+    if log {
+        // 周波数ごとの値は全部を見せ、上下に少し余白を置く
+        let m = 0.1 * (y1 - y0).max(1.0);
+        y0 -= m;
+        y1 += m;
+    } else {
+        // 始めの大きな揺れで潰れないよう、後ろ 3/4 の範囲で縦を決める
+        let tail = &s.points[s.points.len() / 4..];
+        let (ty0, ty1) = tail
+            .iter()
+            .filter(|p| p[1].is_finite())
+            .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p[1]), a.1.max(p[1])));
+        if ty1 > ty0 {
+            let m = 0.25 * (ty1 - ty0).max(1e-9);
+            y0 = y0.max(ty0 - 2.0 * m);
+            y1 = y1.min(ty1 + 2.0 * m);
+        }
     }
     if x1 <= x0 || y1 <= y0 {
         return;
     }
-    let inner = rect.shrink2(egui::vec2(6.0, 8.0));
+    // 対数の横軸は上に縦の最大、下に横軸の両端の値を書くので、線を内へ寄せる
+    let inner = if log {
+        Rect::from_min_max(
+            rect.min + egui::vec2(10.0, 16.0),
+            rect.max - egui::vec2(10.0, 14.0),
+        )
+    } else {
+        rect.shrink2(egui::vec2(6.0, 8.0))
+    };
+    let fx = |x: f64| if log { x.ln() } else { x };
     let at = |x: f64, y: f64| {
         egui::pos2(
-            inner.left() + ((x - x0) / (x1 - x0)) as f32 * inner.width(),
+            inner.left() + ((fx(x) - fx(x0)) / (fx(x1) - fx(x0))) as f32 * inner.width(),
             inner.bottom() - (((y - y0) / (y1 - y0)).clamp(-0.05, 1.05)) as f32 * inner.height(),
         )
     };
+    if log {
+        // 1・2・5 の目盛りの縦の線と、両端の横軸の値・縦の範囲
+        for t in log_ticks(x0, x1) {
+            let x = at(t, y0).x;
+            p.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                Stroke::new(1.0, l.pal.edge),
+            );
+        }
+        let small = |pos: egui::Pos2, align: egui::Align2, text: String| {
+            p.text(pos, align, text, theme::prop(10.0), l.pal.ink3);
+        };
+        small(
+            rect.left_bottom() + egui::vec2(4.0, -2.0),
+            egui::Align2::LEFT_BOTTOM,
+            short(x0),
+        );
+        small(
+            rect.right_bottom() + egui::vec2(-4.0, -2.0),
+            egui::Align2::RIGHT_BOTTOM,
+            short(x1),
+        );
+        small(
+            rect.left_top() + egui::vec2(4.0, 3.0),
+            egui::Align2::LEFT_TOP,
+            format!("最大 {top:.1}"),
+        );
+    }
     let pts: Vec<egui::Pos2> = s
         .points
         .iter()
         .filter(|p| p[1].is_finite())
         .map(|p| at(p[0], p[1]))
         .collect();
-    p.add(egui::Shape::line(pts, Stroke::new(1.5, l.pal.sim)));
-    let last = s.points[s.points.len() - 1];
-    p.text(
-        rect.right_top() + egui::vec2(-4.0, 3.0),
-        egui::Align2::RIGHT_TOP,
-        format!("{:.3}", last[1]),
-        theme::prop(10.5),
-        l.pal.ink2,
-    );
+    p.add(egui::Shape::line(pts.clone(), Stroke::new(1.5, l.pal.sim)));
+    if log {
+        for q in &pts {
+            p.circle_filled(*q, 2.0, l.pal.sim);
+        }
+    }
+    if !log {
+        let last = s.points[s.points.len() - 1];
+        p.text(
+            rect.right_top() + egui::vec2(-4.0, 3.0),
+            egui::Align2::RIGHT_TOP,
+            format!("{:.3}", last[1]),
+            theme::prop(10.5),
+            l.pal.ink2,
+        );
+    } else if let Some(hover) = r.hover_pos() {
+        // ポインタに一番近い点の値
+        if let Some((q, v)) = s
+            .points
+            .iter()
+            .filter(|v| v[1].is_finite())
+            .map(|v| (at(v[0], v[1]), v))
+            .min_by(|a, b| (a.0.x - hover.x).abs().total_cmp(&(b.0.x - hover.x).abs()))
+        {
+            p.circle_stroke(q, 4.0, Stroke::new(1.5, l.pal.ink));
+            p.text(
+                rect.right_top() + egui::vec2(-4.0, 3.0),
+                egui::Align2::RIGHT_TOP,
+                format!("{} {:.1}", short(v[0]), v[1]),
+                theme::prop(10.5),
+                l.pal.ink,
+            );
+        }
+    }
     if !s.note.is_empty() {
         r.on_hover_text(format!("{}(横軸: {})", s.note, s.x_name));
+    }
+}
+
+/// 横軸が等比の並び(周波数を 1 オクターブに何点かで並べた物)か。対数の目盛りで描く。
+fn log_axis(points: &[[f64; 2]]) -> bool {
+    if points.len() < 3 || !points.iter().all(|p| p[0] > 0.0) {
+        return false;
+    }
+    let r0 = points[1][0] / points[0][0];
+    r0 > 1.0 + 1e-6
+        && points
+            .windows(2)
+            .all(|w| ((w[1][0] / w[0][0]) / r0 - 1.0).abs() < 0.02)
+}
+
+/// `x0`〜`x1` に入る 1・2・5 の目盛り。
+fn log_ticks(x0: f64, x1: f64) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut d = 10f64.powf(x0.log10().floor());
+    while d <= x1 {
+        for m in [1.0, 2.0, 5.0] {
+            let t = m * d;
+            if t >= x0 && t <= x1 {
+                out.push(t);
+            }
+        }
+        d *= 10.0;
+    }
+    out
+}
+
+/// 目盛りの短い書き方(250、1.6k)。
+fn short(x: f64) -> String {
+    if x >= 1000.0 {
+        format!("{}k", (x / 100.0).round() / 10.0)
+    } else {
+        format!("{x:.0}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1 オクターブに何点かの周波数の並びだけを対数の目盛りにする(時刻や回数は今の線形のまま)。
+    #[test]
+    fn only_geometric_x_gets_a_log_axis() {
+        let f: Vec<[f64; 2]> = (0..13)
+            .map(|i| [250.0 * 2f64.powf(i as f64 / 3.0), 80.0])
+            .collect();
+        assert!(log_axis(&f));
+        let t: Vec<[f64; 2]> = (0..10).map(|i| [i as f64 * 0.1, 1.0]).collect();
+        assert!(!log_axis(&t));
+        let n: Vec<[f64; 2]> = (1..10).map(|i| [i as f64, 1.0]).collect();
+        assert!(!log_axis(&n));
+        assert!(!log_axis(&f[..2]));
+        assert_eq!(log_ticks(250.0, 4000.0), vec![500.0, 1000.0, 2000.0]);
+        assert_eq!((short(250.0), short(1587.4)), ("250".into(), "1.6k".into()));
     }
 }
