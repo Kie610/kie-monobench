@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use crate::dsp::OnsetFinder;
 use crate::fft::{C, Fft, signed_bin};
 use crate::grid::{Rings, unit};
+use crate::head::{Grading, regrade, tidy};
 use crate::{Dir, Frame, Grid, HrirSet, HrtfError};
 
 /// 頭の網から HRTF を計算する仕事。
@@ -42,6 +43,10 @@ pub struct HeadJob {
     /// 入口の点に一番近い三角形はいつも入る
     #[serde(default = "default_ear_radius")]
     pub ear_radius: f64,
+    /// 耳からの距離で要素の大きさを変える作り直し。無ければ網をそのまま使う(確かめと小さな穴の
+    /// 埋めはいつもする)
+    #[serde(default)]
+    pub grading: Option<Grading>,
     /// 音源の方向の格子
     #[serde(default)]
     pub directions: Directions,
@@ -174,8 +179,11 @@ pub struct Transfer {
     pub grid: Grid,
     /// 耳ごと・周波数ごと・方向ごとの伝達関数(単位の無い複素数)
     pub h: [Vec<Vec<Complex64>>; 2],
-    /// 耳ごとに振動させた三角形の番号
+    /// 耳ごとに振動させた三角形の番号(その耳を解いた網の番号)
     pub ear_triangles: [Vec<usize>; 2],
+    /// 耳ごとに解いた網の三角形の数
+    #[serde(default)]
+    pub mesh_triangles: [usize; 2],
     /// 解き方の記録
     pub notes: Vec<SolveNote>,
     /// 中止されて、周波数が途中までか
@@ -238,26 +246,17 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
     if !(job.ear_radius.is_finite() && job.ear_radius >= 0.0) {
         return Err(HrtfError::input("耳の入口の半径が 0 以上の数でない"));
     }
-    // 頭の中心を原点へ動かす(受け取りの方向と遠方の位相は原点から測る)。
-    let mut mesh = job.mesh.clone();
-    for v in &mut mesh.vertices {
-        *v = sub(*v, job.center);
-    }
+    watch.progress(0.0, "頭の網を整えています");
+    let meshes = head_meshes(job, &|| watch.cancelled())?;
     let ears = job.ears.map(|e| sub(e, job.center));
     let patches = [
-        ear_patch(&mesh, ears[0], job.ear_radius).map_err(|e| e.at("左の耳"))?,
-        ear_patch(&mesh, ears[1], job.ear_radius).map_err(|e| e.at("右の耳"))?,
+        ear_patch(&meshes[0], ears[0], job.ear_radius).map_err(|e| e.at("左の耳"))?,
+        ear_patch(&meshes[1], ears[1], job.ear_radius).map_err(|e| e.at("右の耳"))?,
     ];
-    if patches[0].iter().any(|t| patches[1].contains(t)) {
+    let shared = meshes[0] == meshes[1];
+    if shared && patches[0].iter().any(|t| patches[1].contains(t)) {
         return Err(HrtfError::input("左と右の耳の入口の三角形が重なっている"));
     }
-    let mut groups = vec![0u32; mesh.triangles.len()];
-    for (ear, p) in patches.iter().enumerate() {
-        for &t in p {
-            groups[t] = ear as u32 + 1;
-        }
-    }
-    mesh.groups = groups;
     let directions: Vec<[f64; 3]> = dirs.iter().map(|&(a, e)| unit(a, e)).collect();
     let rho = job.medium.density;
     let c = job.medium.speed_of_sound;
@@ -268,11 +267,15 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
         let v = Boundary::Velocity {
             velocity: Complex64::new(1.0, 0.0),
         };
-        let mut boundaries = vec![Boundary::Rigid; 3];
-        boundaries[ear + 1] = v;
+        let mut mesh = meshes[ear].clone();
+        let mut groups = vec![0u32; mesh.triangles.len()];
+        for &t in &patches[ear] {
+            groups[t] = 1;
+        }
+        mesh.groups = groups;
         let bem = BemJob {
-            mesh: mesh.clone(),
-            boundaries,
+            mesh,
+            boundaries: vec![Boundary::Rigid, v],
             sources: Vec::new(),
             frequencies: freqs.clone(),
             receivers: Receivers::Directions {
@@ -283,7 +286,7 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
             solver: job.solver,
         };
         // 頭が無い時に中心に置く音源の強さ(体積速度 m³/s)。振動の速さは 1 m/s。
-        let q: f64 = patches[ear].iter().map(|&t| area(&mesh, t)).sum();
+        let q: f64 = patches[ear].iter().map(|&t| area(&meshes[ear], t)).sum();
         let side = if ear == 0 { "左の耳" } else { "右の耳" };
         let w = EarWatch {
             inner: watch,
@@ -326,9 +329,35 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
         grid,
         h,
         ear_triangles: patches,
+        mesh_triangles: meshes.each_ref().map(|m| m.triangles.len()),
         notes,
         cancelled,
     })
+}
+
+/// 耳ごとに解く網(左・右。頭の中心を原点へ動かした m)。網を確かめて小さな穴を埋め、作り直しの
+/// 設定があれば耳からの距離で作り直す(耳ごとに作るなら、その耳の近くだけ細かい)。
+pub fn head_meshes(job: &HeadJob, cancelled: &dyn Fn() -> bool) -> Result<[BemMesh; 2], HrtfError> {
+    let mut mesh = job.mesh.clone();
+    for v in &mut mesh.vertices {
+        *v = sub(*v, job.center);
+    }
+    let ears = job.ears.map(|e| sub(e, job.center));
+    let Some(g) = &job.grading else {
+        let m = tidy(&mesh)?.mesh;
+        return Ok([m.clone(), m]);
+    };
+    let grade = g.grade_for(&ears)?;
+    if g.per_ear {
+        let left = regrade(&mesh, &ears[..1], g.near, g.far, grade, cancelled)
+            .map_err(|e| e.at("左の耳の網"))?;
+        let right = regrade(&mesh, &ears[1..], g.near, g.far, grade, cancelled)
+            .map_err(|e| e.at("右の耳の網"))?;
+        Ok([left, right])
+    } else {
+        let m = regrade(&mesh, &ears, g.near, g.far, grade, cancelled)?;
+        Ok([m.clone(), m])
+    }
 }
 
 /// 伝達関数を逆 FFT して HRIR の集まりにする。
@@ -383,7 +412,11 @@ pub fn to_hrir(job: &HeadJob, t: &Transfer) -> Result<HrirSet, HrtfError> {
             dist,
         })
         .collect();
-    let tris = job.mesh.triangles.len();
+    let tris = if t.mesh_triangles[0] == t.mesh_triangles[1] {
+        t.mesh_triangles[0].to_string()
+    } else {
+        format!("左 {}・右 {}", t.mesh_triangles[0], t.mesh_triangles[1])
+    };
     let mut meta = BTreeMap::new();
     meta.insert("Title".into(), "境界要素法で計算した HRTF".into());
     meta.insert(
@@ -579,6 +612,7 @@ mod tests {
             center: [0.0; 3],
             ears,
             ear_radius: 0.0,
+            grading: None,
             directions: Directions::List { dirs },
             distance: None,
             fs: 8000.0,
@@ -697,6 +731,7 @@ mod tests {
             grid: Grid::Any,
             h: [h.clone(), h],
             ear_triangles: [vec![0], vec![1]],
+            mesh_triangles: [20, 20],
             notes: Vec::new(),
             cancelled: false,
         };

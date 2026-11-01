@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json.workspace = true
 hdf5-pure.workspace = true
 kmb-wave.workspace = true
+kmb-fea.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]

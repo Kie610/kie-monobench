@@ -11,7 +11,8 @@
 //! のは操作(`commands`、`hrtf.process`)だけ。
 //!
 //! 頭の網から HRTF を計算する入口(`compute`)も持つ。耳の入口を振動させて境界要素法(`kmb-wave`)で
-//! 解き、HRIR の集まりにする。結果には同じ処理の手順をかけられる。
+//! 解き、HRIR の集まりにする。結果には同じ処理の手順をかけられる。頭の網は確かめて小さな穴を埋め、
+//! 耳からの距離で要素の大きさを変えて作り直せる(`head`)。
 
 mod commands;
 pub mod compute;
@@ -21,6 +22,7 @@ pub mod fft;
 pub mod grid;
 pub mod half;
 mod hdf5w;
+pub mod head;
 pub mod recipe;
 pub mod regrid;
 mod set;
@@ -31,8 +33,9 @@ pub mod table;
 mod tests;
 
 pub use commands::{HrtfCommands, PROCESS};
-pub use compute::{Directions, HeadJob, HeadOut, Transfer, compute};
+pub use compute::{Directions, HeadJob, HeadOut, Transfer, compute, head_meshes};
 pub use error::{ErrorKind, HrtfError};
+pub use head::{Grading, Hole, Tidy, regrade, tidy};
 pub use recipe::{Recipe, RunOptions, Step, run, run_with};
 pub use set::{Dir, Frame, Grid, HrirSet};
 pub use table::{Layout, OutFile, TableSpec};
