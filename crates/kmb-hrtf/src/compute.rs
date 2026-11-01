@@ -302,7 +302,6 @@ pub fn transfer_on(
                 directions: directions.clone(),
                 distance: job.distance,
             },
-            field_points: Vec::new(),
             medium: job.medium,
             solver: job.solver,
         };
