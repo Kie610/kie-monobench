@@ -93,6 +93,7 @@ kmb-cam-program = { path = "crates/kmb-cam-program" }
 kmb-bundle = { path = "crates/kmb-bundle", default-features = false }
 kmb-samples = { path = "crates/kmb-samples" }
 kmb-session = { path = "crates/kmb-session" }
+kmb-wave = { path = "crates/kmb-wave" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 miniz_oxide = "0.9.1"
@@ -213,6 +214,10 @@ opt-level = 2
 
 # 四面体の網づくりと代数的マルチグリッドは最適化なしだと 10 倍以上遅く、曲面の検算が長くなる
 [profile.dev.package.kmb-fea]
+opt-level = 2
+
+# 境界要素法の密な行列の組み立て(要素の対ごとの求積)は最適化なしだと 10 倍ほど遅く、球の検算が長くなる
+[profile.dev.package.kmb-wave]
 opt-level = 2
 
 # 結果の見せ方(断面・流線・帯の切り分け)はコマを送るたびに作るので、最適化なしだと再生が重い
