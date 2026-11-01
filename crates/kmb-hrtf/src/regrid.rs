@@ -322,6 +322,10 @@ fn weights(from: &[Dir], to: &[Dir], method: Method) -> (Weights, usize) {
     (w, fallback)
 }
 
+/// 輪の双線形で、同じ仰角・極・刻みの倍数と見なす角度の許し幅(度)。SOFA の方向は float32 で
+/// 持つことが多く、1° の格子でも 1e-5° ほどずれるため。
+const ANGLE_EPS: f64 = 1e-3;
+
 /// 仰角の輪 1 本。方位(0 以上 360 未満)の順の(方位, 元の番号)。
 struct Ring {
     el: f64,
@@ -330,7 +334,7 @@ struct Ring {
 
 impl Ring {
     fn is_pole(&self) -> bool {
-        self.el.abs() > 90.0 - 1e-6
+        self.el.abs() > 90.0 - ANGLE_EPS
     }
 
     /// 方位 `az` を左右の隣 2 点の比で混ぜる重み。
@@ -377,7 +381,9 @@ fn rings_of(from: &[Dir], azimuth_step: Option<f64>) -> Result<(Vec<Ring>, usize
     for i in order {
         let el = from[i].el;
         match rings.last_mut() {
-            Some(r) if (el - r.el).abs() < 1e-6 => r.pts.push((from[i].az.rem_euclid(360.0), i)),
+            Some(r) if (el - r.el).abs() < ANGLE_EPS => {
+                r.pts.push((from[i].az.rem_euclid(360.0), i))
+            }
             _ => rings.push(Ring {
                 el,
                 pts: vec![(from[i].az.rem_euclid(360.0), i)],
@@ -392,10 +398,7 @@ fn rings_of(from: &[Dir], azimuth_step: Option<f64>) -> Result<(Vec<Ring>, usize
                 .pts
                 .iter()
                 .copied()
-                .filter(|p| {
-                    let q = p.0 / st;
-                    (q - q.round()).abs() < 1e-6
-                })
+                .filter(|p| (p.0 - (p.0 / st).round() * st).abs() < ANGLE_EPS)
                 .collect();
             // 極は方位を持たないので、刻みの点が 1 つも無ければ極の点をそのまま使う。
             if !(on.is_empty() && r.is_pole()) {
@@ -538,6 +541,7 @@ pub fn regrid(
         ));
     }
     let (w, how) = mix_weights(&s.dirs, to, method, azimuth_step)?;
+    log::info!("regrid: {how}");
     let taps = s.taps();
     let mut out = s.clone();
     out.dirs = Vec::with_capacity(to.len());
@@ -898,6 +902,44 @@ mod tests {
         let e = mix_weights(&from, &to, Method::Triangle, Some(1.0)).unwrap_err();
         assert!(e.message.contains("bilinear"), "{}", e.message);
         assert!(mix_weights(&from, &to, Method::Bilinear, Some(0.0)).is_err());
+    }
+
+    /// 確かめること: float32 で持った方向のずれ(方位・仰角とも 1e-5° ほど)があっても、刻みの点・同じ輪・
+    /// 天頂の輪と見なす。
+    #[test]
+    fn bilinear_tolerates_float32_angles() {
+        let jitter = 7.6e-6;
+        let mut from: Vec<Dir> = sparse_rings()
+            .into_iter()
+            .enumerate()
+            .map(|(i, d)| Dir {
+                az: d.az + if i % 2 == 0 { jitter } else { -jitter },
+                el: d.el + if i % 3 == 0 { jitter } else { 0.0 },
+                ..d
+            })
+            .collect();
+        let zenith: Vec<usize> = (0..360)
+            .map(|a| {
+                from.push(Dir {
+                    az: a as f64 + jitter,
+                    el: 90.0 - jitter,
+                    dist: 1.0,
+                });
+                from.len() - 1
+            })
+            .collect();
+        let to = [(10.5, 7.5), (10.0, 82.0)].map(|(az, el)| Dir { az, el, dist: 1.0 });
+        let (w, how) = bilinear_weights(&from, &to, Some(1.0)).unwrap();
+        assert!(!how.contains("使わない"), "{how}");
+        assert_eq!(w[0].len(), 4, "上下の輪の左右の隣");
+        // 82° は 45° の輪と天頂の輪(360 点の平均)の間。
+        let at_zenith: f64 = w[1]
+            .iter()
+            .filter(|x| zenith.contains(&x.0))
+            .map(|x| x.1)
+            .sum();
+        assert!((at_zenith - 37.0 / 45.0).abs() < 1e-3, "{at_zenith}");
+        assert_eq!(w[1].iter().filter(|x| zenith.contains(&x.0)).count(), 360);
     }
 
     /// 確かめること: 帯域の中の正弦波は 44.1 → 48 kHz で同じ周波数の正弦波になり、遅れは比で伸びる。
