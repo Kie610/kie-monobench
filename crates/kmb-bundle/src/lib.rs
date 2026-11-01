@@ -75,6 +75,7 @@ pub fn all() -> Vec<Module> {
         kmb_fea::module(),
         kmb_flow::module(),
         kmb_wave::module(),
+        kmb_hrtf::module(),
         kmb_study::module(),
         kmb_cam_tool::module(),
         kmb_cam_setup::module(machines.clone()),

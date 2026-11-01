@@ -257,3 +257,83 @@ fn mismatches_stop_with_input_errors() {
     let e = run(&recipe(r#"{"steps":[{"op":"onset","set":"a"}]}"#), &mut s).unwrap_err();
     assert!(e.message.contains("長さ"), "{}", e.message);
 }
+
+/// 確かめること: 立ち上がりを外してから格子を替えて SOFA に書くと、元の方向と重なる方向では鳴らす音が
+/// 元と同じで、間の方向の立ち上がりは囲む方向の立ち上がりの間に入る。読み直すと方向と属性が残る。
+#[test]
+fn regrid_then_write_sofa() {
+    let mut s = sets(&[("a", synth(1.0))]);
+    let files = crate::run_with(
+        &recipe(
+            r#"{"steps": [
+                {"op": "onset", "set": "a"},
+                {"op": "regrid", "set": "a", "to": {"kind": "rings", "step": 15}, "out": "b"},
+                {"op": "write", "set": "b", "delay": "keep"}
+            ]}"#,
+        ),
+        &mut s,
+        &crate::RunOptions {
+            now: Some("2026-11-01 12:00:00".into()),
+        },
+    )
+    .unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].name, "b.sofa");
+    let a = &s["a"];
+    let b = &s["b"];
+    assert_eq!(b.grid, Grid::Rings { step: 15.0 });
+    assert_eq!(b.dirs.len(), Rings::new(15.0).unwrap().len());
+    let pa = a.played_onset().unwrap();
+    let pb = b.played_onset().unwrap();
+    let lo = pa.iter().flatten().copied().fold(f64::INFINITY, f64::min);
+    let hi = pa
+        .iter()
+        .flatten()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    for (i, d) in b.dirs.iter().enumerate() {
+        for v in pb[i] {
+            assert!(v >= lo - 1e-9 && v <= hi + 1e-9);
+        }
+        // 30° の格子と重なる方向は元の値そのもの。
+        if let Some(j) = a.dirs.iter().position(|x| {
+            (x.el - d.el).abs() < 1e-9 && (x.el.abs() > 89.0 || (x.az - d.az).abs() < 1e-9)
+        }) {
+            assert_eq!(b.ir[i], a.ir[j]);
+            assert_eq!(b.delay[i], a.delay[j]);
+        }
+    }
+    let back = crate::sofa::read(&files[0].bytes).unwrap();
+    assert!(back.same_dirs(b));
+    assert_eq!(back.meta["Title"], "合成 1");
+    assert_eq!(back.meta["DateModified"], "2026-11-01 12:00:00");
+}
+
+/// 確かめること: 立ち上がりを外さずに三角形で混ぜようとすると、混ぜる前に止まる。最近傍なら通り、
+/// 別の集まりの格子にもそろえられる。
+#[test]
+fn regrid_needs_onset_removed_to_mix() {
+    let mut s = sets(&[("a", synth(1.0)), ("b", synth(0.5))]);
+    let e = run(
+        &recipe(
+            r#"{"steps": [{"op": "regrid", "set": "a", "to": {"kind": "rings", "step": 15}}]}"#,
+        ),
+        &mut s,
+    )
+    .unwrap_err();
+    assert_eq!(e.kind, ErrorKind::Input);
+    assert!(e.message.contains("onset"), "{}", e.message);
+    run(
+        &recipe(
+            r#"{"steps": [
+                {"op": "regrid", "set": "a", "method": "nearest", "to": {"kind": "gauss_legendre", "el": 7, "az": 12}},
+                {"op": "regrid", "set": "b", "method": "nearest", "to": {"kind": "like", "set": "a"}}
+            ]}"#,
+        ),
+        &mut s,
+    )
+    .unwrap();
+    assert_eq!(s["a"].dirs.len(), 84);
+    assert!(s["a"].same_dirs(&s["b"]));
+    assert_eq!(s["b"].grid, Grid::GaussLegendre { el: 7, az: 12 });
+}

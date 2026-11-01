@@ -11,6 +11,17 @@
 //!   {"op": "table", "sets": ["ab"], "lead": 4, "before": 4}
 //! ]}
 //! ```
+//!
+//! 格子とサンプリング周波数のそろえ方と SOFA の書き出し:
+//!
+//! ```json
+//! {"steps": [
+//!   {"op": "resample", "set": "d1", "fs": 48000},
+//!   {"op": "onset", "set": "d1"},
+//!   {"op": "regrid", "set": "d1", "to": {"kind": "gauss_legendre", "el": 89, "az": 180}},
+//!   {"op": "write", "set": "d1", "name": "d1-48k.sofa"}
+//! ]}
+//! ```
 
 use std::collections::BTreeMap;
 
@@ -18,18 +29,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::dsp::{MinPhase, OnsetFinder, linear_from_circular, rolloff, trim_window};
 use crate::fft::{C, Fft, advance};
+use crate::grid::Rings;
+use crate::regrid::{Method, Target, gauss_legendre, regrid, resample};
+use crate::sofa::{DelayMode, SofaSpec};
 use crate::table::{OutFile, TableSpec, default_frame, default_onset_step, default_spectrum_step};
-use crate::{Frame, HrirSet, HrtfError};
+use crate::{Dir, Frame, Grid, HrirSet, HrtfError};
 
 /// 処理の手順。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Recipe {
+    /// 読む物(名前 → ファイルのパス)。読むのは呼ぶ側(操作)で、手順を流す `run` は使わない。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub inputs: BTreeMap<String, String>,
     pub steps: Vec<Step>,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn default_cutoff() -> f64 {
+    0.95
 }
 
 /// 処理の 1 段。
@@ -79,6 +100,32 @@ pub enum Step {
         #[serde(default)]
         rolloff_hz: Option<f64>,
     },
+    /// 方向の格子を替える(`regrid` の説明を見る)。`out` が無ければ `set` を置き換える。
+    Regrid {
+        set: String,
+        to: Target,
+        #[serde(default)]
+        method: Method,
+        #[serde(default)]
+        out: Option<String>,
+    },
+    /// サンプリング周波数を `fs` Hz に替える。帯域は低い方のナイキストの `cutoff` 倍まで残す。
+    /// 輪の枠には使えない(onset の段より前に置く)。
+    Resample {
+        set: String,
+        fs: f64,
+        #[serde(default = "default_cutoff")]
+        cutoff: f64,
+    },
+    /// SOFA(SimpleFreeFieldHRIR)に書き出す。`delay` は遅れを IR に入れる(`bake`、既定)か、方向ごとの
+    /// `Data.Delay` に分ける(`keep`)か。名前が無ければ「集まりの名前.sofa」。
+    Write {
+        set: String,
+        #[serde(default)]
+        name: Option<String>,
+        #[serde(default)]
+        delay: DelayMode,
+    },
     /// 時間差を除いた半スペクトルと遅延の表(分けた表)を書き出す。
     /// 欄の意味は `TableSpec` と同じ。
     Table {
@@ -104,6 +151,9 @@ impl Step {
             Step::Shift { .. } => "shift",
             Step::Trim { .. } => "trim",
             Step::Table { .. } => "table",
+            Step::Regrid { .. } => "regrid",
+            Step::Resample { .. } => "resample",
+            Step::Write { .. } => "write",
         }
     }
 }
@@ -134,15 +184,31 @@ fn get<'a>(sets: &'a BTreeMap<String, HrirSet>, name: &str) -> Result<&'a HrirSe
     Ok(s)
 }
 
+/// 手順の外から渡す値。処理は時計を読まないので、書き出しの日時は呼ぶ側が渡す。
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RunOptions {
+    /// 書き出しの日時(UTC、`yyyy-mm-dd HH:MM:SS`)。
+    pub now: Option<String>,
+}
+
 /// 手順を流す。集まりは名前で置き換わり、書き出すファイルを返す(置くのは呼ぶ側)。
 pub fn run(
     recipe: &Recipe,
     sets: &mut BTreeMap<String, HrirSet>,
 ) -> Result<Vec<OutFile>, HrtfError> {
+    run_with(recipe, sets, &RunOptions::default())
+}
+
+/// `run` に、手順の外から渡す値を足した物。
+pub fn run_with(
+    recipe: &Recipe,
+    sets: &mut BTreeMap<String, HrirSet>,
+    opts: &RunOptions,
+) -> Result<Vec<OutFile>, HrtfError> {
     let mut files = Vec::new();
     for (i, step) in recipe.steps.iter().enumerate() {
         let place = format!("段 {}({})", i + 1, step.name());
-        apply(step, sets, &mut files).map_err(|e| e.at(&place))?;
+        apply(step, sets, &mut files, opts).map_err(|e| e.at(&place))?;
     }
     Ok(files)
 }
@@ -151,8 +217,62 @@ fn apply(
     step: &Step,
     sets: &mut BTreeMap<String, HrirSet>,
     files: &mut Vec<OutFile>,
+    opts: &RunOptions,
 ) -> Result<(), HrtfError> {
     match step {
+        Step::Regrid {
+            set,
+            to,
+            method,
+            out,
+        } => {
+            let s = get(sets, set)?;
+            let dist = s.dirs[0].dist;
+            let (dirs, grid) = match to {
+                Target::GaussLegendre { el, az } => (
+                    gauss_legendre(*el, *az)?
+                        .into_iter()
+                        .map(|(az, el)| Dir { az, el, dist })
+                        .collect(),
+                    Grid::GaussLegendre { el: *el, az: *az },
+                ),
+                Target::Rings { step } => (
+                    Rings::new(*step)?
+                        .dirs()
+                        .into_iter()
+                        .map(|(az, el)| Dir { az, el, dist })
+                        .collect(),
+                    Grid::Rings { step: *step },
+                ),
+                Target::Like { set: other } => {
+                    let o = get(sets, other)?;
+                    (o.dirs.clone(), o.grid)
+                }
+            };
+            let r = regrid(s, &dirs, grid, *method)?;
+            sets.insert(out.clone().unwrap_or_else(|| set.clone()), r);
+        }
+        Step::Resample { set, fs, cutoff } => {
+            let r = resample(get(sets, set)?, *fs, *cutoff)?;
+            sets.insert(set.clone(), r);
+        }
+        Step::Write { set, name, delay } => {
+            let s = get(sets, set)?;
+            let spec = SofaSpec {
+                delay: *delay,
+                now: opts.now.clone(),
+            };
+            let name = name.clone().unwrap_or_else(|| format!("{set}.sofa"));
+            if name.contains(['/', '\\']) || name.starts_with('.') {
+                return Err(HrtfError::input(format!(
+                    "書き出しの名前「{name}」にフォルダの区切りや頭の . を使わない"
+                )));
+            }
+            files.push(OutFile {
+                name,
+                bytes: crate::sofa::write(s, &spec)?,
+            });
+        }
         Step::Onset { set, remove, frame } => {
             frame_ok(*frame)?;
             let s = get(sets, set)?;
