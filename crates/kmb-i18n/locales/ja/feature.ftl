@@ -51,6 +51,6 @@ feature-flow-section-tip = ボディを断面で切り、まわりの流れ(速�
 feature-flow-volume = 3D の流れ
 feature-flow-volume-tip = ボディのまわりの 3 次元の流れと抗力を解き、表面の圧力と流線、断面の速さ・圧力・渦を見る(1 分ほどかかる)
 feature-wave-radiate = 音の放射・散乱
-feature-wave-radiate-tip = 振動する面から外へ出る音と、平面波がボディに当たって散る音を周波数ごとに解き、表面の音圧と指向性を見る(境界要素法)
+feature-wave-radiate-tip = 振動する面から外へ出る音と、平面波・点音源の音がボディに当たって散る音を周波数ごとに解き、表面と断面の音圧と指向性を見る(境界要素法)
 feature-solid-surface-patch = 面を張る
 feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る

@@ -50,6 +50,6 @@ feature-flow-section-tip = Cut a body with a section to see the surrounding flow
 feature-flow-volume = 3D Flow
 feature-flow-volume-tip = Solve the 3D flow and drag around a body to see surface pressure and streamlines, and speed, pressure and vorticity on a section (takes about a minute)
 feature-wave-radiate = Sound Radiation and Scattering
-feature-wave-radiate-tip = Solve, frequency by frequency, the sound radiated by vibrating faces and the sound scattered when a plane wave hits the bodies, and view the surface pressure and directivity (boundary element method)
+feature-wave-radiate-tip = Solve, frequency by frequency, the sound radiated by vibrating faces and the sound scattered when a plane wave or a point source hits the bodies, and view the pressure on the surface and a section, and the directivity (boundary element method)
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary

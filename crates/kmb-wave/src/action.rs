@@ -175,6 +175,7 @@ mod tests {
             receivers: Receivers::Points {
                 points: vec![[0.0, 0.0, 0.5], [0.3, 0.0, 0.0]],
             },
+            field_points: Vec::new(),
             medium: Default::default(),
             solver: Default::default(),
         };
@@ -224,6 +225,7 @@ mod tests {
             sources: vec![],
             frequencies: vec![100.0],
             receivers: Receivers::None,
+            field_points: Vec::new(),
             medium: Default::default(),
             solver: Default::default(),
         };

@@ -117,11 +117,21 @@ pub fn solve_bem(job: &BemJob, watch: &dyn Watch) -> Result<BemOut, WaveError> {
         let p = sol.x;
         let q: Vec<C> = p.iter().zip(&ab).map(|(p, (a, b))| a + b * p).collect();
         let receivers = receive(&job.receivers, &elems, &p, &q, k, &job.sources);
+        let field = if job.field_points.is_empty() {
+            Vec::new()
+        } else {
+            watch.progress(
+                (fi as f64 + 0.9) / nf as f64,
+                &format!("{note}: 断面の音圧を出しています"),
+            );
+            at_points(&job.field_points, &elems, &p, &q, k, &job.sources)
+        };
         let size = elems.iter().map(|e| e.size).fold(0.0, f64::max);
         let fo = FrequencyOut {
             frequency: f,
             surface: p,
             receivers,
+            field,
             iterations: sol.iterations,
             residual: sol.residual,
             elements_per_wavelength: c / f / size,
@@ -168,6 +178,17 @@ fn check(job: &BemJob, n: usize) -> Result<(), WaveError> {
             }
             _ => {}
         }
+    }
+    let finite = |p: &[f64; 3]| p.iter().all(|v| v.is_finite());
+    for s in &job.sources {
+        if let Source::Point { position, .. } = s
+            && !finite(position)
+        {
+            return Err(WaveError::input("点音源の位置が数ではありません"));
+        }
+    }
+    if !job.field_points.iter().all(finite) {
+        return Err(WaveError::input("音圧を出す点の座標が数ではありません"));
     }
     match &job.receivers {
         Receivers::Directions {
@@ -336,19 +357,34 @@ fn incident(sources: &[Source], x: [f64; 3], nx: [f64; 3], k: f64) -> (C, C) {
     (p, dp)
 }
 
+/// 外の空間の点 `x` の音圧(来た音と散った音の和)。
+fn field_at(x: [f64; 3], elems: &[Elem], p: &[C], q: &[C], k: f64, sources: &[Source]) -> C {
+    let mut v = incident(sources, x, [0.0; 3], k).0;
+    for (j, e) in elems.iter().enumerate() {
+        let kn = quad::element(x, [0.0; 3], e, k, false);
+        v += kn.m * p[j] - kn.l * q[j];
+    }
+    v
+}
+
+/// 外の空間の点ごとの音圧。
+fn at_points(
+    points: &[[f64; 3]],
+    elems: &[Elem],
+    p: &[C],
+    q: &[C],
+    k: f64,
+    sources: &[Source],
+) -> Vec<C> {
+    par_map(points, |x| field_at(*x, elems, p, q, k, sources))
+}
+
 /// 受け取る所の値。
 fn receive(r: &Receivers, elems: &[Elem], p: &[C], q: &[C], k: f64, sources: &[Source]) -> Vec<C> {
-    let field = |x: [f64; 3]| {
-        let mut v = incident(sources, x, [0.0; 3], k).0;
-        for (j, e) in elems.iter().enumerate() {
-            let kn = quad::element(x, [0.0; 3], e, k, false);
-            v += kn.m * p[j] - kn.l * q[j];
-        }
-        v
-    };
+    let field = |x: [f64; 3]| field_at(x, elems, p, q, k, sources);
     match r {
         Receivers::None => vec![],
-        Receivers::Points { points } => par_map(points, |x| field(*x)),
+        Receivers::Points { points } => at_points(points, elems, p, q, k, sources),
         Receivers::Directions {
             directions,
             distance: Some(d),

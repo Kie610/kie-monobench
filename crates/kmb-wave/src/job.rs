@@ -22,6 +22,9 @@ pub struct BemJob {
     /// 音圧を出す所
     #[serde(default)]
     pub receivers: Receivers,
+    /// `receivers` とは別に音圧を出す外の空間の点(m。断面の格子など)。値は来た音と散った音の和
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_points: Vec<[f64; 3]>,
     /// 空気の値
     #[serde(default)]
     pub medium: Medium,
@@ -153,6 +156,9 @@ pub struct FrequencyOut {
     pub surface: Vec<Complex64>,
     /// 受け取る所ごとの値([`Receivers`] の並びの順)
     pub receivers: Vec<Complex64>,
+    /// [`BemJob::field_points`] の点ごとの音圧(Pa、同じ並び)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field: Vec<Complex64>,
     /// 反復の回数
     pub iterations: usize,
     /// 終わった時の残り(右辺の大きさに対する比)
