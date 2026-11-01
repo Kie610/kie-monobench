@@ -298,6 +298,8 @@ action-study-cancel = Cancel
 action-study-cancel-tip = Stop solving (for flow and time-varying heat, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
+action-wave-solve = Solve Sound Job…
+action-wave-solve-tip = Solve a sound job JSON with the boundary element method and write the surface and receiver pressures for each frequency as JSON
 
 ## Commands shown only in the feature right-click menu (timeline, browser, 3D view)
 ## For commands whose description depends on the feature type (Save as Default, Place Entry Point), the description is written to fit every type.

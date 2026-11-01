@@ -53,6 +53,7 @@ toolbar-group-output = Output
 toolbar-group-manage = Manage
 toolbar-group-study = Study
 toolbar-group-flow = Flow
+toolbar-group-sound = Sound
 toolbar-group-solve = Solve
 toolbar-group-results = Results
 toolbar-group-constraints = Constraints

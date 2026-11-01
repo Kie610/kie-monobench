@@ -2368,6 +2368,46 @@ fn write_study_screens() {
     s.write(&dir, "107-解析-3Dの流れ-断面も出す");
 }
 
+/// 108〜110. 音の放射・散乱: 解析のツールバーのまとまり「音」から足した研究を「実行」で解き、
+/// 指向性(ボディの横の受け取りの球)と表面の音圧レベルを周波数のコマで見る。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
+fn write_sound_screens() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    // 箱の上の面を振動させる(1〜4 kHz を 1 オクターブごと)
+    let (ws, id) = study_workspace(
+        false,
+        "wave.radiate@1",
+        serde_json::json!({"source": "none", "dir": "+x", "detail": "normal", "f_start": "1000", "f_end": "4000", "per_octave": "1"}),
+    );
+    let body = ws
+        .document()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == "solid.extrude@1")
+        .unwrap()
+        .id
+        .0;
+    let mut data = ws.document().data().feature(id).unwrap().data.clone();
+    data["faces"] =
+        serde_json::json!([{"kind": "face", "feature": body, "face": format!("f{body}:end")}]);
+    let mut s = Screen::new(ws);
+    s.h.state_mut().set_feature_data(id, data);
+    s.h.state_mut().wait();
+    s.h.state_mut().select(id);
+    s.settle();
+    s.write(&dir, "108-解析-音の放射・散乱-実行前");
+    assert!(s.click_exact("▶  実行") || s.click_exact("実行"));
+    wait_run(&mut s, id);
+    s.write(&dir, "109-解析-音の放射・散乱-指向性");
+    assert!(s.click_exact("最初のコマ"));
+    s.write(&dir, "110-解析-音の放射・散乱-最初のコマ");
+}
+
 /// 120〜123. 強度の網は形に沿った 2 次の四面体(穴とボスが残り、曲面に沿う)。断面で切ると中の応力、「網の質」で要素の形の良し悪しを色で見る。
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]

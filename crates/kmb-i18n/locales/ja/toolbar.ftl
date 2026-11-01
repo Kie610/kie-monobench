@@ -53,6 +53,7 @@ toolbar-group-output = 出力
 toolbar-group-manage = 管理
 toolbar-group-study = 研究
 toolbar-group-flow = 流れ
+toolbar-group-sound = 音
 toolbar-group-solve = 実行
 toolbar-group-results = 結果
 toolbar-group-constraints = 拘束

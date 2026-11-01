@@ -267,3 +267,5 @@ solid.sweep@1	kmb-cad-sweep
 solid.thread@1	kmb-cad-hole
 study.cancel	kmb-study
 study.run	kmb-study
+wave.radiate@1	kmb-wave
+wave.solve	kmb-wave

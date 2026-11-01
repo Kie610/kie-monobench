@@ -2399,6 +2399,7 @@ dependencies = [
  "kmb-strategy-waterline",
  "kmb-study",
  "kmb-text",
+ "kmb-wave",
  "kmb-workspace-hack",
  "log",
  "serde_json",
@@ -3584,6 +3585,9 @@ dependencies = [
 name = "kmb-wave"
 version = "0.2.0"
 dependencies = [
+ "kmb-core",
+ "kmb-fea",
+ "kmb-study",
  "kmb-workspace-hack",
  "log",
  "num-complex",

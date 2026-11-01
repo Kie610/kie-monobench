@@ -1,6 +1,6 @@
 [package]
 name = "kmb-wave"
-description = "音の波の解き方(外の空間の放射と散乱を解く境界要素法の核、受け取り点の格子、確かめ用の解析解)"
+description = "音の波の解き方(外の空間の放射と散乱を解く境界要素法の核、受け取り点の格子、確かめ用の解析解、研究「音の放射・散乱」)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,13 +10,14 @@ rust-version.workspace = true
 layer = "analysis"
 
 [dependencies]
+kmb-core.workspace = true
+kmb-study.workspace = true
+kmb-fea.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 log.workspace = true
 num-complex = { version = "0.4.6", default-features = false, features = ["std", "serde"] }
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true
