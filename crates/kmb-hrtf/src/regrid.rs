@@ -8,8 +8,9 @@
 //!   向きごとの一番近い点を足し、選び直す。
 //! - 輪の双線形(`bilinear`): 元の格子を仰角ごとの輪に分け、行き先の上下の輪で方位の左右の隣 2 点を
 //!   方位の比で混ぜ、上下の輪を仰角の比で混ぜる。一番上(下)の輪より外は、極の方向が無ければ極を輪の
-//!   平均で埋めて、輪と極の間を仰角の比で混ぜる。`pole` を `ring_mean` にすると、極の方向があっても
-//!   使わず、極を一番上(下)の輪の平均で埋める。
+//!   平均で埋めて、輪と極の間を仰角の比で混ぜる。極に方位の違う点が並ぶ時はその平均。
+//!   `azimuth_step` を渡すと、方位がその刻みの倍数でない点を使わない(刻みの輪に端数の点が足された
+//!   格子で、刻みの点だけを混ぜる)。極の点がすべて外れる時は極の点をそのまま使う。
 //!
 //! 混ぜる替え方は、混ぜる前に立ち上がりを外してある(輪の枠)ことを求める。時間差を含んだまま混ぜると、
 //! ずれた 2 つの音が重なって櫛の形に欠けるため。
@@ -41,17 +42,6 @@ pub enum Method {
     Triangle,
     /// 輪の双線形。仰角ごとに方位が 3 つ以上並ぶ格子だけに使う。
     Bilinear,
-}
-
-/// 輪の双線形での極の値の取り方。
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Pole {
-    /// 極の方向があればその値、無ければ一番上(下)の輪の平均。
-    #[default]
-    Measured,
-    /// 極の方向があっても使わず、一番上(下)の輪の平均にする。
-    RingMean,
 }
 
 /// Gauss–Legendre の格子の方向(方位、仰角。度)。仰角は下から、輪の中は方位の順。
@@ -378,8 +368,9 @@ impl Ring {
     }
 }
 
-/// 元の方向を仰角ごとの輪に分ける。極でない輪に方位が 3 つ未満なら輪の格子でないとして誤り。
-fn rings_of(from: &[Dir]) -> Result<Vec<Ring>, HrtfError> {
+/// 元の方向を仰角ごとの輪に分け、`azimuth_step` の倍数でない方位の点を外す(外した数も返す)。
+/// 極でない輪に方位が 3 つ未満なら輪の格子でないとして誤り。
+fn rings_of(from: &[Dir], azimuth_step: Option<f64>) -> Result<(Vec<Ring>, usize), HrtfError> {
     let mut order: Vec<usize> = (0..from.len()).collect();
     order.sort_by(|&a, &b| from[a].el.total_cmp(&from[b].el));
     let mut rings: Vec<Ring> = Vec::new();
@@ -393,8 +384,25 @@ fn rings_of(from: &[Dir]) -> Result<Vec<Ring>, HrtfError> {
             }),
         }
     }
+    let mut dropped = 0;
     for r in &mut rings {
         r.pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some(st) = azimuth_step {
+            let on: Vec<(f64, usize)> = r
+                .pts
+                .iter()
+                .copied()
+                .filter(|p| {
+                    let q = p.0 / st;
+                    (q - q.round()).abs() < 1e-6
+                })
+                .collect();
+            // 極は方位を持たないので、刻みの点が 1 つも無ければ極の点をそのまま使う。
+            if !(on.is_empty() && r.is_pole()) {
+                dropped += r.pts.len() - on.len();
+                r.pts = on;
+            }
+        }
         if !r.is_pole() && r.pts.len() < 3 {
             return Err(HrtfError::input(format!(
                 "元の格子が輪になっていない(仰角 {}° の方向が {} 個しかない)。輪の双線形は仰角ごとに方位が 3 つ以上並ぶ格子に使う(ほかは method を triangle に)",
@@ -403,23 +411,19 @@ fn rings_of(from: &[Dir]) -> Result<Vec<Ring>, HrtfError> {
             )));
         }
     }
-    Ok(rings)
+    Ok((rings, dropped))
 }
 
 /// 行き先の方向ごとの(元の方向の番号, 重み)の並び。
 type Weights = Vec<Vec<(usize, f64)>>;
 
-/// 輪の双線形の重みと、輪の平均で埋めた極の数。
-fn bilinear_weights(from: &[Dir], to: &[Dir], pole: Pole) -> Result<(Weights, usize), HrtfError> {
-    let mut rings = rings_of(from)?;
-    if pole == Pole::RingMean {
-        rings.retain(|r| !r.is_pole());
-        if rings.is_empty() {
-            return Err(HrtfError::input(
-                "極のほかに輪が無いので、極を輪の平均で埋められない",
-            ));
-        }
-    }
+/// 輪の双線形の重みと、処理の記録に書く替え方の説明。
+fn bilinear_weights(
+    from: &[Dir],
+    to: &[Dir],
+    azimuth_step: Option<f64>,
+) -> Result<(Weights, String), HrtfError> {
+    let (rings, dropped) = rings_of(from, azimuth_step)?;
     let (first, last) = (&rings[0], &rings[rings.len() - 1]);
     let filled = usize::from(!first.is_pole()) + usize::from(!last.is_pole());
     let w = to
@@ -466,25 +470,53 @@ fn bilinear_weights(from: &[Dir], to: &[Dir], pole: Pole) -> Result<(Weights, us
             out
         })
         .collect();
-    Ok((w, filled))
+    let mut how = "輪の双線形".to_string();
+    let mut notes = Vec::new();
+    if filled > 0 {
+        notes.push(format!("極 {filled} つを輪の平均で埋めた"));
+    }
+    if dropped > 0 {
+        let st = azimuth_step.unwrap_or_default();
+        notes.push(format!("方位が {st}° の倍数でない {dropped} 点は使わない"));
+    }
+    if !notes.is_empty() {
+        how = format!("{how}({})", notes.join("、"));
+    }
+    Ok((w, how))
 }
 
-/// 方向の並び `from` から `to` へ混ぜる重みと、記録に書く数(三角形は最近傍にした方向、双線形は
-/// 輪の平均で埋めた極)。`pole` は双線形の時だけ効く。
+/// 方向の並び `from` から `to` へ混ぜる重みと、処理の記録に書く替え方の説明。
+/// `azimuth_step` は双線形の時だけ選べる。
 pub(crate) fn mix_weights(
     from: &[Dir],
     to: &[Dir],
     method: Method,
-    pole: Pole,
-) -> Result<(Weights, usize), HrtfError> {
-    if pole != Pole::Measured && method != Method::Bilinear {
-        return Err(HrtfError::input(
-            "極の取り方(pole)は輪の双線形(method を bilinear)の時だけ選べる",
-        ));
+    azimuth_step: Option<f64>,
+) -> Result<(Weights, String), HrtfError> {
+    if let Some(st) = azimuth_step {
+        if method != Method::Bilinear {
+            return Err(HrtfError::input(
+                "方位の刻み(azimuth_step)は輪の双線形(method を bilinear)の時だけ選べる",
+            ));
+        }
+        if !(st.is_finite() && st > 0.0 && st <= 360.0) {
+            return Err(HrtfError::input(format!(
+                "方位の刻み {st}° は 0 より大きく 360 以下にする"
+            )));
+        }
     }
     match method {
-        Method::Bilinear => bilinear_weights(from, to, pole),
-        _ => Ok(weights(from, to, method)),
+        Method::Bilinear => bilinear_weights(from, to, azimuth_step),
+        Method::Nearest => Ok((weights(from, to, method).0, "最近傍".to_string())),
+        Method::Triangle => {
+            let (w, fallback) = weights(from, to, method);
+            let how = if fallback > 0 {
+                format!("球面の三角形(囲む三角形が無い {fallback} 方向は最近傍)")
+            } else {
+                "球面の三角形".to_string()
+            };
+            Ok((w, how))
+        }
     }
 }
 
@@ -494,7 +526,7 @@ pub fn regrid(
     to: &[Dir],
     grid: Grid,
     method: Method,
-    pole: Pole,
+    azimuth_step: Option<f64>,
 ) -> Result<HrirSet, HrtfError> {
     s.check()?;
     if to.is_empty() {
@@ -505,7 +537,7 @@ pub fn regrid(
             "三角形や双線形で混ぜる前に立ち上がりを外す(先に onset の段を流す。値を混ぜない時は method を nearest に)",
         ));
     }
-    let (w, fallback) = mix_weights(&s.dirs, to, method, pole)?;
+    let (w, how) = mix_weights(&s.dirs, to, method, azimuth_step)?;
     let taps = s.taps();
     let mut out = s.clone();
     out.dirs = Vec::with_capacity(to.len());
@@ -540,22 +572,6 @@ pub fn regrid(
     }
     out.onset = onset;
     out.grid = grid;
-    let how = match method {
-        Method::Nearest => "最近傍".to_string(),
-        Method::Triangle if fallback > 0 => {
-            format!("球面の三角形(囲む三角形が無い {fallback} 方向は最近傍)")
-        }
-        Method::Triangle => "球面の三角形".to_string(),
-        Method::Bilinear if fallback > 0 => {
-            let measured = if pole == Pole::RingMean {
-                "。測った極の方向は使わない"
-            } else {
-                ""
-            };
-            format!("輪の双線形(極 {fallback} つを輪の平均で埋めた{measured})")
-        }
-        Method::Bilinear => "輪の双線形".to_string(),
-    };
     out.history.push(format!(
         "regrid: 方向 {} 個を {} 個に替えた({how})",
         s.dirs.len(),
@@ -791,8 +807,8 @@ mod tests {
             (77.0, -90.0),
         ]
         .map(|(az, el)| Dir { az, el, dist: 1.0 });
-        let (w, filled) = bilinear_weights(&from, &to, Pole::Measured).unwrap();
-        assert_eq!(filled, 2);
+        let (w, how) = bilinear_weights(&from, &to, None).unwrap();
+        assert!(how.contains("極 2 つ"), "{how}");
         let val = |wl: &[(usize, f64)]| -> f64 {
             wl.iter().map(|&(n, x)| x * f(from[n].az, from[n].el)).sum()
         };
@@ -815,7 +831,7 @@ mod tests {
         let e = bilinear_weights(
             &[(0.0, 0.0), (90.0, 0.0), (45.0, 10.0)].map(|(az, el)| Dir { az, el, dist: 1.0 }),
             &to,
-            Pole::Measured,
+            None,
         )
         .unwrap_err();
         assert!(e.message.contains("輪になっていない"), "{}", e.message);
@@ -823,34 +839,65 @@ mod tests {
         assert_eq!(m, Method::Bilinear);
     }
 
-    /// 確かめること: 天頂の方向がある格子では、既定は天頂の値を使い、`ring_mean` では天頂を使わず
-    /// 一番上の輪の平均で埋める。`ring_mean` は双線形の時だけ選べ、手順の JSON の名前で選べる。
+    /// 確かめること: `azimuth_step` を 1 にすると、1° の倍数でない方位の点(D1 の各輪にある端数の点)を
+    /// 混ぜずに隣の 1° の点だけで補い、天頂の多方位の輪は 1° の点だけの平均、天底の 1 点はそのまま使う。
+    /// 指定しなければ端数の点も使う。双線形の時だけ選べ、刻みは正の数。
     #[test]
-    fn bilinear_pole_choice() {
+    fn bilinear_azimuth_step() {
         let mut from = sparse_rings();
+        let odd: Vec<usize> = [-45.0, -15.0, 0.0, 15.0, 45.0]
+            .into_iter()
+            .map(|el| {
+                from.push(Dir {
+                    az: 116.6,
+                    el,
+                    dist: 1.0,
+                });
+                from.len() - 1
+            })
+            .collect();
+        let zenith: Vec<usize> = (0..360)
+            .map(|a| a as f64)
+            .chain([13.3, 20.9])
+            .map(|az| {
+                from.push(Dir {
+                    az,
+                    el: 90.0,
+                    dist: 1.0,
+                });
+                from.len() - 1
+            })
+            .collect();
         from.push(Dir {
             az: 0.0,
-            el: 90.0,
+            el: -90.0,
             dist: 1.0,
         });
-        let zenith = from.len() - 1;
-        let to = [(30.0, 90.0), (30.0, 67.5)].map(|(az, el)| Dir { az, el, dist: 1.0 });
-        let (w, filled) = bilinear_weights(&from, &to, Pole::Measured).unwrap();
-        assert_eq!(filled, 1, "下の極だけ埋める");
-        assert_eq!(w[0], vec![(zenith, 1.0)]);
-        assert!(w[1].contains(&(zenith, 0.5)));
-        let (w, filled) = bilinear_weights(&from, &to, Pole::RingMean).unwrap();
-        assert_eq!(filled, 2);
-        assert_eq!(w[0].len(), 360);
-        assert!(w.iter().flatten().all(|&(n, _)| n != zenith));
+        let nadir = from.len() - 1;
+        let to = [(116.59, -12.0), (10.0, 90.0), (10.0, -90.0)].map(|(az, el)| Dir {
+            az,
+            el,
+            dist: 1.0,
+        });
+        let (w, _) = bilinear_weights(&from, &to, None).unwrap();
+        assert!(
+            w[0].iter().any(|&(n, _)| odd.contains(&n)),
+            "端数の点を使う"
+        );
+        assert_eq!(w[1].len(), 362);
+        let (w, how) = bilinear_weights(&from, &to, Some(1.0)).unwrap();
+        assert!(w[0].iter().all(|&(n, _)| !odd.contains(&n)));
         assert!(
             w[0].iter()
-                .all(|&(n, x)| from[n].el == 45.0 && (x - 1.0 / 360.0).abs() < 1e-15)
+                .all(|&(n, _)| [116.0, 117.0].contains(&from[n].az))
         );
-        let e = mix_weights(&from, &to, Method::Triangle, Pole::RingMean).unwrap_err();
+        assert_eq!(w[1].len(), 360);
+        assert!(w[1].iter().all(|&(n, _)| zenith[..360].contains(&n)));
+        assert_eq!(w[2], vec![(nadir, 1.0)]);
+        assert!(how.contains("7 点"), "{how}");
+        let e = mix_weights(&from, &to, Method::Triangle, Some(1.0)).unwrap_err();
         assert!(e.message.contains("bilinear"), "{}", e.message);
-        let p: Pole = serde_json::from_str(r#""ring_mean""#).unwrap();
-        assert_eq!(p, Pole::RingMean);
+        assert!(mix_weights(&from, &to, Method::Bilinear, Some(0.0)).is_err());
     }
 
     /// 確かめること: 帯域の中の正弦波は 44.1 → 48 kHz で同じ周波数の正弦波になり、遅れは比で伸びる。

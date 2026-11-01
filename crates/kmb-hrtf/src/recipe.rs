@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use crate::dsp::{MinPhase, OnsetFinder, linear_from_circular, rolloff, trim_window};
 use crate::fft::{C, Fft, advance};
 use crate::grid::Rings;
-use crate::regrid::{Method, Pole, Target, gauss_legendre, regrid, resample};
+use crate::regrid::{Method, Target, gauss_legendre, regrid, resample};
 use crate::sofa::{DelayMode, SofaSpec};
 use crate::table::{
     OutFile, TableSpec, default_frame, default_onset_method, default_onset_step,
@@ -109,9 +109,9 @@ pub enum Step {
         to: Target,
         #[serde(default)]
         method: Method,
-        /// 輪の双線形での極の取り方(`regrid::Pole`)。
+        /// 輪の双線形で使う方位の刻み(度)。倍数でない方位の点は使わない。空なら全部の点を使う。
         #[serde(default)]
-        pole: Pole,
+        azimuth_step: Option<f64>,
         #[serde(default)]
         out: Option<String>,
     },
@@ -232,7 +232,7 @@ fn apply(
             set,
             to,
             method,
-            pole,
+            azimuth_step,
             out,
         } => {
             let s = get(sets, set)?;
@@ -258,7 +258,7 @@ fn apply(
                     (o.dirs.clone(), o.grid)
                 }
             };
-            let r = regrid(s, &dirs, grid, *method, *pole)?;
+            let r = regrid(s, &dirs, grid, *method, *azimuth_step)?;
             sets.insert(out.clone().unwrap_or_else(|| set.clone()), r);
         }
         Step::Resample { set, fs, cutoff } => {

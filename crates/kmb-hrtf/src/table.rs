@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::fft::{C, Fft};
 use crate::grid::{Nearest, Rings};
 use crate::half::{f16_bits, f16_value};
-use crate::regrid::{Method, Pole, mix_weights};
+use crate::regrid::{Method, mix_weights};
 use crate::{Dir, Frame, HrirSet, HrtfError};
 
 /// 遅延の表を 2 次元に並べる時の幅。
@@ -186,7 +186,7 @@ pub fn build(set: &HrirSet, spec: &TableSpec) -> Result<Table, HrtfError> {
             .into_iter()
             .map(|(az, el)| Dir { az, el, dist: 1.0 })
             .collect();
-        let (w, _) = mix_weights(&set.dirs, &to, spec.onset_method, Pole::Measured)
+        let (w, _) = mix_weights(&set.dirs, &to, spec.onset_method, None)
             .map_err(|e| e.at("遅延の表の補い"))?;
         w.iter()
             .map(|wl| {
