@@ -11,6 +11,8 @@
 //!   入力の誤りにする(黙って向きを直さない)。
 //! - 確かめ用の解析解は [`exact`]、受け取り方向の格子は [`grid`]。
 //! - 操作 `wave.solve`([`action`])は仕事の JSON を解いて結果の JSON を書き出す(CLI・MCP・画面)。
+//! - 研究「音の放射・散乱」([`study`]、`wave.radiate@1`)はボディと振動する面から仕事を作り、
+//!   「実行」で解く(進み具合と中止は kmb-study の実行が受け持つ)。
 
 pub mod action;
 pub mod bem;
@@ -20,6 +22,7 @@ pub mod grid;
 pub mod job;
 pub mod mesh;
 mod quad;
+pub mod study;
 
 pub use bem::{Watch, solve_bem};
 pub use job::{
@@ -29,7 +32,8 @@ pub use job::{
 pub use mesh::{BemMesh, icosphere};
 pub use num_complex::Complex64;
 
-/// この crate の名乗り(種類は持たず、操作 `wave.solve` だけ)。
+/// この crate の名乗り(研究の種類 `wave.radiate@1` と操作 `wave.solve`)。実行・中止・結果の
+/// 見せ方は kmb-study の操作が受け持つ。
 pub fn module() -> kmb_core::Module {
-    kmb_core::Module::commands("kmb-wave").with_extension(action::WaveCommands)
+    kmb_core::Module::new("kmb-wave", study::register).with_extension(action::WaveCommands)
 }

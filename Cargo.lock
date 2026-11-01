@@ -3586,6 +3586,8 @@ name = "kmb-wave"
 version = "0.2.0"
 dependencies = [
  "kmb-core",
+ "kmb-fea",
+ "kmb-study",
  "kmb-workspace-hack",
  "log",
  "num-complex",

@@ -84,7 +84,7 @@ browser-body-find-in-timeline-tip = このボディを最後に変えた機能�
 ## 解析の木
 
 browser-studies = 研究
-browser-studies-empty = まだありません。上の「静的応力」「熱」「固有振動」「軽い形の参考」「翼の揚力」「2D の流れ」「3D の流れ」から足す
+browser-studies-empty = まだありません。上の「静的応力」「熱」「固有振動」「軽い形の参考」「翼の揚力」「2D の流れ」「3D の流れ」「音の放射・散乱」から足す
 
 ## 加工の木
 

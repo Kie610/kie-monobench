@@ -10,7 +10,7 @@ use crate::vlm;
 use crate::wing;
 use kmb_core::{
     Descriptor, Dim, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Mesh, Outputs,
-    Payload, Ref, RefKind, Registry, Series, Value, category, expr_inputs,
+    Payload, Ref, RefKind, Registry, Series, Value, category,
 };
 use kmb_study::fields::{is_empty, length, number, rename_exprs};
 use kmb_study::result::{Fnv, fmt};
@@ -205,25 +205,7 @@ impl Study {
 
 impl Feature for Study {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v: Vec<InputRef> = self
-            .bodies()?
-            .into_iter()
-            .map(|feature| InputRef::Output {
-                feature,
-                slot: "body".into(),
-            })
-            .collect();
-        for e in self.data.exprs() {
-            if is_empty(e) {
-                continue;
-            }
-            for i in expr_inputs(e)? {
-                if !v.contains(&i) {
-                    v.push(i);
-                }
-            }
-        }
-        Ok(v)
+        kmb_study::fields::inputs(self.bodies()?, self.data.exprs())
     }
 
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {

@@ -76,7 +76,7 @@ fn tab_plan(space: Space) -> &'static [(&'static str, &'static [&'static str])] 
                 "管理",
             ],
         )],
-        Space::Simulation => &[("解析", &["研究", "流れ", "実行", "結果", "検査"])],
+        Space::Simulation => &[("解析", &["研究", "流れ", "音", "実行", "結果", "検査"])],
     }
 }
 
@@ -121,6 +121,7 @@ pub fn group_id(name: &str) -> Option<&'static str> {
         "管理" => "toolbar-group-manage",
         "研究" => "toolbar-group-study",
         "流れ" => "toolbar-group-flow",
+        "音" => "toolbar-group-sound",
         "実行" => "toolbar-group-solve",
         "結果" => "toolbar-group-results",
         "拘束" => "toolbar-group-constraints",
