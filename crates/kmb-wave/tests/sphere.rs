@@ -20,6 +20,7 @@ fn job(subdivisions: u32, kas: &[f64]) -> BemJob {
         sources: vec![],
         frequencies: kas.iter().map(|&ka| freq(ka)).collect(),
         receivers: Receivers::None,
+        field_points: Vec::new(),
         medium: Medium::default(),
         solver: Solver::default(),
     }

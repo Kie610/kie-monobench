@@ -7,8 +7,11 @@
 //!   [`Watch`] に渡して受ける。中止すると、解き終えた周波数までを結果に残す。
 //! - 網は表示用の網を要素の大きさ(既定は一番高い周波数の波長の 1/6)に張り直して作る
 //!   (kmb-fea の表面の張り直し。面の境を保つので、振動する面の三角形はそのまま分かる)。
+//! - 外から来る音は平面波か点音源(1 m 離れた所で実効値 1 Pa)。点音源はボディの外に置く。
 //! - 結果は表面(音圧レベルと位相)と、受け取りの球(方向ごとの音圧レベル。指向性)の 2 つの網。
 //!   受け取りの球はボディの横に並べて描く(向きはボディと同じ)。コマは周波数ごと。
+//! - 断面を選ぶと、ボディの真ん中を通る平面の上の平らな格子で音圧レベルを出す(格子の結果として
+//!   描くので、ボディの外形で切って中を塗らない)。
 
 use crate::{
     BemJob, BemMesh, BemOut, Boundary, Medium, Receivers, Solver, Source, Watch, icosphere,
@@ -22,7 +25,7 @@ use kmb_fea::surfmesh::{SizeRule, reference, remesh};
 use kmb_study::fields::{is_empty, length, number, rename_exprs};
 use kmb_study::result::{Fnv, fmt};
 use kmb_study::{
-    Control, Frame, Geometry, PLAN, Part, Plan, Quantity, SimResult, Start, Task, Values,
+    Control, Frame, Geometry, Grid, PLAN, Part, Plan, Quantity, SimResult, Start, Task, Values,
 };
 use num_complex::Complex64 as C;
 use serde::{Deserialize, Serialize};
@@ -45,7 +48,7 @@ const MAX_FREQS: usize = 40;
 /// 音圧レベルの基準(Pa、実効値)。
 const P_REF: f64 = 20e-6;
 
-/// 平面波の振幅(Pa)。実効値 1 Pa(94 dB)。
+/// 平面波の振幅(Pa)。実効値 1 Pa(94 dB)。点音源は 1 m 離れた所でこの振幅。
 const PLANE_AMPLITUDE: f64 = std::f64::consts::SQRT_2;
 
 /// 研究のデータ(欄の値。数は式の文字)。
@@ -68,12 +71,24 @@ pub struct RadiateData {
     /// 振動の速さ(mm/s、振幅)。空なら 1 mm/s
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub velocity: String,
-    /// 外から来る音: none・plane
+    /// 外から来る音: none・plane・point
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub source: String,
     /// 平面波の進む向き(+x・-x・+y・-y・+z・-z)
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dir: String,
+    /// 点音源の位置(mm、世界の座標)。無ければ原点
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point: Option<[f64; 3]>,
+    /// 断面: none・xy・yz・zx。空なら出さない
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub section: String,
+    /// 断面の位置(mm、ボディの真ん中から平面の法線の向きへのずれ)。空なら 0
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub section_at: String,
+    /// 断面の 1 辺(mm、正方形)。空なら自動
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub section_size: String,
     /// 始めの周波数(Hz)。空なら 250
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub f_start: String,
@@ -98,7 +113,7 @@ pub struct RadiateData {
 }
 
 impl RadiateData {
-    fn exprs(&self) -> [&String; 7] {
+    fn exprs(&self) -> [&String; 9] {
         [
             &self.velocity,
             &self.f_start,
@@ -107,10 +122,12 @@ impl RadiateData {
             &self.radius,
             &self.temperature,
             &self.size,
+            &self.section_at,
+            &self.section_size,
         ]
     }
 
-    fn exprs_mut(&mut self) -> [&mut String; 7] {
+    fn exprs_mut(&mut self) -> [&mut String; 9] {
         [
             &mut self.velocity,
             &mut self.f_start,
@@ -119,6 +136,8 @@ impl RadiateData {
             &mut self.radius,
             &mut self.temperature,
             &mut self.size,
+            &mut self.section_at,
+            &mut self.section_size,
         ]
     }
 }
@@ -261,19 +280,59 @@ impl Radiate {
             Some(h)
         };
         let plane = (self.data.source == "plane").then(|| direction(&self.data.dir));
-        if self.data.faces.is_empty() && plane.is_none() {
+        let point = (self.data.source == "point").then(|| self.data.point.unwrap_or([0.0; 3]));
+        if point.is_some_and(|p| !p.iter().all(|v| v.is_finite())) {
+            return Err(bad("点音源の位置が数ではありません".into()));
+        }
+        if self.data.faces.is_empty() && plane.is_none() && point.is_none() {
             return Err(bad(
-                "振動する面を選ぶか、外から来る音を平面波にしてください".into(),
+                "振動する面を選ぶか、外から来る音を平面波か点音源にしてください".into(),
             ));
         }
-        let subdivisions = match self.data.detail.as_str() {
-            "coarse" => 2,
-            "fine" => 4,
-            _ => 3,
+        let (subdivisions, cells) = match self.data.detail.as_str() {
+            "coarse" => (2, 32),
+            "fine" => (4, 72),
+            _ => (3, 48),
+        };
+        let normal = match self.data.section.as_str() {
+            "xy" => Some(2),
+            "yz" => Some(0),
+            "zx" => Some(1),
+            _ => None,
+        };
+        let section = match normal {
+            None => None,
+            Some(normal) => {
+                let offset = if is_empty(&self.data.section_at) {
+                    0.0
+                } else {
+                    length(ctx, &self.data.section_at, "断面の位置")?
+                };
+                let size = if is_empty(&self.data.section_size) {
+                    None
+                } else {
+                    let a = length(ctx, &self.data.section_size, "断面の大きさ")?;
+                    if !(a.is_finite() && a > 0.0) {
+                        return Err(bad("断面の大きさは 0 より大きくしてください".into()));
+                    }
+                    Some(a)
+                };
+                if !offset.is_finite() {
+                    return Err(bad("断面の位置が数ではありません".into()));
+                }
+                Some(SectionSpec {
+                    normal,
+                    offset,
+                    size,
+                    cells,
+                })
+            }
         };
         Ok(Conditions {
             velocity: velocity * 1e-3,
             plane,
+            point,
+            section,
             freqs,
             radius,
             temperature,
@@ -346,6 +405,10 @@ pub struct Conditions {
     pub velocity: f64,
     /// 平面波の進む向き(無ければ放射だけ)
     pub plane: Option<[f64; 3]>,
+    /// 点音源の位置(mm、世界の座標)
+    pub point: Option<[f64; 3]>,
+    /// 断面
+    pub section: Option<SectionSpec>,
     /// 周波数(Hz)
     pub freqs: Vec<f64>,
     /// 受け取りの球の半径(mm)。無ければ遠方
@@ -356,6 +419,30 @@ pub struct Conditions {
     pub size: Option<f64>,
     /// 受け取りの方向の球の分け方の回数
     pub subdivisions: u32,
+}
+
+/// 断面の決め方。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SectionSpec {
+    /// 平面の法線の世界の軸(0 = x、1 = y、2 = z)
+    pub normal: usize,
+    /// ボディの真ん中から法線の向きへのずれ(mm)
+    pub offset: f64,
+    /// 正方形の 1 辺(mm)。無ければ自動
+    pub size: Option<f64>,
+    /// 1 辺のセルの数
+    pub cells: usize,
+}
+
+/// 作った断面の格子と、音圧を出すセル。
+struct Section {
+    grid: Grid,
+    /// 音圧を出すセルの番号(ボディの中と点音源のすぐそばを除く)
+    cells: Vec<usize>,
+    /// 音圧を出すセルの中心(mm、世界の座標。`cells` と同じ並び)
+    points: Vec<[f64; 3]>,
+    /// 1 辺(mm)
+    side: f64,
 }
 
 /// 研究 1 つの解く仕事。
@@ -483,9 +570,17 @@ impl RadiateJob {
         })
     }
 
-    fn bem_job(&self, s: &Surface, medium: Medium) -> BemJob {
+    fn bem_job(&self, s: &Surface, sec: Option<&Section>, medium: Medium) -> BemJob {
         let to_m = |p: &[f64; 3]| [0, 1, 2].map(|a| (p[a] - s.center[a]) * 1e-3);
         let directions = icosphere(1.0, self.conditions.subdivisions).vertices;
+        let plane = self.conditions.plane.map(|d| Source::PlaneWave {
+            direction: d,
+            amplitude: C::new(PLANE_AMPLITUDE, 0.0),
+        });
+        let point = self.conditions.point.map(|p| Source::Point {
+            position: to_m(&p),
+            amplitude: C::new(PLANE_AMPLITUDE, 0.0),
+        });
         BemJob {
             mesh: BemMesh {
                 vertices: s.points.iter().map(to_m).collect(),
@@ -498,24 +593,93 @@ impl RadiateJob {
                     velocity: C::new(self.conditions.velocity, 0.0),
                 },
             ],
-            sources: self
-                .conditions
-                .plane
-                .map(|d| Source::PlaneWave {
-                    direction: d,
-                    amplitude: C::new(PLANE_AMPLITUDE, 0.0),
-                })
-                .into_iter()
-                .collect(),
+            sources: plane.into_iter().chain(point).collect(),
             frequencies: self.conditions.freqs.clone(),
             receivers: Receivers::Directions {
                 directions,
                 distance: self.conditions.radius.map(|r| r * 1e-3),
             },
+            field_points: sec
+                .map(|x| x.points.iter().map(to_m).collect())
+                .unwrap_or_default(),
             medium,
             solver: Solver::default(),
         }
     }
+}
+
+impl RadiateJob {
+    /// 断面の格子を作る(ボディの真ん中を通る正方形。自動の大きさはボディの 3 倍で、点音源も入れる)。
+    fn section(&self, s: &Surface) -> Option<Section> {
+        let spec = self.conditions.section?;
+        let n = spec.normal;
+        let (u, v) = match n {
+            0 => (1, 2),
+            1 => (2, 0),
+            _ => (0, 1),
+        };
+        let (lo, hi) = bounds(&s.points);
+        let side = spec.size.unwrap_or_else(|| {
+            let mut half = 1.5 * (hi[u] - lo[u]).max(hi[v] - lo[v]);
+            if let Some(p) = self.conditions.point {
+                let d = (p[u] - s.center[u]).abs().max((p[v] - s.center[v]).abs());
+                half = half.max(1.25 * d);
+            }
+            2.0 * half.max(1.0)
+        });
+        let h = side / spec.cells as f64;
+        let origin = [
+            s.center[u] - 0.5 * side,
+            s.center[v] - 0.5 * side,
+            s.center[n] + spec.offset,
+        ];
+        let mut grid = Grid {
+            n: [spec.cells, spec.cells, 1],
+            origin,
+            h,
+            axes: [u, v, n],
+            signs: [1.0; 3],
+            solid: vec![false; spec.cells * spec.cells],
+            body: Some(0),
+        };
+        let mut cells = Vec::new();
+        let mut points = Vec::new();
+        for j in 0..spec.cells {
+            for i in 0..spec.cells {
+                let x = grid.index(i, j, 0);
+                let w = grid.to_world(grid.center(i, j, 0));
+                if winding(s, w) > 0.5 {
+                    grid.solid[x] = true;
+                    continue;
+                }
+                // 点音源のすぐそばは音圧が限りなく大きくなるので、色の幅を決めないよう出さない
+                if self.conditions.point.is_some_and(|p| dist(p, w) < 1.5 * h) {
+                    continue;
+                }
+                cells.push(x);
+                points.push(w);
+            }
+        }
+        Some(Section {
+            grid,
+            cells,
+            points,
+            side,
+        })
+    }
+}
+
+/// 点 `p` のまわりを網が何周するか(中は 1、外は 0。三角形の立体角の和を 4π で割る)。
+fn winding(s: &Surface, p: [f64; 3]) -> f64 {
+    let mut sum = 0.0;
+    for t in &s.tris {
+        let [a, b, c] = t.map(|i| sub(s.points[i as usize], p));
+        let (la, lb, lc) = (norm(a), norm(b), norm(c));
+        let num = dot(a, cross(b, c));
+        let den = la * lb * lc + dot(a, b) * lc + dot(a, c) * lb + dot(b, c) * la;
+        sum += 2.0 * num.atan2(den);
+    }
+    sum / (4.0 * std::f64::consts::PI)
 }
 
 /// 中止の時の誤り(実行は中止を誤りにしない)。
@@ -607,14 +771,20 @@ impl Task for RadiateJob {
         let medium = Medium::from_temperature(self.conditions.temperature);
         let (h, why) = self.element_size(&medium)?;
         let s = self.surface(h, c)?;
+        if let Some(p) = self.conditions.point
+            && winding(&s, p) > 0.5
+        {
+            return Err("点音源がボディの中にあります。ボディの外に置いてください".into());
+        }
+        let sec = self.section(&s);
         c.step(1);
-        let job = self.bem_job(&s, medium);
+        let job = self.bem_job(&s, sec.as_ref(), medium);
         let out = solve_bem(&job, &Progress(c)).map_err(|e| e.message)?;
         if out.frequencies.is_empty() {
             return Err(CANCELLED.into());
         }
         c.step(2);
-        let mut r = self.result(&s, &job, &out, &why);
+        let mut r = self.result(&s, sec.as_ref(), &job, &out, &why);
         r.bodies = self.bodies.clone();
         log::info!(
             "音の放射・散乱: {:.2} 秒。{}",
@@ -627,7 +797,14 @@ impl Task for RadiateJob {
 
 impl RadiateJob {
     /// 解いた結果を研究の結果の形にする。
-    fn result(&self, s: &Surface, job: &BemJob, out: &BemOut, why: &str) -> SimResult {
+    fn result(
+        &self,
+        s: &Surface,
+        sec: Option<&Section>,
+        job: &BemJob,
+        out: &BemOut,
+        why: &str,
+    ) -> SimResult {
         let far = self.conditions.radius.is_none();
         let dirs = match &job.receivers {
             Receivers::Directions { directions, .. } => directions.clone(),
@@ -649,14 +826,22 @@ impl RadiateJob {
         for f in &out.frequencies {
             let (lv, ph) = vertex_values(s, &f.surface);
             let dir_level: Vec<f32> = f.receivers.iter().map(|p| level(p.norm())).collect();
+            let mut values = vec![
+                Values::exact(lv),
+                Values::exact(ph),
+                Values::exact(dir_level.clone()),
+            ];
+            if let Some(sec) = sec {
+                let mut v = vec![f32::NAN; sec.grid.len()];
+                for (x, p) in sec.cells.iter().zip(&f.field) {
+                    v[*x] = level(p.norm());
+                }
+                values.push(Values::exact(v));
+            }
             frames.push(Frame {
                 label: hz_label(f.frequency),
                 time: None,
-                values: vec![
-                    Values::exact(lv),
-                    Values::exact(ph),
-                    Values::exact(dir_level.clone()),
-                ],
+                values,
             });
             numbers.push((hz_label(f.frequency), on_axis(&dirs, &dir_level, axis)));
             if f.elements_per_wavelength < 6.0 {
@@ -695,6 +880,14 @@ impl RadiateJob {
                 self.conditions
                     .plane
                     .map(|_| "平面波 1 Pa(94 dB)".to_string()),
+                self.conditions.point.map(|p| {
+                    format!(
+                        "点音源 ({}, {}, {}) mm・1 m で 1 Pa(94 dB)",
+                        fmt(p[0]),
+                        fmt(p[1]),
+                        fmt(p[2])
+                    )
+                }),
                 Some(match self.conditions.radius {
                     Some(r) => format!("受け取り 半径 {} mm の球", fmt(r)),
                     None => "受け取り 遠方(1 m に換えた値)".into(),
@@ -705,6 +898,18 @@ impl RadiateJob {
             .collect::<Vec<_>>()
             .join("・"),
         ));
+        if let Some(sec) = sec {
+            let name = ["YZ", "ZX", "XY"][sec.grid.axes[2]];
+            numbers.push((
+                "断面".into(),
+                format!(
+                    "{name} 平面・1 辺 {} mm・{}×{} のセル",
+                    fmt(sec.side),
+                    sec.grid.n[0],
+                    sec.grid.n[1]
+                ),
+            ));
+        }
         numbers.push(("反復の最大".into(), format!("{iterations} 回")));
         let mut note = vec![NOTE.to_string()];
         if !coarse.is_empty() {
@@ -725,37 +930,56 @@ impl RadiateJob {
         }
         let first = out.frequencies.first().map(|f| f.frequency).unwrap_or(0.0);
         let last = out.frequencies.last().map(|f| f.frequency).unwrap_or(0.0);
+        let mut parts = vec![
+            Part {
+                name: "表面".into(),
+                geom: Geometry::Surface {
+                    points: s.points.iter().map(|p| p.map(|v| v as f32)).collect(),
+                    tris: s.tris.clone(),
+                },
+            },
+            Part {
+                name: "受け取りの球".into(),
+                geom: Geometry::Surface {
+                    points: ball_points,
+                    tris: balloon.triangles,
+                },
+            },
+        ];
+        let mut quantities = vec![
+            Quantity::scalar("表面の音圧レベル", "dB", 0),
+            Quantity::scalar("表面の音圧の位相", "°", 0),
+            Quantity::scalar(
+                if far {
+                    "指向性(1 m の音圧レベル)"
+                } else {
+                    "受け取りの球の音圧レベル"
+                },
+                "dB",
+                1,
+            ),
+        ];
+        let start = if let Some(sec) = sec {
+            parts.push(Part {
+                name: "断面".into(),
+                geom: Geometry::Grid(sec.grid.clone()),
+            });
+            quantities.push(Quantity::scalar("音圧レベル", "dB", 2));
+            Start {
+                quantity: 3,
+                section: true,
+                ..Start::default()
+            }
+        } else {
+            Start {
+                quantity: 2,
+                ..Start::default()
+            }
+        };
         SimResult {
             kind: "radiate".into(),
-            parts: vec![
-                Part {
-                    name: "表面".into(),
-                    geom: Geometry::Surface {
-                        points: s.points.iter().map(|p| p.map(|v| v as f32)).collect(),
-                        tris: s.tris.clone(),
-                    },
-                },
-                Part {
-                    name: "受け取りの球".into(),
-                    geom: Geometry::Surface {
-                        points: ball_points,
-                        tris: balloon.triangles,
-                    },
-                },
-            ],
-            quantities: vec![
-                Quantity::scalar("表面の音圧レベル", "dB", 0),
-                Quantity::scalar("表面の音圧の位相", "°", 0),
-                Quantity::scalar(
-                    if far {
-                        "指向性(1 m の音圧レベル)"
-                    } else {
-                        "受け取りの球の音圧レベル"
-                    },
-                    "dB",
-                    1,
-                ),
-            ],
+            parts,
+            quantities,
             frames,
             numbers,
             summary: format!(
@@ -768,10 +992,7 @@ impl RadiateJob {
             note: note.join("\n"),
             badge: format!("境界要素法・三角形 {}", s.tris.len()),
             partial: out.cancelled,
-            start: Start {
-                quantity: 2,
-                ..Start::default()
-            },
+            start,
             ..SimResult::default()
         }
     }
@@ -792,11 +1013,22 @@ impl RadiateJob {
         if l > 0.0 {
             return n.map(|v| v / l);
         }
-        self.conditions.plane.unwrap_or([0.0, 0.0, 1.0])
+        if let Some(d) = self.conditions.plane {
+            return d;
+        }
+        // 点音源は、音源からボディの真ん中へ向かう向き
+        if let Some(p) = self.conditions.point {
+            let d = sub(s.center, p);
+            let l = norm(d);
+            if l > 0.0 {
+                return d.map(|v| v / l);
+            }
+        }
+        [0.0, 0.0, 1.0]
     }
 }
 
-pub const NOTE: &str = "境界要素法(区分一定の三角形・Burton–Miller の結合)の値です。空気は止まっていて、壁は振動する面のほか動かず音を通しません。振動する面は全体が同じ速さ・同じ位相で動くとしています。受け取りの球は見やすいようにボディの横に描いています(向きはボディと同じ)。";
+pub const NOTE: &str = "境界要素法(区分一定の三角形・Burton–Miller の結合)の値です。空気は止まっていて、壁は振動する面のほか動かず音を通しません。振動する面は全体が同じ速さ・同じ位相で動くとしています。受け取りの球は見やすいようにボディの横に描いています(向きはボディと同じ)。断面は来た音と散った音を足した音圧で、点音源のすぐそばは塗りません。";
 
 /// 軸の上の音圧レベルと、軸から最初に 6 dB 下がる角度。
 fn on_axis(dirs: &[[f64; 3]], levels: &[f32], axis: [f64; 3]) -> String {
@@ -875,7 +1107,7 @@ pub fn register(reg: &mut Registry) {
             .icon("wave_radiate")
             .order(21)
             .pinned()
-            .hint("振動する面から外へ出る音と、平面波がボディに当たって散る音を周波数ごとに解き、表面の音圧と指向性を見る(境界要素法)")
+            .hint("振動する面から外へ出る音と、平面波・点音源の音がボディに当たって散る音を周波数ごとに解き、表面と断面の音圧と指向性を見る(境界要素法)")
             .aliases("おと おんきょう ほうしゃ さんらん しこうせい 音 音響 放射 散乱 指向性 スピーカー 回折 バッフル 境界要素法 bem acoustics radiation scattering directivity")
             .field(
                 Field::pick("bodies", "ボディ", &[RefKind::Body], 1, None)
@@ -893,9 +1125,19 @@ pub fn register(reg: &mut Registry) {
             .field(Field::choice(
                 "source",
                 "外から来る音",
-                &[("none", "なし"), ("plane", "平面波")],
-            ).help("平面波は実効値 1 Pa(94 dB)で、ボディに当たって散る音を解く"))
-            .field(Field::choice("dir", "平面波の向き", DIRS).help("平面波が進む向き"))
+                &[("none", "なし"), ("plane", "平面波"), ("point", "点音源")],
+            ).help("平面波は実効値 1 Pa(94 dB)、点音源は 1 m 離れた所で実効値 1 Pa で、ボディに当たって散る音を解く"))
+            .field(
+                Field::choice("dir", "平面波の向き", DIRS)
+                    .help("平面波が進む向き")
+                    .only("source", "plane", "none"),
+            )
+            .field(
+                Field::vector("point", "点音源の位置")
+                    .length()
+                    .help("点音源を置く所(X, Y, Z)。ボディの外に置く")
+                    .only("source", "point", "none"),
+            )
             .field(
                 Field::opt_expr("f_start", "始めの周波数(Hz)")
                     .plain("Hz")
@@ -920,11 +1162,33 @@ pub fn register(reg: &mut Registry) {
                 "detail",
                 "受け取りの細かさ",
                 &[
-                    ("coarse", "粗い(162 方向)"),
-                    ("normal", "普通(642 方向)"),
-                    ("fine", "細かい(2562 方向)"),
+                    ("coarse", "粗い(162 方向・断面 32×32)"),
+                    ("normal", "普通(642 方向・断面 48×48)"),
+                    ("fine", "細かい(2562 方向・断面 72×72)"),
                 ],
             ))
+            .field(Field::choice(
+                "section",
+                "断面",
+                &[
+                    ("none", "なし"),
+                    ("xy", "XY 平面"),
+                    ("yz", "YZ 平面"),
+                    ("zx", "ZX 平面"),
+                ],
+            ).help("ボディの真ん中を通る平面の上で、音圧レベルを色で見る"))
+            .field(
+                Field::opt_expr("section_at", "断面の位置")
+                    .length()
+                    .help("ボディの真ん中から平面の法線の向きへずらす長さ。空なら 0")
+                    .unless("section", "none"),
+            )
+            .field(
+                Field::opt_expr("section_size", "断面の大きさ")
+                    .length()
+                    .help("正方形の断面の 1 辺。空ならボディの 3 倍(点音源があればそれも入る大きさ)")
+                    .unless("section", "none"),
+            )
             .field(
                 Field::opt_expr("temperature", "温度(℃)")
                     .plain("℃")
@@ -935,7 +1199,13 @@ pub fn register(reg: &mut Registry) {
                     .length()
                     .help("表面の三角形の 1 辺。空なら一番高い周波数の波長の 1/6 と、三角形が 600 個ほどになる大きさの小さい方"),
             )
-            .template(json!({"source": "none", "dir": "+x", "detail": "normal"})),
+            .template(json!({
+                "source": "none",
+                "dir": "+x",
+                "point": [0.0, 0.0, 0.0],
+                "detail": "normal",
+                "section": "xy"
+            })),
         |d| {
             Ok(Box::new(Radiate {
                 data: serde_json::from_value(d.clone())
@@ -975,6 +1245,8 @@ mod tests {
             conditions: Conditions {
                 velocity: 1e-3,
                 plane,
+                point: None,
+                section: None,
                 freqs,
                 radius: None,
                 temperature: 20.0,
@@ -1114,17 +1386,109 @@ mod tests {
         let medium = Medium::from_temperature(20.0);
         let (h, why) = j.element_size(&medium).unwrap();
         let s = j.surface(h, &c).unwrap();
-        let mut bem = j.bem_job(&s, medium);
+        let mut bem = j.bem_job(&s, None, medium);
         bem.frequencies.truncate(1);
         let mut out = solve_bem(&bem, &()).unwrap();
         out.cancelled = true;
-        let r = j.result(&s, &bem, &out, &why);
+        let r = j.result(&s, None, &bem, &out, &why);
         assert!(r.partial);
         assert_eq!(r.frames.len(), 1);
         assert_eq!(r.frames[0].label, "300 Hz");
         assert!(r.note.contains("中止"));
         // 散乱だけなら軸は平面波の向き
         assert_eq!(j.axis(&s), [1.0, 0.0, 0.0]);
+    }
+
+    /// 脈動する球の断面: 球の中のセルは塗らず、外のセルの音圧は単極の解析解(|F|/r)に合う。
+    #[test]
+    fn section_of_a_pulsating_sphere_matches_the_monopole() {
+        let mut j = job(vec![(0, "s".into())], None, vec![500.0]);
+        j.conditions.section = Some(SectionSpec {
+            normal: 2,
+            offset: 0.0,
+            size: Some(600.0),
+            cells: 16,
+        });
+        let r = j.solve(&Control::new()).expect("解ける");
+        assert_eq!(r.parts.len(), 3);
+        assert_eq!(r.quantities[3].part, 2);
+        assert_eq!(r.start.quantity, 3);
+        let g = match &r.parts[2].geom {
+            Geometry::Grid(g) => g.clone(),
+            _ => panic!("断面は格子"),
+        };
+        assert!(g.flat() && g.body == Some(0));
+        let v: Vec<f32> = match &r.frames[0].values[3] {
+            Values::F32(v) => v.to_vec(),
+            _ => panic!("値の形"),
+        };
+        assert_eq!(v.len(), 256);
+        let m = Medium::from_temperature(20.0);
+        let k = 2.0 * std::f64::consts::PI * 500.0 / m.speed_of_sound;
+        let a = 0.0875;
+        let f = m.density * m.speed_of_sound * 1e-3 * k * a * a / (1.0 + (k * a).powi(2)).sqrt();
+        let (mut inside, mut worst) = (0, 0.0f64);
+        for jj in 0..16 {
+            for ii in 0..16 {
+                let x = g.index(ii, jj, 0);
+                let rr = norm(g.to_world(g.center(ii, jj, 0))) * 1e-3;
+                if g.solid[x] {
+                    assert!(rr < 0.09, "球の外が中になった r = {rr}");
+                    inside += 1;
+                    continue;
+                }
+                if rr < 0.12 {
+                    continue; // 面のすぐそばは網の粗さが出る
+                }
+                worst = worst.max((v[x] as f64 - level(f / rr) as f64).abs());
+            }
+        }
+        assert!(inside >= 4, "中のセル {inside}");
+        assert!(worst < 0.3, "解析解との差 {worst} dB");
+        assert!(
+            r.numbers
+                .iter()
+                .any(|(k, v)| k == "断面" && v.starts_with("XY 平面"))
+        );
+    }
+
+    /// 点音源: 剛い球の手前(音源の側)は陰(反対の側)より大きい。中に置くと解く前に止める。
+    #[test]
+    fn point_source_casts_a_shadow_behind_a_rigid_sphere() {
+        let mut j = job(Vec::new(), None, vec![2000.0]);
+        j.conditions.point = Some([-200.0, 0.0, 0.0]);
+        j.conditions.section = Some(SectionSpec {
+            normal: 2,
+            offset: 0.0,
+            size: None,
+            cells: 24,
+        });
+        let r = j.solve(&Control::new()).expect("解ける");
+        let g = match &r.parts[2].geom {
+            Geometry::Grid(g) => g.clone(),
+            _ => panic!("断面は格子"),
+        };
+        let v: Vec<f32> = match &r.frames[0].values[3] {
+            Values::F32(v) => v.to_vec(),
+            _ => panic!("値の形"),
+        };
+        let at = |p: [f64; 3]| {
+            let l = g.to_local(p);
+            let i = ((l[0] - g.origin[0]) / g.h) as usize;
+            let jj = ((l[1] - g.origin[1]) / g.h) as usize;
+            v[g.index(i, jj, 0)]
+        };
+        let (front, back) = (at([-120.0, 0.0, 0.0]), at([130.0, 0.0, 0.0]));
+        assert!(front > back + 6.0, "手前 {front} dB、陰 {back} dB");
+        // 音源のすぐそばは塗らない
+        assert!(at([-200.0, 0.0, 0.0]).is_nan());
+        // 自動の大きさは音源を入れる
+        assert!(g.h * g.n[0] as f64 > 2.0 * 200.0);
+        let axis = j.axis(&j.surface(18.0, &Control::new()).unwrap());
+        assert!(axis[0] > 0.9999, "軸は音源からボディへ {axis:?}");
+        j.conditions.point = Some([10.0, 0.0, 0.0]);
+        let e = j.solve(&Control::new()).unwrap_err();
+        assert!(e.contains("ボディの中"), "{e}");
     }
 
     #[test]
@@ -1139,8 +1503,11 @@ mod tests {
     fn data_round_trips_through_json() {
         let d = RadiateData {
             bodies: vec![Ref::Body(FeatureId(3))],
-            source: "plane".into(),
+            source: "point".into(),
             dir: "-y".into(),
+            point: Some([1.0, -2.5, 3.0]),
+            section: "zx".into(),
+            section_at: "5 mm".into(),
             f_end: "2000".into(),
             ..RadiateData::default()
         };
