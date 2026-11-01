@@ -26,7 +26,7 @@ Report the result as counts (passed, failed, skipped) in the pull request. [docs
 - One pull request, one purpose. Put unrelated formatting or refactoring in a separate pull request.
 - If you change the user interface, attach before and after screenshots side by side.
 - When you add a feature, record it as one file in `docs/機能/` (see [docs/機能/README.md](docs/機能/README.md)).
-- New dependencies must use permissive licences such as MIT, Apache-2.0 or BSD (`deny.toml`). **GPL, LGPL and AGPL dependencies and code cannot be used.**
+- New dependencies must use permissive licences such as MIT, Apache-2.0 or BSD (`deny.toml`). **GPL, LGPL, AGPL and EUPL dependencies and code cannot be used.**
 - Do not copy or translate code from other software, whatever its licence. Reading it to understand how something works is fine, but write your own code.
 - Do not name other CAD/CAM products or cite research sources in code, comments or documents (names of machines and file formats needed for compatibility are fine). **Pull request descriptions, commit messages and branch names are public too.**
 - We do not build interaction designs that are covered by patents. The list of shapes we avoid is in [docs/避ける形.md](docs/避ける形.md).
