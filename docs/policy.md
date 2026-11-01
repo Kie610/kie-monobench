@@ -84,7 +84,7 @@ CAD を先に作る場合でも、次の二つは最初からコアで扱う。�
 
 ## 依存とライセンスの扱い
 
-GPL・LGPL・AGPL・EUPL のライブラリは依存に使わない。usd-brep の中では、LGPL の部品を使う部分(STEP の読み書き)と開発用 GUI が該当する。使っている依存の正本はルートの Cargo.toml の workspace.dependencies で、ライセンスは deny.toml で検査する。初めの候補のうち Clipper2 と manifold は使わなかった(2D の重なりは i_overlay、ストック除去シミュレーションは自作の高さの格子)。
+GPL と LGPL のライブラリは依存に使わない。EUPL も同じコピーレフトなので依存に使わず、コードも読まない。usd-brep の中では、LGPL の部品を使う部分(STEP の読み書き)と開発用 GUI が該当する。使っている依存の正本はルートの Cargo.toml の workspace.dependencies で、ライセンスは deny.toml で検査する。初めの候補のうち Clipper2 と manifold は使わなかった(2D の重なりは i_overlay、ストック除去シミュレーションは自作の高さの格子)。
 
 ほかのポストのコードは流用しない。MIT・Apache のコードは仕組みと値を知るためだけに読み、写さず訳さない(「決めたこと」の作り方)。truck の 1 関数を直した写し(third_party/README.md)は認めた例外。
 
