@@ -357,3 +357,5 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+action-hrtf-process = Align HRTF formats
+action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
