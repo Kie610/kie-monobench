@@ -277,6 +277,7 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
             mesh,
             boundaries: vec![Boundary::Rigid, v],
             sources: Vec::new(),
+            field_points: Vec::new(),
             frequencies: freqs.clone(),
             receivers: Receivers::Directions {
                 directions: directions.clone(),
