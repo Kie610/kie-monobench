@@ -6,21 +6,33 @@
 //! 作った HRTF にも測った HRTF にもかけられる。
 //!
 //! 処理はファイルにも文書にも触らない純関数で、書き出しはファイルの名前とバイト列を返すだけにする
-//! (置くのは呼ぶ側の壊れない書き込み)。FFT と float16 の変換は自前で持ち、外の crate に頼らない。
+//! (置くのは呼ぶ側の壊れない書き込み)。FFT・float16 の変換・SOFA に要る HDF5 の書き込みは自前で持ち、
+//! よそで作られた SOFA の読み込みだけを純 Rust の HDF5 の読み手(`hdf5-pure`)に任せる。ファイルを読む
+//! のは操作(`commands`、`hrtf.process`)だけ。
 
+mod commands;
 pub mod dsp;
 mod error;
 pub mod fft;
 pub mod grid;
 pub mod half;
+mod hdf5w;
 pub mod recipe;
+pub mod regrid;
 mod set;
+pub mod sofa;
 pub mod table;
 
 #[cfg(test)]
 mod tests;
 
+pub use commands::{HrtfCommands, PROCESS};
 pub use error::{ErrorKind, HrtfError};
-pub use recipe::{Recipe, Step, run};
+pub use recipe::{Recipe, RunOptions, Step, run, run_with};
 pub use set::{Dir, Frame, Grid, HrirSet};
 pub use table::{Layout, OutFile, TableSpec};
+
+/// この crate の名乗り(HRTF の形式をそろえる操作)。組み立て(kmb-bundle)が 1 回だけ並べる。
+pub fn module() -> kmb_core::Module {
+    kmb_core::Module::commands("kmb-hrtf").with_extension(HrtfCommands)
+}
