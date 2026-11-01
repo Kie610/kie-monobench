@@ -30,9 +30,12 @@ use serde::{Deserialize, Serialize};
 use crate::dsp::{MinPhase, OnsetFinder, linear_from_circular, rolloff, trim_window};
 use crate::fft::{C, Fft, advance};
 use crate::grid::Rings;
-use crate::regrid::{Method, Target, gauss_legendre, regrid, resample};
+use crate::regrid::{Method, Pole, Target, gauss_legendre, regrid, resample};
 use crate::sofa::{DelayMode, SofaSpec};
-use crate::table::{OutFile, TableSpec, default_frame, default_onset_step, default_spectrum_step};
+use crate::table::{
+    OutFile, TableSpec, default_frame, default_onset_method, default_onset_step,
+    default_spectrum_step,
+};
 use crate::{Dir, Frame, Grid, HrirSet, HrtfError};
 
 /// 処理の手順。
@@ -106,6 +109,9 @@ pub enum Step {
         to: Target,
         #[serde(default)]
         method: Method,
+        /// 輪の双線形での極の取り方(`regrid::Pole`)。
+        #[serde(default)]
+        pole: Pole,
         #[serde(default)]
         out: Option<String>,
     },
@@ -140,6 +146,8 @@ pub enum Step {
         before: f64,
         #[serde(default)]
         lead: Option<f64>,
+        #[serde(default = "default_onset_method")]
+        onset_method: Method,
     },
 }
 
@@ -224,6 +232,7 @@ fn apply(
             set,
             to,
             method,
+            pole,
             out,
         } => {
             let s = get(sets, set)?;
@@ -249,7 +258,7 @@ fn apply(
                     (o.dirs.clone(), o.grid)
                 }
             };
-            let r = regrid(s, &dirs, grid, *method)?;
+            let r = regrid(s, &dirs, grid, *method, *pole)?;
             sets.insert(out.clone().unwrap_or_else(|| set.clone()), r);
         }
         Step::Resample { set, fs, cutoff } => {
@@ -478,6 +487,7 @@ fn apply(
             onset_step,
             before,
             lead,
+            onset_method,
         } => {
             let spec = TableSpec {
                 frame: *frame,
@@ -485,6 +495,7 @@ fn apply(
                 onset_step: *onset_step,
                 before: *before,
                 lead: *lead,
+                onset_method: *onset_method,
             };
             let list: Vec<(&str, &HrirSet)> = names
                 .iter()

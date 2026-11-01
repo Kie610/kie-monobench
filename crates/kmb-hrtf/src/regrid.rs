@@ -8,7 +8,8 @@
 //!   向きごとの一番近い点を足し、選び直す。
 //! - 輪の双線形(`bilinear`): 元の格子を仰角ごとの輪に分け、行き先の上下の輪で方位の左右の隣 2 点を
 //!   方位の比で混ぜ、上下の輪を仰角の比で混ぜる。一番上(下)の輪より外は、極の方向が無ければ極を輪の
-//!   平均で埋めて、輪と極の間を仰角の比で混ぜる。
+//!   平均で埋めて、輪と極の間を仰角の比で混ぜる。`pole` を `ring_mean` にすると、極の方向があっても
+//!   使わず、極を一番上(下)の輪の平均で埋める。
 //!
 //! 混ぜる替え方は、混ぜる前に立ち上がりを外してある(輪の枠)ことを求める。時間差を含んだまま混ぜると、
 //! ずれた 2 つの音が重なって櫛の形に欠けるため。
@@ -40,6 +41,17 @@ pub enum Method {
     Triangle,
     /// 輪の双線形。仰角ごとに方位が 3 つ以上並ぶ格子だけに使う。
     Bilinear,
+}
+
+/// 輪の双線形での極の値の取り方。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Pole {
+    /// 極の方向があればその値、無ければ一番上(下)の輪の平均。
+    #[default]
+    Measured,
+    /// 極の方向があっても使わず、一番上(下)の輪の平均にする。
+    RingMean,
 }
 
 /// Gauss–Legendre の格子の方向(方位、仰角。度)。仰角は下から、輪の中は方位の順。
@@ -398,8 +410,16 @@ fn rings_of(from: &[Dir]) -> Result<Vec<Ring>, HrtfError> {
 type Weights = Vec<Vec<(usize, f64)>>;
 
 /// 輪の双線形の重みと、輪の平均で埋めた極の数。
-fn bilinear_weights(from: &[Dir], to: &[Dir]) -> Result<(Weights, usize), HrtfError> {
-    let rings = rings_of(from)?;
+fn bilinear_weights(from: &[Dir], to: &[Dir], pole: Pole) -> Result<(Weights, usize), HrtfError> {
+    let mut rings = rings_of(from)?;
+    if pole == Pole::RingMean {
+        rings.retain(|r| !r.is_pole());
+        if rings.is_empty() {
+            return Err(HrtfError::input(
+                "極のほかに輪が無いので、極を輪の平均で埋められない",
+            ));
+        }
+    }
     let (first, last) = (&rings[0], &rings[rings.len() - 1]);
     let filled = usize::from(!first.is_pole()) + usize::from(!last.is_pole());
     let w = to
@@ -449,8 +469,33 @@ fn bilinear_weights(from: &[Dir], to: &[Dir]) -> Result<(Weights, usize), HrtfEr
     Ok((w, filled))
 }
 
+/// 方向の並び `from` から `to` へ混ぜる重みと、記録に書く数(三角形は最近傍にした方向、双線形は
+/// 輪の平均で埋めた極)。`pole` は双線形の時だけ効く。
+pub(crate) fn mix_weights(
+    from: &[Dir],
+    to: &[Dir],
+    method: Method,
+    pole: Pole,
+) -> Result<(Weights, usize), HrtfError> {
+    if pole != Pole::Measured && method != Method::Bilinear {
+        return Err(HrtfError::input(
+            "極の取り方(pole)は輪の双線形(method を bilinear)の時だけ選べる",
+        ));
+    }
+    match method {
+        Method::Bilinear => bilinear_weights(from, to, pole),
+        _ => Ok(weights(from, to, method)),
+    }
+}
+
 /// 方向の並び `to` に替えた集まり。
-pub fn regrid(s: &HrirSet, to: &[Dir], grid: Grid, method: Method) -> Result<HrirSet, HrtfError> {
+pub fn regrid(
+    s: &HrirSet,
+    to: &[Dir],
+    grid: Grid,
+    method: Method,
+    pole: Pole,
+) -> Result<HrirSet, HrtfError> {
     s.check()?;
     if to.is_empty() {
         return Err(HrtfError::input("行き先の方向が 1 つも無い"));
@@ -460,10 +505,7 @@ pub fn regrid(s: &HrirSet, to: &[Dir], grid: Grid, method: Method) -> Result<Hri
             "三角形や双線形で混ぜる前に立ち上がりを外す(先に onset の段を流す。値を混ぜない時は method を nearest に)",
         ));
     }
-    let (w, fallback) = match method {
-        Method::Bilinear => bilinear_weights(&s.dirs, to)?,
-        _ => weights(&s.dirs, to, method),
-    };
+    let (w, fallback) = mix_weights(&s.dirs, to, method, pole)?;
     let taps = s.taps();
     let mut out = s.clone();
     out.dirs = Vec::with_capacity(to.len());
@@ -505,7 +547,12 @@ pub fn regrid(s: &HrirSet, to: &[Dir], grid: Grid, method: Method) -> Result<Hri
         }
         Method::Triangle => "球面の三角形".to_string(),
         Method::Bilinear if fallback > 0 => {
-            format!("輪の双線形(極 {fallback} つを輪の平均で埋めた)")
+            let measured = if pole == Pole::RingMean {
+                "。測った極の方向は使わない"
+            } else {
+                ""
+            };
+            format!("輪の双線形(極 {fallback} つを輪の平均で埋めた{measured})")
         }
         Method::Bilinear => "輪の双線形".to_string(),
     };
@@ -744,7 +791,7 @@ mod tests {
             (77.0, -90.0),
         ]
         .map(|(az, el)| Dir { az, el, dist: 1.0 });
-        let (w, filled) = bilinear_weights(&from, &to).unwrap();
+        let (w, filled) = bilinear_weights(&from, &to, Pole::Measured).unwrap();
         assert_eq!(filled, 2);
         let val = |wl: &[(usize, f64)]| -> f64 {
             wl.iter().map(|&(n, x)| x * f(from[n].az, from[n].el)).sum()
@@ -768,11 +815,42 @@ mod tests {
         let e = bilinear_weights(
             &[(0.0, 0.0), (90.0, 0.0), (45.0, 10.0)].map(|(az, el)| Dir { az, el, dist: 1.0 }),
             &to,
+            Pole::Measured,
         )
         .unwrap_err();
         assert!(e.message.contains("輪になっていない"), "{}", e.message);
         let m: Method = serde_json::from_str(r#""bilinear""#).unwrap();
         assert_eq!(m, Method::Bilinear);
+    }
+
+    /// 確かめること: 天頂の方向がある格子では、既定は天頂の値を使い、`ring_mean` では天頂を使わず
+    /// 一番上の輪の平均で埋める。`ring_mean` は双線形の時だけ選べ、手順の JSON の名前で選べる。
+    #[test]
+    fn bilinear_pole_choice() {
+        let mut from = sparse_rings();
+        from.push(Dir {
+            az: 0.0,
+            el: 90.0,
+            dist: 1.0,
+        });
+        let zenith = from.len() - 1;
+        let to = [(30.0, 90.0), (30.0, 67.5)].map(|(az, el)| Dir { az, el, dist: 1.0 });
+        let (w, filled) = bilinear_weights(&from, &to, Pole::Measured).unwrap();
+        assert_eq!(filled, 1, "下の極だけ埋める");
+        assert_eq!(w[0], vec![(zenith, 1.0)]);
+        assert!(w[1].contains(&(zenith, 0.5)));
+        let (w, filled) = bilinear_weights(&from, &to, Pole::RingMean).unwrap();
+        assert_eq!(filled, 2);
+        assert_eq!(w[0].len(), 360);
+        assert!(w.iter().flatten().all(|&(n, _)| n != zenith));
+        assert!(
+            w[0].iter()
+                .all(|&(n, x)| from[n].el == 45.0 && (x - 1.0 / 360.0).abs() < 1e-15)
+        );
+        let e = mix_weights(&from, &to, Method::Triangle, Pole::RingMean).unwrap_err();
+        assert!(e.message.contains("bilinear"), "{}", e.message);
+        let p: Pole = serde_json::from_str(r#""ring_mean""#).unwrap();
+        assert_eq!(p, Pole::RingMean);
     }
 
     /// 確かめること: 帯域の中の正弦波は 44.1 → 48 kHz で同じ周波数の正弦波になり、遅れは比で伸びる。

@@ -10,7 +10,8 @@
 //! | `layout.json` | 大きさ・格子の刻み・集まりの名前・共通の遅れ |
 //!
 //! 1 項目は、鳴らす音のスペクトル H から自分の立ち上がり τ を除いた H · e^{+j 2π k τ / F}。鳴らす時は
-//! 最近傍の項目に e^{−j 2π k τ / F}(τ は遅延の表から最近傍で引いた値)を掛ける。HRIR は実数の列で
+//! 最近傍の項目に e^{−j 2π k τ / F}(τ は遅延の表から最近傍で引いた値)を掛ける。遅延の表の各方向の
+//! τ は、集まりの方向から `onset_method`(既定は最近傍)で補って作る。HRIR は実数の列で
 //! 持つので、ナイキストの項は小数の立ち上がりの位相を持てず実部だけになる(聞こえない 24 kHz の 1 点)。
 
 use serde::{Deserialize, Serialize};
@@ -18,7 +19,8 @@ use serde::{Deserialize, Serialize};
 use crate::fft::{C, Fft};
 use crate::grid::{Nearest, Rings};
 use crate::half::{f16_bits, f16_value};
-use crate::{Frame, HrirSet, HrtfError};
+use crate::regrid::{Method, Pole, mix_weights};
+use crate::{Dir, Frame, HrirSet, HrtfError};
 
 /// 遅延の表を 2 次元に並べる時の幅。
 pub const ONSET_WIDTH: usize = 1024;
@@ -50,6 +52,15 @@ pub struct TableSpec {
     /// 引く量は C = max(floor(最小の τ) − before − lead, 0)(整数なので float16 の値を崩さない)。
     #[serde(default)]
     pub lead: Option<f64>,
+    /// 遅延の表の方向の立ち上がりを、集まりの方向から補う替え方(`regrid::Method`)。既定は最近傍。
+    /// 集まりより細かい遅延の格子では `bilinear`(輪の格子の集まり)か `triangle` にすると、
+    /// 間の方向の立ち上がりが隣の方向の値の間に滑らかに入る。
+    #[serde(default = "default_onset_method")]
+    pub onset_method: Method,
+}
+
+pub(crate) fn default_onset_method() -> Method {
+    Method::Nearest
 }
 
 pub(crate) fn default_frame() -> usize {
@@ -70,6 +81,7 @@ impl Default for TableSpec {
             onset_step: default_onset_step(),
             before: 0.0,
             lead: None,
+            onset_method: default_onset_method(),
         }
     }
 }
@@ -123,7 +135,8 @@ fn entry(set: &HrirSet, fft: &Fft, i: usize, onset: &[[f64; 2]]) -> [Vec<C>; 2] 
     })
 }
 
-/// 集まりから表を作る。格子の方向ごとに最も近い方向の値を取る(補間はしない)。
+/// 集まりから表を作る。半スペクトルは格子の方向ごとに最も近い方向の値を取る(補間はしない)。
+/// 立ち上がりは `onset_method` で補う。
 pub fn build(set: &HrirSet, spec: &TableSpec) -> Result<Table, HrtfError> {
     set.check()?;
     let f = spec.frame;
@@ -162,11 +175,31 @@ pub fn build(set: &HrirSet, spec: &TableSpec) -> Result<Table, HrtfError> {
         let [l, r] = entry(set, &fft, i, onset);
         spectrum.push(l.into_iter().zip(r).map(|(a, b)| [a, b]).collect());
     }
-    let mut onsets: Vec<[f64; 2]> = og
-        .dirs()
-        .into_iter()
-        .map(|(az, el)| played[near.find(az, el).unwrap_or(0)])
-        .collect();
+    let mut onsets: Vec<[f64; 2]> = if spec.onset_method == Method::Nearest {
+        og.dirs()
+            .into_iter()
+            .map(|(az, el)| played[near.find(az, el).unwrap_or(0)])
+            .collect()
+    } else {
+        let to: Vec<Dir> = og
+            .dirs()
+            .into_iter()
+            .map(|(az, el)| Dir { az, el, dist: 1.0 })
+            .collect();
+        let (w, _) = mix_weights(&set.dirs, &to, spec.onset_method, Pole::Measured)
+            .map_err(|e| e.at("遅延の表の補い"))?;
+        w.iter()
+            .map(|wl| {
+                let mut o = [0.0; 2];
+                for &(n, x) in wl {
+                    for ear in 0..2 {
+                        o[ear] += x * played[n][ear];
+                    }
+                }
+                o
+            })
+            .collect()
+    };
     let mut common_delay = 0.0;
     if let Some(lead) = spec.lead {
         let lo = onsets
