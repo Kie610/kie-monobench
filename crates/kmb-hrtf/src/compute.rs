@@ -234,8 +234,16 @@ pub fn frequencies(job: &HeadJob) -> Result<Vec<f64>, HrtfError> {
 
 /// 耳ごとに入口の面を振動させて解き、方向ごとの伝達関数を返す。
 pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError> {
-    let freqs = frequencies(job)?;
-    let (dirs, grid) = job.directions.expand()?;
+    check(job)?;
+    watch.progress(0.0, "頭の網を整えています");
+    let meshes = head_meshes(job, &|| watch.cancelled())?;
+    transfer_on(job, &meshes, watch)
+}
+
+/// 仕事の値を確かめる(網を作る前に分かる誤り)。
+pub fn check(job: &HeadJob) -> Result<(), HrtfError> {
+    frequencies(job)?;
+    job.directions.expand()?;
     if let Some(r) = job.distance
         && !(r.is_finite() && r > 0.0)
     {
@@ -246,8 +254,19 @@ pub fn transfer(job: &HeadJob, watch: &dyn Watch) -> Result<Transfer, HrtfError>
     if !(job.ear_radius.is_finite() && job.ear_radius >= 0.0) {
         return Err(HrtfError::input("耳の入口の半径が 0 以上の数でない"));
     }
-    watch.progress(0.0, "頭の網を整えています");
-    let meshes = head_meshes(job, &|| watch.cancelled())?;
+    Ok(())
+}
+
+/// 耳ごとに解く網([`head_meshes`] で作った物)を渡して解く。網を画面にも見せる時に、作り直しを
+/// 2 回しないための入口。
+pub fn transfer_on(
+    job: &HeadJob,
+    meshes: &[BemMesh; 2],
+    watch: &dyn Watch,
+) -> Result<Transfer, HrtfError> {
+    check(job)?;
+    let freqs = frequencies(job)?;
+    let (dirs, grid) = job.directions.expand()?;
     let ears = job.ears.map(|e| sub(e, job.center));
     let patches = [
         ear_patch(&meshes[0], ears[0], job.ear_radius).map_err(|e| e.at("左の耳"))?,

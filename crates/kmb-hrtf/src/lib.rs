@@ -27,6 +27,7 @@ pub mod recipe;
 pub mod regrid;
 mod set;
 pub mod sofa;
+pub mod study;
 pub mod table;
 
 #[cfg(test)]
@@ -40,7 +41,9 @@ pub use recipe::{Recipe, RunOptions, Step, run, run_with};
 pub use set::{Dir, Frame, Grid, HrirSet};
 pub use table::{Layout, OutFile, TableSpec};
 
-/// この crate の名乗り(HRTF の形式をそろえる操作)。組み立て(kmb-bundle)が 1 回だけ並べる。
+/// この crate の名乗り(研究の種類 `hrtf.compute@1` と、HRTF の形式をそろえる操作・頭の網から
+/// 計算する操作)。組み立て(kmb-bundle)が 1 回だけ並べる。実行・中止・結果の見せ方は kmb-study の
+/// 操作が受け持つ。
 pub fn module() -> kmb_core::Module {
-    kmb_core::Module::commands("kmb-hrtf").with_extension(HrtfCommands)
+    kmb_core::Module::new("kmb-hrtf", study::register).with_extension(HrtfCommands)
 }

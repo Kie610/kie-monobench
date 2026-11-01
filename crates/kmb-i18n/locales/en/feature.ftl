@@ -51,5 +51,7 @@ feature-flow-volume = 3D Flow
 feature-flow-volume-tip = Solve the 3D flow and drag around a body to see surface pressure and streamlines, and speed, pressure and vorticity on a section (takes about a minute)
 feature-wave-radiate = Sound Radiation and Scattering
 feature-wave-radiate-tip = Solve, frequency by frequency, the sound radiated by vibrating faces and the sound scattered when a plane wave or a point source hits the bodies, and view the pressure on the surface and a section, and the directivity (boundary element method)
+feature-hrtf-compute = Head HRTF
+feature-hrtf-compute-tip = Compute head-related transfer functions (HRTF) in all directions from a head body and the left and right ear entrances with the boundary element method, and view the left and right levels and the interaural differences by direction
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
