@@ -2786,6 +2786,7 @@ version = "0.2.0"
 dependencies = [
  "hdf5-pure",
  "kmb-core",
+ "kmb-wave",
  "kmb-workspace-hack",
  "log",
  "serde",

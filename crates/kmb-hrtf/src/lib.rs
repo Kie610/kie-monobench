@@ -9,8 +9,12 @@
 //! (置くのは呼ぶ側の壊れない書き込み)。FFT・float16 の変換・SOFA に要る HDF5 の書き込みは自前で持ち、
 //! よそで作られた SOFA の読み込みだけを純 Rust の HDF5 の読み手(`hdf5-pure`)に任せる。ファイルを読む
 //! のは操作(`commands`、`hrtf.process`)だけ。
+//!
+//! 頭の網から HRTF を計算する入口(`compute`)も持つ。耳の入口を振動させて境界要素法(`kmb-wave`)で
+//! 解き、HRIR の集まりにする。結果には同じ処理の手順をかけられる。
 
 mod commands;
+pub mod compute;
 pub mod dsp;
 mod error;
 pub mod fft;
@@ -27,6 +31,7 @@ pub mod table;
 mod tests;
 
 pub use commands::{HrtfCommands, PROCESS};
+pub use compute::{Directions, HeadJob, HeadOut, Transfer, compute};
 pub use error::{ErrorKind, HrtfError};
 pub use recipe::{Recipe, RunOptions, Step, run, run_with};
 pub use set::{Dir, Frame, Grid, HrirSet};

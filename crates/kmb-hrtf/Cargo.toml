@@ -1,6 +1,6 @@
 [package]
 name = "kmb-hrtf"
-description = "頭部伝達関数(HRTF)のデータの型と、形式をそろえる処理の手順(SOFA の読み書き・格子の補間・再標本化・onset・位相の組み合わせ・切り出し・分けた表の書き出し)"
+description = "頭部伝達関数(HRTF)のデータの型と、形式をそろえる処理の手順(SOFA の読み書き・格子の補間・再標本化・onset・位相の組み合わせ・切り出し・分けた表の書き出し)と、頭の網から境界要素法で HRTF を計算する入口"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +15,7 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 hdf5-pure.workspace = true
+kmb-wave.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
