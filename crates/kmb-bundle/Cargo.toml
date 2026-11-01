@@ -32,6 +32,7 @@ kmb-cad-modify.workspace = true
 kmb-asm.workspace = true
 kmb-fea.workspace = true
 kmb-flow.workspace = true
+kmb-wave.workspace = true
 kmb-study.workspace = true
 kmb-cad-edge.workspace = true
 kmb-cad-import-step.workspace = true

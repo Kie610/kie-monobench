@@ -10,13 +10,12 @@ rust-version.workspace = true
 layer = "analysis"
 
 [dependencies]
+kmb-core.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 log.workspace = true
 num-complex = { version = "0.4.6", default-features = false, features = ["std", "serde"] }
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
-
-[dev-dependencies]
-serde_json.workspace = true
 
 [lints]
 workspace = true

@@ -10,7 +10,9 @@
 //! - 網は閉じた三角形の網で、法線(頂点の並びの右ねじ)は物体の外向き。開いた網・裏返った網は
 //!   入力の誤りにする(黙って向きを直さない)。
 //! - 確かめ用の解析解は [`exact`]、受け取り方向の格子は [`grid`]。
+//! - 操作 `wave.solve`([`action`])は仕事の JSON を解いて結果の JSON を書き出す(CLI・MCP・画面)。
 
+pub mod action;
 pub mod bem;
 pub mod exact;
 mod gmres;
@@ -26,3 +28,8 @@ pub use job::{
 };
 pub use mesh::{BemMesh, icosphere};
 pub use num_complex::Complex64;
+
+/// この crate の名乗り(種類は持たず、操作 `wave.solve` だけ)。
+pub fn module() -> kmb_core::Module {
+    kmb_core::Module::commands("kmb-wave").with_extension(action::WaveCommands)
+}
