@@ -349,7 +349,7 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
                 pressed,
                 modifiers: mods,
             });
-            h.run();
+            h.step();
         }
     }
     h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
