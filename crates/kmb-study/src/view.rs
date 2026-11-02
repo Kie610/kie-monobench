@@ -333,11 +333,13 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
         })
         .flatten();
     let stream = velocity.map(|q| {
-        if let Some((_, s)) = surface.filter(|(sq, _)| *sq == q) {
-            return (q, s);
-        }
-        if let Some((_, _, _, s)) = section.filter(|(sq, ..)| *sq == q) {
-            return (q, s);
+        if look.arrows {
+            if let Some((_, s)) = surface.filter(|(sq, _)| *sq == q) {
+                return (q, s);
+            }
+            if let Some((_, _, _, s)) = section.filter(|(sq, ..)| *sq == q) {
+                return (q, s);
+            }
         }
         let s = scale_of(q, STREAM_BANDS, base);
         base += STREAM_BANDS as u32;
@@ -549,8 +551,8 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
         ));
     }
     if let Some((q, s)) = &stream
-        && surface.is_none_or(|(sq, _)| sq != *q)
-        && section.is_none_or(|(sq, ..)| sq != *q)
+        && (!look.arrows
+            || (surface.is_none_or(|(sq, _)| sq != *q) && section.is_none_or(|(sq, ..)| sq != *q)))
     {
         let d = &r.quantities[*q];
         let name = match (look.streamlines, look.arrows) {

@@ -597,3 +597,22 @@ fn arrows_use_the_selected_time_range_and_share_the_velocity_legend() {
     assert!(!Look::default().arrows);
     assert_eq!(Look::default().arrow_spacing, None);
 }
+
+#[test]
+fn streamlines_keep_their_legend_when_velocity_arrows_are_hidden() {
+    let r = channel();
+    let look = Look {
+        section: Some((0, 2, 0.0)),
+        streamlines: true,
+        ..Look::default()
+    };
+    let shape = draw(&r, &look, 1);
+    assert!(
+        shape
+            .more_legends
+            .iter()
+            .any(|(title, _)| title.contains("流線")),
+        "{:?}",
+        shape.more_legends
+    );
+}
