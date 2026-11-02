@@ -378,7 +378,22 @@ type Item = (
 /// 部品表: 中にボディを持つ部品ごとと、部品に入っていないボディごとに 1 つ。規格部品は部品に
 /// 入っていても 1 個ずつ数える。外形・体積・質量を測り、材料と寸法(0.1 mm)と体積(1 mm³)が同じ物を
 /// 1 行にまとめて数える(カットリスト)。出現の部品は、形によらず元の部品の行で数える。外形の箱は世界の軸に沿った箱(斜めに置いた板は大きく出る)。
+/// 部品表の行に対応する、文書の部品かボディ。
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BomSource {
+    Component { id: u64 },
+    Body { root: FeatureId },
+}
+
 pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
+    bom_rows_with_sources(cx).0
+}
+
+/// 表の集約と同じ判断で、番号札が参照する部品・ボディを行へ対応付ける。
+pub fn bom_rows_with_sources(
+    cx: &Context<'_>,
+) -> (Vec<BomRow>, std::collections::BTreeMap<BomSource, usize>) {
     let data = cx.data;
     let bodies = cx.visible_bodies();
     let ids: Vec<FeatureId> = bodies.iter().map(|b| b.0).collect();
@@ -390,6 +405,8 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
     let fasteners: Vec<Option<(String, String)>> =
         roots.iter().map(|r| fastener_item(cx, *r)).collect();
     let mut items: Vec<Item> = Vec::new();
+    let mut sources = Vec::new();
+    let mut source_rows = std::collections::BTreeMap::new();
     // 行ごとの部品(出現なら元の部品)。部品の行は、材料・寸法でなくこれでまとめる
     let mut keys: Vec<Option<u64>> = Vec::new();
     for c in &data.components {
@@ -408,10 +425,12 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
                 .map_or_else(|| c.name.clone(), |s| s.name.clone());
             keys.push(Some(src.unwrap_or(c.id)));
             items.push((name, "部品", shapes, None));
+            sources.push(BomSource::Component { id: c.id });
         }
     }
     for (i, (_, h)) in bodies.iter().enumerate() {
         let r = roots[i];
+        let before = items.len();
         match &fasteners[i] {
             Some((name, material)) => items.push((
                 name.clone(),
@@ -424,15 +443,23 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
             }
             None => {}
         }
+        if items.len() != before {
+            sources.push(BomSource::Body { root: r });
+        }
     }
     let materials_of = kmb_look::material::of(data);
     keys.resize(items.len(), None);
     let mut rows: Vec<BomRow> = Vec::new();
     // 部品(出現なら元の部品)→ 数えた行
     let mut row_of: Vec<(u64, usize)> = Vec::new();
-    for ((name, kind, shapes, fallback), key) in items.into_iter().zip(keys) {
+    for (((name, kind, shapes, fallback), key), source) in items.into_iter().zip(keys).zip(sources)
+    {
         if let Some(&(_, i)) = key.and_then(|k| row_of.iter().find(|(c, _)| *c == k)) {
             rows[i].count += 1;
+            source_rows.insert(source, i);
+            for (_, root) in &shapes {
+                source_rows.insert(BomSource::Body { root: *root }, i);
+            }
             continue;
         }
         let mut lo = [f64::INFINITY; 3];
@@ -476,6 +503,10 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
                 && (r.volume - volume).round() == 0.0
         };
         let at = rows.iter().position(same).unwrap_or(rows.len());
+        source_rows.insert(source, at);
+        for (_, root) in &shapes {
+            source_rows.insert(BomSource::Body { root: *root }, at);
+        }
         if let Some(k) = key {
             row_of.push((k, at));
         }
@@ -497,7 +528,7 @@ pub fn bom_rows(cx: &Context<'_>) -> Vec<BomRow> {
             }),
         }
     }
-    rows
+    (rows, source_rows)
 }
 
 fn fmt_mass(m: Option<f64>) -> String {
