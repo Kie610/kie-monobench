@@ -926,7 +926,7 @@ fn exact_half_side_arc_merges_keep_radius_dimension_names() {
     }
     assert_eq!(names.len(), 4);
     for (id, name) in names {
-        assert_eq!(s.dim_name(id).as_deref(), Some(name.as_str()));
+        assert_eq!(s.dim_name(id), Some(name.as_str()));
         let constraint = s.constraints.iter().find(|c| c.id == id).unwrap();
         let ConstraintKind::Radius { circle, .. } = constraint.kind else {
             panic!("半径の寸法を残す")

@@ -319,7 +319,8 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
     let points: Vec<_> = current_sketch(h.state())
         .entities
         .iter()
-        .filter_map(|e| matches!(e, Entity::Point { .. }).then(|| sol.points[&e.id()]))
+        .filter(|e| matches!(e, Entity::Point { .. }))
+        .map(|e| sol.points[&e.id()])
         .collect();
     assert_eq!(points.len(), 4);
     for (i, p) in points.into_iter().enumerate() {
@@ -450,7 +451,8 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
         let corners: Vec<_> = before
             .entities
             .iter()
-            .filter_map(|e| matches!(e, Entity::Point { .. }).then(|| sol.points[&e.id()]))
+            .filter(|e| matches!(e, Entity::Point { .. }))
+            .map(|e| sol.points[&e.id()])
             .collect();
         assert_eq!(corners.len(), 8);
         // 大きな四角の4隅と、小さな四角の1隅だけを、同じ囲みに入れる。
@@ -459,7 +461,7 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
         h.event(egui::Event::ModifiersChanged(egui::Modifiers::SHIFT));
         for p in &corners {
             if p[0] < 22.0 && p[1] < 9.0 {
-                let pos = screen(&mut h, *p);
+                let pos = screen(&h, *p);
                 h.hover_at(pos);
                 h.step();
                 for pressed in [true, false] {
