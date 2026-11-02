@@ -44,16 +44,14 @@ fn call(h: &mut Harness<'static, Workspace>, dir: &Path, tool: &str, args: Value
 
 #[test]
 fn live_active_tool_button_returns_to_selection_through_ui_tools() {
-    let dir = Scratch(
-        std::env::temp_dir().join(format!(
+    let dir = Scratch(std::env::temp_dir().join(format!(
             "kmb-tool-button-live-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
-        )),
-    );
+        )));
     std::fs::create_dir_all(&dir.0).unwrap();
     let mut ws = ws_of(Document::new(), None, reg()).with_data_dir(dir.0.clone());
     ws.layout_mut().ai_live = true;
