@@ -7,7 +7,7 @@ use egui_kittest::Harness;
 use kmb_ui::Workspace;
 
 /// 右ボタンで画面の位置から位置へ引く(3D の視点へ回す)。
-fn right_drag(h: &mut Harness<'static, Workspace>, a: egui::Pos2, b: egui::Pos2) {
+pub(crate) fn right_drag(h: &mut Harness<'static, Workspace>, a: egui::Pos2, b: egui::Pos2) {
     h.hover_at(a);
     h.run();
     h.event(egui::Event::PointerButton {

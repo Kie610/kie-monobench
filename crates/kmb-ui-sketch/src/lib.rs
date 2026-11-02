@@ -1798,3 +1798,6 @@ mod tests;
 
 #[cfg(test)]
 mod fillet_3d_ui_tests;
+
+#[cfg(test)]
+mod plane_frame_tests;

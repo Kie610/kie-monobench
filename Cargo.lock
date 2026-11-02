@@ -2332,6 +2332,7 @@ dependencies = [
 name = "kmb-asm"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-cad",
  "kmb-core",
  "kmb-interchange",
@@ -2868,6 +2869,7 @@ dependencies = [
 name = "kmb-io-stl"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
@@ -3476,6 +3478,7 @@ dependencies = [
  "kmb-strategy-pocket2d",
  "kmb-text",
  "kmb-ui-mouse3d",
+ "kmb-ui-sketch",
  "kmb-ui-view3d",
  "kmb-workspace-hack",
  "log",

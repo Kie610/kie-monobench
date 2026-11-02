@@ -3,6 +3,7 @@
 
 mod commands;
 pub mod obj;
+mod step_header;
 pub mod threemf;
 pub use commands::{EXPORT_3MF, EXPORT_OBJ, EXPORT_STEP, EXPORT_STL, ExportCommands};
 pub use obj::write_obj;
@@ -115,3 +116,6 @@ mod tests {
         assert!(s.trim_end().ends_with("endsolid part"));
     }
 }
+
+#[cfg(test)]
+mod step_tests;

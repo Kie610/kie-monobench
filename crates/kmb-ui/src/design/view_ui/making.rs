@@ -514,7 +514,16 @@ impl Workspace {
                 .input(|i| i.pointer.hover_pos())
                 .filter(|p| rect.contains(*p))
                 .and_then(|p| gesture::choice_at(h, &self.cur.camera, rect, p));
-            for (k, c) in h.choices.iter().enumerate() {
+            for (k, c) in h
+                .choices
+                .iter()
+                .chain(
+                    g.whole_profile
+                        .iter()
+                        .filter(|c| g.picks.contains(&c.value)),
+                )
+                .enumerate()
+            {
                 let screen: Vec<Vec<Pos2>> = c
                     .outline
                     .iter()

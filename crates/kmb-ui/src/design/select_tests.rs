@@ -929,3 +929,89 @@ fn a_body_row_pressed_while_a_field_takes_bodies_goes_into_the_field() {
     assert!(ws.leave_pick_field());
     assert!(!ws.pick_field_body_row(plate, false));
 }
+
+#[test]
+fn body_field_pick_state_has_a_named_one_click_exit_and_keeps_the_chosen_bodies() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+    for (language, exit) in [("ja", "部品の選択を終える"), ("en", "Finish picking parts")]
+    {
+        for labels in [true, false] {
+            for usual in [PickFilter::default(), PickFilter::BODY] {
+                let (mut ws, _) = plate_and_posts();
+                ws.win.layout.appearance.language = language.into();
+                ws.win.layout.appearance.tool_labels = labels;
+                ws.set_pick_filter(usual);
+                let id = ws.add_described(kmb_cad_boolean::BOOLEAN).unwrap();
+                if !ws.is_pick_field(id, "target") {
+                    ws.toggle_pick_field(id, "target");
+                }
+                assert!(ws.is_pick_field(id, "target"));
+                assert!(ws.effective_pick_filter().body);
+                let before = ws.document().to_json();
+                let mut h = Harness::builder()
+                    .with_size(egui::vec2(1280.0, 900.0))
+                    .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+                h.run();
+                // 欄は選んだ数を残し、受ける状態はツールバーでも読める。
+                assert!(h.state().is_pick_field(id, "target"));
+                h.get_by_label(exit);
+                let crate::live_ui::Answer::AfterScript(batch) = h
+                    .state_mut()
+                    .live_request("ui_click", &serde_json::json!({"target":exit}))
+                    .unwrap()
+                else {
+                    panic!("画面の台本で操作する");
+                };
+                let started = std::time::Instant::now();
+                loop {
+                    h.step();
+                    if let Some(result) = h.state_mut().script_result(batch) {
+                        assert!(result.ok, "{}", result.report());
+                        break;
+                    }
+                    assert!(started.elapsed().as_secs() < 60, "選ぶ状態を終えられません");
+                }
+                assert!(h.state().active_pick_field().is_none());
+                assert_eq!(h.state().win.pick_filter, usual);
+                assert_eq!(h.state().effective_pick_filter(), usual);
+                assert_eq!(
+                    h.state().document().to_json(),
+                    before,
+                    "欄に入れたボディは変えない"
+                );
+                assert_eq!(h.state().creating(), Some(id));
+                assert!(h.query_by_label(exit).is_none());
+            }
+        }
+    }
+}
+
+#[test]
+fn body_field_pick_state_fits_the_compact_toolbar_at_large_text_scales() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::Queryable;
+    for (width, scale) in [(1280.0, 1.0), (1920.0, 1.0), (1280.0, 2.5), (1920.0, 2.5)] {
+        let (mut ws, _) = plate_and_posts();
+        ws.win.layout.appearance.language = "ja".into();
+        ws.win.layout.appearance.tool_labels = false;
+        ws.win.layout.appearance.text_scale = scale;
+        ws.win.layout.appearance.icon_scale = scale;
+        ws.add_described(kmb_cad_boolean::BOOLEAN).unwrap();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(width, 900.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        let finish = h.get_by_label("部品の選択を終える").rect();
+        let menu = h.get_by_label("選択 ▾").rect();
+        assert!(
+            egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 900.0))
+                .contains_rect(finish)
+        );
+        assert!(
+            finish.bottom() < menu.top(),
+            "終了ボタンとメニューを重ねない: {finish:?} {menu:?}"
+        );
+        h.get_by_label_contains("部品を選択中:");
+    }
+}
