@@ -444,7 +444,10 @@ impl Workspace {
                     Kind::Curve { length } => format!("長さ: {}", measure::mm(*length)),
                     Kind::Circle(c) => format!("半径: {}", measure::mm(c.radius)),
                     Kind::Cylinder(c) => format!("半径: {}", measure::mm(c.radius)),
-                    Kind::Plane { area, .. } | Kind::Surface { area } => {
+                    Kind::Plane { area, .. }
+                    | Kind::Surface { area }
+                    | Kind::Sphere(measure::Sphere { area, .. })
+                    | Kind::Torus(measure::Torus { area, .. }) => {
                         format!("面積: {}", self.length_unit().power(*area, 2, 3))
                     }
                 };
