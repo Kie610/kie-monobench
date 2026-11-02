@@ -566,6 +566,9 @@ pub(crate) fn add_line_rel(
 mod curve_snap_tests;
 
 #[cfg(test)]
+mod three_point_circle_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
