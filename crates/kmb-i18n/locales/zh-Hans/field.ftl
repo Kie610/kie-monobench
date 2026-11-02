@@ -2198,3 +2198,12 @@
 # field-cam-radial3d-levels = Cut in depth levels from the top
 # field-cam-radial3d-direction = Cutting direction
 # field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+
+# field-cam-setup-stock-cost-material-price = Cost: Stock price
+# field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+# field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+# field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+# field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+# field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+# field-cam-setup-stock-cost-currency = Cost: Currency
+# field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
