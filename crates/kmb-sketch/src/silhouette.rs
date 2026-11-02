@@ -222,7 +222,7 @@ pub fn silhouette_refs(
             .min_by(|a, b| len(sub(p, *a)).total_cmp(&len(sub(p, *b))))
             .unwrap_or(p)
     };
-    let mut rest: Vec<Shape> = Vec::new();
+    let mut rest = Fitted::default();
     for c in &outline {
         let n = c.len();
         let free: Vec<bool> = (0..n).map(|i| !covered(c[i], c[(i + 1) % n])).collect();
@@ -258,25 +258,142 @@ pub fn silhouette_refs(
         }
     }
     let mut out = edges;
-    out.extend(
-        rest.iter()
-            .filter_map(ref_shape)
-            // 網の外形の小さな折れ返しから出る、長さの無い線は写さない
-            .filter(|s| !matches!(s, RefShape::Line(a, b) if len(sub(*a, *b)) < SECTION_TOL))
-            .enumerate()
-            .map(|(i, shape)| RefItem {
-                source: ProjectionSource::Silhouette {
-                    feature,
-                    index: i as u32,
-                },
-                shape,
-            }),
-    );
+    out.extend(rest.references(feature));
     out
 }
 
+#[derive(Default)]
+struct Fitted {
+    fine: Vec<RefShape>,
+    shapes: Vec<(Shape, std::ops::Range<usize>)>,
+}
+
+impl Fitted {
+    fn push(&mut self, pts: &[P2], closed: bool) {
+        let mut fine = Vec::new();
+        fit(pts, closed, SECTION_TOL, &mut fine);
+        let first = self.fine.len();
+        self.fine.extend(fine.iter().filter_map(drawable));
+        let range = first..self.fine.len();
+        let shapes = if fine.len() == 1 && chords_fit(pts, &fine[0]) {
+            fine
+        } else {
+            compact_fit(pts, closed)
+        };
+        self.shapes
+            .extend(shapes.into_iter().map(|s| (s, range.clone())));
+    }
+
+    fn references(self, feature: FeatureId) -> Vec<RefItem> {
+        // 参照番号は細かい近似の同じ場所から引く。まとまった区間の余った番号を、
+        // 別の場所の線へ割り当てない。型が変わった写しは更新側が参照切れとして知らせる。
+        let fine = self.fine;
+        let mut used = std::collections::BTreeSet::new();
+        self.shapes
+            .into_iter()
+            .filter_map(|(shape, range)| drawable(&shape).map(|s| (s, range)))
+            .enumerate()
+            .map(|(fresh, (shape, range))| {
+                let index = fine
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| range.contains(i) && !used.contains(i))
+                    .filter_map(|(i, old)| {
+                        let points = samples(old, 16);
+                        points
+                            .iter()
+                            .all(|p| to_shape(*p, &shape) <= SECTION_TOL)
+                            .then(|| {
+                                let length: f64 =
+                                    points.windows(2).map(|p| len(sub(p[1], p[0]))).sum();
+                                (i, length)
+                            })
+                    })
+                    .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
+                    .map(|(i, _)| i)
+                    .unwrap_or(fine.len() + fresh);
+                used.insert(index);
+                RefItem {
+                    source: ProjectionSource::Silhouette {
+                        feature,
+                        index: index as u32,
+                    },
+                    shape,
+                }
+            })
+            .collect()
+    }
+}
+
+// 網の小さな折れ返しにできる、長さの無い線は参照にしない。
+fn drawable(shape: &Shape) -> Option<RefShape> {
+    ref_shape(shape)
+        .filter(|r| !matches!(r, RefShape::Line(a, b) if len(sub(*a, *b)) < SECTION_TOL))
+}
+
+/// 点と、点をつなぐ弦の中点が同じ許容内にある、1本の線分・円弧・円。
+/// 中点も確かめ、長い直線と短い円弧を、大きく膨らむ円弧へ合わせるのを防ぐ。
+fn fit_one(pts: &[P2], closed: bool) -> Option<Shape> {
+    let mut pieces = Vec::new();
+    fit(pts, closed, SECTION_TOL, &mut pieces);
+    if pieces.len() != 1 {
+        return None;
+    }
+    let shape = pieces.pop()?;
+    chords_fit(pts, &shape).then_some(shape)
+}
+
+fn chords_fit(pts: &[P2], shape: &Shape) -> bool {
+    if let Shape::Arc { center, radius, .. } | Shape::Circle { center, radius } = shape
+        && pts.windows(2).any(|p| {
+            let mid = [(p[0][0] + p[1][0]) / 2.0, (p[0][1] + p[1][1]) / 2.0];
+            (len(sub(mid, *center)) - radius).abs() > SECTION_TOL
+        })
+    {
+        return false;
+    }
+    true
+}
+
+/// 滑らかにつながる直線と円弧を、許容を満たす長い区間ごとにまとめる。
+fn compact_fit(pts: &[P2], closed: bool) -> Vec<Shape> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    while start + 1 < pts.len() {
+        let mut end = start + 1;
+        let mut best = Shape::Line {
+            a: pts[start],
+            b: pts[end],
+        };
+        while end + 1 < pts.len() {
+            let Some(shape) = fit_one(&pts[start..=end + 1], false) else {
+                break;
+            };
+            end += 1;
+            best = shape;
+        }
+        parts.push((start, end, best));
+        start = end;
+    }
+    // 閉じた列の継ぎ目が曲線の途中でも、その両側を同じ円弧として確かめる。
+    if closed && parts.len() > 1 {
+        let (last_start, _, _) = parts.last().unwrap();
+        let (_, first_end, _) = parts[0];
+        let joined: Vec<_> = pts[*last_start..pts.len() - 1]
+            .iter()
+            .chain(&pts[..=first_end])
+            .copied()
+            .collect();
+        if let Some(shape) = fit_one(&joined, false) {
+            parts[0].2 = shape;
+            parts.pop();
+        }
+    }
+    parts.into_iter().map(|(_, _, shape)| shape).collect()
+}
+
 /// 点の列を、大きく曲がる所で分けてから、線分・円弧・円に直す。
-fn fit_runs(pts: &[P2], closed: bool, out: &mut Vec<Shape>) {
+fn fit_runs(pts: &[P2], closed: bool, out: &mut Fitted) {
     if pts.len() < 2 {
         return;
     }
@@ -300,17 +417,17 @@ fn fit_runs(pts: &[P2], closed: bool, out: &mut Vec<Shape>) {
         return fit_cut(&p, &cuts, out);
     }
     if cuts.is_empty() {
-        fit(pts, closed, SECTION_TOL, out);
+        out.push(pts, closed);
         return;
     }
     fit_cut(pts, &cuts, out);
 }
 
-fn fit_cut(pts: &[P2], cuts: &[usize], out: &mut Vec<Shape>) {
+fn fit_cut(pts: &[P2], cuts: &[usize], out: &mut Fitted) {
     let mut from = 0;
     for &c in cuts.iter().chain(std::iter::once(&(pts.len() - 1))) {
         if c > from {
-            fit(&pts[from..=c], false, SECTION_TOL, out);
+            out.push(&pts[from..=c], false);
         }
         from = c;
     }
