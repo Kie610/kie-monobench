@@ -114,3 +114,8 @@ view-candidates = 重なっているもの(手前から)
 
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+view-candidate-edge = 辺({ $faces })
+view-candidate-vertex = 頂点({ $position })
+
+view-others = ほかを選ぶ…(長押しでも)
+view-others-help = 右クリックした所に重なっている面・辺・頂点の一覧から選びます。左ボタンの長押しでも開けます。

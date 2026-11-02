@@ -19,10 +19,10 @@ mod pick;
 pub(crate) struct ViewMenu {
     /// 右クリックの時の修飾キー(メニューの種類を決める)
     pub(crate) kind: MenuKind,
-    /// 長押しで出す、重なった面の候補(位置、候補)
-    pub(crate) candidates: Option<(egui::Pos2, Vec<view3d::Pick>)>,
-    /// 右クリックした所に重なっている面(「ほかを選ぶ」の一覧。手前から)
-    pub(crate) context_others: (egui::Pos2, Vec<view3d::Pick>),
+    /// 長押しで出す、重なった物の候補(位置、候補)
+    pub(crate) candidates: Option<(egui::Pos2, Vec<Hit>)>,
+    /// 右クリックした所に重なっている物(「ほかを選ぶ」の一覧。手前から)
+    pub(crate) context_others: (egui::Pos2, Vec<Hit>),
 }
 
 impl Workspace {

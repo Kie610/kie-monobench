@@ -4,3 +4,8 @@
 
 # view-keycast-drag = Drag
 # view-keycast-mouse3d-button = 3D mouse button { $number }
+# view-candidate-edge = Edge ({ $faces })
+# view-candidate-vertex = Vertex ({ $position })
+
+# view-others = Select other… (or hold)
+# view-others-help = Select from overlapping faces, edges and vertices at this point. You can also hold the left mouse button to open the list.
