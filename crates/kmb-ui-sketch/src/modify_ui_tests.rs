@@ -354,13 +354,14 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
     }
     h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
     h.run();
+    let points = current_sketch(h.state()).entities;
+    let e = &editor(h.state_mut()).editor;
     assert_eq!(
-        editor(h.state_mut()).editor.selection.len(),
+        e.selection.len(),
         4,
-        "tool {:?}, points {:?}, selection {:?}",
-        editor(h.state_mut()).editor.tool,
-        current_sketch(h.state()).entities,
-        editor(h.state_mut()).editor.selection
+        "tool {:?}, points {points:?}, selection {:?}",
+        e.tool,
+        e.selection
     );
 }
 
