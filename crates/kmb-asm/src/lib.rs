@@ -105,15 +105,18 @@ fn fastener_handles(cx: &Context<'_>) -> Vec<Handle> {
 /// 規格部品を挿す: 規格部品の機能と、穴ごとのボディの機能を足し、ボディを新しい部品にまとめる
 /// (穴のボディが部品に入っていれば、その中に。ジョイントで一緒に動く)。
 fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
-    let mouths: Vec<fastener::HoleMouth> = cx
+    let values = cx
         .arg("holes")
         .and_then(|v| v.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                .collect()
+        .ok_or("挿す穴の口の円を並びで指定してください")?;
+    let mouths: Vec<fastener::HoleMouth> = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("穴{} の口の指定が読めません: {e}", i + 1))
         })
-        .unwrap_or_default();
+        .collect::<Result<_, _>>()?;
     if mouths.is_empty() {
         return Err("挿す穴の口の円を選んでいません".into());
     }
@@ -133,6 +136,36 @@ fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         })
         .map(|c| c.id);
     let mut f = fastener::new_fastener(kind, &mouths);
+    if let Some(size) = cx.arg_str("size") {
+        f.size = size.trim().into();
+    }
+    if let Some(len) = cx.arg_f64("length")? {
+        if len <= 0.0
+            || kmb_core::Quantity::new(len, kmb_core::Dim::LENGTH)
+                .size_problem()
+                .is_some()
+        {
+            return Err("長さは正の、形に使える大きさで指定してください".into());
+        }
+        f.length = format!("{len} mm");
+    }
+    for (i, m) in mouths.iter().enumerate() {
+        if m.center.iter().chain(&m.normal).any(|v| !v.is_finite())
+            || kmb_core::kernel::dot(m.normal, m.normal) < 1e-18
+            || !m.diameter.is_finite()
+            || m.diameter <= 0.0
+            || !m.depth.is_finite()
+            || m.depth < 0.0
+            || !m.through.is_finite()
+            || m.through < 0.0
+        {
+            return Err(format!("穴{} の位置・向き・径・深さを確かめてください", i + 1).into());
+        }
+        if fastener::fits_mouth(kind, &f.size, m) != Some(true) {
+            return Err(format!("穴{} の径 {} mm に呼び {} が合いません。合う穴だけを選ぶか、共通の呼びを指定してください",i+1,m.diameter,f.size).into());
+        }
+    }
+    f.instances = true;
     // 穴のあるボディを覚え、穴の径が後で呼びと合わなくなったら知らせる(合わせ直しはしない)。
     // 同じ穴の口に座金・ナットが挿してあれば、その上に重ねる
     for (p, m) in f.places.iter_mut().zip(&mouths) {
@@ -152,10 +185,14 @@ fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         data: serde_json::to_value(&f).map_err(|e| e.to_string())?,
     }];
     for i in 0..mouths.len() {
+        let mut data = json!({"fastener":{"$new":0},"index":i});
+        if i > 0 {
+            data["prototype"] = json!({"$new":1});
+        }
         edits.push(Edit::Insert {
             type_id: fastener::FASTENER_BODY.into(),
             name: format!("{name} の穴{}", i + 1),
-            data: json!({"fastener": {"$new": 0}, "index": i}),
+            data,
         });
     }
     edits.push(Edit::AddBodies {
@@ -912,6 +949,8 @@ impl Extension for AsmCommands {
                     Arg::value("face", "穴の口の面"),
                     Arg::list("holes", "穴の口の円(手順の値の並び)"),
                     Arg::text("kind", "種類(省くとねじ)"),
+                    Arg::text("size", "共通の呼び(省くと最初の穴の径から選ぶ。選んだすべての穴に合う物だけ使える)"),
+                    Arg::length("length", "共通の長さ(mm。省くと最も深い穴から選ぶ)"),
                 ])
                 .menu("組立")
                 .icon("fastener")
