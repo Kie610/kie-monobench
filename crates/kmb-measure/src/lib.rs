@@ -409,3 +409,6 @@ pub fn resolve(scene: &(impl Meshes + ?Sized), t: &Target) -> Option<Geo> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod curved_radius_tests;
