@@ -300,14 +300,11 @@ impl Fitted {
                     .filter(|(i, _)| range.contains(i) && !used.contains(i))
                     .filter_map(|(i, old)| {
                         let points = samples(old, 16);
-                        points
-                            .iter()
-                            .all(|p| to_shape(*p, &shape) <= SECTION_TOL)
-                            .then(|| {
-                                let length: f64 =
-                                    points.windows(2).map(|p| len(sub(p[1], p[0]))).sum();
-                                (i, length)
-                            })
+                        if !points.iter().all(|p| to_shape(*p, &shape) <= SECTION_TOL) {
+                            return None;
+                        }
+                        let length: f64 = points.windows(2).map(|p| len(sub(p[1], p[0]))).sum();
+                        Some((i, length))
                     })
                     .max_by(|a, b| a.1.total_cmp(&b.1).then_with(|| b.0.cmp(&a.0)))
                     .map(|(i, _)| i)
