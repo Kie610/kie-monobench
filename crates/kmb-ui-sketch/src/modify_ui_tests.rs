@@ -301,3 +301,91 @@ fn the_rounded_corner_is_previewed_with_the_typed_radius() {
     assert!((chord("3", &mut h) - 3.0 * 2f64.sqrt()).abs() < 1e-6);
     assert!((chord("1", &mut h) - 2f64.sqrt()).abs() < 1e-6);
 }
+
+fn corner_rectangle() -> Harness<'static, Workspace> {
+    let mut h = empty_sketch();
+    editor(h.state_mut()).set_tool(Tool::Rectangle);
+    h.run();
+    click_at(&mut h, [-5.0, 25.0]);
+    click_at(&mut h, [15.0, 5.0]);
+    press_key(&mut h, egui::Key::Escape);
+    h
+}
+
+fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifiers) {
+    let sol = solution(h);
+    let points: Vec<_> = current_sketch(h.state())
+        .entities
+        .iter()
+        .filter_map(|e| matches!(e, Entity::Point { .. }).then(|| sol.points[&e.id()]))
+        .collect();
+    assert_eq!(points.len(), 4);
+    for (i, p) in points.into_iter().enumerate() {
+        let mods = if i == 0 {
+            egui::Modifiers::NONE
+        } else {
+            modifiers
+        };
+        let pos = screen(h, p);
+        h.event(egui::Event::ModifiersChanged(mods));
+        h.hover_at(pos);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: mods,
+            });
+            h.run();
+        }
+    }
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    h.run();
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 4);
+}
+
+#[test]
+fn selected_corners_fillet_with_one_value_and_one_undo() {
+    let mut h = corner_rectangle();
+    select_corners(&mut h, egui::Modifiers::SHIFT);
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Fillet);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Arc { .. }
+        )),
+        4
+    );
+    h.get_by_label("元に戻す").click();
+    h.run();
+    assert_eq!(current_sketch(h.state()), before);
+}
+
+#[test]
+fn selected_corners_chamfer_with_one_value_and_one_undo() {
+    let mut h = corner_rectangle();
+    select_corners(&mut h, egui::Modifiers::CTRL);
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Chamfer);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Line {
+                construction: false,
+                ..
+            }
+        )),
+        8
+    );
+    h.get_by_label("元に戻す").click();
+    h.run();
+    assert_eq!(current_sketch(h.state()), before);
+}
