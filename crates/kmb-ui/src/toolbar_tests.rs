@@ -268,3 +268,77 @@ fn the_toolbar_follows_the_display_language() {
     assert_eq!(label(&ws, "a:cad.extrude"), "押し出し");
     assert_eq!(label(&ws, "f:solid.hole@1"), "穴(欄で指定)");
 }
+
+/// 確かめること: 計測・断面の切り替えは、ボタンの名前を保ったまま実際に押した見た目になる。
+#[test]
+fn persistent_inspection_commands_already_paint_their_active_buttons() {
+    use egui_kittest::Harness;
+    use egui_kittest::kittest::{NodeT, Queryable};
+    fn lit_shape(
+        shape: &egui::Shape,
+        rect: egui::Rect,
+        fill: egui::Color32,
+        edge: egui::Color32,
+    ) -> bool {
+        match shape {
+            egui::Shape::Rect(r) => {
+                r.rect == rect
+                    && r.fill == fill
+                    && r.stroke.color == edge
+                    && (r.stroke.width - 1.5).abs() < 1e-6
+            }
+            egui::Shape::Vec(shapes) => shapes.iter().any(|s| lit_shape(s, rect, fill, edge)),
+            _ => false,
+        }
+    }
+    for dark in [false, true] {
+        let mut ws = Workspace::new(reference_document(), None, kmb_bundle::modules());
+        ws.win.layout.brightness = if dark {
+            crate::layout::Brightness::Dark
+        } else {
+            crate::layout::Brightness::Light
+        };
+        ws.win.layout.appearance.language = "ja".into();
+        let original = ws.document().data().clone();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1920.0, 900.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        for compact in [false, true] {
+            h.state_mut().win.layout.appearance.tool_labels = !compact;
+            h.run();
+            for (label, key) in [("計測", "u:measure"), ("断面解析", "u:section")] {
+                for (step, on) in [false, true, false].into_iter().enumerate() {
+                    let node = h
+                        .query_all_by_label(label)
+                        .find(|n| {
+                            n.accesskit_node().role() == egui::accesskit::Role::Button
+                                && n.rect().top() < 180.0
+                        })
+                        .unwrap_or_else(|| panic!("リボンのボタン {label} が無い"));
+                    let rect = node.rect();
+                    let look = crate::theme::look(&h.ctx);
+                    let fill = crate::theme::mix(look.pal.panel, look.ws(), 0.2);
+                    let lit = h
+                        .output()
+                        .shapes
+                        .iter()
+                        .any(|s| lit_shape(&s.shape, rect, fill, look.ws()));
+                    assert_eq!(lit, on, "{label}: dark={dark}, compact={compact}");
+                    assert_eq!(h.state().active_item().as_deref(), on.then_some(key));
+                    // 同じ名前の同じボタンをもう一度押して切る。
+                    if step < 2 {
+                        node.click();
+                    }
+                    h.run();
+                }
+            }
+        }
+        assert_eq!(
+            h.state().document().data(),
+            &original,
+            "切り替えは文書を変えない"
+        );
+        assert!(!h.state().document().can_undo());
+    }
+}
