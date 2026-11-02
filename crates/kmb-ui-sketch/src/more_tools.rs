@@ -337,6 +337,12 @@ fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
         .collect()
 }
 
+/// 角の処理を全部断った理由。文章への変換は、画面の表示言語が分かる所で行う。
+pub(crate) enum CornerFailure {
+    TooLong { maximum: f64 },
+    Invalid,
+}
+
 /// 選んだ角を先に集め、全部作れた時だけひとつの変更として返す。
 pub(crate) fn apply_corners(
     editor: &mut Editor,
@@ -366,12 +372,16 @@ pub(crate) fn apply_corners(
             s.chamfer_corner_with(corner, first, &chamfer).is_some()
         };
         if !done {
-            editor.notice = Some(match limit {
-                Some((radius, sides)) => {
-                    let max = if editor.tool == Tool::Fillet { radius } else { sides[0].min(sides[1]) };
-                    format!("選んだ角を処理できません。使える最大の長さは {} です(変更はしていません)", crate::view::shown_length(max))
-                }
-                None => "選んだ角を処理できません。端でつながった2本の線分の角を選んでください(変更はしていません)".into(),
+            editor.notice = None;
+            editor.corner_error = Some(match limit {
+                Some((radius, sides)) => CornerFailure::TooLong {
+                    maximum: if editor.tool == Tool::Fillet {
+                        radius
+                    } else {
+                        sides[0].min(sides[1])
+                    },
+                },
+                None => CornerFailure::Invalid,
             });
             return None;
         }

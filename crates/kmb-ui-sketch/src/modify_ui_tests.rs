@@ -438,8 +438,15 @@ fn selected_corners_from_a_box_are_processed_together() {
 
 #[test]
 fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
-    for tool in [Tool::Fillet, Tool::Chamfer] {
+    for (tool, lang) in [
+        (Tool::Fillet, "ja"),
+        (Tool::Chamfer, "ja"),
+        (Tool::Fillet, "en"),
+        (Tool::Chamfer, "en"),
+    ] {
         let mut h = corner_rectangle();
+        h.state_mut().layout_mut().appearance.language = lang.into();
+        h.run();
         let large = current_sketch(h.state());
         editor(h.state_mut()).set_tool(Tool::Rectangle);
         h.run();
@@ -494,6 +501,14 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
             .notice
             .clone()
             .expect("作れない角の理由を出す");
+        assert!(
+            notice.starts_with(if lang == "en" {
+                "The selected corners cannot be processed."
+            } else {
+                "選んだ角を処理できません。"
+            }),
+            "{notice}"
+        );
         let maximum = notice
             .split_whitespace()
             .find_map(|s| s.trim_matches(['\u{2068}', '\u{2069}']).parse::<f64>().ok())
@@ -501,7 +516,8 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
         // クリック位置は画面の単精度の座標を通る。
         assert!((maximum - 2.0).abs() < 1e-5, "{notice}");
         assert!(notice.contains("mm"), "{notice}");
-        h.get_by_label("元に戻す").click();
+        h.get_by_label(if lang == "en" { "Undo" } else { "元に戻す" })
+            .click();
         h.run();
         assert_eq!(
             current_sketch(h.state()),

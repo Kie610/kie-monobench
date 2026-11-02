@@ -382,6 +382,22 @@ pub(crate) fn sketch_view(
         },
     );
 
+    if let Some(reason) = editor.corner_error.take() {
+        editor.notice = Some(match reason {
+            crate::more_tools::CornerFailure::TooLong { maximum } => {
+                let maximum = shown_length(maximum);
+                kmb_ui::translated_text(
+                    ui.ctx(),
+                    "view-sketch-corner-cannot-fit",
+                    &[("maximum", &maximum)],
+                )
+            }
+            crate::more_tools::CornerFailure::Invalid => {
+                kmb_ui::translated_text(ui.ctx(), "view-sketch-corner-invalid", &[])
+            }
+        });
+    }
+
     // 描く道具は形を作った後も続ける(Kie 2026-10-15)。選んだ要素を並べる・動かす
     // 道具だけは 1 回で終えて選ぶ道具へ戻る
     if result.is_some() && finishes_on_make(used) && editor.tool == used {
