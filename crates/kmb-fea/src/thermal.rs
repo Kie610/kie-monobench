@@ -348,7 +348,6 @@ fn transient(
             t: t.clone(),
         });
     }
-    out.cancelled = cancelled();
     Ok(out)
 }
 

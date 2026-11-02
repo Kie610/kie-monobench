@@ -5,3 +5,5 @@
 
 # action-cad-sketch-dxf-layers = List DXF layers
 # action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design
+# action-cad-text-on-face = Text on Face
+# action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.

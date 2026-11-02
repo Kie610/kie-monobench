@@ -39,6 +39,8 @@ struct Progress {
     passes: u32,
     /// 回していた時間(一時停止と、目安に届いて待っている間は数えない)
     active: Duration,
+    /// 回す側が待っている(目安に届いたか一時停止して、回していた途中の 1 回も終えた)か
+    holding: bool,
 }
 
 type Shared = Arc<Mutex<Progress>>;
@@ -72,6 +74,9 @@ pub(crate) struct CanvasRender {
     active: Duration,
     /// 一時停止しているか
     pub(crate) paused: bool,
+    /// 回す側が待っているか(試験が、一時停止の後で途中の 1 回が終わるのを待つのに使う)
+    #[cfg_attr(not(test), allow(dead_code))]
+    holding: bool,
 }
 
 impl Workspace {
@@ -108,6 +113,13 @@ impl Workspace {
     /// キャンバス内レンダリングで出している絵の回した数(していなければ `None`)。
     pub fn canvas_render_passes(&self) -> Option<u32> {
         self.cur.canvas_render.as_ref().map(|c| c.passes)
+    }
+
+    /// キャンバス内レンダリングの回す側が待っているか(一時停止か目安に届いて、途中の 1 回も終えた)。
+    /// 一時停止を押しても回している途中の 1 回は最後まで回すので、試験はこれを待ってから数を読む。
+    #[cfg(test)]
+    pub(crate) fn canvas_render_holding(&self) -> bool {
+        self.cur.canvas_render.as_ref().is_some_and(|c| c.holding)
     }
 
     /// キャンバス内レンダリングの止める目安(回す数。0 は止めない)。
@@ -346,6 +358,7 @@ impl Workspace {
             let mut o = job.out.lock().unwrap_or_else(|e| e.into_inner());
             cr.done = o.passes;
             cr.active = o.active;
+            cr.holding = o.holding;
             o.image.take()
         });
         if let Some((img, passes)) = fresh {
@@ -618,9 +631,12 @@ fn start(
                             }
                         );
                     }
+                    // 絵を出した後で待っている印を立てる(印を見た画面は、もう数が増えないと分かる)
+                    o.lock().unwrap_or_else(|e| e.into_inner()).holding = true;
                     std::thread::sleep(Duration::from_millis(30));
                     continue;
                 }
+                o.lock().unwrap_or_else(|e| e.into_inner()).holding = false;
                 let t0 = Instant::now();
                 tracer.pass();
                 active += t0.elapsed();
