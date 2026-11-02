@@ -1,7 +1,7 @@
 //! 確かめること: 道具の同じボタンで抜け、選びを保ち、直接の道具指定は続ける。
 
-use crate::tests::{click_at, current_sketch, editor, empty_sketch};
 use crate::Tool;
+use crate::tests::{click_at, current_sketch, editor, empty_sketch};
 use egui_kittest::kittest::Queryable;
 
 #[test]
