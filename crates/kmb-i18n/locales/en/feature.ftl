@@ -60,3 +60,7 @@ feature-asm-position = Position
 feature-asm-position-tip = Rotate the component about its center in X, Y, Z order, then translate along world axes. Parts connected to follow it move together.
 feature-cam-setup = Setup
 feature-cam-setup-tip = Set the parts, stock, origin, and safe heights for machining
+feature-cam-spiral3d = Spiral (3D)
+feature-cam-spiral3d-tip = Finish by tracing a spiral from outside in around the center. Choose depth levels and cutting direction
+feature-cam-radial3d = Radial (3D)
+feature-cam-radial3d-tip = Finish by tracing radial lines from the center. Choose depth levels and back-and-forth or one-way cutting

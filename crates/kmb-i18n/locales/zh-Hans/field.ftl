@@ -2191,3 +2191,10 @@
 # field-solid-thread-end = Far end
 # field-solid-thread-flip = Start at the opposite end
 # field-solid-thread-form = Thread form
+
+# field-cam-spiral3d-levels = Cut in depth levels from the top
+# field-cam-spiral3d-direction = Cutting direction
+# field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+# field-cam-radial3d-levels = Cut in depth levels from the top
+# field-cam-radial3d-direction = Cutting direction
+# field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
