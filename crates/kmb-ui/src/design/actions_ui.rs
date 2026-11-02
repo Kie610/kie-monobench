@@ -195,6 +195,7 @@ impl Workspace {
                     live: None,
                     typed: String::new(),
                     picks,
+                    whole_profile: None,
                     stop: None,
                     stop_seen: None,
                 });
@@ -259,6 +260,7 @@ impl Workspace {
         g.live = None;
         g.typed.clear();
         g.picks.clear();
+        g.whole_profile = None;
         let args = serde_json::Value::Object(g.args.clone());
         let id = g.action.clone();
         let cx = Context {
