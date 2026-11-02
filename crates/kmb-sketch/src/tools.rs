@@ -349,30 +349,9 @@ impl Sketch {
         if r <= EPS {
             return None;
         }
-        let lines: Vec<(EntityId, EntityId)> = self
-            .entities
-            .iter()
-            .filter_map(|e| match e {
-                Entity::Line {
-                    id,
-                    a,
-                    b,
-                    construction: false,
-                } if *a == corner => Some((*id, *b)),
-                Entity::Line {
-                    id,
-                    a,
-                    b,
-                    construction: false,
-                } if *b == corner => Some((*id, *a)),
-                _ => None,
-            })
-            .collect();
-        let [(l1, o1), (l2, o2)] = lines.as_slice() else {
-            return None;
-        };
+        let [(l1, o1), (l2, o2)] = self.corner_arms(corner)?;
         let c = self.pos(corner)?;
-        let (d1, d2) = (sub(self.pos(*o1)?, c), sub(self.pos(*o2)?, c));
+        let (d1, d2) = (sub(self.pos(o1)?, c), sub(self.pos(o2)?, c));
         let (n1, n2) = (len(d1), len(d2));
         if n1 < EPS || n2 < EPS {
             return None;
@@ -390,8 +369,8 @@ impl Sketch {
         let (p1, p2) = (add(c, scale(u1, t)), add(c, scale(u2, t)));
         let bis = add(u1, u2);
         let center = add(c, scale(bis, r / (angle / 2.0).sin() / len(bis)));
-        let t1 = self.corner_side_end(*l1, corner, *o1, p1, t >= n1 - EPS);
-        let t2 = self.corner_side_end(*l2, corner, *o2, p2, t >= n2 - EPS);
+        let t1 = self.corner_side_end(l1, corner, o1, p1, t >= n1 - EPS);
+        let t2 = self.corner_side_end(l2, corner, o2, p2, t >= n2 - EPS);
         let cp = self.add_point(center[0], center[1]);
         // 円弧は中心のまわりに反時計回り
         let arc = if cross(sub(p1, center), sub(p2, center)) > 0.0 {
@@ -399,7 +378,7 @@ impl Sketch {
         } else {
             self.add_arc(cp, t2, t1)
         };
-        for line in [*l1, *l2] {
+        for line in [l1, l2] {
             if self.entity(line).is_some() {
                 self.add_constraint(K::Tangent { line, circle: arc });
             }
@@ -431,7 +410,7 @@ impl Sketch {
         if used {
             // 式や寸法が角の点を指していれば、点を 2 本の線の延長の交わりに留め、
             // 角の位置が変わると丸めた輪郭も一緒に動くようにする
-            for line in [*l1, *l2] {
+            for line in [l1, l2] {
                 if self.entity(line).is_some() {
                     self.add_constraint(K::PointOnLine {
                         point: corner,
@@ -447,6 +426,48 @@ impl Sketch {
     }
 
     /// 接点を既存の端と共有し、使い切った辺は輪郭から外す。寸法などの基準は補助線に残す。
+    /// 角の半径の上限と、両側の線分で使える距離(mm)。解いた座標を採ったスケッチで読む。
+    pub fn corner_limits(&self, corner: EntityId) -> Option<(f64, [f64; 2])> {
+        let [(_, a), (_, b)] = self.corner_arms(corner)?;
+        let at = self.pos(corner)?;
+        let da = sub(self.pos(a)?, at);
+        let db = sub(self.pos(b)?, at);
+        let lengths = [len(da), len(db)];
+        if lengths.iter().any(|n| *n < EPS) {
+            return None;
+        }
+        let angle = (dot(da, db) / (lengths[0] * lengths[1]))
+            .clamp(-1.0, 1.0)
+            .acos();
+        if !(1e-3..std::f64::consts::PI - 1e-3).contains(&angle) {
+            return None;
+        }
+        Some((lengths[0].min(lengths[1]) * (angle / 2.0).tan(), lengths))
+    }
+
+    pub(crate) fn corner_arms(&self, corner: EntityId) -> Option<[(EntityId, EntityId); 2]> {
+        let lines: Vec<(EntityId, EntityId)> = self
+            .entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Line {
+                    id,
+                    a,
+                    b,
+                    construction: false,
+                } if *a == corner => Some((*id, *b)),
+                Entity::Line {
+                    id,
+                    a,
+                    b,
+                    construction: false,
+                } if *b == corner => Some((*id, *a)),
+                _ => None,
+            })
+            .collect();
+        lines.try_into().ok()
+    }
+
     pub(crate) fn corner_side_end(
         &mut self,
         line: EntityId,

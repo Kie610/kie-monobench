@@ -559,28 +559,7 @@ impl Sketch {
         first: Option<EntityId>,
         chamfer: &Chamfer,
     ) -> Option<(EntityId, Vec<ConstraintId>)> {
-        let mut lines: Vec<(EntityId, EntityId)> = self
-            .entities
-            .iter()
-            .filter_map(|e| match e {
-                Entity::Line {
-                    id,
-                    a,
-                    b,
-                    construction: false,
-                } if *a == corner => Some((*id, *b)),
-                Entity::Line {
-                    id,
-                    a,
-                    b,
-                    construction: false,
-                } if *b == corner => Some((*id, *a)),
-                _ => None,
-            })
-            .collect();
-        if lines.len() != 2 {
-            return None;
-        }
+        let mut lines = self.corner_arms(corner)?;
         if first == Some(lines[1].0) {
             lines.swap(0, 1);
         }

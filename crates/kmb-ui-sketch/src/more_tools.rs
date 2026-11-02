@@ -359,13 +359,20 @@ pub(crate) fn apply_corners(
     let mut s = sketch.clone();
     s.adopt_solution(sol);
     for &(corner, first) in corners {
+        let limit = s.corner_limits(corner);
         let done = if editor.tool == Tool::Fillet {
             s.fillet_corner(corner, radius, &value).is_some()
         } else {
             s.chamfer_corner_with(corner, first, &chamfer).is_some()
         };
         if !done {
-            editor.notice = Some("選んだ角を処理できません。辺に収まる小さな値を指定してください(変更はしていません)".into());
+            editor.notice = Some(match limit {
+                Some((radius, sides)) => {
+                    let max = if editor.tool == Tool::Fillet { radius } else { sides[0].min(sides[1]) };
+                    format!("選んだ角を処理できません。使える最大の長さは {} です(変更はしていません)", crate::view::shown_length(max))
+                }
+                None => "選んだ角を処理できません。端でつながった2本の線分の角を選んでください(変更はしていません)".into(),
+            });
             return None;
         }
     }

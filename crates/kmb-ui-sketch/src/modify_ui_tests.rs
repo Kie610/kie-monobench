@@ -416,3 +416,84 @@ fn selected_corners_chamfer_with_one_value_and_one_undo() {
     h.run();
     assert_eq!(current_sketch(h.state()), before);
 }
+
+#[test]
+fn selected_corners_from_a_box_are_processed_together() {
+    let mut h = corner_rectangle();
+    drag_on(&mut h, [0.15, 20.0], [22.23, -2.0], egui::Modifiers::NONE);
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 8);
+    editor(h.state_mut()).set_tool(Tool::Fillet);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Arc { .. }
+        )),
+        4
+    );
+}
+
+#[test]
+fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
+    for tool in [Tool::Fillet, Tool::Chamfer] {
+        let mut h = corner_rectangle();
+        let large = current_sketch(h.state());
+        editor(h.state_mut()).set_tool(Tool::Rectangle);
+        h.run();
+        click_at(&mut h, [24.0, 10.0]);
+        click_at(&mut h, [26.0, 8.0]);
+        press_key(&mut h, egui::Key::Escape);
+        let before = current_sketch(h.state());
+        let sol = solution(&h);
+        let corners: Vec<_> = before
+            .entities
+            .iter()
+            .filter_map(|e| matches!(e, Entity::Point { .. }).then(|| sol.points[&e.id()]))
+            .collect();
+        assert_eq!(corners.len(), 8);
+        // 大きな四角の4隅と、小さな四角の1隅だけを、同じ囲みに入れる。
+        drag_on(&mut h, [0.15, 20.0], [24.1, 9.0], egui::Modifiers::NONE);
+        // この囲みでは大きな四角の下の隅が外れるので、Shift の短いクリックで足す。
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::SHIFT));
+        for p in &corners {
+            if p[0] < 22.0 && p[1] < 9.0 {
+                let pos = screen(&mut h, *p);
+                h.hover_at(pos);
+                h.step();
+                for pressed in [true, false] {
+                    h.event(egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::SHIFT,
+                    });
+                    h.step();
+                }
+            }
+        }
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        h.run();
+        let selected_points = editor(h.state_mut())
+            .editor
+            .selection
+            .iter()
+            .filter(|id| matches!(before.entity(**id), Some(Entity::Point { .. })))
+            .count();
+        assert_eq!(selected_points, 5);
+        editor(h.state_mut()).set_tool(tool);
+        h.run();
+        type_text(&mut h, "5");
+        press_enter(&mut h);
+        assert_eq!(current_sketch(h.state()), before, "{tool:?} は全部断る");
+        assert!(editor(h.state_mut()).editor.notice.is_some());
+        h.get_by_label("元に戻す").click();
+        h.run();
+        assert_eq!(
+            current_sketch(h.state()),
+            large,
+            "失敗で取り消しの段を増やさない"
+        );
+    }
+}
