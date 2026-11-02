@@ -22,3 +22,6 @@ pub use study::{SECTION, VOLUME, WING, register};
 pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-flow", register)
 }
+
+#[cfg(test)]
+mod study_arrow_tests;

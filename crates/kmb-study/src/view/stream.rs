@@ -125,7 +125,7 @@ pub fn streamlines(
 }
 
 /// 点 `p`(ローカル)を含むセル。
-fn cell_of(g: &Grid, p: [f64; 3]) -> Option<usize> {
+pub(super) fn cell_of(g: &Grid, p: [f64; 3]) -> Option<usize> {
     let mut c = [0usize; 3];
     for a in 0..3 {
         if g.n[a] == 1 {

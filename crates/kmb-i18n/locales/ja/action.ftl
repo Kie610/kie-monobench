@@ -364,3 +364,6 @@ action-hrtf-process = HRTF の形式をそろえる
 action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
 action-hrtf-compute = 頭の網から HRTF を計算…
 action-hrtf-compute-tip = 頭の網の仕事の JSON を境界要素法で解き、全方向の HRIR を SOFA で書き出す
+
+action-study-view-arrows = 矢印を出す
+action-study-view-arrows-tip = 一定の間隔の点から、速さと向きを矢印で出す・隠す

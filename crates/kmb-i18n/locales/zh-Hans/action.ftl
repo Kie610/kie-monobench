@@ -2,3 +2,6 @@
 ### Translations for zh-Hans (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+
+# action-study-view-arrows = Show / hide arrows
+# action-study-view-arrows-tip = Show or hide regularly spaced arrows indicating flow speed and direction

@@ -557,3 +557,43 @@ fn streamlines_go_around_the_body() {
     let s = draw(&r, &look, 1);
     assert!(!s.more_legends.is_empty() || s.label.starts_with("流線"));
 }
+
+#[test]
+fn arrows_use_the_selected_time_range_and_share_the_velocity_legend() {
+    let mut r = channel();
+    let g = match &r.parts[1].geom {
+        Geometry::Grid(g) => g,
+        _ => unreachable!(),
+    };
+    r.frames[0].values[0] = Values::exact([4.0, 0.0, 0.0].repeat(g.len()));
+    r.frames.push(Frame {
+        label: "次".into(),
+        time: Some(0.2),
+        values: vec![Values::exact([2.0, 0.0, 0.0].repeat(g.len()))],
+    });
+    let mut look = Look {
+        arrows: true,
+        arrow_spacing: Some(4.0),
+        frame: 1,
+        ..Look::default()
+    };
+    let max_x = |s: OverlayShape| {
+        s.mesh
+            .positions
+            .iter()
+            .map(|p| p[0])
+            .fold(f32::MIN, f32::max)
+    };
+    let all = max_x(draw(&r, &look, 1));
+    look.legend_all = false;
+    let frame = max_x(draw(&r, &look, 2));
+    assert!((frame - all - 1.8).abs() < 1e-5, "{frame} {all}");
+    look.streamlines = true;
+    look.section = Some((0, 2, 0.0));
+    let shape = draw(&r, &look, 3);
+    assert!(!shape.legend.is_empty());
+    assert!(shape.more_legends.is_empty(), "{:?}", shape.more_legends);
+    assert!(!shape.mesh.triangles.is_empty());
+    assert!(!Look::default().arrows);
+    assert_eq!(Look::default().arrow_spacing, None);
+}

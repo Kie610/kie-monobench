@@ -2645,3 +2645,178 @@ fn write_sketch_point_and_arc_screens() {
     s.settle();
     s.write(&dir, "円弧の端より外の半径の寸法");
 }
+
+fn flow_arrow_document(kind: &str) -> (kmb_core::Document, kmb_core::FeatureId) {
+    let mut b = kmb_samples::sample::DocBuilder::new();
+    let mut sketch = kmb_samples::sample::SketchBuilder::xy();
+    let point = sketch.fixed_point(0.0, 0.0);
+    sketch.rectangle(point, "12 mm", "12 mm", [0.0, 0.0, 12.0, 12.0]);
+    let profile = b.sketch("物体の輪郭", sketch);
+    let body = b.feature(
+        "solid.extrude@1",
+        "流れの中の物体",
+        serde_json::json!({"profile":profile,"distance":"12 mm"}),
+    );
+    let study = b.feature(
+        kind,
+        "流れの研究",
+        serde_json::json!({
+            "bodies":[body],"size":"2 mm","speed":"1","end":"0.0004","frames":"2","arrows":"4 mm"
+        }),
+    );
+    (b.finish("流れの矢印"), study)
+}
+
+struct FlowArrowScratch(std::path::PathBuf);
+impl FlowArrowScratch {
+    fn new() -> Self {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        Self(std::env::temp_dir().join(format!("flow-arrows-{}-{nonce}", std::process::id())))
+    }
+}
+impl Drop for FlowArrowScratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// MCPの画面の道具をTCPの待ち受けから流し、描画しながら答えを待つ。
+fn flow_arrow_ui_call(
+    screen: &mut Screen,
+    dir: &std::path::Path,
+    tool: &str,
+    args: serde_json::Value,
+) {
+    let dir = dir.to_owned();
+    let tool = tool.to_owned();
+    let request = std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args));
+    let started = std::time::Instant::now();
+    while !request.is_finished() {
+        screen.h.step();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert!(started.elapsed().as_secs() < 20, "画面の要求の時間切れ");
+    }
+    let reply = request.join().unwrap().unwrap();
+    assert_eq!(reply["ok"], true, "{reply}");
+    screen.settle();
+}
+
+fn flow_arrow_solved_screen(
+    kind: &str,
+    brightness: kmb_ui::layout::Brightness,
+    dir: &std::path::Path,
+) -> Screen {
+    let (doc, study) = flow_arrow_document(kind);
+    let mut ws = Workspace::new(doc, None, kmb_bundle::modules()).with_data_dir(dir.to_owned());
+    ws.layout_mut().ai_live = true;
+    ws.layout_mut().brightness = brightness;
+    ws.layout_mut().appearance.language = "ja".into();
+    ws.layout_mut().space = Space::Simulation;
+    ws.select(study);
+    let mut screen = Screen::sized(ws, Some([1280.0, 900.0]));
+    assert!(screen.h.state().live_port().is_some());
+    // 選んだ研究を編集パネルで開き、実行のボタンを押す。
+    flow_arrow_ui_call(
+        &mut screen,
+        dir,
+        "ui_key",
+        serde_json::json!({"keys":"Return"}),
+    );
+    flow_arrow_ui_call(
+        &mut screen,
+        dir,
+        "ui_click",
+        serde_json::json!({"target":"▶  実行"}),
+    );
+    let started = std::time::Instant::now();
+    while !screen
+        .h
+        .state()
+        .actions()
+        .iter()
+        .any(|a| a.id == "study.view.arrows")
+    {
+        screen.h.step();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        let state = screen.h.state().run_state(study).unwrap();
+        assert_ne!(state.tone, kmb_core::RunTone::Failed, "{}", state.detail);
+        assert!(
+            started.elapsed().as_secs() < 20,
+            "研究の結果が出ません: {}",
+            state.detail
+        );
+    }
+    screen.settle();
+    if screen.h.query_by_label("矢印を出す").is_none() {
+        flow_arrow_ui_call(
+            &mut screen,
+            dir,
+            "ui_key",
+            serde_json::json!({"keys":"Return"}),
+        );
+    }
+    flow_arrow_ui_call(
+        &mut screen,
+        dir,
+        "ui_expect",
+        serde_json::json!({"target":"矢印を出す","state":"exists"}),
+    );
+    // 流体の範囲も見えるよう、結果を含む全体を収める。
+    if screen.h.query_by_label("全体表示").is_some() {
+        flow_arrow_ui_call(
+            &mut screen,
+            dir,
+            "ui_click",
+            serde_json::json!({"target":"全体表示"}),
+        );
+    }
+    screen
+}
+
+#[test]
+fn flow_arrows_toggle_through_mcp_ui_tools_without_changing_the_document() {
+    for kind in ["flow.section@1", "flow.volume@1"] {
+        let scratch = FlowArrowScratch::new();
+        let mut screen =
+            flow_arrow_solved_screen(kind, kmb_ui::layout::Brightness::Dark, &scratch.0);
+        let before = screen.h.state().document().to_json();
+        let count = |s: &Screen| {
+            s.h.state()
+                .overlay()
+                .shape
+                .as_ref()
+                .unwrap()
+                .mesh
+                .triangles
+                .len()
+        };
+        let hidden = count(&screen);
+        flow_arrow_ui_call(
+            &mut screen,
+            &scratch.0,
+            "ui_click",
+            serde_json::json!({"target":"矢印を出す"}),
+        );
+        assert!(count(&screen) > hidden, "矢印の網が増える");
+        if screen.h.query_by_label("矢印を隠す").is_none() {
+            flow_arrow_ui_call(
+                &mut screen,
+                &scratch.0,
+                "ui_key",
+                serde_json::json!({"keys":"Return"}),
+            );
+        }
+        flow_arrow_ui_call(
+            &mut screen,
+            &scratch.0,
+            "ui_click",
+            serde_json::json!({"target":"矢印を隠す"}),
+        );
+        assert_eq!(count(&screen), hidden);
+        assert_eq!(screen.h.state().document().to_json(), before);
+        screen.h.state_mut().live_disconnect();
+    }
+}
