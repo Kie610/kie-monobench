@@ -46,6 +46,8 @@ mod param_views_tests;
 #[cfg(test)]
 mod pick_tests;
 #[cfg(test)]
+mod polish_tests;
+#[cfg(test)]
 mod press_pull_tests;
 #[cfg(test)]
 mod revolve_tests;
