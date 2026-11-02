@@ -4,7 +4,7 @@
 feature-solid-hole = Hole
 feature-solid-hole-tip = Drill a hole at every lone sketch point (points not used by lines or circles)
 feature-solid-thread = Thread
-feature-solid-thread-tip = Add a metric, unified or parallel pipe thread to a cylindrical face (stores the size and pitch as attributes without modeling the thread)
+feature-solid-thread-tip = Add a metric, unified or parallel pipe thread to a cylindrical face. Choose cosmetic attributes or modeled thread geometry
 feature-solid-shell = Shell
 feature-solid-shell-tip = Hollow out a solid into a shell. Selected faces are removed to open it; selecting a body makes a closed cavity inside
 feature-solid-boolean = Combine
@@ -55,3 +55,6 @@ feature-hrtf-compute = Head HRTF
 feature-hrtf-compute-tip = Compute head-related transfer functions (HRTF) in all directions from a head body and the left and right ear entrances with the boundary element method, and view the left and right levels and the interaural differences by direction
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
+
+feature-asm-position = Position
+feature-asm-position-tip = Rotate the component about its center in X, Y, Z order, then translate along world axes. Parts connected to follow it move together.
