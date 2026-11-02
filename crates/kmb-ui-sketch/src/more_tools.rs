@@ -357,7 +357,7 @@ pub(crate) fn apply_corners(
         std::mem::take(&mut editor.typed)
     };
     let value = if text.trim().is_empty() {
-        "2 mm".into()
+        crate::view::default_corner()
     } else {
         typed_value(&text)
     };

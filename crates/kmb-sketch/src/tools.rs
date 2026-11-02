@@ -526,7 +526,9 @@ impl Sketch {
                 else {
                     return None;
                 };
+                // 写した円弧は元から取り直す単位なので、そのまま保つ。
                 if *id == arc
+                    || self.projections.iter().any(|p| p.entity == *id)
                     || len(sub(self.pos(*oc)?, c)) > EPS
                     || (len(sub(self.pos(*os)?, c)) - radius).abs() > EPS
                 {
