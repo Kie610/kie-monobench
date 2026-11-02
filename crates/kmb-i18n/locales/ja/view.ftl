@@ -114,3 +114,5 @@ view-candidates = 重なっているもの(手前から)
 
 view-part-hues = 部品ごとに色を変える
 view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
+view-keycast-drag = ドラッグ
+view-keycast-mouse3d-button = 3D マウス ボタン { $number }

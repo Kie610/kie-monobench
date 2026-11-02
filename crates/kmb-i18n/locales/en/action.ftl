@@ -149,11 +149,11 @@ action-cad-text-font-tip = Use an outline font on this PC (TrueType, OpenType) f
 action-cad-text-at-point = Text at Sketch Point
 action-cad-text-at-point-tip = Place text centered on a lone sketch point. The point can be moved with constraints
 action-cad-text-on-face = Text on Face
-action-cad-text-on-face-tip = Select a flat face, then press to place single-line font text at the face's center. Trace it with engraving, or cut or raise it with an extrude
+action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.
 action-cad-text-on-path = Text on Sketch Line
 action-cad-text-on-path-tip = Lay text along the first line of the sketch (construction lines too). On a circle it starts at the top, facing out
 action-cad-thread = Thread
-action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the thread size and pitch nearest the face's diameter. Edit size, length and direction in the fields, then OK or Enter
+action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the thread size and pitch nearest the face's diameter. Edit size, length, direction and thread form in the fields, then OK or Enter
 action-cad-timeline-read-latest-bodies = Read Latest Bodies Everywhere
 action-cad-timeline-read-latest-bodies-tip = Make every feature that still reads a body as it was when picked (the older reading) read the latest shape instead (one undo step)
 action-cad-timeline-read-latest-body = Read Latest Body
@@ -298,6 +298,8 @@ action-study-cancel = Cancel
 action-study-cancel-tip = Stop solving (for flow and time-varying heat, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
+action-wave-solve = Solve Sound Job…
+action-wave-solve-tip = Solve a sound job JSON with the boundary element method and write the surface and receiver pressures for each frequency as JSON
 
 ## Commands shown only in the feature right-click menu (timeline, browser, 3D view)
 ## For commands whose description depends on the feature type (Save as Default, Place Entry Point), the description is written to fit every type.
@@ -360,3 +362,7 @@ action-io-export-obj-tip = Export visible bodies as OBJ with object names, verti
 
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
+action-hrtf-process = Align HRTF formats
+action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
+action-hrtf-compute = Compute HRTF from Head Mesh…
+action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA

@@ -921,3 +921,5 @@ mod units_tests;
 
 #[cfg(test)]
 mod component_colors_tests;
+#[cfg(test)]
+mod wide_toolbar_tests;
