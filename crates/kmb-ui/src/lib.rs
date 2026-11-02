@@ -922,3 +922,6 @@ mod settings_tests;
 mod tabs_tests;
 #[cfg(test)]
 mod units_tests;
+
+#[cfg(test)]
+mod wide_toolbar_tests;

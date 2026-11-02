@@ -673,3 +673,92 @@ fn own_lines_and_points_win_over_projections_at_the_same_spot() {
         Some(p)
     );
 }
+
+/// 確かめること: 丸めで判別式が負になる接線も、接点の左右で切り分けられる。
+#[test]
+fn trimming_a_circle_tangent_keeps_the_other_half_of_the_line() {
+    for side in [-1.0, 1.0] {
+        let mut s = Sketch::default();
+        let center = s.add_point(0.1, 0.1);
+        let circle = s.add_circle(center, 1.1);
+        let y = 0.1 + 1.1;
+        let a = s.add_point(-0.5, y);
+        let b = s.add_point(0.7, y);
+        let line = s.add_line(a, b);
+        assert!(s.trim(line, [0.1 + side * 0.3, y]));
+        let remaining = lines(&s);
+        assert_eq!(remaining.len(), 1, "接点の反対側を残す: {side}");
+        let (_, a, b) = remaining[0];
+        let (a, b) = (s.pos(a).unwrap(), s.pos(b).unwrap());
+        let original = [0.1 - side * 0.6, y];
+        let contact = [0.1, y];
+        assert!(
+            (near(a, original) && near(b, contact)) || (near(b, original) && near(a, contact)),
+            "{a:?} {b:?}"
+        );
+        assert!(s.entity(circle).is_some());
+    }
+}
+
+#[test]
+fn trimming_an_arc_tangent_keeps_the_other_half_of_the_line() {
+    for side in [-1.0, 1.0] {
+        let mut s = Sketch::default();
+        let center = s.add_point(0.1, 0.1);
+        let start = s.add_point(1.2, 0.1);
+        let end = s.add_point(-1.0, 0.1);
+        let arc = s.add_arc(center, start, end);
+        let y = 0.1 + 1.1;
+        let a = s.add_point(-0.5, y);
+        let b = s.add_point(0.7, y);
+        let line = s.add_line(a, b);
+        assert!(s.trim(line, [0.1 + side * 0.3, y]));
+        let remaining = lines(&s);
+        assert_eq!(remaining.len(), 1, "接点の反対側を残す: {side}");
+        let (_, a, b) = remaining[0];
+        let (a, b) = (s.pos(a).unwrap(), s.pos(b).unwrap());
+        let original = [0.1 - side * 0.6, y];
+        let contact = [0.1, y];
+        assert!(
+            (near(a, original) && near(b, contact)) || (near(b, original) && near(a, contact)),
+            "{a:?} {b:?}"
+        );
+        assert!(s.entity(arc).is_some());
+    }
+}
+
+/// 接点を1つだけ返し、離れた直線や本当に2点で交わる直線と区別する。
+#[test]
+fn tangent_intersections_stay_single_at_different_scales_and_angles() {
+    use crate::geom::{Curve, EPS, add, intersect, scale};
+    for size in [0.001, 1.0, 1000.0] {
+        for angle in [0.0f64, 0.37, 0.91] {
+            let center = [0.1 * size, 0.2 * size];
+            let radius = 1.1 * size;
+            let normal = [angle.cos(), angle.sin()];
+            let along = [-normal[1], normal[0]];
+            let circle = Curve::Arc(center, radius, 0.0, std::f64::consts::TAU);
+            for (shift, count) in [
+                (0.0, 1),
+                (EPS * 0.25, 1),
+                (EPS * 10.0, 0),
+                (-radius * 0.01, 2),
+            ] {
+                let middle = add(center, scale(normal, radius + shift));
+                let line = Curve::Seg(
+                    add(middle, scale(along, -radius)),
+                    add(middle, scale(along, radius)),
+                );
+                let points = intersect(&line, &circle);
+                assert_eq!(
+                    points.len(),
+                    count,
+                    "size {size}, angle {angle}, shift {shift}: {points:?}"
+                );
+                if count == 1 {
+                    assert!((crate::geom::dist(points[0], center) - radius).abs() < EPS * 2.0);
+                }
+            }
+        }
+    }
+}

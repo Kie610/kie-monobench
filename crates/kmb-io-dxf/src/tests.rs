@@ -309,9 +309,13 @@ fn binary_dxf(text: &str, modern: bool) -> Vec<u8> {
             binary.push(255);
             binary.extend(code.to_le_bytes());
         }
-        if (10..60).contains(&code) {
+        if (10..60).contains(&code) || (140..148).contains(&code) {
             binary.extend(pair[1].parse::<f64>().unwrap().to_le_bytes());
-        } else if (60..80).contains(&code) || (270..290).contains(&code) {
+        } else if (60..80).contains(&code)
+            || (170..180).contains(&code)
+            || (270..290).contains(&code)
+            || (370..373).contains(&code)
+        {
             binary.extend(pair[1].parse::<i16>().unwrap().to_le_bytes());
         } else {
             binary.extend(pair[1].as_bytes());
@@ -869,6 +873,163 @@ proptest::proptest! {
                 Sketch::default().insert_shapes(&imp.shapes, Place::default());
             }
             Err(reason) => proptest::prop_assert!(reason.contains("倍率") || reason.contains("形の大きさが 0")),
+        }
+    }
+}
+
+fn r2000_records(text: &str) -> Vec<Vec<(i32, &str)>> {
+    let lines: Vec<_> = text.lines().collect();
+    assert!(lines.len().is_multiple_of(2));
+    let mut records: Vec<Vec<_>> = Vec::new();
+    for p in lines.as_chunks::<2>().0 {
+        let code = p[0].trim().parse().unwrap();
+        if code == 0 || records.is_empty() {
+            records.push(Vec::new());
+        }
+        records.last_mut().unwrap().push((code, p[1]));
+    }
+    records
+}
+
+#[test]
+fn r2000_required_tables_have_named_records_and_an_empty_classes_section() {
+    let sketch = sample_sketch();
+    let text = to_dxf(&sketch, &solved(&sketch), &DxfOptions::default()).unwrap();
+    let records = r2000_records(&text);
+    let value = |record: &Vec<(i32, &str)>, code| {
+        record.iter().find(|p| p.0 == code).map(|p| p.1.to_string())
+    };
+    let missing: Vec<_> = ["VPORT", "VIEW", "UCS", "APPID", "DIMSTYLE", "STYLE"]
+        .into_iter()
+        .filter(|table| {
+            !records
+                .iter()
+                .any(|r| r[0].1 == "TABLE" && value(r, 2).as_deref() == Some(*table))
+        })
+        .collect();
+    assert!(missing.is_empty(), "R2000の表が足りない: {missing:?}");
+    let classes = records
+        .iter()
+        .position(|r| r[0].1 == "SECTION" && value(r, 2).as_deref() == Some("CLASSES"))
+        .expect("CLASSES の区画");
+    assert_eq!(records[classes + 1][0].1, "ENDSEC", "CLASSES は空");
+    for (kind, name, class) in [
+        ("VPORT", "*ACTIVE", "AcDbViewportTableRecord"),
+        ("APPID", "ACAD", "AcDbRegAppTableRecord"),
+        ("STYLE", "STANDARD", "AcDbTextStyleTableRecord"),
+        ("DIMSTYLE", "STANDARD", "AcDbDimStyleTableRecord"),
+    ] {
+        let r = records
+            .iter()
+            .find(|r| r[0].1 == kind && value(r, 2).as_deref() == Some(name))
+            .expect("既定の項目");
+        assert!(r.contains(&(100, "AcDbSymbolTableRecord")) && r.contains(&(100, class)));
+    }
+    let viewport = records.iter().find(|r| r[0].1 == "VPORT").unwrap();
+    let number = |code| value(viewport, code).unwrap().parse::<f64>().unwrap();
+    assert!((number(12) - 35.0).abs() < 1e-9 && (number(22) - 10.0).abs() < 1e-9);
+    assert!(
+        (number(40) - 77.0).abs() < 1e-9,
+        "図形の全体を既定の表示範囲に収める"
+    );
+    // 付け足す表で、線・円・円弧の読み戻しを妨げない。
+    let read = from_dxf(&text).unwrap();
+    assert!(read.skipped.is_empty());
+    assert_eq!(read.shapes.len(), 7);
+    let (lo, hi) = read.bounds.unwrap();
+    assert!(close2(lo, [0.0, 0.0], 1e-9) && close2(hi, [70.0, 20.0], 1e-9));
+}
+
+#[test]
+fn r2000_required_tables_keep_handles_unique_and_owners_and_text_style_resolvable() {
+    for many in [false, true] {
+        let mut sketch = sample_sketch();
+        if many {
+            for i in 0..220 {
+                sketch.add_point(i as f64, 100.0);
+            }
+        }
+        let text = to_dxf(
+            &sketch,
+            &solved(&sketch),
+            &DxfOptions {
+                points: many,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let records = r2000_records(&text);
+        let mut handles = std::collections::BTreeMap::new();
+        for record in &records {
+            if record[0].1 == "SECTION" {
+                continue;
+            }
+            for (_, handle) in record.iter().filter(|p| matches!(p.0, 5 | 105)) {
+                assert!(
+                    handles.insert(*handle, record).is_none(),
+                    "ハンドルの重複: {handle}"
+                );
+            }
+        }
+        for record in &records {
+            if let Some((_, owner)) = record.iter().find(|p| p.0 == 330) {
+                assert!(
+                    *owner == "0" || handles.contains_key(owner),
+                    "持ち主が無い: {record:?}"
+                );
+            }
+            if record[0].1 == "TABLE" {
+                assert!(record.contains(&(100, "AcDbSymbolTable")));
+                assert!(record.iter().any(|p| p.0 == 330));
+            }
+            if [
+                "VPORT",
+                "STYLE",
+                "APPID",
+                "DIMSTYLE",
+                "LTYPE",
+                "LAYER",
+                "BLOCK_RECORD",
+            ]
+            .contains(&record[0].1)
+            {
+                let owner = record.iter().find(|p| p.0 == 330).unwrap().1;
+                let parent = handles.get(owner).unwrap();
+                assert_eq!(parent[0].1, "TABLE");
+                assert!(parent.contains(&(2, record[0].1)));
+            }
+        }
+        let dim = records
+            .iter()
+            .find(|r| r[0].1 == "DIMSTYLE")
+            .expect("寸法スタイル");
+        assert!(
+            dim.iter().any(|p| p.0 == 105),
+            "寸法スタイルのハンドルは105"
+        );
+        let style = dim
+            .iter()
+            .find(|p| p.0 == 340)
+            .expect("文字スタイルへの参照")
+            .1;
+        let style = handles.get(style).unwrap();
+        assert_eq!(style[0].1, "STYLE");
+        assert!(style.contains(&(2, "STANDARD")));
+        let header = records
+            .iter()
+            .find(|r| r[0].1 == "SECTION" && r.contains(&(2, "HEADER")))
+            .unwrap();
+        let pos = header.iter().position(|p| *p == (9, "$HANDSEED")).unwrap();
+        assert_eq!(header[pos + 1].0, 5);
+        let seed = u64::from_str_radix(header[pos + 1].1, 16).unwrap();
+        let max = handles
+            .keys()
+            .map(|h| u64::from_str_radix(h, 16).unwrap())
+            .max()
+            .unwrap();
+        assert!(seed > max, "次のハンドルを確保する");
+        if many {
+            assert!(max > 255, "多くの図形でも桁をまたいで重複しない");
         }
     }
 }

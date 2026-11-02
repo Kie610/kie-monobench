@@ -5,3 +5,5 @@
 
 # action-cad-sketch-project-axis = Project Datum Axis
 # action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
+# action-cad-text-on-face = Text on Face
+# action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.

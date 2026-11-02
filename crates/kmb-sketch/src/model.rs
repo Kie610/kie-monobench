@@ -689,7 +689,8 @@ pub enum ProjectionSource {
         index: u32,
     },
     /// ボディをスケッチの平面へ写した外形(シルエット)のうち、元の辺に当たらない部分の
-    /// `index` 番目(横に寝た円柱の側面の外形など。辺に当たる部分は [`Self::Edge`] で持つ)
+    /// 参照番号 `index` (横に寝た円柱の側面の外形など。辺に当たる部分は [`Self::Edge`] で持つ)。
+    /// 同じ場所の近似の番号を引き継ぎ、まとまった区間の番号を別の場所へ再利用しない。
     Silhouette {
         feature: kmb_core::FeatureId,
         index: u32,
