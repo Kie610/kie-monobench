@@ -3,6 +3,7 @@
 use crate::Tool;
 use crate::tests::*;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use kmb_sketch::{ConstraintKind, Entity, EntityId};
 use kmb_ui::Workspace;
 
@@ -369,7 +370,14 @@ fn selected_corners_fillet_with_one_value_and_one_undo() {
 #[test]
 fn selected_corners_chamfer_with_one_value_and_one_undo() {
     let mut h = corner_rectangle();
-    select_corners(&mut h, egui::Modifiers::CTRL);
+    select_corners(
+        &mut h,
+        egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..egui::Modifiers::NONE
+        },
+    );
     let before = current_sketch(h.state());
     editor(h.state_mut()).set_tool(Tool::Chamfer);
     h.run();
