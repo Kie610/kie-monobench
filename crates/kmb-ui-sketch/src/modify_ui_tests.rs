@@ -307,8 +307,8 @@ fn corner_rectangle() -> Harness<'static, Workspace> {
     let mut h = empty_sketch();
     editor(h.state_mut()).set_tool(Tool::Rectangle);
     h.run();
-    click_at(&mut h, [-5.0, 25.0]);
-    click_at(&mut h, [15.0, 5.0]);
+    click_at(&mut h, [1.19, 18.97]);
+    click_at(&mut h, [21.19, -1.03]);
     press_key(&mut h, egui::Key::Escape);
     h
 }
