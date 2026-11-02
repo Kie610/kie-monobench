@@ -23,6 +23,8 @@ mod space3d;
 mod view;
 
 #[cfg(test)]
+mod tool_button_live_tests;
+#[cfg(test)]
 mod tool_button_tests;
 
 pub use space3d::{Sketch3dEditor, Tool3};
