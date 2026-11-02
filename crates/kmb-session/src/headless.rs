@@ -97,10 +97,12 @@ pub enum Ran {
 mod actions;
 mod active;
 mod background;
+mod open;
 mod params;
 mod status;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
+pub use open::OpenedDocument;
 
 /// 開いている文書。CLI・MCP は変更のたびにその場で再計算する。画面は裏で再計算する
 /// ([`Headless::in_background`])。
@@ -148,24 +150,31 @@ impl Headless {
         // 古い版の文書の、読むボディを固定する印のうち要らない物を外す(読む形は変わらない)
         doc.release_pins(&modules.registry);
         let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
-        let mut h = Headless {
-            doc,
-            path,
-            modules,
-            report,
-            keep: vec![],
-            background: None,
-            active: Default::default(),
-            recomputes: 1,
-            hold: Hold::Off,
-            creating: None,
-            just_hidden: BTreeSet::new(),
-            old_names: true,
-        };
+        let mut h = Self::uncomputed(modules, doc, path);
+        h.report = report;
+        h.recomputes = 1;
         if h.rename_old_faces() {
             h.recompute();
         }
         h
+    }
+
+    /// 再計算前の状態。ファイルを読み取る準備では、今の文書の形を捨てないため計算しない。
+    fn uncomputed(modules: Modules, doc: Document, path: Option<PathBuf>) -> Self {
+        Self {
+            doc,
+            path,
+            modules,
+            report: RecomputeReport::default(),
+            keep: vec![],
+            background: None,
+            active: Default::default(),
+            recomputes: 0,
+            hold: Hold::Off,
+            creating: None,
+            just_hidden: BTreeSet::new(),
+            old_names: true,
+        }
     }
 
     /// 開いた後の最初の計算の結果で、前の版の伸びた面の名前の参照を今の名前に直す
@@ -178,10 +187,10 @@ impl Headless {
                 > 0
     }
 
-    /// ファイルを開く。
+    /// ファイルを開く。DXF は保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
-        let doc = crate::load(path)?;
-        Ok(Self::with_document(modules, doc, Some(path.to_path_buf())))
+        let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
+        Ok(Self::with_document(modules, opened.document, opened.path))
     }
 
     /// 文書を入れ替える(開く、見本)。裏で前の文書を計算している時は、その結果を使わない。
