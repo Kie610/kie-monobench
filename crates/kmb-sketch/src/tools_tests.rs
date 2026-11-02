@@ -935,3 +935,36 @@ fn exact_half_side_arc_merges_keep_radius_dimension_names() {
     }
     assert_closed_corner_profile(&s, 10.0, 1);
 }
+
+#[test]
+fn exact_half_side_fillets_preserve_rectangle_guides_and_their_endpoints() {
+    let mut s = Sketch::default();
+    s.add_rectangle((None, [0.0, 0.0]), (None, [20.0, 20.0]))
+        .unwrap();
+    let corners: Vec<_> = s
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Point { .. }))
+        .map(Entity::id)
+        .collect();
+    for corner in corners {
+        s.fillet_corner(corner, 10.0, "10 mm").unwrap();
+    }
+    assert!(s.entities.iter().any(|e| matches!(
+        e,
+        Entity::Line {
+            construction: true,
+            ..
+        }
+    )));
+    for e in &s.entities {
+        for point in e.points() {
+            assert!(
+                matches!(s.entity(point), Some(Entity::Point { .. })),
+                "{:?} が指す点 {point:?} が無い",
+                e.id()
+            );
+        }
+    }
+    assert_closed_corner_profile(&s, 10.0, 1);
+}

@@ -392,6 +392,15 @@ pub(crate) fn sketch_view(
                     &[("maximum", &maximum)],
                 )
             }
+            crate::more_tools::CornerFailure::Edges { lengths } => {
+                let first = shown_length(lengths[0]);
+                let second = shown_length(lengths[1]);
+                kmb_ui::translated_text(
+                    ui.ctx(),
+                    "view-sketch-corner-edge-limits",
+                    &[("first", &first), ("second", &second)],
+                )
+            }
             crate::more_tools::CornerFailure::Invalid => {
                 kmb_ui::translated_text(ui.ctx(), "view-sketch-corner-invalid", &[])
             }

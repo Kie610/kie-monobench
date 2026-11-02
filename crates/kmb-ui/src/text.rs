@@ -36,6 +36,16 @@ mod tests {
             assert!(text.starts_with(start), "{lang}: {text}");
             assert!(text.contains("1.25 mm"), "{lang}: {text}");
             assert!(!text.contains("$maximum"), "{lang}: {text}");
+            let edges = translated_text(
+                &ctx,
+                "view-sketch-corner-edge-limits",
+                &[("first", "10 mm"), ("second", "20 mm")],
+            );
+            assert!(edges.starts_with(start), "{lang}: {edges}");
+            assert!(
+                edges.contains("10 mm") && edges.contains("20 mm"),
+                "{lang}: {edges}"
+            );
             let invalid = translated_text(&ctx, "view-sketch-corner-invalid", &[]);
             assert!(invalid.starts_with(start), "{lang}: {invalid}");
         }

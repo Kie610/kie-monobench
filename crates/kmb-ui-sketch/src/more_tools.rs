@@ -340,6 +340,7 @@ fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
 /// 角の処理を全部断った理由。文章への変換は、画面の表示言語が分かる所で行う。
 pub(crate) enum CornerFailure {
     TooLong { maximum: f64 },
+    Edges { lengths: [f64; 2] },
     Invalid,
 }
 
@@ -374,13 +375,10 @@ pub(crate) fn apply_corners(
         if !done {
             editor.notice = None;
             editor.corner_error = Some(match limit {
-                Some((radius, sides)) => CornerFailure::TooLong {
-                    maximum: if editor.tool == Tool::Fillet {
-                        radius
-                    } else {
-                        sides[0].min(sides[1])
-                    },
-                },
+                Some((radius, _)) if editor.tool == Tool::Fillet => {
+                    CornerFailure::TooLong { maximum: radius }
+                }
+                Some((_, lengths)) => CornerFailure::Edges { lengths },
                 None => CornerFailure::Invalid,
             });
             return None;
