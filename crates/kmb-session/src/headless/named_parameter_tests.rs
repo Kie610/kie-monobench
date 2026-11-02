@@ -135,3 +135,46 @@ fn named_parameter_assembly_fields_use_the_declared_angle_and_document_length_un
         assert!(work.doc().data().param_by_name(name).is_none());
     }
 }
+
+#[test]
+fn named_parameter_row_values_replace_the_expression_with_one_undo() {
+    let (mut work, body) = extrude();
+    let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = work.report().feature(body) else {
+        panic!("元のボディ")
+    };
+    let Some(kmb_core::Value::Shape(shape)) = outputs.get("body") else {
+        panic!("ボディの形")
+    };
+    let edge = work
+        .kernel()
+        .edges(*shape)
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    let id = work.add_feature("solid.fillet@1",Some("丸め"),json!({
+        "target":body.0,"rows":[{"edges":[{"kind":"edge","feature":body.0,"faces":edge.faces}],"radius":"1 mm"}]
+    })).unwrap();
+    assert_eq!(work.report().error_count(), 0);
+    let before = work.doc().undo_depth();
+    let mut data = work.doc().data().feature(id).unwrap().data.clone();
+    data["rows"][0]["radius"] = json!("rounding=2");
+    let tx = crate::edit::set_feature_data(work.doc().data(), id, data);
+    work.apply(tx).unwrap();
+    assert_eq!(
+        work.doc().data().param_by_name("rounding").unwrap().expr,
+        "2 mm"
+    );
+    assert_eq!(
+        work.doc().data().feature(id).unwrap().data["rows"][0]["radius"],
+        "rounding"
+    );
+    assert_eq!(work.doc().undo_depth(), before + 1);
+    assert_eq!(work.report().error_count(), 0);
+    work.undo().unwrap();
+    assert!(work.doc().data().param_by_name("rounding").is_none());
+    assert_eq!(
+        work.doc().data().feature(id).unwrap().data["rows"][0]["radius"],
+        "1 mm"
+    );
+}
