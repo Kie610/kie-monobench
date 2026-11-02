@@ -1806,3 +1806,5 @@ mod tests;
 
 #[cfg(test)]
 mod freedom_ui_tests;
+#[cfg(test)]
+mod plane_frame_tests;

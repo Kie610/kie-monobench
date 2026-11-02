@@ -28,6 +28,7 @@ serde_json.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-ui-sketch.workspace = true
 kmb-format.workspace = true
 # 書いた静止画を読み直す試験
 kmb-image.workspace = true

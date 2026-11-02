@@ -56,6 +56,11 @@ const WROTE_FOR: Duration = Duration::from_secs(5);
 const MARK_FOR: Duration = Duration::from_millis(1800);
 const MARK_FADE: f32 = 0.6;
 
+/// 文書の変更と部品の押下に共通の、経過時間から決める光の強さ。
+pub(crate) fn mark_strength(age: Duration) -> Option<f32> {
+    (age < MARK_FOR).then(|| ((MARK_FOR - age).as_secs_f32() / MARK_FADE).min(1.0))
+}
+
 /// 文書を変えた要求の、変える前の機能(再計算が終わってから比べて印を付ける)。
 struct Pending {
     before: Vec<FeatureEntry>,
@@ -319,12 +324,9 @@ impl Workspace {
     /// AI が変えた所の光の強さ(0〜1)。光らせ終えていれば `None`。
     fn mark_glow(&self, ctx: &egui::Context) -> Option<(&AiMark, f32)> {
         let m = self.live.mark.as_ref()?;
-        let t = m.at.elapsed();
-        if t >= MARK_FOR {
-            return None;
-        }
+        let strength = mark_strength(m.at.elapsed())?;
         ctx.request_repaint();
-        Some((m, ((MARK_FOR - t).as_secs_f32() / MARK_FADE).min(1.0)))
+        Some((m, strength))
     }
 
     /// 機能 `id`(ブラウザの行ならそのボディ `root` も)を、AI が変えたので今光らせる強さ。
@@ -417,7 +419,9 @@ impl Workspace {
             "ui_find" | "ui_tree" | "ui_click" | "ui_type" | "ui_key" | "ui_select" | "ui_pick"
             | "ui_expect" | "command" | "script" => {
                 let text = ui_tool_script(tool, a)?;
-                return self.run_script(&text).map(Answer::AfterScript);
+                return self
+                    .run_script_from(&text, crate::cmdline::InputOrigin::Mcp)
+                    .map(Answer::AfterScript);
             }
             "set_param" => {
                 let (name, expr) = (need("name")?, need("expr")?);
@@ -607,6 +611,11 @@ impl Workspace {
             "values": values,
             "selection": self.live_selection(),
             "human_editing": self.human_editing(),
+            "ui_glow": self.win.repaint.as_ref().map_or_else(|| json!([]), |ctx| {
+                ctx.plugin_opt::<crate::drive::UiDriver>().map_or_else(|| json!([]), |driver| {
+                    driver.lock().glow_status(ctx.pixels_per_point(), ctx.content_rect(), Instant::now())
+                })
+            }),
             "can_undo": self.cur.work.doc().can_undo(),
             "can_redo": self.cur.work.doc().can_redo(),
             "running": kmb_session::live::running_json(&self.live_running()),

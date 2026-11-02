@@ -104,15 +104,19 @@ fn already_on(sketch: &Sketch, point: EntityId, curve: EntityId) -> bool {
     sketch.constraints.iter().any(|c| match c.kind {
         ConstraintKind::PointOnLine { point: p, line } => p == point && line == curve,
         ConstraintKind::PointOnCircle { point: p, circle } => p == point && circle == curve,
+        ConstraintKind::PointOnCurve { point: p, curve: c } => p == point && c == curve,
         ConstraintKind::Midpoint { point: p, line } => p == point && line == curve,
         _ => false,
     })
 }
 
-/// 点を曲線の上に置く拘束(線分なら線上、円・円弧なら円周上)。
+/// 点を曲線の上に置く拘束。線分・円周・自由曲線で、その形を受ける拘束を選ぶ。
 pub fn on_curve(sketch: &Sketch, point: EntityId, curve: EntityId) -> ConstraintKind {
     match sketch.entity(curve) {
         Some(Entity::Line { .. }) => ConstraintKind::PointOnLine { point, line: curve },
+        Some(Entity::Ellipse { .. } | Entity::Spline { .. } | Entity::Conic { .. }) => {
+            ConstraintKind::PointOnCurve { point, curve }
+        }
         _ => ConstraintKind::PointOnCircle {
             point,
             circle: curve,
