@@ -417,3 +417,6 @@ action-drawing-set-style-tip = 文字・矢印・補助線・桁・単位・公�
 
 action-cad-thicken = 厚みを付ける
 action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
+
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う

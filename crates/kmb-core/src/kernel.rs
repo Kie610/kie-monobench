@@ -395,12 +395,13 @@ fn order_by_position(mut idx: Vec<usize>, at: &dyn Fn(usize) -> P3, axis: usize)
     out
 }
 
-/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。
+/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。網は閉じている時だけ体積を持つ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BodyKind {
     Solid,
     Sheet,
+    Mesh,
 }
 
 /// 面の向きを基準に厚みを付ける側。両側は表裏へ半分ずつ。
@@ -445,7 +446,13 @@ pub struct BoundarySegment {
 pub trait Kernel: Send + Sync {
     fn name(&self) -> &str;
 
-    /// 厚みのある立体か、厚みの無い面のボディか。
+    /// 三角形の網をそのまま預かる。面の名前は `{tag}:mesh`、辺は渡された物を使う。
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let _ = (mesh, tag);
+        Err(KernelError::Unsupported("網のボディ".into()))
+    }
+
+    /// 厚みのある立体・厚みの無い面・三角形の網のボディの区分。
     fn body_kind(&self, shape: ShapeHandle) -> Result<BodyKind, KernelError> {
         let _ = shape;
         Ok(BodyKind::Solid)

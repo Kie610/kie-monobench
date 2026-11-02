@@ -1,4 +1,133 @@
-//! zip の書き手と、書いた zip の読み手。
+//! zip の書き手と、中央の目録から内容を確かめる読み手。
+
+/// 中央の目録を読んで全ファイルを取り出す。展開後の合計は 2 GiB まで。
+/// 暗号化・分割・データ記述子・zip64 は扱わず、理由を返す。
+pub fn read(bytes: &[u8]) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
+    use std::collections::BTreeMap;
+    const LIMIT: usize = 2 * 1024 * 1024 * 1024;
+    let bad = || "zip の目録かファイルが壊れています".to_string();
+    let u16_at = |i: usize| -> Result<usize, String> {
+        Ok(u16::from_le_bytes(
+            bytes
+                .get(i..i + 2)
+                .ok_or_else(bad)?
+                .try_into()
+                .map_err(|_| bad())?,
+        ) as usize)
+    };
+    let u32_at = |i: usize| -> Result<usize, String> {
+        Ok(u32::from_le_bytes(
+            bytes
+                .get(i..i + 4)
+                .ok_or_else(bad)?
+                .try_into()
+                .map_err(|_| bad())?,
+        ) as usize)
+    };
+    let end = (bytes.len().saturating_sub(65557)..bytes.len().saturating_sub(21))
+        .rev()
+        .find(|&i| {
+            bytes.get(i..i + 4) == Some(b"PK\x05\x06")
+                && u16_at(i + 20).is_ok_and(|n| i + 22 + n == bytes.len())
+        })
+        .ok_or_else(bad)?;
+    let (count, size, start) = (u16_at(end + 10)?, u32_at(end + 12)?, u32_at(end + 16)?);
+    if count == 65535 || size == u32::MAX as usize || start == u32::MAX as usize {
+        return Err("zip64 は読めません".into());
+    }
+    if u16_at(end + 4)? != 0 || u16_at(end + 6)? != 0 || u16_at(end + 8)? != count {
+        return Err("分割された zip は読めません".into());
+    }
+    if start.checked_add(size) != Some(end) {
+        return Err(bad());
+    }
+    let mut out = BTreeMap::new();
+    let mut cursor = start;
+    let mut expanded = 0usize;
+    for _ in 0..count {
+        if u32_at(cursor)? != 0x0201_4b50 {
+            return Err(bad());
+        }
+        let flags = u16_at(cursor + 8)?;
+        if flags & 1 != 0 {
+            return Err("暗号化された zip は読めません".into());
+        }
+        if flags & 8 != 0 {
+            return Err("データ記述子つきの zip は読めません".into());
+        }
+        let method = u16_at(cursor + 10)?;
+        if ![0, 8].contains(&method) {
+            return Err(format!("zip の圧縮方法 {method} は読めません"));
+        }
+        let (crc, packed, length) = (
+            u32_at(cursor + 16)?,
+            u32_at(cursor + 20)?,
+            u32_at(cursor + 24)?,
+        );
+        let (n, extra, comment, local) = (
+            u16_at(cursor + 28)?,
+            u16_at(cursor + 30)?,
+            u16_at(cursor + 32)?,
+            u32_at(cursor + 42)?,
+        );
+        if [packed, length, local].contains(&(u32::MAX as usize)) || u16_at(cursor + 34)? == 65535 {
+            return Err("zip64 は読めません".into());
+        }
+        if u16_at(cursor + 34)? != 0 {
+            return Err("分割された zip は読めません".into());
+        }
+        expanded = expanded
+            .checked_add(length)
+            .filter(|x| *x <= LIMIT)
+            .ok_or("zip の展開後の大きさが 2 GiB を超えます")?;
+        let next = cursor
+            .checked_add(46 + n + extra + comment)
+            .filter(|x| *x <= end)
+            .ok_or_else(bad)?;
+        let name = std::str::from_utf8(bytes.get(cursor + 46..cursor + 46 + n).ok_or_else(bad)?)
+            .map_err(|_| "zip のファイル名が UTF-8 ではありません")?
+            .to_string();
+        if name.is_empty() || name.contains('\0') {
+            return Err(bad());
+        }
+        if u32_at(local)? != 0x0403_4b50
+            || u16_at(local + 6)? != flags
+            || u16_at(local + 8)? != method
+            || u32_at(local + 14)? != crc
+            || u32_at(local + 18)? != packed
+            || u32_at(local + 22)? != length
+        {
+            return Err(bad());
+        }
+        let (ln, lx) = (u16_at(local + 26)?, u16_at(local + 28)?);
+        if bytes.get(local + 30..local + 30 + ln) != Some(name.as_bytes()) {
+            return Err(bad());
+        }
+        let data_start = local.checked_add(30 + ln + lx).ok_or_else(bad)?;
+        let data_end = data_start
+            .checked_add(packed)
+            .filter(|x| *x <= start)
+            .ok_or_else(bad)?;
+        let input = bytes.get(data_start..data_end).ok_or_else(bad)?;
+        let data = if method == 0 {
+            input.to_vec()
+        } else {
+            miniz_oxide::inflate::decompress_to_vec_with_limit(input, length)
+                .map_err(|_| "zip の圧縮データが壊れています")?
+        };
+        if data.len() != length || crc32fast::hash(&data) as usize != crc {
+            return Err(bad());
+        }
+        if out.insert(name, data).is_some() {
+            return Err("zip の中に同じ名前のファイルが重複しています".into());
+        }
+        cursor = next;
+    }
+    if cursor != end {
+        return Err(bad());
+    }
+    Ok(out)
+}
 
 /// ファイルを並べた zip を作る(圧縮は deflate、時刻は 1980-01-01 0:00、名前は UTF-8)。
 pub fn write(files: &[(&str, &[u8])]) -> Vec<u8> {

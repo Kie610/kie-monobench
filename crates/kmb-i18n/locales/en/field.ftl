@@ -2269,3 +2269,11 @@ field-solid-thicken-body = Body
 field-solid-thicken-body-help = Select a sheet body without thickness
 field-solid-thicken-thickness = Thickness
 field-solid-thicken-side = Side
+
+field-solid-import-mesh-file = File
+field-solid-import-mesh-object = Object name
+field-solid-import-mesh-triangles = Triangles
+field-solid-import-mesh-unit = Unit
+field-solid-import-mesh-crease-angle = Crease angle
+field-solid-import-mesh-crease-angle-help = Smooth the shading between adjacent triangles whose angle is at most this value
+field-solid-import-mesh-notes = Notes

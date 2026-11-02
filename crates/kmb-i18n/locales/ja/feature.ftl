@@ -67,3 +67,5 @@ feature-cam-radial3d = 放射状(3D)
 feature-cam-radial3d-tip = 中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる
 feature-solid-thicken = 厚みを付ける
 feature-solid-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
+feature-solid-import-mesh = 網の読み込み
+feature-solid-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う

@@ -55,3 +55,5 @@
 # action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
 # action-cad-thicken = Thicken
 # action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+# action-cad-import-mesh = Import STL or 3MF…
+# action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining

@@ -416,3 +416,6 @@ action-drawing-set-style-tip = Set the sheet style for text, arrows, extension l
 
 action-cad-thicken = Thicken
 action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
