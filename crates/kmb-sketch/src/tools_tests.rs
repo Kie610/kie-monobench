@@ -915,6 +915,7 @@ fn exact_half_side_arc_merges_keep_radius_dimension_names() {
     let mut names = Vec::new();
     for corner in corners {
         s.fillet_corner(corner, 10.0, "10 mm").unwrap();
+        s = s.with_dim_names(&mut kmb_core::Names::default()).unwrap();
         for constraint in &s.constraints {
             if constraint.kind.value().is_some()
                 && !names.iter().any(|(id, _)| *id == constraint.id)
