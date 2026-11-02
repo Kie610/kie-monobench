@@ -22,6 +22,8 @@ pub(crate) mod value_box_ui;
 pub(crate) mod view_ui;
 
 #[cfg(test)]
+mod browser_regions_tests;
+#[cfg(test)]
 mod browser_tests;
 #[cfg(test)]
 mod canvas_tests;
