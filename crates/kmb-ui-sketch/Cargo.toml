@@ -21,6 +21,7 @@ log.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-session.workspace = true
 kmb-io-dxf.workspace = true
 kmb-bundle = { workspace = true, features = ["smlib"] }
 kmb-samples.workspace = true
