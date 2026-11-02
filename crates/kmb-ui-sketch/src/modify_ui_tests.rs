@@ -526,3 +526,37 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
         );
     }
 }
+
+#[test]
+fn selected_corners_two_distance_chamfer_reports_both_edges() {
+    let mut h = empty_sketch();
+    editor(h.state_mut()).set_tool(Tool::Rectangle);
+    h.run();
+    click_at(&mut h, [1.19, 18.97]);
+    click_at(&mut h, [21.19, 8.97]);
+    press_key(&mut h, egui::Key::Escape);
+    quick_click(&mut h, [1.19, 18.97]);
+    h.run();
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 1);
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Chamfer);
+    h.run();
+    type_text(&mut h, "21,11");
+    press_enter(&mut h);
+    assert_eq!(current_sketch(h.state()), before);
+    let notice = editor(h.state_mut())
+        .editor
+        .notice
+        .clone()
+        .expect("辺で使える長さを出す");
+    let limits: Vec<f64> = notice
+        .split_whitespace()
+        .filter_map(|s| s.trim_matches(['\u{2068}', '\u{2069}']).parse().ok())
+        .collect();
+    for expected in [10.0, 20.0] {
+        assert!(
+            limits.iter().any(|n| (*n - expected).abs() < 1e-5),
+            "{notice}"
+        );
+    }
+}
