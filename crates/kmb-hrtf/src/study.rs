@@ -302,6 +302,7 @@ impl Feature for HeadStudy {
             steps: STEPS.iter().map(|s| s.to_string()).collect(),
             section: None,
             keeps_partial: true,
+            arrows: None,
         };
         kmb_study::prepare(ctx, key, Arc::new(job));
         Ok([(PLAN.to_string(), plan.to_value())].into())

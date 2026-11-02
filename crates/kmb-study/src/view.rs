@@ -13,12 +13,14 @@
 use crate::result::{Derive, Geometry, Grid, Role, SimResult, Tets, Values, fmt, nice};
 use kmb_core::{Mesh, OverlayShape, ShapeInk};
 
+mod arrow;
 mod section;
 mod stream;
 #[cfg(test)]
 mod tests;
 mod tets;
 
+pub use arrow::{Arrow, arrows};
 pub use section::sample;
 use section::section_mesh;
 pub use stream::{Streamline, streamlines};
@@ -48,6 +50,10 @@ pub struct Look {
     pub section: Option<(usize, usize, f64)>,
     /// 流線を出すか(速度の量があれば)
     pub streamlines: bool,
+    /// 速度の矢印を出すか
+    pub arrows: bool,
+    /// 矢印の間隔(mm)。空なら格子に合わせて自動
+    pub arrow_spacing: Option<f64>,
     /// 滑らかに塗る(偽なら帯)
     pub smooth: bool,
     /// 変形を出す(変位の量があれば)
@@ -65,6 +71,8 @@ impl Default for Look {
             surface: None,
             section: None,
             streamlines: false,
+            arrows: false,
+            arrow_spacing: None,
             smooth: true,
             deform: true,
             legend_all: true,
@@ -317,8 +325,7 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
             add_block("断面", &s);
             (q, axis, at, s)
         });
-    let velocity = look
-        .streamlines
+    let velocity = (look.streamlines || look.arrows)
         .then(|| {
             r.quantities
                 .iter()
@@ -326,6 +333,14 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
         })
         .flatten();
     let stream = velocity.map(|q| {
+        if look.arrows {
+            if let Some((_, s)) = surface.filter(|(sq, _)| *sq == q) {
+                return (q, s);
+            }
+            if let Some((_, _, _, s)) = section.filter(|(sq, ..)| *sq == q) {
+                return (q, s);
+            }
+        }
         let s = scale_of(q, STREAM_BANDS, base);
         base += STREAM_BANDS as u32;
         add_block("流線", &s);
@@ -497,8 +512,18 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
                 Geometry::Surface { points, .. } => Some(points.as_slice()),
                 _ => None,
             });
-            for line in streamlines(g, vals, body, look.section.map(|(_, a, v)| (a, v))) {
-                tube(&mut b, g, &line, s);
+            let plane = look.section.map(|(_, a, v)| (a, v));
+            if look.streamlines {
+                for line in streamlines(g, vals, body, plane) {
+                    tube(&mut b, g, &line, s);
+                }
+            }
+            if look.arrows {
+                let spacing = arrow::spacing(g, plane, look.arrow_spacing);
+                let maximum = s.lo + s.span;
+                for a in arrows(g, vals, plane, spacing, maximum) {
+                    arrow::mesh(&mut b, g, &a, s);
+                }
             }
         }
     }
@@ -525,10 +550,18 @@ pub fn draw(r: &SimResult, look: &Look, key: u64) -> OverlayShape {
             s.legend(&d.unit, !look.smooth, top_open(*q, s)),
         ));
     }
-    if let Some((q, s)) = &stream {
+    if let Some((q, s)) = &stream
+        && (!look.arrows
+            || (surface.is_none_or(|(sq, _)| sq != *q) && section.is_none_or(|(sq, ..)| sq != *q)))
+    {
         let d = &r.quantities[*q];
+        let name = match (look.streamlines, look.arrows) {
+            (true, true) => "流線・矢印",
+            (false, true) => "矢印",
+            _ => "流線",
+        };
         legends.push((
-            format!("流線 {}", d.title()),
+            format!("{name} {}", d.title()),
             s.legend(&d.unit, true, false),
         ));
     }

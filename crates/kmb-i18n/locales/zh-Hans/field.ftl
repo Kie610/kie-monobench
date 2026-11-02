@@ -2162,3 +2162,8 @@
 # field-solid-thread-size = Nominal Size
 # field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
 # field-solid-thread-target = Target
+
+# field-flow-section-arrows = Arrow spacing
+# field-flow-section-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
+# field-flow-volume-arrows = Arrow spacing
+# field-flow-volume-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.

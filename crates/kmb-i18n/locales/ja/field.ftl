@@ -2219,3 +2219,8 @@ field-solid-thread-length-help = 空なら面の全長
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
 field-solid-thread-target = 対象
+
+field-flow-section-arrows = 矢印の間隔
+field-flow-section-arrows-help = 空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない
+field-flow-volume-arrows = 矢印の間隔
+field-flow-volume-arrows-help = 空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない
