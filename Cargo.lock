@@ -2970,10 +2970,13 @@ dependencies = [
 name = "kmb-measure"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-look",
+ "kmb-samples",
  "kmb-workspace-hack",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
