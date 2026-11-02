@@ -3121,9 +3121,11 @@ name = "kmb-sketch"
 version = "0.2.0"
 dependencies = [
  "i_overlay",
+ "kmb-bundle",
  "kmb-contract",
  "kmb-core",
  "kmb-interchange",
+ "kmb-session",
  "kmb-sketch-solver",
  "kmb-workspace-hack",
  "proptest",
