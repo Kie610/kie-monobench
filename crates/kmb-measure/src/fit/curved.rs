@@ -15,17 +15,18 @@ fn solve<const N: usize>(mut a: [[f64; N]; N], mut b: [f64; N]) -> Option<[f64; 
         a.swap(k, pivot);
         b.swap(k, pivot);
         let d = a[k][k];
-        for j in k..N {
-            a[k][j] /= d;
+        for value in &mut a[k][k..] {
+            *value /= d;
         }
         b[k] /= d;
+        let pivot_row = a[k];
         for i in 0..N {
             if i == k {
                 continue;
             }
             let d = a[i][k];
-            for j in k..N {
-                a[i][j] -= d * a[k][j];
+            for (value, pivot) in a[i][k..].iter_mut().zip(&pivot_row[k..]) {
+                *value -= d * pivot;
             }
             b[i] -= d * b[k];
         }
