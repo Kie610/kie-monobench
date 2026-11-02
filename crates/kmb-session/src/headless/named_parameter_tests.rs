@@ -116,7 +116,9 @@ fn named_parameter_assembly_fields_use_the_declared_angle_and_document_length_un
     properties.units = kmb_core::LengthUnit::In;
     work.apply(Transaction::new(
         "単位",
-        vec![kmb_core::Op::SetProperties { properties }],
+        vec![kmb_core::Op::SetProperties {
+            properties: Box::new(properties),
+        }],
     ))
     .unwrap();
     for (key, typed, name, expr) in [
