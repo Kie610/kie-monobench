@@ -372,3 +372,6 @@ action-cam-nest-remove-part = 配置する部品を外す
 action-cam-nest-remove-part-tip = 板への配置から、指定した番号の部品を外す
 action-cam-nest-set-part = 配置する部品を直す
 action-cam-nest-set-part-tip = 部品の個数、回してよい向き、上に向ける面を直す
+
+action-cad-sketch-regions = スケッチの領域を一覧
+action-cad-sketch-regions-tip = スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む

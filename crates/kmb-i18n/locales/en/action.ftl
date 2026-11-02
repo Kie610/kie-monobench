@@ -371,3 +371,6 @@ action-cam-nest-remove-part = Remove nesting part
 action-cam-nest-remove-part-tip = Remove the part with the specified index from the layout
 action-cam-nest-set-part = Edit nesting part
 action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper face of a part
+
+action-cad-sketch-regions = List sketch regions
+action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations

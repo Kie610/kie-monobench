@@ -11,3 +11,5 @@
 # action-cam-add-radial3d-tip = Finish by tracing radial lines from the part's center. Choose depth levels and back-and-forth or one-way cutting (uses a ball end mill if there is one)
 # action-cam-add-spiral3d = Spiral (3D)
 # action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in. Choose depth levels and cutting direction (uses a ball end mill if there is one)
+# action-cad-sketch-regions = List sketch regions
+# action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
