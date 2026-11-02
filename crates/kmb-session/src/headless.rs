@@ -969,3 +969,6 @@ impl Headless {
         self.apply(tx)
     }
 }
+
+#[cfg(test)]
+mod hole_visibility_tests;
