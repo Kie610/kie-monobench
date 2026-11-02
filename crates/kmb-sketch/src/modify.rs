@@ -602,38 +602,25 @@ impl Sketch {
                 (*d, d * angle.sin() / (alpha + angle).sin())
             }
         };
-        if !(da > EPS && db > EPS) || n1 <= da + EPS || n2 <= db + EPS {
+        if !(da > EPS && db > EPS) || da > n1 + EPS || db > n2 + EPS {
             return None;
         }
         let (p1, p2) = (add(c, scale(d1, da / n1)), add(c, scale(d2, db / n2)));
-        let t1 = self.add_point(p1[0], p1[1]);
-        let t2 = self.add_point(p2[0], p2[1]);
-        for (line, to) in [(l1, t1), (l2, t2)] {
-            for e in &mut self.entities {
-                if let Entity::Line { id, a, b, .. } = e
-                    && *id == line
-                {
-                    if *a == corner {
-                        *a = to;
-                    } else {
-                        *b = to;
-                    }
-                }
-            }
-        }
+        let t1 = self.corner_side_end(l1, corner, o1, p1, da >= n1 - EPS);
+        let t2 = self.corner_side_end(l2, corner, o2, p2, db >= n2 - EPS);
         let cut = self.add_line(t1, t2);
         let c1 = self.add_line(corner, t1);
         let c2 = self.add_line(corner, t2);
         self.set_construction(c1, true);
         self.set_construction(c2, true);
-        self.add_constraint(K::PointOnLine {
-            point: corner,
-            line: l1,
-        });
-        self.add_constraint(K::PointOnLine {
-            point: corner,
-            line: l2,
-        });
+        for line in [l1, l2] {
+            if self.entity(line).is_some() {
+                self.add_constraint(K::PointOnLine {
+                    point: corner,
+                    line,
+                });
+            }
+        }
         let mut dims = vec![];
         match chamfer {
             Chamfer::Equal { value, .. } => {

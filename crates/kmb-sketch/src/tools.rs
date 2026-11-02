@@ -384,42 +384,41 @@ impl Sketch {
         }
         // 角から接点までの長さ
         let t = r / (angle / 2.0).tan();
-        if t >= n1 - EPS || t >= n2 - EPS {
+        if t > n1 + EPS || t > n2 + EPS {
             return None;
         }
         let (p1, p2) = (add(c, scale(u1, t)), add(c, scale(u2, t)));
         let bis = add(u1, u2);
         let center = add(c, scale(bis, r / (angle / 2.0).sin() / len(bis)));
-        let t1 = self.add_point(p1[0], p1[1]);
-        let t2 = self.add_point(p2[0], p2[1]);
+        let t1 = self.corner_side_end(*l1, corner, *o1, p1, t >= n1 - EPS);
+        let t2 = self.corner_side_end(*l2, corner, *o2, p2, t >= n2 - EPS);
         let cp = self.add_point(center[0], center[1]);
-        for (line, to) in [(*l1, t1), (*l2, t2)] {
-            for e in &mut self.entities {
-                if let Entity::Line { id, a, b, .. } = e
-                    && *id == line
-                {
-                    if *a == corner {
-                        *a = to;
-                    } else {
-                        *b = to;
-                    }
-                }
-            }
-        }
         // 円弧は中心のまわりに反時計回り
         let arc = if cross(sub(p1, center), sub(p2, center)) > 0.0 {
             self.add_arc(cp, t1, t2)
         } else {
             self.add_arc(cp, t2, t1)
         };
-        self.add_constraint(K::Tangent {
-            line: *l1,
-            circle: arc,
-        });
-        self.add_constraint(K::Tangent {
-            line: *l2,
-            circle: arc,
-        });
+        for line in [*l1, *l2] {
+            if self.entity(line).is_some() {
+                self.add_constraint(K::Tangent { line, circle: arc });
+            }
+        }
+        let adjacent: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Arc { id, start, end, .. }
+                    if *id != arc && [t1, t2].iter().any(|p| p == start || p == end) =>
+                {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .collect();
+        for other in adjacent {
+            self.add_constraint(K::TangentCircles { a: other, b: arc });
+        }
         self.add_constraint(K::Radius {
             circle: arc,
             value: value.to_string(),
@@ -433,15 +432,141 @@ impl Sketch {
             // 式や寸法が角の点を指していれば、点を 2 本の線の延長の交わりに留め、
             // 角の位置が変わると丸めた輪郭も一緒に動くようにする
             for line in [*l1, *l2] {
-                self.add_constraint(K::PointOnLine {
-                    point: corner,
-                    line,
-                });
+                if self.entity(line).is_some() {
+                    self.add_constraint(K::PointOnLine {
+                        point: corner,
+                        line,
+                    });
+                }
             }
         } else {
             self.entities.retain(|e| e.id() != corner);
         }
+        self.merge_corner_arcs(arc, r);
         Some(arc)
+    }
+
+    /// 接点を既存の端と共有し、使い切った辺は輪郭から外す。寸法などの基準は補助線に残す。
+    pub(crate) fn corner_side_end(
+        &mut self,
+        line: EntityId,
+        corner: EntityId,
+        other: EntityId,
+        at: [f64; 2],
+        exhausted: bool,
+    ) -> EntityId {
+        if exhausted {
+            let keep_guide = self
+                .constraints
+                .iter()
+                .any(|c| refs(&c.kind).contains(&line) && !matches!(c.kind, K::Tangent { .. }));
+            if keep_guide {
+                self.set_construction(line, true);
+            } else {
+                self.entities.retain(|e| e.id() != line);
+                self.constraints.retain(|c| !refs(&c.kind).contains(&line));
+            }
+            return other;
+        }
+        let to = self.add_point(at[0], at[1]);
+        for e in &mut self.entities {
+            if let Entity::Line { id, a, b, .. } = e
+                && *id == line
+            {
+                if *a == corner {
+                    *a = to;
+                } else {
+                    *b = to;
+                }
+            }
+        }
+        to
+    }
+
+    /// 同じ円の上で端を共有する円弧をまとめる。寸法の番号と式は残して参照先だけ揃える。
+    fn merge_corner_arcs(&mut self, arc: EntityId, radius: f64) {
+        loop {
+            let Some(Entity::Arc {
+                center, start, end, ..
+            }) = self.entity(arc).cloned()
+            else {
+                return;
+            };
+            let c = self.pos(center).unwrap();
+            let found = self.entities.iter().find_map(|e| {
+                let Entity::Arc {
+                    id,
+                    center: oc,
+                    start: os,
+                    end: oe,
+                    construction: false,
+                } = e
+                else {
+                    return None;
+                };
+                if *id == arc
+                    || len(sub(self.pos(*oc)?, c)) > EPS
+                    || (len(sub(self.pos(*os)?, c)) - radius).abs() > EPS
+                {
+                    return None;
+                }
+                if *oe == start {
+                    Some((*id, *oc, *os, end, start))
+                } else if end == *os {
+                    Some((*id, *oc, start, *oe, end))
+                } else {
+                    None
+                }
+            });
+            let Some((old, old_center, ns, ne, shared)) = found else {
+                return;
+            };
+            let next = if ns == ne {
+                Entity::Circle {
+                    id: arc,
+                    center,
+                    radius,
+                    construction: false,
+                }
+            } else {
+                Entity::Arc {
+                    id: arc,
+                    center,
+                    start: ns,
+                    end: ne,
+                    construction: false,
+                }
+            };
+            let mut map: BTreeMap<_, _> = self.entities.iter().map(|e| (e.id(), e.id())).collect();
+            map.insert(old, arc);
+            map.insert(old_center, center);
+            for e in &mut self.entities {
+                if e.id() == arc {
+                    *e = next.clone();
+                }
+                *e = e.with_points(e.id(), &|p| map[&p]);
+            }
+            for constraint in &mut self.constraints {
+                constraint.kind = crate::arrange::remap(&constraint.kind, &map)
+                    .expect("拘束の参照はすべて現在の要素を指す");
+            }
+            self.constraints.retain(|c|!matches!(c.kind,K::TangentCircles {a,b} | K::Concentric {a,b} | K::Equal {a,b} if a==b));
+            self.patterns_renumber(&map, &BTreeMap::new());
+            for p in &mut self.projections {
+                p.entity = map[&p.entity];
+            }
+            self.entities.retain(|e| e.id() != old);
+            for point in [old_center, shared] {
+                if !self.entities.iter().any(|e| uses(e).contains(&point))
+                    && !self
+                        .constraints
+                        .iter()
+                        .any(|c| refs(&c.kind).contains(&point))
+                {
+                    self.entities.retain(|e| e.id() != point);
+                }
+            }
+        }
     }
 
     /// 要素 `ids` を線分 `axis` について写す。写した点には対称の拘束を付け、
