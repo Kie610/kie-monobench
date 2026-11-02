@@ -1798,3 +1798,6 @@ mod tests;
 
 #[cfg(test)]
 mod plane_frame_tests;
+
+#[cfg(test)]
+mod undo_line_tests;
