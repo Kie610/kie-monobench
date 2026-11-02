@@ -126,3 +126,6 @@ view-mark-leftover = { $count ->
 ## Overlapping candidates (long press)
 
 view-candidates = Overlapping items (front to back)
+
+view-keycast-drag = Drag
+view-keycast-mouse3d-button = 3D mouse button { $number }
