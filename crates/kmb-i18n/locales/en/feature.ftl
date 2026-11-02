@@ -58,3 +58,5 @@ feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
 
 feature-asm-position = Position
 feature-asm-position-tip = Rotate the component about its center in X, Y, Z order, then translate along world axes. Parts connected to follow it move together.
+feature-cam-setup = Setup
+feature-cam-setup-tip = Set the parts, stock, origin, and safe heights for machining

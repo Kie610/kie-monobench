@@ -65,6 +65,7 @@ pub fn prepared(mesh: &Mesh, stock_min: P3, stock_max: P3, tool: Tool) -> Prepar
             machine: kmb_post::machines::GENERIC_GRBL.into(),
             machine_values: kmb_post::machines::generic_grbl(),
             leveling: None,
+            sections: None,
         },
         cutting: tool.cutting(),
         tool,

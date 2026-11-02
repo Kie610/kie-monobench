@@ -10,8 +10,16 @@ pub fn floor_area(p: &Prepared, face: &str, margin: f64) -> Result<(Area, f64), 
             "面 {face} が見つかりません(参照が切れたか、水平な平面ではありません)"
         ))
     })?;
+    floor_face(p, f, margin)
+}
+
+fn floor_face(
+    p: &Prepared,
+    f: &kmb_cam_geom::FlatFace,
+    margin: f64,
+) -> Result<(Area, f64), EvalError> {
     if !f.up {
-        return Err(invalid(format!("面 {face} は上を向いていません")));
+        return Err(invalid(format!("面 {} は上を向いていません", f.name)));
     }
     let holes = f
         .area
@@ -24,7 +32,12 @@ pub fn floor_area(p: &Prepared, face: &str, margin: f64) -> Result<(Area, f64), 
         .cloned()
         .collect();
     // 外周の外側に部品の壁がなければ(上面のような開いた面なら)、ストックの縁まで削る
-    let outer = if has_wall(&p.model, &f.area.outer, f.z) {
+    let nested = p
+        .info
+        .sections
+        .as_ref()
+        .is_some_and(|s| s.kind == crate::sections::SectionKind::Sheets);
+    let outer = if nested || has_wall(&p.model, &f.area.outer, f.z) {
         f.area.outer.clone()
     } else {
         let (min, max) = (p.info.stock_min, p.info.stock_max);
@@ -307,12 +320,20 @@ pub fn floors(
     }
     let mut out = Vec::new();
     for f in names {
-        let (area, z) = floor_area(p, f, margin)?;
-        out.push(Floor {
-            area,
-            z,
-            sketch_top: None,
-        });
+        let faces = p.model.flats_named(f);
+        if faces.is_empty() {
+            return Err(invalid(format!(
+                "面 {f} が見つかりません(参照が切れたか、水平な平面ではありません)"
+            )));
+        }
+        for face in faces {
+            let (area, z) = floor_face(p, face, margin)?;
+            out.push(Floor {
+                area,
+                z,
+                sketch_top: None,
+            });
+        }
     }
     if let Some(id) = pick.profile {
         let (areas, plane) = profile_areas(ctx, p, id)?;

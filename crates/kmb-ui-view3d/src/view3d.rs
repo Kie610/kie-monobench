@@ -12,6 +12,8 @@ mod fit_tests;
 mod hit;
 mod look;
 #[cfg(test)]
+mod overlay_tests;
+#[cfg(test)]
 mod pick_wait_tests;
 mod raster;
 mod scene;
@@ -320,8 +322,9 @@ pub fn view3d(
             ));
         }
     }
-    let stock = boxes(kmb_interchange::ink::boxes::WORK).next();
-    if let Some((lo, hi)) = stock {
+    let mut stocks = boxes(kmb_interchange::ink::boxes::WORK).peekable();
+    let stock = stocks.peek().copied();
+    for (lo, hi) in stocks {
         let color = colors.stock;
         for (a, b) in edges(lo, hi) {
             if let Some((a, b)) = cam.segment(a, b, rect) {
