@@ -921,3 +921,6 @@ mod units_tests;
 
 #[cfg(test)]
 mod wide_toolbar_tests;
+
+#[cfg(test)]
+mod mass_progress_tests;
