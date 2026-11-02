@@ -10,6 +10,9 @@ fn fixture(existing_name: bool) -> (Workspace, FeatureId) {
     let sketch = doc.data().features[0].id;
     if existing_name {
         for (name, expr) in [("width", "10 mm"), ("width_extra", "5 mm")] {
+            if doc.data().param_by_name(name).is_some() {
+                continue;
+            }
             let id = doc.alloc_param_id();
             doc.apply(Transaction::new(
                 "パラメータ",
