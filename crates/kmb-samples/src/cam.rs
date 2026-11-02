@@ -182,6 +182,7 @@ fn build(three_d: bool) -> ReferenceCam {
             finish_opts: Default::default(),
             lead_opts: Default::default(),
             rest_tool: None,
+            rest_tab_source: None,
             rest_size: Default::default(),
         }),
     );
