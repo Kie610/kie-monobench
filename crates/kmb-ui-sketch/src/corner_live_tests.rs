@@ -84,7 +84,16 @@ fn live_corner_box_fillet_and_undo_use_ui_tools() {
         "ui_type",
         json!({"target":"コマンド", "text":format!("drag \"スケッチの図\" {dx} {dy}"), "commit":"enter"}),
     );
-    assert_eq!(editor(h.state_mut()).editor.selection.len(), 8);
+    let began = Instant::now();
+    while editor(h.state_mut()).editor.selection.len() != 8 {
+        h.step();
+        std::thread::sleep(Duration::from_millis(2));
+        assert!(
+            began.elapsed() < Duration::from_secs(10),
+            "囲みの選択が終わりません: {:?}",
+            h.state().message_history()
+        );
+    }
     call(&mut h, &dir.0, "ui_click", json!({"target":"フィレット"}));
     call(
         &mut h,
