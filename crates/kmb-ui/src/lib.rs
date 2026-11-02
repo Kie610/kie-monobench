@@ -84,6 +84,9 @@ pub use tabs_ui::KernelFactory;
 pub use versions_ui::paint_fit;
 pub use view3d::Pick;
 
+#[cfg(test)]
+mod named_parameter_tests;
+
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;
 

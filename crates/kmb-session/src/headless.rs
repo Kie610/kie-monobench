@@ -100,6 +100,8 @@ mod background;
 mod open;
 mod params;
 mod status;
+#[cfg(test)]
+mod named_parameter_tests;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
 pub use open::OpenedDocument;
