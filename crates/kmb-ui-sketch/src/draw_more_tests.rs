@@ -273,6 +273,34 @@ fn corner_defaults_follow_the_display_unit() {
         }
         other => panic!("{other:?}"),
     }
+    let mut s = kmb_sketch::Sketch::default();
+    let corner = s.add_point(0.0, 0.0);
+    let a = s.add_point(20.0, 0.0);
+    let b = s.add_point(0.0, 20.0);
+    s.add_line(corner, a);
+    s.add_line(corner, b);
+    let sol = kmb_sketch::solve(&s, &Default::default()).unwrap();
+    let mut editor = crate::view::Editor::default();
+    editor.set_tool(Tool::Fillet);
+    let made = crate::more_tools::apply_corners(&mut editor, &s, &sol, &[(corner, None)]).unwrap();
+    assert!(
+        made.constraints.iter().any(
+            |c| matches!(&c.kind, ConstraintKind::Radius { value, .. } if value == "0.0625 in")
+        ),
+        "{:?}",
+        made.constraints
+    );
+    let values = kmb_sketch::dimension_values(&made, &|_| None).unwrap();
+    let sol = kmb_sketch::solve(&made, &values).unwrap();
+    let (center, start) = made
+        .entities
+        .iter()
+        .find_map(|e| match e {
+            Entity::Arc { center, start, .. } => Some((sol.points[center], sol.points[start])),
+            _ => None,
+        })
+        .unwrap();
+    assert!(((start[0] - center[0]).hypot(start[1] - center[1]) - 1.5875).abs() < 1e-9);
     kmb_core::set_display_unit(kmb_core::LengthUnit::Mm);
 }
 
