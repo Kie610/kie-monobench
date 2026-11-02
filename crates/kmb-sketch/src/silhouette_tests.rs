@@ -1,4 +1,4 @@
-//! 交差の参照(面の名前つき)、シルエット、面の選び(Kie のレビュー K12・K13)。
+//! 確かめること: 交差の参照の面の名前と、曲線を含むシルエットの個数・閉じ方。
 
 use crate::{ProjectionSource, RefItem, RefShape, face_under, section_refs, silhouette_refs};
 use kmb_core::{FeatureId, Mesh, Plane};
@@ -174,4 +174,246 @@ fn a_silhouette_without_edges_is_fitted_from_the_mesh() {
             );
         }
     }
+}
+
+fn cap(mesh: &mut Mesh, name: &str, center: [f64; 3], rim: &[[f64; 3]]) {
+    let face = mesh.face_names.len() as u32;
+    mesh.face_names.push(name.into());
+    let base = mesh.positions.len() as u32;
+    mesh.positions.push(center.map(|v| v as f32));
+    mesh.positions
+        .extend(rim.iter().map(|p| p.map(|v| v as f32)));
+    mesh.normals.resize(mesh.positions.len(), [0.0, 0.0, 1.0]);
+    for i in 0..rim.len() {
+        mesh.triangles.push([
+            base,
+            base + 1 + i as u32,
+            base + 1 + ((i + 1) % rim.len()) as u32,
+        ]);
+        mesh.triangle_faces.push(face);
+    }
+}
+
+/// x 軸に沿う、両端の半径を指定した閉じた円柱・円すいの網。
+fn tapered_cylinder(length: f64, first: f64, last: f64) -> Mesh {
+    let mut mesh = Mesh::default();
+    let rim = |x: f64, radius: f64| -> Vec<_> {
+        (0..128)
+            .map(|i| {
+                let a = std::f64::consts::TAU * i as f64 / 128.0;
+                [x, radius * a.cos(), first + radius * a.sin()]
+            })
+            .collect()
+    };
+    let a = rim(0.0, first);
+    let b = rim(length, last);
+    for i in 0..a.len() {
+        let j = (i + 1) % a.len();
+        quad(&mut mesh, "wall", [a[i], a[j], b[j], b[i]]);
+    }
+    cap(&mut mesh, "start", [0.0, 0.0, first], &a);
+    if last > 0.0 {
+        cap(&mut mesh, "end", [length, 0.0, first], &b);
+    }
+    mesh
+}
+
+/// 高さ方向の4辺を半径rでフィレットした箱。rが平面の縦の幅の半分なら長円になる。
+fn rounded_box(width: f64, height: f64, r: f64) -> Mesh {
+    let mut rim = Vec::new();
+    for (center, start) in [
+        ([width - r, r], -std::f64::consts::FRAC_PI_2),
+        ([width - r, height - r], 0.0),
+        ([r, height - r], std::f64::consts::FRAC_PI_2),
+        ([r, r], std::f64::consts::PI),
+    ] {
+        for i in 0..=32 {
+            let a = start + std::f64::consts::FRAC_PI_2 * i as f64 / 32.0;
+            rim.push([center[0] + r * a.cos(), center[1] + r * a.sin(), 0.0]);
+        }
+    }
+    let top: Vec<_> = rim.iter().map(|p| [p[0], p[1], 8.0]).collect();
+    let mut mesh = Mesh::default();
+    for i in 0..rim.len() {
+        let j = (i + 1) % rim.len();
+        quad(&mut mesh, "wall", [rim[i], rim[j], top[j], top[i]]);
+    }
+    cap(&mut mesh, "bottom", [width / 2.0, height / 2.0, 0.0], &rim);
+    cap(&mut mesh, "top", [width / 2.0, height / 2.0, 8.0], &top);
+    mesh
+}
+
+fn closed_outline(mesh: &Mesh, plane: Plane, area: f64) -> Vec<RefItem> {
+    let out = silhouette_refs(mesh, &plane, BODY, &[]);
+    assert_outline_closes(&out, plane, area);
+    out
+}
+
+fn assert_outline_closes(out: &[RefItem], plane: Plane, area: f64) {
+    assert!(!out.is_empty());
+    let mut sketch = crate::Sketch::default();
+    for item in out {
+        sketch.add_projection_as(item, false);
+    }
+    let solution = crate::solve(&sketch, &Default::default()).unwrap();
+    let (profile, unused) = crate::profile_of(&sketch, &solution, plane);
+    assert_eq!(profile.regions.len(), 1, "{out:?}");
+    assert!(profile.regions[0].holes.is_empty());
+    assert!(unused.is_empty(), "{unused:?}");
+    assert!(crate::open_ends_of(&sketch, &solution).is_empty());
+    let measured = profile.regions[0].outer.signed_area();
+    assert!(
+        (measured - area).abs() <= area * 0.005,
+        "{measured} != {area}"
+    );
+}
+
+fn shape_counts(out: &[RefItem]) -> (usize, usize, usize) {
+    let mut counts = (0, 0, 0);
+    for item in out {
+        match item.shape {
+            RefShape::Line(..) => counts.0 += 1,
+            RefShape::Circle { arc: Some(_), .. } => counts.1 += 1,
+            RefShape::Circle { arc: None, .. } => counts.2 += 1,
+            RefShape::Point(_) => panic!("外形に点だけの参照が入りました"),
+        }
+    }
+    counts
+}
+
+#[test]
+fn a_cylinders_side_and_end_silhouettes_close_as_a_rectangle_and_a_circle() {
+    let mesh = tapered_cylinder(20.0, 5.0, 5.0);
+    let side = closed_outline(&mesh, Plane::XY, 200.0);
+    assert_eq!(shape_counts(&side), (4, 0, 0));
+    let end = closed_outline(&mesh, Plane::YZ, std::f64::consts::PI * 25.0);
+    assert_eq!(shape_counts(&end), (0, 0, 1));
+}
+
+#[test]
+fn cone_rims_are_one_closed_circle_in_the_axial_silhouette() {
+    for radius in [0.0, 2.0] {
+        let mesh = tapered_cylinder(20.0, 5.0, radius);
+        let out = closed_outline(&mesh, Plane::YZ, std::f64::consts::PI * 25.0);
+        assert_eq!(shape_counts(&out), (0, 0, 1));
+    }
+}
+
+#[test]
+fn a_filleted_box_silhouette_has_four_lines_and_four_arcs() {
+    let out = closed_outline(
+        &rounded_box(30.0, 20.0, 3.0),
+        Plane::XY,
+        600.0 - (4.0 - std::f64::consts::PI) * 9.0,
+    );
+    assert_eq!(shape_counts(&out), (4, 4, 0), "{out:?}");
+    assert_rounded_boundary(&out, 30.0, 20.0, 3.0);
+}
+
+#[test]
+fn a_capsule_silhouette_has_two_lines_and_two_semicircles() {
+    let out = closed_outline(
+        &rounded_box(30.0, 10.0, 5.0),
+        Plane::XY,
+        200.0 + std::f64::consts::PI * 25.0,
+    );
+    assert_eq!(shape_counts(&out), (2, 2, 0), "{out:?}");
+    assert_rounded_boundary(&out, 30.0, 10.0, 5.0);
+}
+
+#[test]
+fn a_plain_box_without_edge_references_keeps_four_closed_lines() {
+    let out = closed_outline(&boxed(30.0, 20.0, 8.0), Plane::XY, 600.0);
+    assert_eq!(shape_counts(&out), (4, 0, 0));
+}
+
+fn assert_rounded_boundary(out: &[RefItem], width: f64, height: f64, radius: f64) {
+    for item in out {
+        for p in crate::reference_samples(&item.shape, 64) {
+            let x = (p[0] - width / 2.0).abs() - (width / 2.0 - radius);
+            let y = (p[1] - height / 2.0).abs() - (height / 2.0 - radius);
+            let distance = x.max(0.0).hypot(y.max(0.0)) + x.max(y).min(0.0) - radius;
+            assert!(
+                distance.abs() <= crate::SECTION_TOL + 1e-5,
+                "{p:?}: {distance}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fitted_curves_keep_saved_straight_references_on_the_same_sides() {
+    // 保存した写しの4辺と、左下の丸めを細かい線分として持つデータ。
+    let saved = [
+        (0, [0.0, 17.0], [0.01444581151008606, 2.7059485912323]),
+        (7, [3.0, 0.0], [27.294052124023438, 0.01444581151008606]),
+        (14, [30.0, 3.0], [29.985553741455078, 17.294052124023438]),
+        (21, [27.0, 20.0], [2.7059485912323, 19.985553741455078]),
+        (
+            3,
+            [0.5055911540985107, 1.3332892656326294],
+            [0.9853231310844421, 0.7771466374397278],
+        ),
+    ];
+    let mut sketch = crate::Sketch::default();
+    let mut refs = Vec::new();
+    let mut entities = Vec::new();
+    for (index, a, b) in saved {
+        let item = RefItem {
+            source: ProjectionSource::Silhouette {
+                feature: BODY,
+                index,
+            },
+            shape: RefShape::Line(a, b),
+        };
+        entities.push(sketch.add_projection_as(&item, false));
+        refs.push(item);
+    }
+    let curved = entities[4];
+    let before: Vec<_> = sketch
+        .entity(curved)
+        .unwrap()
+        .points()
+        .into_iter()
+        .map(|id| (id, sketch.entity(id).unwrap().clone()))
+        .collect();
+    let out = silhouette_refs(&rounded_box(30.0, 20.0, 3.0), &Plane::XY, BODY, &[]);
+    let lost = crate::refresh_projections(&mut sketch, &out);
+    assert_eq!(lost, vec![curved], "丸めの線分だけを選び直す");
+    for old in &refs[..4] {
+        let now = out.iter().find(|r| r.source.same(&old.source)).unwrap();
+        assert!(matches!(now.shape, RefShape::Line(..)));
+        for p in crate::reference_samples(&old.shape, 16) {
+            assert!(now.shape.distance(p) <= crate::SECTION_TOL);
+        }
+    }
+    for (id, point) in before {
+        assert_eq!(sketch.entity(id), Some(&point));
+    }
+}
+
+#[test]
+fn a_curved_silhouette_keeps_the_original_straight_body_edges() {
+    let body: Vec<_> = [
+        ([3.0, 0.0], [27.0, 0.0]),
+        ([30.0, 3.0], [30.0, 17.0]),
+        ([27.0, 20.0], [3.0, 20.0]),
+        ([0.0, 17.0], [0.0, 3.0]),
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(i, (a, b))| RefItem {
+        source: ProjectionSource::Edge {
+            feature: BODY,
+            faces: ["cap".into(), format!("side{i}")],
+        },
+        shape: RefShape::Line(a, b),
+    })
+    .collect();
+    let out = silhouette_refs(&rounded_box(30.0, 20.0, 3.0), &Plane::XY, BODY, &body);
+    assert_eq!(shape_counts(&out), (4, 4, 0));
+    for edge in &body {
+        assert!(out.contains(edge));
+    }
+    assert_outline_closes(&out, Plane::XY, 600.0 - (4.0 - std::f64::consts::PI) * 9.0);
 }

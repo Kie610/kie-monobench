@@ -79,8 +79,22 @@ impl FontIndex {
             for d in &dirs {
                 scan(d, 0, &mut faces);
             }
-            faces.sort_by(|a, b| a.label.cmp(&b.label).then(a.path.cmp(&b.path)));
+            let display_order = |a: &Face, b: &Face| {
+                a.label
+                    .cmp(&b.label)
+                    .then(a.path.cmp(&b.path))
+                    .then(a.index.cmp(&b.index))
+            };
+            // 同名・同じ太さの写しは、字の形を文書に入れられる物を残す。
+            faces.sort_by(|a, b| {
+                a.family
+                    .cmp(&b.family)
+                    .then(a.style.cmp(&b.style))
+                    .then(b.embeddable.cmp(&a.embeddable))
+                    .then_with(|| display_order(a, b))
+            });
             faces.dedup_by(|a, b| a.family == b.family && a.style == b.style);
+            faces.sort_by(display_order);
             log::info!(
                 "フォントの一覧を作った: {} 書体({} か所のフォルダ)",
                 faces.len(),
@@ -89,6 +103,53 @@ impl FontIndex {
             self.built = Some((dirs, faces));
         }
         self.built.as_ref().map_or(&[], |(_, f)| f.as_slice())
+    }
+
+    /// 日本語のゴシック体を優先順で選ぶ。字の形を文書に入れられる書体だけを使い、
+    /// 同じ書体の中では通常の太さを先にする。
+    pub fn gothic(&mut self) -> Option<Face> {
+        let faces = self.faces();
+        for names in [
+            &["Yu Gothic", "游ゴシック"][..],
+            &["Meiryo", "メイリオ"],
+            &[
+                "Hiragino Kaku Gothic ProN",
+                "Hiragino Kaku Gothic Pro",
+                "ヒラギノ角ゴ ProN",
+                "ヒラギノ角ゴ Pro",
+            ],
+            &["Hiragino Sans", "ヒラギノ角ゴシック"],
+            &["Noto Sans CJK JP"],
+            &["Noto Sans JP"],
+            &["BIZ UDPGothic", "BIZ UDPゴシック", "BIZ UDP Gothic"],
+            &["IPAexGothic", "IPAexゴシック"],
+            &["IPAGothic", "IPA Gothic", "IPAゴシック"],
+            &["IPAPGothic", "IPA Pゴシック"],
+        ] {
+            if let Some(face) = faces
+                .iter()
+                .filter(|f| {
+                    f.embeddable
+                        && names
+                            .iter()
+                            .any(|name| f.family.trim().eq_ignore_ascii_case(name))
+                })
+                .min_by_key(|f| {
+                    let regular = f.style.eq_ignore_ascii_case("regular") || f.style == "標準";
+                    (!regular, &f.style, &f.label, &f.path, f.index)
+                })
+            {
+                return Some(face.clone());
+            }
+        }
+        None
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test(faces: Vec<Face>) -> Self {
+        let mut index = Self::default();
+        index.built = Some((index.dirs(), faces));
+        index
     }
 
     /// 書体の名前と太さの名前で探す(英語の名前でも画面の名前でもよい。太さが空なら Regular を先に)。
@@ -291,5 +352,100 @@ impl Names {
             .iter()
             .find(|(p, l, i, s)| *p == 3 && *l == 0x0411 && *i == id && !s.is_empty())
             .map(|(.., s)| s.clone())
+    }
+}
+
+#[cfg(test)]
+mod gothic_tests {
+    use super::*;
+
+    fn face(family: &str, style: &str, embeddable: bool) -> Face {
+        Face {
+            path: PathBuf::new(),
+            index: 0,
+            family: family.into(),
+            style: style.into(),
+            label: format!("{family} {style}"),
+            embeddable,
+        }
+    }
+
+    #[test]
+    fn gothic_priority_prefers_an_embeddable_regular_face() {
+        let mut index = FontIndex::for_test(vec![
+            face("Yu Gothic", "Bold", true),
+            face("Meiryo", "Regular", true),
+            face("Yu Gothic", "Regular", true),
+        ]);
+        let picked = index.gothic().unwrap();
+        assert_eq!(
+            (picked.family.as_str(), picked.style.as_str()),
+            ("Yu Gothic", "Regular")
+        );
+        index = FontIndex::for_test(vec![
+            face("Yu Gothic", "Bold", true),
+            face("Meiryo", "Regular", true),
+        ]);
+        assert_eq!(
+            index.gothic().unwrap().family,
+            "Yu Gothic",
+            "候補の順は太さより先"
+        );
+        index = FontIndex::for_test(vec![
+            face("Yu Gothic", "Regular", false),
+            face("Meiryo", "Regular", true),
+        ]);
+        assert_eq!(index.gothic().unwrap().family, "Meiryo");
+        index = FontIndex::for_test(vec![face("游ゴシック", "標準", true)]);
+        assert_eq!(index.gothic().unwrap().family, "游ゴシック");
+    }
+
+    #[test]
+    fn an_embeddable_copy_survives_scanning_a_restricted_copy_of_the_same_font() {
+        let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fonts/kmb-test-jp.ttf");
+        let fonts = crate::test_fonts::GothicFonts::new(&source);
+        let mut bytes = std::fs::read(fonts.path().join("gothic.ttf")).unwrap();
+        let count = u16::from_be_bytes(bytes[4..6].try_into().unwrap()) as usize;
+        let record = (0..count)
+            .map(|i| 12 + 16 * i)
+            .find(|&r| &bytes[r..r + 4] == b"OS/2")
+            .unwrap();
+        let offset =
+            u32::from_be_bytes(bytes[record + 8..record + 12].try_into().unwrap()) as usize;
+        bytes[offset + 8..offset + 10].copy_from_slice(&0x0002u16.to_be_bytes());
+        std::fs::write(fonts.path().join("0-restricted.ttf"), bytes).unwrap();
+        let mut index = FontIndex::default();
+        index.add_dir(fonts.path());
+        let copies: Vec<_> = index
+            .faces()
+            .iter()
+            .filter(|f| f.family == "IPA Gothic" && f.style == "Regular")
+            .cloned()
+            .collect();
+        assert_eq!(copies.len(), 1, "同じ書体・太さは一覧で1つにする");
+        assert!(
+            copies[0].embeddable,
+            "禁止された写しより、埋め込める写しを残す"
+        );
+        let chosen = FontIndex::for_test(copies)
+            .gothic()
+            .expect("走査で残した候補を選べる");
+        assert_eq!(chosen.path, fonts.path().join("gothic.ttf"));
+    }
+
+    #[test]
+    fn an_empty_or_non_gothic_index_has_no_default_outline() {
+        assert!(FontIndex::for_test(vec![]).gothic().is_none());
+        assert!(
+            FontIndex::for_test(vec![face("無関係の書体", "Regular", true)])
+                .gothic()
+                .is_none()
+        );
+        assert!(
+            FontIndex::for_test(vec![face("IPAGothic", "Regular", false)])
+                .gothic()
+                .is_none()
+        );
     }
 }

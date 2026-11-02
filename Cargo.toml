@@ -36,6 +36,7 @@ kmb-measure = { path = "crates/kmb-measure" }
 kmb-fea = { path = "crates/kmb-fea" }
 kmb-flow = { path = "crates/kmb-flow" }
 kmb-acoustics = { path = "crates/kmb-acoustics" }
+kmb-hrtf = { path = "crates/kmb-hrtf" }
 kmb-study = { path = "crates/kmb-study" }
 kmb-render = { path = "crates/kmb-render" }
 kmb-kernel-truck = { path = "crates/kmb-kernel-truck" }
@@ -93,9 +94,12 @@ kmb-cam-program = { path = "crates/kmb-cam-program" }
 kmb-bundle = { path = "crates/kmb-bundle", default-features = false }
 kmb-samples = { path = "crates/kmb-samples" }
 kmb-session = { path = "crates/kmb-session" }
+kmb-wave = { path = "crates/kmb-wave" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 miniz_oxide = "0.9.1"
+hdf5-pure = "0.47.0"
+sofar = { version = "0.4.0", default-features = false }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 crc32fast = "1.5.2"
@@ -205,8 +209,16 @@ opt-level = 2
 [profile.dev.package.kmb-flow]
 opt-level = 2
 
+# HRTF の格子の補間・再標本化・FFT は方向ごとに回すので、最適化なしだと数万方向の手順が重い
+[profile.dev.package.kmb-hrtf]
+opt-level = 2
+
 # 四面体の網づくりと代数的マルチグリッドは最適化なしだと 10 倍以上遅く、曲面の検算が長くなる
 [profile.dev.package.kmb-fea]
+opt-level = 2
+
+# 境界要素法の密な行列の組み立て(要素の対ごとの求積)は最適化なしだと 10 倍ほど遅く、球の検算が長くなる
+[profile.dev.package.kmb-wave]
 opt-level = 2
 
 # 結果の見せ方(断面・流線・帯の切り分け)はコマを送るたびに作るので、最適化なしだと再生が重い

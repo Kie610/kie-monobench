@@ -103,6 +103,17 @@ pub(crate) fn augment(
     refs: &[RefItem],
     wants: Wants,
 ) -> Augmented {
+    augment_with_crossings(sketch, sol, refs, wants, None)
+}
+
+/// 作り置いた交点があれば使い、仮の点の並びは作り直す時も同じにする。
+pub(crate) fn augment_with_crossings(
+    sketch: &Sketch,
+    sol: &Solution,
+    refs: &[RefItem],
+    wants: Wants,
+    crossings: Option<&[crate::infer::Crossing]>,
+) -> Augmented {
     let mut s = sketch.clone();
     s.adopt_solution(sol);
     let mut sol = sol.clone();
@@ -182,7 +193,15 @@ pub(crate) fn augment(
         }
     }
     if wants.crossings {
-        for (p, on) in crate::infer::crossings(sketch, &sol) {
+        let calculated;
+        let crossings = match crossings {
+            Some(crossings) => crossings,
+            None => {
+                calculated = crate::infer::crossings(sketch, &sol);
+                &calculated
+            }
+        };
+        for (p, on) in crossings {
             let taken = s.entities.iter().any(|e| match e {
                 Entity::Point { x, y, .. } => (x - p.0[0]).hypot(y - p.0[1]) < SAME,
                 _ => false,
