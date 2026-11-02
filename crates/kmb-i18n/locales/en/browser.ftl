@@ -87,7 +87,7 @@ browser-body-find-in-timeline-tip = Highlight in the timeline the last feature t
 ## Simulation tree
 
 browser-studies = Studies
-browser-studies-empty = None yet. Add one with "Static Stress", "Thermal", "Modal Frequencies", "Lightweight Shape Guide", "Wing Lift", "2D Flow" or "3D Flow" above
+browser-studies-empty = None yet. Add one with "Static Stress", "Thermal", "Modal Frequencies", "Lightweight Shape Guide", "Wing Lift", "2D Flow", "3D Flow" or "Sound Radiation and Scattering" above
 
 ## Machining tree
 

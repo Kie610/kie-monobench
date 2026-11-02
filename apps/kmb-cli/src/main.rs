@@ -1,6 +1,8 @@
-//! 文書ファイル(JSON)を操作する CLI。1 回の実行が 1 つのトランザクションになる。
+//! 文書を操作し、ファイルの変換と文書の命令の一括実行を行う CLI。
 
 //! 文書の扱いとモジュールの操作は、MCP と同じ [`kmb_session::Headless`] に任せる。
+
+mod batch;
 
 use clap::{Parser, Subcommand};
 use kmb_bundle::Sample;
@@ -122,6 +124,14 @@ enum Command {
         #[arg(long)]
         each: bool,
     },
+    /// 文書を作らずに形式を変換する(STEP → STL・3MF・OBJ など、DXF → SVG など)
+    Convert {
+        input: PathBuf,
+        out: PathBuf,
+        /// 書き出しの操作に渡す引数。宣言に無い鍵は誤り
+        #[arg(long = "arg", value_name = "鍵=値")]
+        args: Vec<String>,
+    },
     /// 基準部品の文書を作る
     Sample {
         file: PathBuf,
@@ -169,10 +179,20 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// 操作を ID で実行する(`kmb actions` の一覧の ID)。文書を変える操作は保存し、書き出しは `--out` へ書く
+    /// 操作を ID で実行する。ID を省くと file を台本として順に流す(文書の命令のみ)。
+    /// 台本は空の文書から始める。--document で始めの文書、--save で保存先、--export で書き出し先を指定する
     Run {
         file: PathBuf,
-        id: String,
+        id: Option<String>,
+        /// 台本を流す前の文書(省くと空の文書)。操作の ID と同時には使わない
+        #[arg(long, conflicts_with = "id")]
+        document: Option<PathBuf>,
+        /// 台本がすべて成功したら文書を保存する
+        #[arg(long, conflicts_with = "id")]
+        save: Option<PathBuf>,
+        /// 台本がすべて成功したら拡張子で形式を選んで書き出す
+        #[arg(long, conflicts_with = "id")]
+        export: Option<PathBuf>,
         /// 引数 `鍵=値`(いくつでも)。値は JSON として読めなければ文字。長さは `5 mm`・`0.2 in` とも書ける。
         /// 操作が宣言しない鍵や型の違いは誤り
         #[arg(long = "arg", value_name = "鍵=値")]
@@ -902,6 +922,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 }
             }
         }
+        Command::Convert { input, out, args } => batch::convert(&input, &out, &args)?,
         Command::Sample { file, cam, three_d } => {
             if file.exists() {
                 return Err(Problem::new(
@@ -1016,12 +1037,32 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
         Command::Run {
             file,
             id,
+            document,
+            save,
+            export,
             args,
             selected,
             input,
             out,
             component,
         } => {
+            let Some(id) = id else {
+                if !args.is_empty()
+                    || selected.is_some()
+                    || input.is_some()
+                    || out.is_some()
+                    || component.is_some()
+                {
+                    return Err("台本では --document・--save・--export を使ってください".into());
+                }
+                batch::script(
+                    &file,
+                    document.as_deref(),
+                    save.as_deref(),
+                    export.as_deref(),
+                )?;
+                return Ok(ExitCode::SUCCESS);
+            };
             let mut w = open(&file)?;
             activate(&mut w, component)?;
             let args = kmb_session::run_args::parse_pairs(&args)?;

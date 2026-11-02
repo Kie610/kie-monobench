@@ -317,10 +317,16 @@ fn canvas_render_stops_at_the_chosen_mark_and_can_pause() {
     // 目安を上げる → 続きから回す
     h.state_mut().set_canvas_render_target(64);
     wait(&mut h, 17);
-    // 一時停止 → 増えない → 続ける → また増える
+    // 一時停止 → 増えない → 続ける → また増える。押した時に回していた途中の 1 回は最後まで回すので、
+    // 回す側が待ちに入るのを待ってから数を読む(決めた時間だけ待つと、遅い機械では途中の 1 回が
+    // 後から足されて落ちた)
     h.state_mut().toggle_canvas_render_pause();
-    std::thread::sleep(std::time::Duration::from_millis(400));
-    h.step();
+    let t = std::time::Instant::now();
+    while !h.state().canvas_render_holding() {
+        assert!(t.elapsed().as_secs() < 180, "一時停止の後も回し続ける");
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        h.step();
+    }
     let held = h.state().canvas_render_passes().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(400));
     h.step();

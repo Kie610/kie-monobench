@@ -141,6 +141,18 @@ pub fn pencil_chains(
         .collect()
 }
 
+// 計測する呼び出しだけが印を受ける。通常の計算では何もしない関数に展開する。
+#[derive(Debug, Clone, Copy)]
+enum Phase {
+    Heights,
+    CurrentEnvelope,
+    RestEnvelope,
+    ValleyNodes,
+    LeftBy,
+    Trace,
+    Join,
+}
+
 /// 谷ごとの、なぞる線の組(外側の線から谷の線への順)。`region` があれば、その外の点を除く
 /// (線をそこで切る)。
 pub fn pencil_groups(
@@ -150,13 +162,31 @@ pub fn pencil_groups(
     o: &Options,
     region: Option<&Region>,
 ) -> Vec<Vec<Chain>> {
+    pencil_groups_profile::<false>(heights, tool, rest, o, region, &mut |_| {})
+}
+
+fn pencil_groups_profile<const EXHAUSTIVE: bool>(
+    heights: Heights,
+    tool: &Tool,
+    rest: Option<&Tool>,
+    o: &Options,
+    region: Option<&Region>,
+    mark: &mut impl FnMut(Phase),
+) -> Vec<Vec<Chain>> {
     let cutter = Cutter::new(tool.clone(), o.grow);
     let field = DropField::new(heights.clone(), cutter.clone());
+    mark(Phase::CurrentEnvelope);
     let rest_field = rest.map(|t| DropField::new(heights, Cutter::new(t.clone(), o.grow)));
+    mark(Phase::RestEnvelope);
     let mut found = valley_nodes(&field, o);
+    mark(Phase::ValleyNodes);
     if let Some(rf) = &rest_field {
         let keep = par_map(&found, |&(n, d)| {
-            left_by(&field, rf, n, d, o.leave) > REST_MIN
+            #[cfg(test)]
+            if EXHAUSTIVE {
+                return rest_filter_tests::exhaustive_left_by(&field, rf, n, d, o.leave) > REST_MIN;
+            }
+            left_by_more_than(&field, rf, n, d, o.leave, REST_MIN)
         });
         found = found
             .into_iter()
@@ -164,6 +194,7 @@ pub fn pencil_groups(
             .filter_map(|(f, k)| k.then_some(f))
             .collect();
     }
+    mark(Phase::LeftBy);
     let h = &field.heights;
     let mut flagged = vec![false; h.nx * h.ny];
     for &(n, _) in &found {
@@ -210,7 +241,7 @@ pub fn pencil_groups(
             })
             .collect()
     };
-    trace(&flagged, h.nx, h.ny)
+    let groups = trace(&flagged, h.nx, h.ny)
         .into_iter()
         .filter_map(|(nodes, closed)| {
             let xy: Vec<[f64; 2]> = nodes.iter().map(|&n| h.at(n % h.nx, n / h.nx)).collect();
@@ -229,7 +260,9 @@ pub fn pencil_groups(
             group.extend(to_chains(&xy, closed));
             (!group.is_empty()).then_some(group)
         })
-        .collect()
+        .collect();
+    mark(Phase::Trace);
+    groups
 }
 
 /// 線を横へ `d` だけずらす(進む向きの左が正)。各点の向きは前後の点から決める。
@@ -306,10 +339,17 @@ fn valley_nodes(field: &DropField, o: &Options) -> Vec<(usize, usize)> {
     .collect()
 }
 
-/// 前の工具が残した厚さの目安。節点 `n` に今の工具を置いた時、谷を横切る向き `d` の
-/// 9 点で、前の工具が届いた面の高さ(前の工具をすべての節点に置いた下側の包み)が
-/// 今の工具の刃よりどれだけ上にあるかの最大。
-fn left_by(field: &DropField, rest: &DropField, n: usize, d: usize, leave: f64) -> f64 {
+/// 前の工具が下限より厚く残した点があるか。谷を横切る9点のうち一つでも、前の工具が
+/// 届いた面と今の刃の差が下限を超えればよい。各点の候補の最小値が下限以下になったら
+/// その点を、超える点が確定したら残りの点を調べずに終える。差の計算順は変えない。
+fn left_by_more_than(
+    field: &DropField,
+    rest: &DropField,
+    n: usize,
+    d: usize,
+    leave: f64,
+    minimum: f64,
+) -> bool {
     let h = &field.heights;
     let (i, j) = (n % h.nx, n / h.nx);
     let c = h.at(i, j);
@@ -320,8 +360,7 @@ fn left_by(field: &DropField, rest: &DropField, n: usize, d: usize, leave: f64) 
     let r = field.tool.radius();
     let rr = rest.tool.radius();
     let span = (rr / h.cell).ceil() as isize;
-    let mut worst = f64::NEG_INFINITY;
-    for k in -4..=4 {
+    'probe: for k in -4..=4 {
         let t = r * k as f64 / 4.0;
         let x = [c[0] + u[0] * t, c[1] + u[1] * t];
         let Some(tool_z) = field.tool.height_at(t.abs()).map(|v| z + v) else {
@@ -335,12 +374,18 @@ fn left_by(field: &DropField, rest: &DropField, n: usize, d: usize, leave: f64) 
                 let p = h.at(ci as usize, cj as usize);
                 if let Some(v) = rest.tool.height_at((p[0] - x[0]).hypot(p[1] - x[1])) {
                     reached = reached.min(rest.node(ci as usize, cj as usize) + v);
+                    // 一つでも刃との差が下限以下なら、この点では削り残しを示せない。
+                    if reached - tool_z <= minimum {
+                        continue 'probe;
+                    }
                 }
             }
         }
-        worst = worst.max(reached - tool_z);
+        if reached - tool_z > minimum {
+            return true;
+        }
     }
-    worst
+    false
 }
 
 /// 印の付いた節点を、隣どうしでつないだ線にする。線の脇に並んだ節点は同じ線にまとめる。
@@ -562,7 +607,11 @@ pub struct PencilPlan {
 }
 
 /// なぞる線と、つなぎの検査に使う格子。
-fn chains(p: &Planner, f: &PencilPlan) -> Result<Traced, EvalError> {
+fn chains_profile<const EXHAUSTIVE: bool>(
+    p: &Planner,
+    f: &PencilPlan,
+    mark: &mut impl FnMut(Phase),
+) -> Result<Traced, EvalError> {
     let PencilPlan {
         leave,
         cell,
@@ -589,6 +638,7 @@ fn chains(p: &Planner, f: &PencilPlan) -> Result<Traced, EvalError> {
         below,
         &p.model.triangles,
     );
+    mark(Phase::Heights);
     let o = Options {
         angle,
         leave,
@@ -598,12 +648,13 @@ fn chains(p: &Planner, f: &PencilPlan) -> Result<Traced, EvalError> {
         passes,
         pitch,
     };
-    let chains = pencil_groups(
+    let chains = pencil_groups_profile::<EXHAUSTIVE>(
         heights.clone(),
         &p.tool,
         rest.as_ref(),
         &o,
         limits.region.as_ref(),
+        mark,
     );
     if chains.is_empty() {
         return Err(invalid(if rest.is_some() {
@@ -626,9 +677,16 @@ pub fn plan(input: &StrategyInput) -> Result<StrategyOutput, String> {
 }
 
 fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
+    run_profile::<false>(input, &mut |_| {})
+}
+
+fn run_profile<const EXHAUSTIVE: bool>(
+    input: &StrategyInput,
+    mark: &mut impl FnMut(Phase),
+) -> Result<StrategyOutput, EvalError> {
     let p = Planner::new(input);
     let f: PencilPlan = input.params().map_err(invalid)?;
-    let (mut groups, heights, leave, cutter) = chains(&p, &f)?;
+    let (mut groups, heights, leave, cutter) = chains_profile::<EXHAUSTIVE>(&p, &f, mark)?;
     let lowest = groups
         .iter()
         .flatten()
@@ -694,6 +752,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         }
     }
     kmb_cam_setup::retract(&mut tp);
+    mark(Phase::Join);
     Ok(p.output(tp))
 }
 
@@ -816,7 +875,7 @@ mod tests {
     }
 
     /// 高さ 0 の床に、x 0〜10・y -10〜10・高さ 5 の箱(上面だけで十分。壁は格子が縦にする)。
-    fn box_on_floor() -> Vec<[P3; 3]> {
+    pub(super) fn box_on_floor() -> Vec<[P3; 3]> {
         let mut t = Vec::new();
         t.extend(quad(
             [-20.0, -20.0, 0.0],
@@ -834,7 +893,7 @@ mod tests {
     }
 
     /// x の向きに伸びる、両側が `deg` 度で上る V の溝(底は y = 0、高さ 0)。
-    fn v_groove(deg: f64) -> Vec<[P3; 3]> {
+    pub(super) fn v_groove(deg: f64) -> Vec<[P3; 3]> {
         let s = deg.to_radians().tan();
         let mut t = Vec::new();
         t.extend(quad(
@@ -1053,6 +1112,205 @@ mod tests {
         for c in &chains {
             assert!(!c.closed);
             assert!(c.points.iter().all(|q| q[1] <= 0.0), "{:?}", c.points);
+        }
+    }
+}
+#[cfg(test)]
+mod performance {
+    use super::*;
+
+    fn fixture_input(case: &str) -> StrategyInput {
+        if case == "reference" {
+            return serde_json::from_str(include_str!("../tests/reference-rest-input.json"))
+                .unwrap();
+        }
+        let triangles = match case {
+            "box" => super::tests::box_on_floor(),
+            "v" => super::tests::v_groove(45.0),
+            _ => panic!("計測する形がありません: {case}"),
+        };
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        for point in triangles.iter().flatten() {
+            for axis in 0..3 {
+                lo[axis] = lo[axis].min(point[axis]);
+                hi[axis] = hi[axis].max(point[axis]);
+            }
+        }
+        let mesh = kmb_cam_setup::testing::mesh_of(&[("part", triangles)]);
+        let rest = ToolLibrary::starter().tools[3].clone();
+        let tool = Tool {
+            number: 9,
+            diameter: 1.0,
+            flute_length: 12.0,
+            ..rest.clone()
+        };
+        let p = kmb_cam_setup::testing::prepared(&mesh, lo, [hi[0], hi[1], hi[2] + 1.0], tool);
+        p.input(
+            kmb_core::FeatureId(1),
+            PencilPlan {
+                leave: 0.0,
+                cell: 0.1,
+                angle: DEFAULT_ANGLE_DEG.to_radians(),
+                rest: Some(rest),
+                depth: None,
+                limits: Default::default(),
+                pitch: p.tool.diameter * p.cutting.stepover,
+                passes: 0,
+            },
+            Default::default(),
+        )
+    }
+
+    // 確かめること: 見本・箱・V溝の動きの列が、同じ環境の全候補の計算と完全に一致する。
+    #[test]
+    fn reference_box_and_v_paths_match_the_exhaustive_filter() {
+        for (case, count) in [("reference", 274), ("box", 34), ("v", 5)] {
+            let input = fixture_input(case);
+            let expected = run_profile::<true>(&input, &mut |_| {}).unwrap();
+            let output = plan(&input).unwrap();
+            assert_eq!(output.toolpath.moves.len(), count, "{case}");
+            assert_eq!(output, expected, "{case}");
+            assert_eq!(
+                serde_json::to_vec(&output).unwrap(),
+                serde_json::to_vec(&expected).unwrap(),
+                "{case}"
+            );
+        }
+    }
+
+    // 確かめること: 同じ解いた入力の計算時間と、経路のバイト列を単独で測る。
+    #[test]
+    #[ignore = "道具: 残り削りの段ごとの時間を、ほかの重い処理を止めて測る"]
+    fn profile_rest_pencil() {
+        let mut input: StrategyInput = match std::env::var("JC_PENCIL_INPUT") {
+            Ok(path) => serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap(),
+            Err(_) => fixture_input(
+                &std::env::var("JC_PENCIL_CASE").unwrap_or_else(|_| "reference".into()),
+            ),
+        };
+        if let Ok(path) = std::env::var("JC_PENCIL_INPUT_OUT") {
+            std::fs::write(path, serde_json::to_vec(&input).unwrap()).unwrap();
+        }
+        if let Ok(cell) = std::env::var("JC_PENCIL_CELL") {
+            input.params["cell"] = serde_json::json!(cell.parse::<f64>().unwrap());
+        }
+        let started = std::time::Instant::now();
+        let mut last = std::time::Instant::now();
+        let mut phases = Vec::new();
+        let output = run_profile::<false>(&input, &mut |phase| {
+            let now = std::time::Instant::now();
+            phases.push((
+                format!("{phase:?}"),
+                now.duration_since(last).as_secs_f64() * 1000.0,
+            ));
+            last = now;
+        })
+        .unwrap();
+        for (phase, ms) in &phases {
+            println!("phase={phase}, ms={ms:.3}");
+        }
+        let elapsed = started.elapsed();
+        let bytes = serde_json::to_vec(&output).unwrap();
+        println!(
+            "total_ms={:.3}, cell={}, moves={}, cut_length={:.12}",
+            elapsed.as_secs_f64() * 1000.0,
+            input.params["cell"],
+            output.toolpath.moves.len(),
+            output.toolpath.lengths().0
+        );
+        if let Ok(path) = std::env::var("JC_PENCIL_BASELINE") {
+            assert_eq!(bytes, std::fs::read(path).unwrap(), "経路が変わりました");
+        }
+        if let Ok(path) = std::env::var("JC_PENCIL_OUTPUT") {
+            std::fs::write(path, &bytes).unwrap();
+        }
+    }
+}
+
+#[cfg(test)]
+mod rest_filter_tests {
+    use super::*;
+    pub(super) fn exhaustive_left_by(
+        field: &DropField,
+        rest: &DropField,
+        n: usize,
+        d: usize,
+        leave: f64,
+    ) -> f64 {
+        let h = &field.heights;
+        let (i, j) = (n % h.nx, n / h.nx);
+        let c = h.at(i, j);
+        let z = field.node(i, j) + leave;
+        let (di, dj) = DIRS[d];
+        let len = ((di * di + dj * dj) as f64).sqrt();
+        let u = [di as f64 / len, dj as f64 / len];
+        let r = field.tool.radius();
+        let rr = rest.tool.radius();
+        let span = (rr / h.cell).ceil() as isize;
+        let mut worst = f64::NEG_INFINITY;
+        for k in -4..=4 {
+            let t = r * k as f64 / 4.0;
+            let x = [c[0] + u[0] * t, c[1] + u[1] * t];
+            let Some(tool_z) = field.tool.height_at(t.abs()).map(|v| z + v) else {
+                continue;
+            };
+            // 前の工具が x で届いた面の高さ
+            let (xi, xj) = (h.index(x[0], 0) as isize, h.index(x[1], 1) as isize);
+            let mut reached = f64::INFINITY;
+            for cj in (xj - span).max(0)..=(xj + span).min(h.ny as isize - 1) {
+                for ci in (xi - span).max(0)..=(xi + span).min(h.nx as isize - 1) {
+                    let p = h.at(ci as usize, cj as usize);
+                    if let Some(v) = rest.tool.height_at((p[0] - x[0]).hypot(p[1] - x[1])) {
+                        reached = reached.min(rest.node(ci as usize, cj as usize) + v);
+                    }
+                }
+            }
+            worst = worst.max(reached - tool_z);
+        }
+        worst
+    }
+    // 確かめること: 全候補の最大の差と、短絡する判定が、下限のちょうど前後でも一致する。
+    #[test]
+    fn short_circuit_matches_the_exhaustive_gap_at_its_float_boundary() {
+        for (case, same_tool, grow, leave) in [
+            ("v", false, 0.0, 0.0),
+            ("v", true, 0.15, 0.1),
+            ("box", false, 0.0, -0.1),
+        ] {
+            let triangles = if case == "v" {
+                super::tests::v_groove(45.0)
+            } else {
+                super::tests::box_on_floor()
+            };
+            let h = Heights::new([-3.0, -3.0], [3.0, 3.0], 0.25, -1.0, &triangles);
+            let template = ToolLibrary::starter().tools[3].clone();
+            let tool = Tool {
+                diameter: 1.0,
+                ..template.clone()
+            };
+            let previous = if same_tool { tool.clone() } else { template };
+            let field = DropField::new(h.clone(), Cutter::new(tool, grow));
+            let rest = DropField::new(h, Cutter::new(previous, grow));
+            let h = &field.heights;
+            for (i, j) in [
+                (0, 0),
+                (h.nx - 1, h.ny - 1),
+                (h.nx / 2, h.ny / 2),
+                (h.nx / 2 + 1, h.ny / 2 - 1),
+            ] {
+                for d in 0..DIRS.len() {
+                    let n = j * h.nx + i;
+                    let gap = exhaustive_left_by(&field, &rest, n, d, leave);
+                    for minimum in [gap.next_down(), gap, gap.next_up(), REST_MIN] {
+                        assert_eq!(
+                            left_by_more_than(&field, &rest, n, d, leave, minimum),
+                            gap > minimum,
+                            "{case}, same={same_tool}, grow={grow}, leave={leave}, n={n}, d={d}, gap={gap}, minimum={minimum}"
+                        );
+                    }
+                }
+            }
         }
     }
 }
