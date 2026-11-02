@@ -294,13 +294,26 @@ impl Fitted {
             .filter_map(|(shape, range)| drawable(&shape).map(|s| (s, range)))
             .enumerate()
             .map(|(fresh, (shape, range))| {
+                let current_points = samples(&shape, 16);
                 let index = fine
                     .iter()
                     .enumerate()
                     .filter(|(i, _)| range.contains(i) && !used.contains(i))
                     .filter_map(|(i, old)| {
+                        let same_kind = match (old, &shape) {
+                            (RefShape::Line(..), RefShape::Line(..)) => true,
+                            (RefShape::Circle { arc: a, .. }, RefShape::Circle { arc: b, .. }) => {
+                                a.is_some() == b.is_some()
+                            }
+                            _ => false,
+                        };
                         let points = samples(old, 16);
-                        if !points.iter().all(|p| to_shape(*p, &shape) <= SECTION_TOL) {
+                        if !same_kind
+                            || !points.iter().all(|p| to_shape(*p, &shape) <= SECTION_TOL)
+                            || !current_points
+                                .iter()
+                                .all(|p| to_shape(*p, old) <= SECTION_TOL)
+                        {
                             return None;
                         }
                         let length: f64 = points.windows(2).map(|p| len(sub(p[1], p[0]))).sum();
@@ -434,5 +447,36 @@ impl RefShape {
     /// 点 `p` からこの形までの距離(円弧の外の向きなら近い方の端まで)。
     pub fn distance(&self, p: P2) -> f64 {
         to_shape(p, self)
+    }
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+
+    /// 確かめること: 短い写しの番号を、大きさの違う線へ再利用しない。
+    #[test]
+    fn a_short_saved_line_is_not_rebound_to_a_longer_line() {
+        let feature = FeatureId(7);
+        let old = RefItem {
+            source: ProjectionSource::Silhouette { feature, index: 0 },
+            shape: RefShape::Line([0.0, 0.0], [0.01, 0.0]),
+        };
+        let mut sketch = crate::Sketch::default();
+        let entity = sketch.add_projection_as(&old, false);
+        let before = sketch.entities.clone();
+        let fitted = Fitted {
+            fine: vec![old.shape],
+            shapes: vec![(
+                Shape::Line {
+                    a: [0.0, 0.0],
+                    b: [10.0, 0.0],
+                },
+                0..1,
+            )],
+        };
+        let lost = crate::refresh_projections(&mut sketch, &fitted.references(feature));
+        assert_eq!(lost, vec![entity]);
+        assert_eq!(sketch.entities, before);
     }
 }
