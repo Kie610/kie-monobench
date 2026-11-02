@@ -114,3 +114,12 @@ view-candidates = 重なっているもの(手前から)
 
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+
+view-measure-radius = 半径
+view-measure-diameter = 直径
+view-measure-major-radius = 大きい半径
+view-measure-major-diameter = 大きい直径
+view-measure-center = 中心
+view-measure-axis = 軸の向き
+view-measure-axis-center = 軸の中心
+view-measure-mesh-area = 面積(網で)

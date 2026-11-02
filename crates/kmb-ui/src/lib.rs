@@ -921,3 +921,6 @@ mod units_tests;
 
 #[cfg(test)]
 mod wide_toolbar_tests;
+
+#[cfg(test)]
+mod curved_measure_tests;

@@ -10,6 +10,22 @@ use crate::measure::{self, Basis, Report, Target};
 use crate::view3d::{self, Pick};
 use egui::{Color32, Pos2, Rect};
 
+/// 計測の数値行の名前。計算が返す値はそのまま、見出しだけを表示言語にする。
+pub(crate) fn report_label(words: &crate::window_state::Words, label: &str) -> String {
+    let key = match label {
+        "半径" => "view-measure-radius",
+        "直径" => "view-measure-diameter",
+        "大きい半径" => "view-measure-major-radius",
+        "大きい直径" => "view-measure-major-diameter",
+        "中心" => "view-measure-center",
+        "軸の向き" => "view-measure-axis",
+        "軸の中心" => "view-measure-axis-center",
+        "面積(網で)" => "view-measure-mesh-area",
+        _ => return label.to_string(),
+    };
+    words.t(key)
+}
+
 /// 測る道具の状態。
 #[derive(Default)]
 pub struct Measure {
@@ -380,6 +396,7 @@ impl Workspace {
         let mut xyz = self.win.layout.measure_xyz;
         let copied = m.copied.is_some_and(|t| ui.input(|i| i.time) - t < 2.0);
         let l = self.win.look;
+        let words = self.win.words();
         let mut close = false;
         let mut clear = false;
         let mut copy: Option<String> = None;
@@ -473,7 +490,10 @@ impl Workspace {
                                 .striped(true)
                                 .show(ui, |ui| {
                                     for (i, (k, v)) in rows.iter().enumerate() {
-                                        ui.label(egui::RichText::new(k).color(l.pal.ink2));
+                                        ui.label(
+                                            egui::RichText::new(report_label(&words, k))
+                                                .color(l.pal.ink2),
+                                        );
                                         let mut t = egui::RichText::new(v).monospace();
                                         if i == primary {
                                             t = t.strong();

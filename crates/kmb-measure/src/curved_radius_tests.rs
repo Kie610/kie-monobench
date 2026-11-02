@@ -181,3 +181,62 @@ fn curved_radius_a_rounded_cylinder_rim_includes_a_measurable_toroidal_face() {
         assert!(describe(&g).iter().any(|(k, _)| k == "半径"));
     }
 }
+
+#[test]
+fn curved_radius_a_partial_torus_keeps_its_radii_after_rotation() {
+    let scene = patch(22, 16, |u, v| {
+        let a = 0.2 + u * 1.2;
+        let b = 0.1 + v * 1.4;
+        let p = [
+            (16.0 + 4.0 * b.cos()) * a.cos(),
+            (16.0 + 4.0 * b.cos()) * a.sin(),
+            4.0 * b.sin(),
+        ];
+        let (s, c) = 0.7_f64.sin_cos();
+        [
+            30.0 + c * p[0] + s * p[2],
+            -14.0 + p[1],
+            15.0 - s * p[0] + c * p[2],
+        ]
+    });
+    let g = resolved(&scene);
+    radius_rows(&g, 4.0);
+    let rows = describe(&g);
+    assert!(
+        rows.iter()
+            .any(|(k, v)| k == "大きい半径" && v == "16.000 mm")
+    );
+}
+
+#[test]
+fn curved_radius_serialization_and_mesh_distances_keep_the_measured_surface() {
+    let scene = patch(24, 16, |u, v| {
+        let a = u * std::f64::consts::FRAC_PI_2;
+        let b = 0.08 + v * 1.45;
+        [
+            6.0 + 4.0 * b.sin() * a.cos(),
+            7.0 + 4.0 * b.sin() * a.sin(),
+            8.0 + 4.0 * b.cos(),
+        ]
+    });
+    let g = resolved(&scene);
+    let value = serde_json::to_value(&g.kind).unwrap();
+    assert_eq!(value["type"], "sphere");
+    assert!((value["value"]["radius"].as_f64().unwrap() - 4.0).abs() < 1e-4);
+    let Kind::Sphere(s) = g.kind else {
+        panic!("球面")
+    };
+    assert!(s.area > 0.0);
+    let mut fallback = g.clone();
+    fallback.kind = Kind::Surface { area: s.area };
+    let point = Geo {
+        kind: Kind::Point([30.0, 20.0, 10.0]),
+        points: vec![[30.0, 20.0, 10.0]],
+        segs: vec![],
+        tris: vec![],
+    };
+    assert_eq!(
+        compare(&g, &point, Basis::Min, true).rows,
+        compare(&fallback, &point, Basis::Min, true).rows
+    );
+}
