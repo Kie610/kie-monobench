@@ -1,6 +1,10 @@
-//! 網の点から円・円柱を求め直す(網の弦のずれを消して径・中心・軸を出す)。
+//! 網の点から円・円柱・球・円環を求め直す。径・中心・軸を頂点から出す。
 
 use super::*;
+
+mod curved;
+pub(crate) use curved::triangle_area;
+pub use curved::{fit_sphere, fit_torus};
 
 /// 折れ線が円・円弧か。網の点から 3 点で円を求め、全部の点が同じ平面の上で、中心から同じ距離なら円。
 pub fn fit_circle(pts: &[P]) -> Option<Circle> {

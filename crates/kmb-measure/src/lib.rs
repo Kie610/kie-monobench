@@ -167,6 +167,10 @@ pub enum Kind {
     },
     /// 円柱の面(穴の壁・丸い柱の側面)
     Cylinder(Cylinder),
+    /// 球の面。
+    Sphere(Sphere),
+    /// 円環の面。
+    Torus(Torus),
     /// 曲面
     Surface {
         area: f64,
@@ -189,6 +193,25 @@ pub struct Cylinder {
     pub sweep: f64,
     /// 一周していない時、軸から弧の真ん中へ向かう向き(一周なら 0)
     pub bulge: P,
+}
+
+/// 球の面。半径は頂点から求め、面積は選んだ範囲の網で測る。
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Sphere {
+    pub center: P,
+    pub radius: f64,
+    pub area: f64,
+}
+
+/// 円環の面。管の半径と、中心から管の中心の円までの半径を分ける。
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct Torus {
+    pub center: P,
+    pub axis: P,
+    pub major_radius: f64,
+    pub minor_radius: f64,
+    /// 選んだ範囲の網の面積。
+    pub area: f64,
 }
 
 /// 長穴(両端が半円の形)。
@@ -358,10 +381,7 @@ pub fn resolve(scene: &(impl Meshes + ?Sized), t: &Target) -> Option<Geo> {
             if tris.is_empty() {
                 return None;
             }
-            let area: f64 = tris
-                .iter()
-                .map(|t| 0.5 * len(cross(sub(t[1], t[0]), sub(t[2], t[0]))))
-                .sum();
+            let area = fit::triangle_area(&tris);
             // 平らな面か: どの三角形の向きも、いちばん大きい三角形の向きと同じ
             let big = tris
                 .iter()
@@ -394,6 +414,10 @@ pub fn resolve(scene: &(impl Meshes + ?Sized), t: &Target) -> Option<Geo> {
                     segs: vec![],
                     tris: cylinder_tris(&c),
                 });
+            } else if let Some(sphere) = fit_sphere(&tris) {
+                Kind::Sphere(sphere)
+            } else if let Some(torus) = fit_torus(&tris) {
+                Kind::Torus(torus)
             } else {
                 Kind::Surface { area }
             };
