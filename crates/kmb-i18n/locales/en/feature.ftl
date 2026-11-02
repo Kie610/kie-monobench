@@ -55,3 +55,6 @@ feature-hrtf-compute = Head HRTF
 feature-hrtf-compute-tip = Compute head-related transfer functions (HRTF) in all directions from a head body and the left and right ear entrances with the boundary element method, and view the left and right levels and the interaural differences by direction
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
+
+feature-asm-position = Position
+feature-asm-position-tip = Rotate the component about its center in X, Y, Z order, then translate along world axes. Parts connected to follow it move together.
