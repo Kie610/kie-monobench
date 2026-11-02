@@ -337,6 +337,42 @@ fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
         .collect()
 }
 
+/// 選んだ角を先に集め、全部作れた時だけひとつの変更として返す。
+pub(crate) fn apply_corners(
+    editor: &mut Editor,
+    sketch: &Sketch,
+    sol: &Solution,
+    corners: &[(EntityId, Option<EntityId>)],
+) -> Option<Sketch> {
+    let text = if editor.typed.trim().is_empty() {
+        editor.dim_text.clone()
+    } else {
+        std::mem::take(&mut editor.typed)
+    };
+    let value = if text.trim().is_empty() {
+        "2 mm".into()
+    } else {
+        typed_value(&text)
+    };
+    let radius = typed_length(&value).unwrap_or(2.0);
+    let chamfer = chamfer_kind(&text);
+    let mut s = sketch.clone();
+    s.adopt_solution(sol);
+    for &(corner, first) in corners {
+        let done = if editor.tool == Tool::Fillet {
+            s.fillet_corner(corner, radius, &value).is_some()
+        } else {
+            s.chamfer_corner_with(corner, first, &chamfer).is_some()
+        };
+        if !done {
+            editor.notice = Some("選んだ角を処理できません。辺に収まる小さな値を指定してください(変更はしていません)".into());
+            return None;
+        }
+    }
+    editor.clear_selection();
+    Some(s)
+}
+
 /// 道具の操作。変えたスケッチを返す。
 pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
     let typed = (inp.enter && !editor.typed.trim().is_empty()).then(|| editor.typed.clone());
@@ -719,20 +755,7 @@ pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
                     }
                 }
             };
-            let text = if editor.typed.trim().is_empty() {
-                editor.dim_text.clone()
-            } else {
-                std::mem::take(&mut editor.typed)
-            };
-            let kind = chamfer_kind(&text);
-            let mut s = inp.start();
-            out = s.chamfer_corner_with(corner, first, &kind).map(|_| s);
-            if out.is_none() {
-                editor.notice = Some(
-                    "角を落とせません: 2 本の線分が交わる角を押してください(距離が辺より長い時も作れません)"
-                        .into(),
-                );
-            }
+            out = apply_corners(editor, inp.sketch, inp.sol, &[(corner, first)]);
         }
         Tool::LinearPattern => {
             let w = click?;

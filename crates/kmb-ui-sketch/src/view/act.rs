@@ -110,6 +110,19 @@ pub(super) fn act(
         to_project: Vec::new(),
         origin_hover: None,
     };
+    if matches!(editor.tool, Tool::Fillet | Tool::Chamfer) && (enter || raw_enter) {
+        let corners: Vec<_> = editor
+            .selection
+            .iter()
+            .copied()
+            .filter(|id| matches!(sketch.entity(*id), Some(Entity::Point { .. })))
+            .map(|id| (id, None))
+            .collect();
+        if !corners.is_empty() {
+            out.result = crate::more_tools::apply_corners(editor, sketch, sol, &corners);
+            return out;
+        }
+    }
     // 寸法の道具の間に、付いた寸法の値の札を押す: 道具を抜けずに、その場で値を直す
     // (選ぶ道具ではダブルクリック。続けて寸法を入れている途中に前の寸法を直せる)
     if editor.tool == Tool::Dimension
