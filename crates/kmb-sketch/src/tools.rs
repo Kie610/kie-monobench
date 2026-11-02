@@ -425,7 +425,6 @@ impl Sketch {
         Some(arc)
     }
 
-    /// 接点を既存の端と共有し、使い切った辺は輪郭から外す。寸法などの基準は補助線に残す。
     /// 角の半径の上限と、両側の線分で使える距離(mm)。解いた座標を採ったスケッチで読む。
     pub fn corner_limits(&self, corner: EntityId) -> Option<(f64, [f64; 2])> {
         let [(_, a), (_, b)] = self.corner_arms(corner)?;
@@ -468,6 +467,7 @@ impl Sketch {
         lines.try_into().ok()
     }
 
+    /// 接点を既存の端と共有し、使い切った辺は輪郭から外す。寸法などの基準は補助線に残す。
     pub(crate) fn corner_side_end(
         &mut self,
         line: EntityId,
