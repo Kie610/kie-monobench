@@ -134,6 +134,19 @@ fn read_document(
     reader: &mut impl std::io::Read,
     path: &Path,
 ) -> Result<Document, kmb_core::Problem> {
+    let mut bytes = read_document_header(reader, path)?;
+    reader
+        .read_to_end(&mut bytes)
+        .map_err(|error| document_read_error(path, error))?;
+    let text = std::str::from_utf8(&bytes).map_err(|error| document_read_error(path, error))?;
+    Document::from_json(text).map_err(|error| format!("{}: {error}", path.display()).into())
+}
+
+/// 文書と図面の読み手が共通で通す、先頭の印の検査。
+fn read_document_header(
+    reader: &mut impl std::io::Read,
+    path: &Path,
+) -> Result<Vec<u8>, kmb_core::Problem> {
     use std::io::Read;
     let mut bytes = Vec::with_capacity(6);
     reader
@@ -144,11 +157,7 @@ fn read_document(
     if let Some(problem) = dwg_problem(&bytes) {
         return Err(problem);
     }
-    reader
-        .read_to_end(&mut bytes)
-        .map_err(|error| document_read_error(path, error))?;
-    let text = std::str::from_utf8(&bytes).map_err(|error| document_read_error(path, error))?;
-    Document::from_json(text).map_err(|error| format!("{}: {error}", path.display()).into())
+    Ok(bytes)
 }
 
 /// ファイルの先頭の印を、文字コードや拡張子の解釈に先立って見分ける。

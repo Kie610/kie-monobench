@@ -38,6 +38,10 @@ impl Headless {
                 saved: None,
             });
         }
+        // 図面の読み手へ渡す前に、中身の印に応じた共通の案内を返す。
+        std::fs::File::open(path)
+            .map_err(|error| crate::document_read_error(path, error))
+            .and_then(|mut file| crate::read_document_header(&mut file, path))?;
         if !blank.data().features.is_empty()
             || !blank.data().params.is_empty()
             || blank.can_undo()
