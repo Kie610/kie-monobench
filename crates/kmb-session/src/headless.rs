@@ -553,6 +553,13 @@ impl Headless {
 
     /// 組み立てた変更([`crate::edit`])を適用して再計算する。
     pub fn apply(&mut self, tx: Transaction) -> Result<(), String> {
+        let tx = crate::params::complete_named_parameter_change(
+            &mut self.doc,
+            &self.modules.registry,
+            &self.report,
+            tx,
+        )
+        .map_err(|e| e.to_string())?;
         let touched: Vec<FeatureId> = tx
             .ops
             .iter()

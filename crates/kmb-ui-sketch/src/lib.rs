@@ -197,33 +197,39 @@ fn name_cycle(host: &EditorHost<'_>, before: &Sketch, after: &Sketch) -> Option<
         })
 }
 
-/// 寸法の値の `名前 = 式` を `名前` に直し、作るパラメータ(名前と式)を返す(
-/// 寸法の欄で `w=20` と打つと w というパラメータができ、寸法は w になる)。
-/// 数だけの式には寸法の単位(mm・deg)を補う。
-pub(crate) fn split_new_param(sketch: &mut Sketch) -> Option<(String, String)> {
+/// 寸法の名前付きの式を共有の規則で調べ、式を新しいパラメータの名前にする。
+fn split_new_param(
+    host: &EditorHost<'_>,
+    sketch: &mut Sketch,
+) -> Result<Option<kmb_session::params::NamedParameter>, kmb_session::params::NamedParamError> {
     for c in &mut sketch.constraints {
-        let angle = c.kind.is_angle();
+        let unit = if c.kind.is_angle() {
+            kmb_core::FieldUnit::Angle
+        } else {
+            kmb_core::FieldUnit::Length
+        };
         let Some(v) = c.kind.value_mut() else {
             continue;
         };
-        let Some((name, expr)) = v.split_once('=') else {
-            continue;
-        };
-        let (name, expr) = (name.trim().to_string(), expr.trim());
-        if name.is_empty() || expr.is_empty() || expr.contains('=') {
-            continue;
+        // 寸法が単位を省いた時は、平面の座標と同じ mm・deg として扱う。
+        if let Some(param) = kmb_session::params::parse_named_parameter(
+            host.data,
+            host.report,
+            v,
+            Some(&unit),
+            kmb_core::LengthUnit::Mm,
+        )? {
+            *v = param.name.clone();
+            return Ok(Some(param));
         }
-        let unit = if angle { "0 deg" } else { "0 mm" };
-        let expr = kmb_ui::with_unit_of(expr, unit);
-        *v = name.clone();
-        return Some((name, expr));
     }
-    None
+    Ok(None)
 }
 
 /// `名前=式` で作るパラメータを調べ、よければ画面へパラメータを作るよう頼んで、スケッチは
 /// 次の更新まで取っておく(パラメータができてから置く)。
 fn defer_with_param(
+    ctx: &egui::Context,
     host: &mut EditorHost<'_>,
     before: &Sketch,
     mut after: Sketch,
@@ -231,38 +237,15 @@ fn defer_with_param(
     deferred: &mut Option<(kmb_core::FeatureId, Sketch)>,
     feature: kmb_core::FeatureId,
 ) -> Option<Sketch> {
-    let Some((name, expr)) = split_new_param(&mut after) else {
-        return refuse_broken_dims(host, before, after, editor);
-    };
-    // 単位や組み込みの名前(mm、pi など)は、パラメータがなくても値になる
-    let reserved = kmb_core::eval_str(&name, &|_| None).is_ok();
-    let valid = name
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_alphabetic() || c == '_')
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_');
-    if !valid || reserved {
-        editor.dim_error = Some(format!("「{name}」はパラメータの名前に使えません"));
-        return None;
-    }
-    if host.name_taken(&name) {
-        let what = if host.data.param_by_name(&name).is_some() {
-            "パラメータ"
-        } else {
-            "寸法の名前"
-        };
-        editor.dim_error = Some(format!(
-            "{what}「{name}」は既にあります(値に {name} とだけ打てば使えます)"
-        ));
-        return None;
-    }
-    let value = match host.eval(&expr) {
-        Ok(v) => v,
-        Err(e) => {
-            editor.dim_error = Some(format!("{expr} を計算できません: {e}"));
+    let param = match split_new_param(host, &mut after) {
+        Ok(Some(p)) => p,
+        Ok(None) => return refuse_broken_dims(host, before, after, editor),
+        Err(error) => {
+            editor.dim_error = Some(kmb_ui::named_parameter_error(ctx, &error));
             return None;
         }
     };
+    let kmb_session::params::NamedParameter { name, expr, value } = param;
     let s = refuse_broken_dims_with(host, before, after, editor, Some((&name, value)))?;
     *host.then = Some((
         kmb_ui::APP_ADD_PARAM.into(),
@@ -1233,6 +1216,7 @@ impl FeatureEditor for SketchEditor {
         changed
             .and_then(|s| {
                 defer_with_param(
+                    ui.ctx(),
                     host,
                     &sketch,
                     s,
@@ -1362,6 +1346,7 @@ impl FeatureEditor for SketchEditor {
         )
         .and_then(|s| {
             defer_with_param(
+                ui.ctx(),
                 host,
                 &sketch,
                 s,

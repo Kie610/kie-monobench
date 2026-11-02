@@ -30,6 +30,7 @@ pub mod layout;
 mod live_ui;
 mod menus_ui;
 mod mouse3d;
+mod named_parameter_text;
 mod outer_ui;
 mod plain_error;
 pub mod ribbon;
@@ -39,6 +40,7 @@ pub mod theme;
 pub mod themes;
 mod titlebar_ui;
 mod window_state;
+pub use named_parameter_text::named_parameter_error;
 use window_state::Tone;
 mod workspace;
 
