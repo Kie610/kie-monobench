@@ -456,10 +456,11 @@ impl Sketch {
         exhausted: bool,
     ) -> EntityId {
         if exhausted {
-            let keep_guide = self
-                .constraints
-                .iter()
-                .any(|c| refs(&c.kind).contains(&line) && !matches!(c.kind, K::Tangent { .. }));
+            let keep_guide = self.projections.iter().any(|p| p.entity == line)
+                || self
+                    .constraints
+                    .iter()
+                    .any(|c| refs(&c.kind).contains(&line) && !matches!(c.kind, K::Tangent { .. }));
             if keep_guide {
                 self.set_construction(line, true);
             } else {
@@ -544,16 +545,19 @@ impl Sketch {
                 if e.id() == arc {
                     *e = next.clone();
                 }
-                *e = e.with_points(e.id(), &|p| map[&p]);
+                *e = e.with_points(e.id(), &|p| map.get(&p).copied().unwrap_or(p));
             }
             for constraint in &mut self.constraints {
-                constraint.kind = crate::arrange::remap(&constraint.kind, &map)
-                    .expect("拘束の参照はすべて現在の要素を指す");
+                if let Some(kind) = crate::arrange::remap(&constraint.kind, &map) {
+                    constraint.kind = kind;
+                }
             }
             self.constraints.retain(|c|!matches!(c.kind,K::TangentCircles {a,b} | K::Concentric {a,b} | K::Equal {a,b} if a==b));
             self.patterns_renumber(&map, &BTreeMap::new());
             for p in &mut self.projections {
-                p.entity = map[&p.entity];
+                if let Some(id) = map.get(&p.entity) {
+                    p.entity = *id;
+                }
             }
             self.entities.retain(|e| e.id() != old);
             for point in [old_center, shared] {
