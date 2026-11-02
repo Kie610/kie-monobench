@@ -3125,7 +3125,6 @@ dependencies = [
  "kmb-contract",
  "kmb-core",
  "kmb-interchange",
- "kmb-session",
  "kmb-sketch-solver",
  "kmb-workspace-hack",
  "proptest",

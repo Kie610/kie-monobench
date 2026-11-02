@@ -2,9 +2,9 @@
 
 use super::*;
 use kmb_core::{
-    Document, FacePick, FeatureEntry, FeatureId, FeatureStatus, Op, Plane, Transaction,
+    Context, Document, FacePick, FeatureEntry, FeatureId, FeatureStatus, Modules, Op, Outcome,
+    Plane, Transaction,
 };
-use kmb_session::{Handled, Headless, Picks};
 use serde_json::json;
 
 fn rounded_rectangle(scale: f64) -> Sketch {
@@ -49,30 +49,32 @@ fn insert(doc: &mut Document, type_id: &str, data: serde_json::Value) -> Feature
     id
 }
 
-fn sketch_on_cap(work: &mut Headless, body: FeatureId, cap: &str, expected_area: f64) {
-    assert_eq!(work.report().error_count(), 0, "{:?}", work.report());
+fn sketch_on_cap(
+    doc: &mut Document,
+    modules: &Modules,
+    body: FeatureId,
+    cap: &str,
+    expected_area: f64,
+) {
+    let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{report:?}");
     let pick = FacePick {
         feature: body,
         face: format!("f{}:{cap}", body.0),
     };
-    let Handled::Changed(added) = work
-        .run_with(
-            SKETCH_ON_FACE,
-            &Picks {
-                selected: Some(body),
-                picked: Some(&pick),
-                ..Default::default()
-            },
-            None,
-            &json!({}),
-        )
-        .unwrap()
+    let mut context = Context::new(doc.data(), &report, &modules.registry, &modules.kernel);
+    context.selected = Some(body);
+    context.picked = Some(&pick);
+    let Outcome::Change { label, edits } =
+        modules.extensions.run(SKETCH_ON_FACE, &context).unwrap()
     else {
         panic!("面にスケッチを置く操作が文書を変えませんでした");
     };
+    let added = doc.apply_edits(&label, edits).unwrap();
     assert_eq!(added.len(), 1);
-    assert_eq!(work.report().error_count(), 0, "{:?}", work.report());
-    let Some(FeatureStatus::Ok { outputs, .. }) = work.report().feature(added[0]) else {
+    let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(added[0]) else {
         panic!("面のスケッチの計算が通りませんでした");
     };
     let profile = profile_value(&outputs["profile"]).unwrap();
@@ -84,7 +86,7 @@ fn sketch_on_cap(work: &mut Headless, body: FeatureId, cap: &str, expected_area:
         "{area}"
     );
     let sketch: Sketch =
-        serde_json::from_value(work.doc().data().feature(added[0]).unwrap().data.clone()).unwrap();
+        serde_json::from_value(doc.data().feature(added[0]).unwrap().data.clone()).unwrap();
     assert!(!sketch.projections.is_empty());
     let solution = solve(&sketch, &Default::default()).unwrap();
     assert!(open_ends_of(&sketch, &solution).is_empty());
@@ -107,8 +109,8 @@ fn a_plain_box_cap_still_projects_to_one_closed_region() {
         "solid.extrude@1",
         json!({"profile": profile, "distance": "20 mm"}),
     );
-    let mut work = Headless::with_document(kmb_bundle::modules(), doc, None);
-    sketch_on_cap(&mut work, body, "end", 1200.0);
+    let modules = kmb_bundle::modules();
+    sketch_on_cap(&mut doc, &modules, body, "end", 1200.0);
 }
 
 fn projected_with_gap(scale: f64, gap: f64) -> Sketch {
