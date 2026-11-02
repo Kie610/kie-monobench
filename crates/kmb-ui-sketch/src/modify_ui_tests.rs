@@ -332,10 +332,10 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
         assert!(
             editor(h.state_mut())
                 .view
-                .last
+                .seen
                 .as_ref()
                 .unwrap()
-                .rect
+                .1
                 .contains(pos),
             "point {p:?} at {pos:?}"
         );
