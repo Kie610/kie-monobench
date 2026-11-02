@@ -374,3 +374,9 @@ action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper 
 
 action-cad-sketch-regions = List sketch regions
 action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
+
+action-study-converge = Check accuracy
+action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+action-study-check = Check conditions
+action-study-check-tip = List missing study conditions and explain how to fix them before solving

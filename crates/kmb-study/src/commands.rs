@@ -3,7 +3,7 @@
 //! 機能)ならどれにも効く(強度と熱の kmb-fea、流れの kmb-flow)。
 
 use crate::result::{Geometry, Role, SimResult, fmt};
-use crate::run::{PLAN, Plan, Runner, Status, clock, prepared};
+use crate::run::{Mode, PLAN, Plan, Runner, Status, clock, prepared};
 use crate::view::{self, Look};
 use kmb_core::{
     Action, Context, Extension, FeatureId, FeatureStatus, FrameBar, Outcome, Overlay, OverlayShape,
@@ -14,6 +14,8 @@ use std::sync::{Arc, Mutex};
 
 pub const RUN: &str = "study.run";
 pub const CANCEL: &str = "study.cancel";
+pub const CONVERGE: &str = "study.converge";
+pub const CHECK: &str = "study.check";
 pub const VIEW_QUANTITY: &str = "study.view.quantity.";
 pub const VIEW_FRAME: &str = "study.view.frame.";
 pub const VIEW_SURFACE: &str = "study.view.surface";
@@ -282,16 +284,37 @@ impl StudyCommands {
         id: FeatureId,
         wait: bool,
     ) -> Result<Option<Arc<SimResult>>, String> {
+        self.run_mode(cx, id, wait, Mode::Solve)
+    }
+
+    fn run_mode(
+        &self,
+        cx: &Context<'_>,
+        id: FeatureId,
+        wait: bool,
+        mode: Mode,
+    ) -> Result<Option<Arc<SimResult>>, String> {
         let Some(p) = plan(cx, id) else {
             return Err(problem(cx, id));
         };
         let task = prepared(cx.registry, p.key)
             .ok_or("条件を読み直してから実行してください(再計算すると読み直します)")?;
+        task.supports(&mode)?;
         let at = Self::at(cx, id);
         if wait {
-            self.runner.solve_now(at, p.key, task.as_ref()).map(Some)
+            self.runner
+                .solve_now(at, p.key, task.as_ref(), mode)
+                .map(Some)
         } else {
-            self.runner.start(at, p.key, p.steps.clone(), task);
+            let steps = match mode {
+                Mode::Solve => p.steps.clone(),
+                Mode::Converge { .. } => {
+                    ["粗い網で解く", "中の網で解く", "細かい網で解く", "比べる"]
+                        .map(str::to_string)
+                        .to_vec()
+                }
+            };
+            self.runner.start(at, p.key, steps, task, mode);
             Ok(None)
         }
     }
@@ -373,7 +396,41 @@ impl Extension for StudyCommands {
             .aliases("じっこう とく かいせき 実行 解く solve run")
             .at(&places);
         run.disabled = run_why;
+        let mut converge = Action::new(CONVERGE, "精度を確かめる", "fea")
+            .arg(kmb_core::Arg::flag(
+                "wait",
+                "解き終わるまで待って結果を返す(CLI・MCP)",
+            ))
+            .arg(
+                kmb_core::Arg::number(
+                    "ratio",
+                    "網の大きさの比(1.3〜2.0)",
+                    kmb_core::FieldUnit::Unitless,
+                )
+                .default(serde_json::json!(1.5)),
+            )
+            .menu("実行")
+            .icon("play")
+            .hint("3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる")
+            .at(&places);
+        converge.disabled = run.disabled.clone().or_else(|| {
+            sel.and_then(|id| {
+                let p = plan(cx, id)?;
+                prepared(cx.registry, p.key)?
+                    .supports(&Mode::Converge { ratio: 1.5 })
+                    .err()
+            })
+        });
         out.push(run);
+        out.push(converge);
+        let mut check = Action::new(CHECK, "点検", "fea")
+            .menu("実行")
+            .hint("解く前に足りない条件を一覧で示し、直し方を知らせる")
+            .at(&places);
+        if sel.is_none() {
+            check.disabled = Some("研究を選んでから点検します".into());
+        }
+        out.push(check);
         let mut cancel = Action::new(CANCEL, "中止", "fea")
             .menu("実行")
             .icon("x")
@@ -508,16 +565,41 @@ impl Extension for StudyCommands {
     }
 
     fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
-        if id != RUN && id != CANCEL && !id.starts_with("study.view.") {
+        if id != RUN
+            && id != CANCEL
+            && id != CONVERGE
+            && id != CHECK
+            && !id.starts_with("study.view.")
+        {
             return None;
         }
         let Some(fid) = selected(cx) else {
             return Some(Err("解析の研究を選んでから使う".into()));
         };
         Some(match id {
-            RUN => {
+            CHECK => {
+                let checks = plan(cx, fid).map_or_else(
+                    || {
+                        vec![crate::Check {
+                            error: true,
+                            what: problem(cx, fid),
+                            fix: "研究の条件を直して再計算してください".into(),
+                        }]
+                    },
+                    |p| p.checks,
+                );
+                check_outcome(&checks)
+            }
+            RUN | CONVERGE => {
+                let mode = if id == CONVERGE {
+                    Mode::Converge {
+                        ratio: cx.arg("ratio").and_then(|v| v.as_f64()).unwrap_or(1.5),
+                    }
+                } else {
+                    Mode::Solve
+                };
                 let wait = cx.arg("wait").and_then(|v| v.as_bool()) == Some(true);
-                self.run_study(cx, fid, wait)
+                self.run_mode(cx, fid, wait, mode)
                     .map(|r| match r {
                         Some(r) => Outcome::Message(format!("解きました: {}", r.summary)),
                         None => {
@@ -794,4 +876,54 @@ impl Extension for StudyCommands {
 /// 数を短く(結果の表と同じ)。
 pub fn short(v: f64) -> String {
     fmt(v)
+}
+
+/// 点検の結果は、注意だけなら読める文、誤りがあれば見つけた問題として返す。
+fn check_outcome(checks: &[crate::Check]) -> Result<Outcome, kmb_core::Problem> {
+    let body = if checks.is_empty() {
+        "足りない条件はありません".to_string()
+    } else {
+        checks
+            .iter()
+            .map(|c| {
+                format!(
+                    "{}: {}。{}",
+                    if c.error { "誤り" } else { "注意" },
+                    c.what,
+                    c.fix
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if checks.iter().any(|c| c.error) {
+        Err(kmb_core::Problem::new(kmb_core::ProblemKind::Found, body))
+    } else {
+        Ok(Outcome::Text {
+            title: "点検".into(),
+            body,
+        })
+    }
+}
+
+#[cfg(test)]
+mod check_tests {
+    use super::*;
+    #[test]
+    fn checks_have_the_found_exit_code_and_warning_only_is_readable() {
+        let mut c = crate::Check {
+            error: true,
+            what: "固定が無い".into(),
+            fix: "面を足す".into(),
+        };
+        let p = check_outcome(&[c.clone()]).unwrap_err();
+        assert_eq!(p.kind, kmb_core::ProblemKind::Found);
+        assert_eq!(p.kind.exit_code(), 3);
+        assert!(p.message.contains("面を足す"));
+        c.error = false;
+        assert!(matches!(check_outcome(&[c]).unwrap(), Outcome::Text { .. }));
+        assert!(
+            matches!(check_outcome(&[]).unwrap(), Outcome::Text { body, .. } if body == "足りない条件はありません")
+        );
+    }
 }

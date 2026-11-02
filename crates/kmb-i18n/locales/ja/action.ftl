@@ -375,3 +375,9 @@ action-cam-nest-set-part-tip = 部品の個数、回してよい向き、上に�
 
 action-cad-sketch-regions = スケッチの領域を一覧
 action-cad-sketch-regions-tip = スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む
+
+action-study-converge = 精度を確かめる
+action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる
+
+action-study-check = 点検
+action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる
