@@ -382,3 +382,75 @@ fn a_snap_joint_between_touching_faces_keeps_the_part_where_it_is() {
     };
     assert_eq!(touching_alignment(&apart, &to), None);
 }
+
+fn batch_mouth(diameter: f64, x: f64) -> serde_json::Value {
+    serde_json::json!({"center":[x,0,0],"normal":[0,0,1],"diameter":diameter,"hole":true,"depth":8})
+}
+
+#[test]
+fn batch_fasteners_reject_an_incompatible_hole_instead_of_inserting_another_size() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let args = serde_json::json!({"holes":[batch_mouth(3.4,0.0),batch_mouth(6.6,20.0)]});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    let result = AsmCommands.run(NEW_FASTENER, &cx).unwrap();
+    let Err(problem) = result else {
+        panic!("合わない穴を含む変更は作らない")
+    };
+    assert_eq!(problem.kind, kmb_core::ProblemKind::Input);
+    assert!(
+        problem.to_string().contains("穴2") && problem.to_string().contains("M3"),
+        "{problem}"
+    );
+}
+
+#[test]
+fn batch_fasteners_do_not_silently_drop_a_malformed_hole() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let args = serde_json::json!({"holes":[batch_mouth(3.4,0.0),{"bad":true}]});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    let result = AsmCommands.run(NEW_FASTENER, &cx).unwrap();
+    assert!(
+        matches!(result,Err(ref p) if p.kind==kmb_core::ProblemKind::Input),
+        "読めない穴を飛ばして挿さない"
+    );
+}
+
+#[test]
+fn batch_fasteners_choose_a_flat_head_from_the_countersink_instead_of_a_thicker_shank() {
+    let mut mouth = batch_mouth(6.8, 0.0);
+    mouth["countersink"] = serde_json::json!(true);
+    let mouth: fastener::HoleMouth = serde_json::from_value(mouth).unwrap();
+    let f = fastener::new_fastener(fastener::Kind::FlatHead, &[mouth]);
+    assert_eq!(f.size, "M3", "皿の径は頭の寸法で選ぶ");
+}
+
+#[test]
+fn batch_fasteners_reject_a_shank_that_only_matches_the_countersink_opening() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let mut mouth = batch_mouth(6.8, 0.0);
+    mouth["countersink"] = serde_json::json!(true);
+    let args = serde_json::json!({"holes":[mouth],"kind":"flat_head","size":"M6"});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    assert!(
+        matches!(AsmCommands.run(NEW_FASTENER,&cx).unwrap(),Err(p) if p.kind==kmb_core::ProblemKind::Input),
+        "皿の口の径だけに合う太い軸を挿さない"
+    );
+}
