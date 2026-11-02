@@ -48,7 +48,10 @@ fn undoing_a_line_chain_accepts_a_new_start_and_then_another_line() {
     undo(&mut h);
     assert_eq!(count_of(&current_sketch(h.state()), is_line), 2);
     assert_live_points(&h);
-    assert_eq!(h.state().editor::<SketchEditor>().unwrap().editor.tool, Tool::Line);
+    assert_eq!(
+        h.state().editor::<SketchEditor>().unwrap().editor.tool,
+        Tool::Line
+    );
     click_at(&mut h, [-9.24, 5.93]);
     assert_eq!(count_of(&current_sketch(h.state()), is_line), 2);
     click_at(&mut h, [-4.03, 5.93]);
@@ -86,5 +89,8 @@ fn esc_after_undo_leaves_the_line_tool_without_finishing_the_sketch() {
     assert!(h.state().is_editing(id));
     assert_eq!(current_sketch(h.state()), before);
     press_key(&mut h, egui::Key::Escape);
-    assert!(h.state().is_editing(id), "選ぶ状態の最初のEscで編集を終えない");
+    assert!(
+        h.state().is_editing(id),
+        "選ぶ状態の最初のEscで編集を終えない"
+    );
 }
