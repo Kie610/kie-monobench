@@ -492,7 +492,13 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
             .notice
             .clone()
             .expect("作れない角の理由を出す");
-        assert!(notice.contains(&crate::view::shown_length(2.0)), "{notice}");
+        let maximum = notice
+            .split_whitespace()
+            .find_map(|s| s.trim_matches(['\u{2068}', '\u{2069}']).parse::<f64>().ok())
+            .expect("使える上限の数を出す");
+        // クリック位置は画面の単精度の座標を通る。
+        assert!((maximum - 2.0).abs() < 1e-5, "{notice}");
+        assert!(notice.contains("mm"), "{notice}");
         h.get_by_label("元に戻す").click();
         h.run();
         assert_eq!(
