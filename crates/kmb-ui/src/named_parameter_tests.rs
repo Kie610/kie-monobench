@@ -116,3 +116,127 @@ fn named_parameter_typing_in_the_distance_field_changes_both_values_with_one_und
         "10 mm"
     );
 }
+
+fn live_call(
+    h: &mut Harness<'static, Workspace>,
+    dir: &std::path::Path,
+    tool: &str,
+    args: serde_json::Value,
+) -> serde_json::Value {
+    let dir = dir.to_owned();
+    let tool = tool.to_owned();
+    let worker = std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args));
+    let began = std::time::Instant::now();
+    while !worker.is_finished() {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert!(
+            began.elapsed() < std::time::Duration::from_secs(30),
+            "画面の答えの時間切れ"
+        );
+    }
+    let reply = worker.join().unwrap().expect("画面の答え");
+    assert_eq!(reply["ok"], true, "{reply}");
+    while h.state().is_busy() {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert!(
+            began.elapsed() < std::time::Duration::from_secs(30),
+            "再計算の時間切れ"
+        );
+    }
+    h.run_steps(8);
+    reply
+}
+
+#[test]
+fn named_parameter_live_typing_and_undo_use_the_same_change() {
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let dir = Scratch(
+        std::env::temp_dir().join(format!(
+            "kmb-named-parameter-live-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        )),
+    );
+    std::fs::create_dir_all(&dir.0).unwrap();
+    let (ws, id) = fixture(false);
+    let mut ws = ws.with_data_dir(dir.0.clone());
+    ws.layout_mut().ai_live = true;
+    ws.layout_mut().appearance.language = "ja".into();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let before = h.state().document().undo_depth();
+    live_call(
+        &mut h,
+        &dir.0,
+        "ui_type",
+        json!({"target":"距離","text":"w=20","commit":"enter"}),
+    );
+    assert_eq!(
+        h.state().document().data().param_by_name("w").unwrap().expr,
+        "20 mm"
+    );
+    assert_eq!(
+        h.state().document().data().feature(id).unwrap().data["distance"],
+        "w"
+    );
+    assert_eq!(h.state().document().undo_depth(), before + 1);
+    live_call(&mut h, &dir.0, "ui_key", json!({"keys":"Ctrl+Z"}));
+    assert!(h.state().document().data().param_by_name("w").is_none());
+    assert_eq!(
+        h.state().document().data().feature(id).unwrap().data["distance"],
+        "10 mm"
+    );
+}
+
+#[test]
+fn named_parameter_error_messages_follow_the_display_language() {
+    use kmb_session::params::NamedParamError;
+    for language in ["ja", "en"] {
+        let (mut ws, _) = fixture(false);
+        ws.layout_mut().appearance.language = language.into();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1400.0, 800.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        let errors = [
+            NamedParamError::Syntax,
+            NamedParamError::InvalidName("mm".into()),
+            NamedParamError::Duplicate {
+                name: "w".into(),
+                dimension: false,
+            },
+            NamedParamError::Duplicate {
+                name: "d1".into(),
+                dimension: true,
+            },
+            NamedParamError::Expression {
+                expr: "no_such_name".into(),
+                reason: "unknown name".into(),
+            },
+            NamedParamError::UnitMismatch { length: true },
+            NamedParamError::UnitMismatch { length: false },
+        ];
+        for error in errors {
+            let text = crate::named_parameter_error(&h.ctx, &error);
+            assert!(!text.contains("common-named-parameter-"), "{text}");
+            if language == "ja" {
+                assert_eq!(text, error.to_string());
+            } else {
+                assert!(text.is_ascii() || text.contains('“'), "{text}");
+                assert!(!text.contains("パラメータ"), "{text}");
+            }
+        }
+    }
+}
