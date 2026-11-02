@@ -157,16 +157,14 @@ fn named_parameter_live_typing_and_undo_use_the_same_change() {
             let _ = std::fs::remove_dir_all(&self.0);
         }
     }
-    let dir = Scratch(
-        std::env::temp_dir().join(format!(
-            "kmb-named-parameter-live-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        )),
-    );
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = Scratch(std::env::temp_dir().join(format!(
+        "kmb-named-parameter-live-{}-{unique}",
+        std::process::id()
+    )));
     std::fs::create_dir_all(&dir.0).unwrap();
     let (ws, id) = fixture(false);
     let mut ws = ws.with_data_dir(dir.0.clone());
