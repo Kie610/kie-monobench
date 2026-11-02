@@ -57,3 +57,5 @@
 # action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
 # action-cad-import-mesh = Import STL or 3MF…
 # action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
+# action-params-apply-batch = Apply expressions together
+# action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid

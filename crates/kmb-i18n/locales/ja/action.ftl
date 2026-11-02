@@ -420,3 +420,6 @@ action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリ�
 
 action-cad-import-mesh = STL・3MF を読み込む…
 action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
+
+action-params-apply-batch = 式をまとめて適用
+action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する
