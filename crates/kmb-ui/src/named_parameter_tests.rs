@@ -2,7 +2,7 @@
 
 use crate::*;
 use egui_kittest::{Harness, kittest::Queryable};
-use kmb_core::{Document, FeatureEntry, FeatureId, Op, Param, Transaction};
+use kmb_core::{FeatureEntry, FeatureId, Op, Param, Transaction};
 use serde_json::json;
 
 fn fixture(existing_name: bool) -> (Workspace, FeatureId) {
@@ -52,7 +52,7 @@ fn named_parameter_typing_in_the_distance_field_changes_both_values_with_one_und
     h.ctx.memory_mut(|m|m.request_focus(key.with("edit")));
     h.run();
     for pressed in [true,false] {
-        h.event(egui::Event::Key {key:egui::Key::A,physical_key:None,pressed,repeat:false,modifiers:egui::Modifiers::CTRL});
+        h.event(egui::Event::Key {key:egui::Key::A,physical_key:None,pressed,repeat:false,modifiers:egui::Modifiers {ctrl:true,command:true,..egui::Modifiers::NONE}});
         h.run();
     }
     h.event(egui::Event::Text("w=20".into()));
