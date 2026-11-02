@@ -20,11 +20,32 @@ enum Act {
     WriteBack(String),
 }
 
+#[derive(Clone)]
+struct Problems {
+    stamp: u64,
+    table: Configurations,
+    issues: Vec<kmb_session::ConfigurationIssue>,
+}
+
 impl Workspace {
     /// 構成表の欄(パラメータの欄の下)。
     pub(crate) fn config_ui(&mut self, ui: &mut egui::Ui) {
         let data = self.cur.work.doc().data();
         let c = configuration::of(data);
+        let cache_id = crate::doc_id(ui.ctx(), "config_expression_problems");
+        let stamp = self.cur.work.report().stamp();
+        let cached = ui.data(|d| d.get_temp::<std::sync::Arc<Problems>>(cache_id));
+        let problems = if let Some(cached) = cached.filter(|p| p.stamp == stamp && p.table == c) {
+            cached
+        } else {
+            let cached = std::sync::Arc::new(Problems {
+                stamp,
+                table: c.clone(),
+                issues: self.cur.work.configuration_issues(),
+            });
+            ui.data_mut(|d| d.insert_temp(cache_id, cached.clone()));
+            cached
+        };
         let labels: Vec<String> = c
             .columns
             .iter()
@@ -86,7 +107,7 @@ impl Workspace {
                                 }
                                 ui.end_row();
                                 for (i, row) in c.rows.iter().enumerate() {
-                                    if let Some(a) = row_ui(ui, i, row, &c, &labels) {
+                                    if let Some(a) = row_ui(ui, i, row, &c, &labels, &problems.issues) {
                                         act = Some(a);
                                     }
                                     ui.end_row();
@@ -148,13 +169,21 @@ impl Workspace {
                 });
             });
         if let Some(a) = act {
-            self.config_act(a);
+            self.config_act(ui.ctx(), a);
         }
     }
 
-    fn config_act(&mut self, a: Act) {
+    fn config_act(&mut self, ctx: &egui::Context, a: Act) {
         let data = self.cur.work.doc().data();
         let mut c = configuration::of(data);
+        let problem = match &a {
+            Act::Set(row, col, _) => c
+                .rows
+                .iter()
+                .position(|r| r.name == *row)
+                .map(|i| crate::doc_id(ctx, ("config_cell", i, *col)).with("problem")),
+            _ => None,
+        };
         let (label, ops) = match a {
             Act::AddColumn(col) => {
                 let label = format!(
@@ -258,7 +287,14 @@ impl Workspace {
                 }
             },
         };
-        self.apply(tx);
+        let done = self.apply(tx);
+        if let Some(problem) = problem {
+            if done {
+                ctx.data_mut(|d| d.remove::<String>(problem));
+            } else if let Some(why) = &self.win.message {
+                ctx.data_mut(|d| d.insert_temp(problem, why.clone()));
+            }
+        }
     }
 }
 
@@ -269,6 +305,7 @@ fn row_ui(
     row: &ConfigRow,
     c: &Configurations,
     labels: &[String],
+    issues: &[kmb_session::ConfigurationIssue],
 ) -> Option<Act> {
     let mut act = None;
     let active = c.active.as_deref() == Some(row.name.as_str());
@@ -288,6 +325,10 @@ fn row_ui(
         &row.name,
         80.0,
         &format!("{} の名前", row.name),
+        issues
+            .iter()
+            .find(|e| e.row == row.name)
+            .map(|e| e.message.as_str()),
     );
     if let Some(t) = r.0 {
         act = Some(Act::Rename(row.name.clone(), t));
@@ -320,6 +361,18 @@ fn row_ui(
                     e,
                     90.0,
                     &name,
+                    issues
+                        .iter()
+                        .find(|e| {
+                            e.row == row.name
+                                && match &c.columns[j] {
+                                    ConfigColumn::Param { param } => {
+                                        e.param.is_none_or(|p| p == *param)
+                                    }
+                                    _ => false,
+                                }
+                        })
+                        .map(|e| e.message.as_str()),
                 );
                 if let Some(t) = t {
                     act = Some(Act::Set(row.name.clone(), j, ConfigCell::Expr(t)));
@@ -349,15 +402,30 @@ fn text_cell(
     now: &str,
     width: f32,
     name: &str,
+    reason: Option<&str>,
 ) -> (Option<String>, egui::Response) {
     let mut text = ui
         .data(|d| d.get_temp::<FieldEdit>(id))
         .map_or_else(|| now.to_string(), |e| e.text_on(now));
-    let r = ui.add(
-        egui::TextEdit::singleline(&mut text)
-            .id(id.with("edit"))
-            .desired_width(width),
-    );
+    let problem = id.with("problem");
+    let why = reason
+        .map(str::to_string)
+        .or_else(|| ui.data(|d| d.get_temp::<String>(problem)));
+    let edit = egui::TextEdit::singleline(&mut text)
+        .id(id.with("edit"))
+        .desired_width(width);
+    let edit = if why.is_some() {
+        edit.text_color(ui.visuals().error_fg_color)
+    } else {
+        edit
+    };
+    let mut r = ui.add(edit);
+    if let Some(why) = &why {
+        r = r.on_hover_text(why);
+    }
+    if r.changed() {
+        ui.data_mut(|d| d.remove::<String>(problem));
+    }
     ui.ctx().accesskit_node_builder(r.id, |b| b.set_label(name));
     let done = (r.lost_focus() && text != now).then(|| text.clone());
     ui.data_mut(|d| d.insert_temp(id, FieldEdit::new(now, text)));
