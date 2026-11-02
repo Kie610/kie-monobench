@@ -487,7 +487,13 @@ fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
         type_text(&mut h, "5");
         press_enter(&mut h);
         assert_eq!(current_sketch(h.state()), before, "{tool:?} は全部断る");
-        assert!(editor(h.state_mut()).editor.notice.is_some());
+        assert!(
+            editor(h.state_mut())
+                .editor
+                .notice
+                .as_ref()
+                .is_some_and(|s| s.contains("2 mm"))
+        );
         h.get_by_label("元に戻す").click();
         h.run();
         assert_eq!(

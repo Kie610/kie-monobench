@@ -861,3 +861,76 @@ fn tangent_intersections_stay_single_at_different_scales_and_angles() {
         }
     }
 }
+
+#[test]
+fn exact_half_side_limits_allow_equality_but_refuse_values_beyond_epsilon() {
+    let (s, corners) = rectangle_corners(10.0, 20.0);
+    let (radius, sides) = s.corner_limits(corners[0]).unwrap();
+    assert!((radius - 10.0).abs() < crate::geom::EPS);
+    assert_eq!(sides, [10.0, 20.0]);
+    let mut accepted = s.clone();
+    assert!(
+        accepted
+            .fillet_corner(corners[0], 10.0 + crate::geom::EPS / 2.0, "10 mm")
+            .is_some()
+    );
+    let mut refused = s.clone();
+    assert!(
+        refused
+            .fillet_corner(corners[0], 10.0 + 2.0 * crate::geom::EPS, "10 mm")
+            .is_none()
+    );
+    assert_eq!(refused, s);
+    let mut accepted = s.clone();
+    assert!(
+        accepted
+            .chamfer_corner_with(
+                corners[0],
+                None,
+                &Chamfer::Equal {
+                    d: 10.0 + crate::geom::EPS / 2.0,
+                    value: "10 mm".into()
+                }
+            )
+            .is_some()
+    );
+    assert!(
+        refused
+            .chamfer_corner_with(
+                corners[0],
+                None,
+                &Chamfer::Equal {
+                    d: 10.0 + 2.0 * crate::geom::EPS,
+                    value: "10 mm".into()
+                }
+            )
+            .is_none()
+    );
+    assert_eq!(refused, s);
+}
+
+#[test]
+fn exact_half_side_arc_merges_keep_radius_dimension_names() {
+    let (mut s, corners) = rectangle_corners(20.0, 20.0);
+    let mut names = Vec::new();
+    for corner in corners {
+        s.fillet_corner(corner, 10.0, "10 mm").unwrap();
+        for constraint in &s.constraints {
+            if constraint.kind.value().is_some()
+                && !names.iter().any(|(id, _)| *id == constraint.id)
+            {
+                names.push((constraint.id, s.dim_name(constraint.id).unwrap()));
+            }
+        }
+    }
+    assert_eq!(names.len(), 4);
+    for (id, name) in names {
+        assert_eq!(s.dim_name(id).as_deref(), Some(name.as_str()));
+        let constraint = s.constraints.iter().find(|c| c.id == id).unwrap();
+        let ConstraintKind::Radius { circle, .. } = constraint.kind else {
+            panic!("半径の寸法を残す")
+        };
+        assert!(matches!(s.entity(circle), Some(Entity::Circle { .. })));
+    }
+    assert_closed_corner_profile(&s, 10.0, 1);
+}
