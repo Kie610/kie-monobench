@@ -968,3 +968,37 @@ fn exact_half_side_fillets_preserve_rectangle_guides_and_their_endpoints() {
     }
     assert_closed_corner_profile(&s, 10.0, 1);
 }
+
+#[test]
+fn exact_half_side_keeps_a_projected_arc_separate_from_new_fillet_arcs() {
+    let (mut s, corners) = rectangle_corners(20.0, 20.0);
+    let arc = s.fillet_corner(corners[0], 10.0, "10 mm").unwrap();
+    let original = s.entity(arc).unwrap().clone();
+    let projection = Projection {
+        entity: arc,
+        source: ProjectionSource::Sketch {
+            feature: kmb_core::FeatureId(42),
+            item: arc,
+        },
+    };
+    s.projections.push(projection.clone());
+    for corner in &corners[1..] {
+        s.fillet_corner(*corner, 10.0, "10 mm").unwrap();
+    }
+    assert_eq!(
+        s.entity(arc),
+        Some(&original),
+        "写した円弧は元の形へ取り直す単位を保つ"
+    );
+    assert_eq!(s.projections, [projection]);
+    let values: HashMap<_, _> = s
+        .constraints
+        .iter()
+        .filter(|c| c.kind.value().is_some())
+        .map(|c| (c.id, 10.0))
+        .collect();
+    let sol = solve(&s, &values).unwrap();
+    let (profile, bad) = profile_of(&s, &sol, kmb_core::Plane::XY);
+    assert!(bad.is_empty(), "{bad:?}");
+    assert_eq!(profile.regions.len(), 1);
+}
