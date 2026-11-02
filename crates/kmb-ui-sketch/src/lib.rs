@@ -939,6 +939,7 @@ impl FeatureEditor for SketchEditor {
             ui.colored_label(ui.visuals().error_fg_color, why);
             return None;
         };
+        self.editor.reconcile_line_points(&sketch);
         self.show_diagnosis(
             host,
             entry.id,
