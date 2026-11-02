@@ -308,6 +308,7 @@ unsafe extern "C" {
     fn jc_set_face_tags(brep: *mut JcBrep, tags: *const i64, count: usize) -> i32;
     fn jc_edges(brep: *const JcBrep, out: *mut *mut JcEdge, count: *mut usize) -> i32;
     fn jc_free_buffer(p: *mut std::ffi::c_void);
+    fn jc_face_normal(brep: *const JcBrep, face: usize, p: *const f64, out: *mut f64) -> i32;
     fn jc_face_distance(brep: *const JcBrep, face: usize, p: *const f64, out: *mut f64) -> i32;
     fn jc_arc_edges(brep: *const JcBrep, out: *mut *mut JcArcEdge, count: *mut usize) -> i32;
     fn jc_mass(brep: *const JcBrep, relative_accuracy: f64, out: *mut JcMassProps) -> i32;
@@ -678,7 +679,7 @@ impl Brep {
         take(code, out)
     }
 
-    /// [`Brep::shell`] の SMLib の指定(`flags`: 1 = 凸の辺を延ばす、2 = 自己交差を扱う)を選べる版。
+    /// [`Brep::shell`] の SMLib の指定(`flags`: 1 = 凸の辺を延ばす、2 = 自己交差を扱う、4 = 面の縁を閉じて立体にする、8 = 両側)を選べる版。
     pub fn shell_with(&self, open: &[usize], offset: f64, flags: i32) -> Result<Brep, String> {
         let mut out = std::ptr::null_mut();
         // SAFETY: self.0 は生きている形状、open は open.len() 個の添字
@@ -716,6 +717,13 @@ impl Brep {
     }
 
     /// 面 `face`(`faces` の添字)から点 `p` までの距離。
+    pub fn face_normal(&self, face: usize, p: [f64; 3]) -> Result<[f64; 3], String> {
+        let mut n = [0.; 3];
+        // SAFETY: 生きている形と、それぞれ3座標の読み書き可能な配列。
+        status(unsafe { jc_face_normal(self.0, face, p.as_ptr(), n.as_mut_ptr()) })?;
+        Ok(n)
+    }
+
     pub fn face_distance(&self, face: usize, p: [f64; 3]) -> Result<f64, String> {
         let mut d = 0.0;
         // SAFETY: 3 要素の配列を読み、出力へ書くだけ
@@ -877,4 +885,15 @@ pub fn export_step(breps: &[&Brep], names: &[&str], product: &str) -> Result<Str
         .into_owned();
     unsafe { jc_free_buffer(out.cast()) };
     Ok(text)
+}
+
+#[cfg(test)]
+pub fn test_curved_sheet(kind: i32, radius: f64) -> Result<Brep, String> {
+    unsafe extern "C" {
+        fn jc_test_curved_sheet(kind: i32, radius: f64, out: *mut *mut JcBrep) -> i32;
+    }
+    let mut out = std::ptr::null_mut();
+    // SAFETY: 固定の解析曲面の種類と半径、書き込み可能な結果の場所。
+    let code = unsafe { jc_test_curved_sheet(kind, radius, &mut out) };
+    take(code, out)
 }

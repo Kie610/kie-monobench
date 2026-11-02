@@ -413,3 +413,6 @@ action-drawing-parts-table-tip = Place selected parts table columns on the sheet
 
 action-drawing-set-style = Dimension style
 action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
+
+action-cad-thicken = Thicken
+action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid

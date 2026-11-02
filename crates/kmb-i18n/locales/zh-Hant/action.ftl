@@ -53,3 +53,5 @@
 
 # action-drawing-delete = Delete drawing
 # action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
+# action-cad-thicken = Thicken
+# action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
