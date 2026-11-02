@@ -40,7 +40,7 @@ pub(super) fn picks_on_ray(
             let depth = dot(sub(p, cam.target), e);
             // 視点に近すぎて描かない所と、断面で切り取った所は拾わない
             if near.is_some_and(|zmax| depth > zmax)
-                || scene.section.is_some_and(|sec| sec.removes(p))
+                || !section_hit_allowed(scene.section, b, &m.triangles[t as usize], p, d)
             {
                 return;
             }
@@ -65,6 +65,7 @@ pub(super) fn picks_on_ray(
 pub fn picks_at_brute(scene: &Scene, cam: &Camera, rect: Rect, pos: Pos2) -> Vec<(Pick, [f32; 3])> {
     let mut hits: Vec<(f32, Pick)> = Vec::new();
     let near = cam.near_limit(rect);
+    let direction = cam.ray(pos, rect).1;
     for b in &scene.bodies {
         let m = &b.mesh;
         let pts: Vec<(Pos2, f32)> = m.positions.iter().map(|p| cam.project(*p, rect)).collect();
@@ -84,6 +85,10 @@ pub fn picks_at_brute(scene: &Scene, cam: &Camera, rect: Rect, pos: Pos2) -> Vec
                 hit_depth(cam, rect, v, pos)
             };
             let Some(depth) = depth else { continue };
+            let point = cam.unproject(pos, depth, rect);
+            if !section_hit_allowed(scene.section, b, t, point, direction) {
+                continue;
+            }
             let pick = Pick {
                 feature: b.feature,
                 face: m.face_names[*face as usize].clone(),
@@ -98,6 +103,25 @@ pub fn picks_at_brute(scene: &Scene, cam: &Camera, rect: Rect, pos: Pos2) -> Vec
     hits.into_iter()
         .map(|(d, p)| (p, cam.unproject(pos, d, rect)))
         .collect()
+}
+
+/// 切り取った側と、閉じた網の内側から見た壁は断面の選びに含めない。
+fn section_hit_allowed(
+    section: Option<Section>,
+    body: &SceneBody,
+    triangle: &[u32; 3],
+    point: [f32; 3],
+    direction: [f32; 3],
+) -> bool {
+    let Some(section) = section else { return true };
+    if section.removes(point) {
+        return false;
+    }
+    if body.two_sided || !body.section_closed_boundary {
+        return true;
+    }
+    let [a, b, c] = triangle.map(|i| body.mesh.positions[i as usize]);
+    dot(cross(sub(b, a), sub(c, a)), direction) <= 0.0
 }
 
 /// 画面に写した三角形 `v`(位置と近さ)に点 `pos` が入っていれば、そこの近さ。
@@ -620,4 +644,525 @@ pub fn body_bounds(scene: &Scene, feature: FeatureId) -> Option<([f32; 3], [f32;
         }
     }
     (min[0] <= max[0]).then_some((min, max))
+}
+
+#[cfg(test)]
+mod section_pick_tests {
+    use super::*;
+
+    fn rect() -> Rect {
+        Rect::from_min_size(Pos2::new(20.0, 30.0), Vec2::new(800.0, 600.0))
+    }
+
+    /// 外向きの三角形を持つ箱。面の名前は軸の向きで分ける。
+    fn box_mesh(center: [f32; 3], half: f32) -> Mesh {
+        let positions = [
+            [-1.0, -1.0, -1.0],
+            [1.0, -1.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+        ]
+        .map(|p| [0, 1, 2].map(|i| center[i] + p[i] * half))
+        .to_vec();
+        Mesh {
+            positions,
+            triangles: vec![
+                [0, 2, 1],
+                [0, 3, 2],
+                [4, 5, 6],
+                [4, 6, 7],
+                [0, 4, 7],
+                [0, 7, 3],
+                [1, 2, 6],
+                [1, 6, 5],
+                [0, 1, 5],
+                [0, 5, 4],
+                [3, 7, 6],
+                [3, 6, 2],
+            ],
+            triangle_faces: (0..6).flat_map(|f| [f, f]).collect(),
+            face_names: ["-z", "+z", "-x", "+x", "-y", "+y"]
+                .map(str::to_owned)
+                .to_vec(),
+            ..Mesh::default()
+        }
+    }
+
+    fn box_scene() -> Scene {
+        let mut scene = Scene::default();
+        scene.set(&[], vec![(FeatureId(1), box_mesh([0.0; 3], 1.0))]);
+        scene
+    }
+
+    fn camera(yaw: f32, pitch: f32, perspective: bool) -> Camera {
+        Camera {
+            yaw: yaw.to_radians(),
+            pitch: pitch.to_radians(),
+            zoom: 120.0,
+            perspective,
+            ..Camera::default()
+        }
+    }
+
+    fn section(normal: [f32; 3], offset: f32) -> Section {
+        Section {
+            normal,
+            offset,
+            by_body: false,
+            outside: false,
+        }
+    }
+
+    fn assert_same_hits(scene: &Scene, cam: &Camera, pos: Pos2) {
+        let tree = picks_at(scene, cam, rect(), pos);
+        let brute = picks_at_brute(scene, cam, rect(), pos);
+        assert_eq!(
+            tree.iter().map(|h| &h.0).collect::<Vec<_>>(),
+            brute.iter().map(|h| &h.0).collect::<Vec<_>>()
+        );
+        for (a, b) in tree.iter().zip(&brute) {
+            assert!(
+                (0..3).all(|i| (a.1[i] - b.1[i]).abs() < 1e-4),
+                "当たった位置が異なる: {a:?}, {b:?}"
+            );
+        }
+    }
+
+    /// 確かめること: 断面の向き・位置・投影と色の設定によらず、切り口は奥の壁の面を返さない。
+    #[test]
+    fn a_section_cut_does_not_pick_the_far_wall() {
+        for (yaw, pitch) in [(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (37.0, 28.0)] {
+            for perspective in [false, true] {
+                let cam = camera(yaw, pitch, perspective);
+                let normal = cam.basis().2;
+                for offset in [-0.4, 0.0, 0.4] {
+                    for (by_body, outside) in
+                        [(false, false), (false, true), (true, false), (true, true)]
+                    {
+                        let mut scene = box_scene();
+                        scene.section = Some(Section {
+                            by_body,
+                            outside,
+                            ..section(normal, offset)
+                        });
+                        let pos = cam.project([0.13, 0.07, 0.11], rect()).0;
+                        let hits = picks_at(&scene, &cam, rect(), pos);
+                        assert!(
+                            hits.is_empty(),
+                            "切り口の奥を拾った: {hits:?}, {cam:?}, {:?}",
+                            scene.section
+                        );
+                        assert_same_hits(&scene, &cam, pos);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_exterior_face_in_front_of_the_section_wall_is_pickable() {
+        for perspective in [false, true] {
+            let cam = camera(0.0, 90.0, perspective);
+            let mut scene = box_scene();
+            scene.set(
+                &[],
+                vec![
+                    (FeatureId(1), box_mesh([0.0; 3], 1.0)),
+                    (FeatureId(2), box_mesh([0.13, 0.07, -0.45], 0.2)),
+                ],
+            );
+            scene.section = Some(section([0.0, 0.0, 1.0], 0.0));
+            let pos = cam.project([0.13, 0.07, -0.25], rect()).0;
+            let hits = picks_at(&scene, &cam, rect(), pos);
+            assert_eq!(hits.len(), 1, "表向きの手前の面だけを拾う: {hits:?}");
+            assert_eq!(hits[0].0.feature, FeatureId(2));
+            assert_eq!(hits[0].0.face, "+z");
+            assert_same_hits(&scene, &cam, pos);
+        }
+    }
+
+    #[test]
+    fn a_section_keeps_the_exterior_front_face() {
+        for perspective in [false, true] {
+            let cam = camera(0.0, 90.0, perspective);
+            let mut scene = box_scene();
+            scene.section = Some(section([0.0, 0.0, -1.0], 0.0));
+            let pos = cam.project([0.13, 0.07, 1.0], rect()).0;
+            let hits = picks_at(&scene, &cam, rect(), pos);
+            assert_eq!(hits.len(), 1);
+            assert_eq!(hits[0].0.face, "+z");
+            assert_same_hits(&scene, &cam, pos);
+        }
+    }
+
+    #[test]
+    fn an_open_sheet_is_pickable_from_behind_with_a_section() {
+        let mut mesh = box_mesh([0.0; 3], 1.0);
+        mesh.triangles.truncate(2);
+        mesh.triangle_faces.truncate(2);
+        let mut scene = Scene::default();
+        scene.set(&[], vec![(FeatureId(1), mesh)]);
+        // 面のボディを受け取ると、Scene::set_body_kinds がこの印を立てる。
+        scene.bodies[0].two_sided = true;
+        for perspective in [false, true] {
+            let cam = camera(0.0, 90.0, perspective);
+            for (by_body, outside) in [(false, false), (false, true), (true, false), (true, true)] {
+                scene.section = Some(Section {
+                    by_body,
+                    outside,
+                    ..section([1.0, 0.0, 0.0], 0.0)
+                });
+                for x in [-0.4, 0.4] {
+                    let pos = cam.project([x, 0.07, -1.0], rect()).0;
+                    let hits = picks_at(&scene, &cam, rect(), pos);
+                    if x < 0.0 {
+                        assert_eq!(hits.len(), 1);
+                        assert_eq!(hits[0].0.face, "-z");
+                    } else {
+                        assert!(hits.is_empty(), "切り取った開いた面は拾わない");
+                    }
+                    assert_same_hits(&scene, &cam, pos);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_picking_keeps_both_front_and_back_faces() {
+        let mut scene = box_scene();
+        for two_sided in [false, true] {
+            scene.bodies[0].two_sided = two_sided;
+            for perspective in [false, true] {
+                let cam = camera(0.0, 90.0, perspective);
+                let pos = cam.project([0.13, 0.07, 0.0], rect()).0;
+                let hits = picks_at(&scene, &cam, rect(), pos);
+                assert_eq!(
+                    hits.iter().map(|h| h.0.face.as_str()).collect::<Vec<_>>(),
+                    vec!["+z", "-z"]
+                );
+                assert_same_hits(&scene, &cam, pos);
+            }
+        }
+    }
+
+    #[test]
+    fn section_picking_matches_projecting_every_triangle() {
+        for perspective in [false, true] {
+            for (yaw, pitch) in [(-60.0, 30.0), (21.0, 47.0)] {
+                let cam = camera(yaw, pitch, perspective);
+                let mut scene = box_scene();
+                for normal in [
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                    normalize([1.0, -2.0, 3.0]),
+                ] {
+                    for offset in [-0.4, 0.0, 0.4] {
+                        scene.section = Some(section(normal, offset));
+                        for y in 0..9 {
+                            for x in 0..11 {
+                                let pos = rect().center()
+                                    + Vec2::new(x as f32 * 31.7 - 153.2, y as f32 * 37.1 - 143.8);
+                                assert_same_hits(&scene, &cam, pos);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unclassified_open_and_doubled_faces_keep_back_picking() {
+        let mut sheet = box_mesh([0.0; 3], 1.0);
+        sheet.triangles.truncate(2);
+        sheet.triangle_faces.truncate(2);
+        let mut doubled = sheet.clone();
+        for mut tri in sheet.triangles.clone() {
+            tri.swap(1, 2);
+            doubled.triangles.push(tri);
+            doubled.triangle_faces.push(0);
+        }
+        let mut open_box = box_mesh([0.0; 3], 1.0);
+        open_box.triangles.drain(2..4);
+        open_box.triangle_faces.drain(2..4);
+        for mesh in [sheet, doubled, open_box] {
+            let mut scene = Scene::default();
+            scene.set(&[], vec![(FeatureId(1), mesh)]);
+            assert!(!scene.bodies[0].two_sided);
+            assert!(!scene.bodies[0].section_closed_boundary);
+            scene.section = Some(section([0.0, 0.0, 1.0], 0.0));
+            for perspective in [false, true] {
+                let cam = camera(0.0, 90.0, perspective);
+                let pos = cam.project([0.13, 0.07, -1.0], rect()).0;
+                let hits = picks_at(&scene, &cam, rect(), pos);
+                assert_eq!(hits.len(), 1, "開いた網の裏面: {hits:?}");
+                assert_eq!(hits[0].0.face, "-z");
+                assert_same_hits(&scene, &cam, pos);
+            }
+        }
+    }
+
+    fn duplicate_triangle_vertices(mesh: &Mesh) -> Mesh {
+        let mut out = Mesh {
+            face_names: mesh.face_names.clone(),
+            triangle_faces: mesh.triangle_faces.clone(),
+            ..Mesh::default()
+        };
+        for tri in &mesh.triangles {
+            let start = out.positions.len() as u32;
+            out.positions
+                .extend(tri.map(|i| mesh.positions[i as usize]));
+            out.triangles.push([start, start + 1, start + 2]);
+        }
+        out
+    }
+
+    #[test]
+    fn identical_coordinates_close_independent_triangle_vertices_without_welding_gaps() {
+        let mesh = duplicate_triangle_vertices(&fine_box(2, false));
+        let mut signed_zero = mesh.clone();
+        for point in signed_zero.positions.iter_mut().step_by(2) {
+            for v in point {
+                if *v == 0.0 {
+                    *v = -0.0;
+                }
+            }
+        }
+        let mut scene = Scene::default();
+        scene.set(&[], vec![(FeatureId(1), signed_zero)]);
+        assert!(scene.bodies[0].section_closed_boundary);
+        scene.section = Some(section([0.0, 0.0, 1.0], 0.0));
+        let cam = camera(0.0, 90.0, false);
+        let pos = cam.project([0.13, 0.07, 0.0], rect()).0;
+        assert!(picks_at(&scene, &cam, rect(), pos).is_empty());
+        let mut gap = mesh;
+        gap.positions[0][0] += 1e-6;
+        scene.set(&[], vec![(FeatureId(1), gap)]);
+        assert!(
+            !scene.bodies[0].section_closed_boundary,
+            "微小な穴は塞がない"
+        );
+    }
+
+    #[test]
+    fn invalid_or_nonmanifold_meshes_are_not_marked_closed() {
+        let base = box_mesh([0.0; 3], 1.0);
+        let mut invalid_index = base.clone();
+        invalid_index.triangles[0][0] = u32::MAX;
+        let mut nonfinite = base.clone();
+        nonfinite.positions[0][0] = f32::NAN;
+        let mut degenerate = base.clone();
+        degenerate.triangles[0][1] = degenerate.triangles[0][0];
+        let mut reversed = base.clone();
+        reversed.triangles[0].swap(1, 2);
+        let mut multiple = base.clone();
+        multiple.triangles.push([0, 1, 6]);
+        multiple.triangle_faces.push(0);
+        let mut t_junction = base.clone();
+        t_junction.positions.push([0.0, 0.0, -1.0]);
+        t_junction.triangles[0] = [0, 8, 1];
+        t_junction.triangles.push([8, 2, 1]);
+        t_junction.triangle_faces.push(0);
+        for mesh in [
+            Mesh::default(),
+            invalid_index,
+            nonfinite,
+            degenerate,
+            reversed,
+            multiple,
+            t_junction,
+        ] {
+            let mut scene = Scene::default();
+            scene.set(&[], vec![(FeatureId(1), mesh)]);
+            assert!(!scene.bodies[0].section_closed_boundary);
+        }
+    }
+
+    #[test]
+    fn sheets_remain_two_sided_through_the_body_kind_connection() {
+        struct SheetKernel;
+        impl Kernel for SheetKernel {
+            fn name(&self) -> &str {
+                "section-sheet-test"
+            }
+            fn body_kind(
+                &self,
+                _: ShapeHandle,
+            ) -> Result<kmb_core::kernel::BodyKind, kmb_core::KernelError> {
+                Ok(kmb_core::kernel::BodyKind::Sheet)
+            }
+        }
+        let mut scene = Scene::default();
+        scene.set(
+            &[(FeatureId(1), ShapeHandle(1))],
+            vec![(FeatureId(1), box_mesh([0.0; 3], 1.0))],
+        );
+        scene.set_body_kinds(&SheetKernel);
+        assert!(scene.bodies[0].two_sided);
+        assert!(scene.bodies[0].section_closed_boundary);
+        scene.section = Some(section([0.0, 0.0, 1.0], 0.0));
+        let cam = camera(0.0, 90.0, false);
+        let pos = cam.project([0.13, 0.07, -1.0], rect()).0;
+        assert_eq!(picks_at(&scene, &cam, rect(), pos)[0].0.face, "-z");
+    }
+
+    #[test]
+    fn section_picking_is_the_same_before_and_after_the_tree_is_ready() {
+        use std::sync::atomic::Ordering;
+        let mut scene = Scene::default();
+        scene.set(&[], vec![(FeatureId(1), fine_box(45, false))]);
+        assert!(scene.bodies[0].section_closed_boundary);
+        // 完成前の全走査を確実に通し、同じ網で完成後の木とも比べる。
+        scene.bodies[0].bvh = Default::default();
+        scene.bodies[0].bvh.started.store(true, Ordering::Release);
+        scene.section = Some(section([0.0, 0.0, 1.0], 0.0));
+        let cam = camera(0.0, 90.0, false);
+        let pos = cam.project([0.13, 0.07, 0.0], rect()).0;
+        assert!(picks_at(&scene, &cam, rect(), pos).is_empty());
+        assert!(scene.bodies[0].bvh.tree.get().is_none());
+        assert!(
+            scene.bodies[0]
+                .bvh
+                .tree
+                .set(super::super::scene::build_bvh(&scene.bodies[0].mesh))
+                .is_ok(),
+            "木を設定"
+        );
+        assert!(picks_at(&scene, &cam, rect(), pos).is_empty());
+        assert_same_hits(&scene, &cam, pos);
+    }
+
+    #[test]
+    fn closed_boundary_is_preserved_for_bands_poses_and_hiding_and_replaced_with_the_mesh() {
+        let mut scene = Scene::default();
+        scene.set(&[], vec![(FeatureId(1), box_mesh([0.0; 3], 1.0))]);
+        assert!(scene.bodies[0].section_closed_boundary);
+        let mark = kmb_interchange::ThreadMark {
+            start: [0.0, 0.0, -1.0],
+            axis: [0.0, 0.0, 1.0],
+            length: 2.0,
+            radius: 2.0_f64.sqrt(),
+            pitch: 0.5,
+            internal: false,
+        };
+        scene.set_thread_marks([(FeatureId(1), vec![mark])].into_iter().collect());
+        assert!(
+            scene.bodies[0].mesh.triangles.len() > 12,
+            "実際に帯へ切り直す"
+        );
+        assert!(
+            scene.bodies[0].section_closed_boundary,
+            "帯の継ぎ目から再分類しない"
+        );
+        scene.set_poses(
+            [(
+                FeatureId(1),
+                kmb_core::kernel::translation([10.0, 0.0, 0.0]),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        assert!(scene.bodies[0].section_closed_boundary);
+        scene.set_hidden(&[FeatureId(1)].into_iter().collect());
+        assert!(scene.bodies.is_empty());
+        scene.set_hidden(&HashSet::new());
+        assert!(scene.bodies[0].section_closed_boundary);
+        scene.set_poses(Default::default());
+        scene.set_thread_marks(Default::default());
+        assert_eq!(scene.bodies[0].mesh.triangles.len(), 12);
+        assert!(scene.bodies[0].section_closed_boundary);
+        let mut open = box_mesh([0.0; 3], 1.0);
+        open.triangles.truncate(2);
+        open.triangle_faces.truncate(2);
+        scene.set(&[], vec![(FeatureId(1), open)]);
+        assert!(!scene.bodies[0].section_closed_boundary);
+    }
+
+    fn fine_box(n: usize, open: bool) -> Mesh {
+        let mut mesh = Mesh::default();
+        let coords: Vec<f32> = (0..=n).map(|i| 2.0 * i as f32 / n as f32 - 1.0).collect();
+        let width = (n + 1) as u32;
+        for axis in 0..3 {
+            for positive in [false, true] {
+                let base = mesh.positions.len() as u32;
+                let face = mesh.face_names.len() as u32;
+                mesh.face_names.push(format!("{axis}/{positive}"));
+                for &v in &coords {
+                    for &u in &coords {
+                        let side = if positive { 1.0 } else { -1.0 };
+                        mesh.positions.push(match axis {
+                            0 => [side, u, v],
+                            1 => [v, side, u],
+                            _ => [u, v, side],
+                        });
+                    }
+                }
+                for y in 0..n as u32 {
+                    for x in 0..n as u32 {
+                        let a = base + y * width + x;
+                        for mut tri in [[a, a + 1, a + width + 1], [a, a + width + 1, a + width]] {
+                            if !positive {
+                                tri.swap(1, 2);
+                            }
+                            mesh.triangles.push(tri);
+                            mesh.triangle_faces.push(face);
+                        }
+                    }
+                }
+            }
+        }
+        if open {
+            mesh.triangles.remove(0);
+            mesh.triangle_faces.remove(0);
+        }
+        mesh
+    }
+
+    /// 網を置く費用も含む初回と、断面の拾いを繰り返す費用を分けて測る。
+    #[test]
+    #[ignore = "速さを測る道具(--release で手で流す)"]
+    fn section_setup_and_pick_speed() {
+        use std::time::Instant;
+        let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(1600.0, 1000.0));
+        for n in [130, 205] {
+            for open in [false, true] {
+                let mesh = fine_box(n, open);
+                let triangles = mesh.triangles.len();
+                let mut scene = Scene::default();
+                let start = Instant::now();
+                scene.set(&[], vec![(FeatureId(1), mesh)]);
+                let set_ms = start.elapsed().as_secs_f64() * 1000.0;
+                let mut cam = Camera::default();
+                cam.set_view(0.0, 90.0);
+                cam.fit(&scene, rect);
+                scene.section = Some(Section {
+                    normal: [0.0, 0.0, 1.0],
+                    offset: 0.0,
+                    by_body: false,
+                    outside: false,
+                });
+                let pos = cam.project([0.13, 0.07, 0.0], rect).0;
+                let _ = std::hint::black_box(picks_at(&scene, &cam, rect, pos));
+                let first_ms = start.elapsed().as_secs_f64() * 1000.0;
+                let waiting = Instant::now();
+                while scene.bodies[0].bvh.tree.get().is_none() {
+                    assert!(waiting.elapsed().as_secs() < 30, "拾う箱の木が完成しません");
+                    std::thread::yield_now();
+                }
+                let start = Instant::now();
+                for _ in 0..100 {
+                    let _ = std::hint::black_box(picks_at(&scene, &cam, rect, pos));
+                }
+                let repeat_ms = start.elapsed().as_secs_f64() * 1000.0 / 100.0;
+                eprintln!(
+                    "三角形 {triangles} open={open}: set {set_ms:.3} ms、setから初pick {first_ms:.3} ms、断面反復1回 {repeat_ms:.5} ms"
+                );
+            }
+        }
+    }
 }
