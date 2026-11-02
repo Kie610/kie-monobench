@@ -1,4 +1,5 @@
-//! 式の欄の名前の候補(U51・K19)。打っている名前の頭の文字で、パラメータ・寸法・関数の名前を
+//! 式の欄の名前の候補。空欄の ↓ では全パラメータを名前順に、入力中は名前の頭の文字で
+//! パラメータ・寸法・関数の名前を
 //! 欄の下に出す。大かっこの中(`5 [c`)では単位の名前を出す。↑↓ で選び、Tab か Enter で入れ、
 //! Esc で閉じる。候補をクリックしても入り、欄からキーボードは外れない。
 //!
@@ -29,7 +30,7 @@ impl Candidate {
     }
 }
 
-/// 一度に出す候補の数。
+/// 名前を打って絞る時に出す候補の数。
 const MAX_ROWS: usize = 8;
 
 fn names_id() -> Id {
@@ -85,7 +86,7 @@ fn token(text: &str, cursor: usize) -> (usize, String, bool) {
 }
 
 /// `word` で始まる候補(前に合う物が先、次に途中に含む物)。名前の重なりは先の物を残す。
-fn matches(word: &str, all: &[Candidate]) -> Vec<Candidate> {
+fn matching(word: &str, all: &[Candidate]) -> Vec<Candidate> {
     let w = word.to_lowercase();
     let mut seen = std::collections::HashSet::new();
     let all: Vec<&Candidate> = all.iter().filter(|c| seen.insert(c.name.clone())).collect();
@@ -102,6 +103,11 @@ fn matches(word: &str, all: &[Candidate]) -> Vec<Candidate> {
             })
             .map(|c| (*c).clone()),
     );
+    out
+}
+
+fn matches(word: &str, all: &[Candidate]) -> Vec<Candidate> {
+    let mut out = matching(word, all);
     out.truncate(MAX_ROWS);
     out
 }
@@ -111,6 +117,8 @@ fn matches(word: &str, all: &[Candidate]) -> Vec<Candidate> {
 struct State {
     /// 前のフレームで候補を出していたか
     open: bool,
+    /// 空欄で明示して開いた、パラメータだけの一覧。
+    all: bool,
     sel: usize,
     /// Esc で閉じた時の名前の位置と字(打ち足すとまた出す)
     closed: Option<(usize, String)>,
@@ -123,6 +131,7 @@ fn state_id(id: Id) -> Id {
 /// 開いている候補への操作。
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Act {
+    Open,
     Up,
     Down,
     Accept,
@@ -165,6 +174,13 @@ pub fn begin(ui: &egui::Ui, id: Id) -> Completion {
             } else {
                 None
             };
+        });
+    }
+    if !open && ui.memory(|m| m.has_focus(id)) {
+        ui.input_mut(|i| {
+            if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                act = Some(Act::Open);
+            }
         });
     }
     Completion {
@@ -214,7 +230,16 @@ impl Completion {
         let mut at = (0, String::new());
         if focused && let Some(c) = cursor {
             let (start, word, in_unit) = token(text, c);
-            if !word.is_empty() && st.closed.as_ref() != Some(&(start, word.clone())) {
+            let all_parameters =
+                text.trim().is_empty() && (self.act == Some(Act::Open) || st.open && st.all);
+            if self.act == Some(Act::Open) && all_parameters {
+                st.closed = None;
+                st.sel = 0;
+            }
+            st.all = all_parameters;
+            if all_parameters
+                || !word.is_empty() && st.closed.as_ref() != Some(&(start, word.clone()))
+            {
                 let all: Vec<Candidate> = if in_unit {
                     kmb_core::UNIT_NAMES
                         .iter()
@@ -227,20 +252,26 @@ impl Completion {
                         .iter()
                         .cloned()
                         .chain(doc.iter().cloned())
-                        .chain(builtins())
+                        .chain(if all_parameters { vec![] } else { builtins() })
                         .collect()
                 };
                 let all: Vec<Candidate> = all
                     .into_iter()
                     .filter(|c| self.except.as_deref() != Some(c.name.as_str()))
                     .collect();
-                found = matches(&word, &all);
+                found = if all_parameters {
+                    let mut names = matching("", &all);
+                    names.sort_by(|a, b| a.name.cmp(&b.name));
+                    names
+                } else {
+                    matches(&word, &all)
+                };
                 // 打ち終えた名前だけが残ったら出さない(Enter で欄を決められるように)
                 if found.len() == 1 && found[0].name == word && !found[0].call {
                     found.clear();
                 }
             }
-            if !word.is_empty() || st.closed.is_some() {
+            if all_parameters || !word.is_empty() || st.closed.is_some() {
                 at = (start, word);
             }
             if st.closed.as_ref().is_some_and(|c| *c != at) {
@@ -272,7 +303,7 @@ impl Completion {
                 ui.data_mut(|d| d.insert_temp(sid, st));
                 return false;
             }
-            None => {}
+            Some(Act::Open) | None => {}
         }
         if pick.is_none() {
             let area = egui::Area::new(id.with("jc_complete_list"))
@@ -283,20 +314,35 @@ impl Completion {
                         .show(ui, |ui| {
                             ui.set_min_width(response.rect.width().max(120.0));
                             let mut clicked = None;
-                            for (i, c) in found.iter().enumerate() {
-                                ui.horizontal(|ui| {
-                                    let r = ui.selectable_label(i == st.sel, &c.name);
-                                    if !c.note.is_empty() {
-                                        ui.label(egui::RichText::new(&c.note).small().weak());
-                                    }
-                                    if r.clicked() {
-                                        clicked = Some(i);
-                                    }
-                                    if r.hovered() {
-                                        st.sel = i;
+                            egui::ScrollArea::vertical()
+                                .id_salt(id.with("complete_scroll"))
+                                .max_height(ui.ctx().content_rect().height() * 0.4)
+                                .show(ui, |ui| {
+                                    for (i, c) in found.iter().enumerate() {
+                                        ui.horizontal(|ui| {
+                                            let r = ui.selectable_label(i == st.sel, &c.name);
+                                            if !c.note.is_empty() {
+                                                ui.label(
+                                                    egui::RichText::new(&c.note).small().weak(),
+                                                );
+                                            }
+                                            if r.clicked() {
+                                                clicked = Some(i);
+                                            }
+                                            if r.hovered() && self.act.is_none() {
+                                                st.sel = i;
+                                            }
+                                            if i == st.sel
+                                                && matches!(
+                                                    self.act,
+                                                    Some(Act::Open | Act::Up | Act::Down)
+                                                )
+                                            {
+                                                r.scroll_to_me(Some(egui::Align::Center));
+                                            }
+                                        });
                                     }
                                 });
-                            }
                             ui.label(
                                 egui::RichText::new("↑↓ で選び Tab・Enter で入れる。Esc で閉じる")
                                     .small()
@@ -344,6 +390,42 @@ impl Completion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn down_in_an_empty_expression_offers_all_parameter_names() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(500.0, 500.0))
+            .build_ui_state(
+                |ui, text: &mut String| {
+                    set_names(
+                        ui.ctx(),
+                        (0..12)
+                            .rev()
+                            .map(|i| Candidate::new(format!("p{i:02}"), format!("{} mm", i + 1)))
+                            .collect(),
+                    );
+                    let c = begin(ui, Id::new("empty_expression"));
+                    let r = ui.add(c.filter(egui::TextEdit::singleline(text)));
+                    c.end(ui, &r, text, &[]);
+                },
+                String::new(),
+            );
+        h.run();
+        h.get_by_role(egui::accesskit::Role::TextInput).click();
+        h.run();
+        h.key_press(Key::ArrowDown);
+        h.run();
+        assert!(h.query_by_label("p00").is_some(), "空欄から一覧が開く");
+        assert!(h.query_by_label("1 mm").is_some(), "候補に値と単位がある");
+        for _ in 0..11 {
+            h.key_press(Key::ArrowDown);
+            h.run();
+        }
+        h.key_press(Key::Tab);
+        h.run();
+        assert_eq!(h.state(), "p11", "8件で切らず名前順に最後まで選べる");
+    }
 
     #[test]
     fn token_is_the_name_before_the_cursor() {

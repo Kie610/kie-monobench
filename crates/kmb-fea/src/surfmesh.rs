@@ -86,10 +86,23 @@ impl Sizing {
         Self::new(h, 0.4, Vec::new())
     }
 
+    /// 見本の点(位置と、そこでの大きさ)から離れるほど `grade` の割合で大きくし、`h` で頭打ちに
+    /// する場。耳の近くを細かくするなど、形の外から大きさを決める時に使う。
+    pub fn graded(h: f64, grade: f64, samples: Vec<(P3, f64)>) -> Self {
+        Self::new(h, grade, samples)
+    }
+
     /// 点 x での要素の大きさ。
     pub fn at(&self, x: P3) -> f64 {
         let mut l = self.h;
         if self.samples.is_empty() {
+            return l;
+        }
+        // 見本が少なければ全部を見る(割合が小さいと格子で探す範囲が広くなり、かえって遅い)
+        if self.samples.len() <= 64 {
+            for &(p, s) in &self.samples {
+                l = l.min(s + self.grade * dist(p, x));
+            }
             return l;
         }
         let k = x.map(|v| (v / self.cell).floor() as i64);

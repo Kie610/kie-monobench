@@ -94,3 +94,130 @@ fn a_pc_font_is_chosen_from_the_list_and_new_letters_are_filled_in() {
     assert!(t.outline.is_none());
     assert_eq!(t.font, Font::Roman);
 }
+
+#[path = "../../kmb-text/src/test_fonts.rs"]
+mod gothic_test_fonts;
+
+fn script(h: &mut Harness<'static, Workspace>, text: &str) {
+    let batch = h.state_mut().run_script(text).expect("読める台本");
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            return;
+        }
+        assert!(
+            started.elapsed().as_secs() < 30,
+            "台本が終わらない: {:?}",
+            h.state().command_log()
+        );
+        if h.state().is_busy() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+}
+
+#[test]
+fn newly_placed_text_shows_its_gothic_font_and_can_return_to_single_lines() {
+    let fonts = gothic_test_fonts::GothicFonts::new(&fonts().join("kmb-test-jp.ttf"));
+    let modules = kmb_bundle::modules();
+    let data = fonts.path().join("data");
+    std::fs::create_dir_all(data.join("fonts")).unwrap();
+    std::fs::copy(
+        fonts.path().join("gothic.ttf"),
+        data.join("fonts/gothic.ttf"),
+    )
+    .unwrap();
+    let ws = Workspace::new(kmb_bundle::Sample::Part.make()(), None, modules)
+        .with_editor(TextEditor::new().with_font_dir(fonts.path()))
+        .with_data_dir(data);
+    let mut h = harness(ws);
+    kmb_ui::install_fonts(&h.ctx, None);
+    runs(&mut h);
+    script(
+        &mut h,
+        r#"
+        pick f12:end
+        click "作成 ▾"
+        click "面に文字"
+        wait
+        until "combobox:フォント" exists
+    "#,
+    );
+    let id = h
+        .state()
+        .document()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == TEXT)
+        .unwrap()
+        .id;
+    let t = text_of(h.state(), id);
+    capture_panel(&mut h, "new-default");
+    let f = t.outline.as_ref().expect("新しい文字はゴシック体");
+    let mut index = FontIndex::default();
+    index.add_dir(fonts.path());
+    assert_eq!(f.family, index.gothic().unwrap().family);
+    script(
+        &mut h,
+        &format!("expect \"フォント\" = \"{}\"", f.label_or_family()),
+    );
+    script(
+        &mut h,
+        r#"
+        type "文字" "自作の名入れ"
+        wait
+        expect "~字「" missing
+    "#,
+    );
+    let t = text_of(h.state(), id);
+    assert!(t.outline.as_ref().unwrap().missing(&t.text).is_empty());
+    let Some(FeatureStatus::Ok { outputs, .. }) = h.state().report().feature(id) else {
+        panic!("文字の輪郭ができる")
+    };
+    assert!(
+        !Profile::from_value(&outputs["profile"])
+            .unwrap()
+            .regions
+            .is_empty()
+    );
+    capture_panel(&mut h, "japanese");
+    script(
+        &mut h,
+        r#"
+        click "combobox:フォント"
+        click "1 本線(飾りなし)"
+        wait
+    "#,
+    );
+    assert!(text_of(h.state(), id).outline.is_none());
+}
+
+fn capture_panel(h: &mut Harness<'_, Workspace>, name: &str) {
+    let Some(dir) = std::env::var_os("JC_SCREENS_OUT") else {
+        return;
+    };
+    h.step();
+    let output = h.output().clone();
+    let primitives = h.ctx.tessellate(output.shapes, output.pixels_per_point);
+    let atlas = h.ctx.fonts(|f| f.image());
+    let field = h.get_by_role_and_label(Role::ComboBox, "フォント").rect();
+    let label = label_of(&text_of(h.state(), h.state().selected().unwrap()));
+    let meshes: Vec<_> = primitives.into_iter().filter_map(|p| {
+        let egui::epaint::Primitive::Mesh(m) = p.primitive else { return None };
+        (m.texture_id == egui::TextureId::default()).then(|| serde_json::json!({
+            "clip": [p.clip_rect.min.x, p.clip_rect.min.y, p.clip_rect.max.x, p.clip_rect.max.y],
+            "vertices": m.vertices.iter().map(|v| (v.pos.x, v.pos.y, v.uv.x, v.uv.y, v.color.to_array())).collect::<Vec<_>>(),
+            "indices": m.indices,
+        }))
+    }).collect();
+    let path = std::path::Path::new(&dir).join(format!("{name}.json"));
+    std::fs::create_dir_all(&dir).unwrap();
+    kmb_session::write_output(&path, &serde_json::to_vec(&serde_json::json!({
+        "size": [1400, 1000], "ppp": output.pixels_per_point,
+        "font_label": label, "font_rect": [field.min.x, field.min.y, field.max.x, field.max.y],
+        "atlas_size": atlas.size, "atlas": atlas.pixels.iter().map(|c| c.to_array()).collect::<Vec<_>>(), "meshes": meshes,
+    })).unwrap()).unwrap();
+}

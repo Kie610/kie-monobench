@@ -53,6 +53,7 @@ toolbar-group-output = Output
 toolbar-group-manage = Manage
 toolbar-group-study = Study
 toolbar-group-flow = Flow
+toolbar-group-sound = Sound
 toolbar-group-solve = Solve
 toolbar-group-results = Results
 toolbar-group-constraints = Constraints
@@ -116,3 +117,6 @@ toolbar-pick-field = What the field "{ $name }" accepts
 toolbar-pick-now-body = Clicking a face selects its whole body
 toolbar-pick-now-mixed = Select vertices, edges and faces together
 toolbar-pick-all = Allow Selecting Everything
+
+toolbar-pick-now-part = Picking parts: { $name }
+toolbar-pick-stop-part = Finish picking parts

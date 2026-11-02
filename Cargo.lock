@@ -2332,6 +2332,7 @@ dependencies = [
 name = "kmb-asm"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-cad",
  "kmb-core",
  "kmb-interchange",
@@ -2399,6 +2400,7 @@ dependencies = [
  "kmb-strategy-waterline",
  "kmb-study",
  "kmb-text",
+ "kmb-wave",
  "kmb-workspace-hack",
  "log",
  "serde_json",
@@ -2785,6 +2787,9 @@ version = "0.2.0"
 dependencies = [
  "hdf5-pure",
  "kmb-core",
+ "kmb-fea",
+ "kmb-study",
+ "kmb-wave",
  "kmb-workspace-hack",
  "log",
  "serde",
@@ -2864,6 +2869,7 @@ dependencies = [
 name = "kmb-io-stl"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
@@ -3581,6 +3587,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-wave"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-fea",
+ "kmb-study",
+ "kmb-workspace-hack",
+ "log",
+ "num-complex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-workspace-hack"
 version = "0.1.0"
 dependencies = [
@@ -3995,6 +4015,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
