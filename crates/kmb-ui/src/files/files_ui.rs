@@ -398,29 +398,55 @@ impl Workspace {
     /// ファイルを開く(未保存の確認はしない)。形の計算は裏で行い、終わるまで前の文書を持っておく
     /// (計算の間は進み具合と「キャンセル」を出す。U8)。
     pub fn load_path(&mut self, path: &Path) -> bool {
-        match kmb_session::load(path) {
-            Ok(doc) => {
-                let before = self.cur.work.path().map(std::path::Path::to_path_buf);
-                let (modified, saved) = (self.cur.modified, Box::new(self.cur.saved.clone()));
-                let report = Box::new(self.cur.work.report().clone());
-                let old = self.replace_document(doc, Some(path.to_path_buf()));
-                let back = Back::Document {
-                    doc: Box::new(old),
-                    path: before,
-                    modified,
-                    saved,
-                    report,
-                };
-                self.watch_opening(path, back);
-                self.remember(path);
-                self.win.message = Some(format!("{} を開きました", path.display()));
-                true
-            }
+        let Some(opened) = self.prepare_path(path) else {
+            return false;
+        };
+        self.load_prepared(path, opened);
+        true
+    }
+
+    /// 読み取ってからタブを作る。失敗したファイルのために、今の文書や形を変えない。
+    pub(crate) fn prepare_path(&mut self, path: &Path) -> Option<kmb_session::OpenedDocument> {
+        match kmb_session::Headless::prepare_open(
+            self.cur.work.modules().clone(),
+            path,
+            self.blank_document(),
+        ) {
+            Ok(opened) => Some(opened),
             Err(e) => {
                 self.win.fail(e.to_string());
-                false
+                None
             }
         }
+    }
+
+    /// 読み取れた文書を開く(文書の形式は保存済み、外の図面は未保存の設計)。
+    pub(crate) fn load_prepared(&mut self, path: &Path, opened: kmb_session::OpenedDocument) {
+        let kmb_session::OpenedDocument {
+            document,
+            path: save_path,
+            label,
+            saved: baseline,
+        } = opened;
+        let before = self.cur.work.path().map(std::path::Path::to_path_buf);
+        let (modified, saved) = (self.cur.modified, Box::new(self.cur.saved.clone()));
+        let report = Box::new(self.cur.work.report().clone());
+        let old = self.replace_document(document, save_path);
+        self.cur.doc_label = label;
+        if let Some(saved) = baseline {
+            self.cur.saved = saved;
+            self.cur.modified = self.cur.work.doc().data() != &self.cur.saved;
+        }
+        let back = Back::Document {
+            doc: Box::new(old),
+            path: before,
+            modified,
+            saved,
+            report,
+        };
+        self.watch_opening(path, back);
+        self.remember(path);
+        self.win.message = Some(format!("{} を開きました", path.display()));
     }
 
     /// 計算が裏で走っていれば、開いている途中として前の状態を持っておく。

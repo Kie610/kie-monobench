@@ -313,11 +313,28 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
     use kmb_sketch::SketchPlane;
     use std::sync::Arc;
-    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let kernel = TestKernel::new();
+    if kernel.is_truck() {
+        kmb_contract::skip!("truck は円筒の面を選ぶための円の辺を列挙しない");
+    }
+    let k: Arc<dyn Kernel> = match kernel {
+        TestKernel::Smlib(k) => Arc::new(k),
+        TestKernel::Truck(k) => Arc::new(k),
+    };
     let reg = registry();
     let actions = Extensions(vec![Arc::new(kmb_cad_hole::thread::ThreadCommands)]);
-    for name in ["M24", "M30", "1/4-20 UNC", "#10-32 UNF", "G1/4", "Rp1/4"] {
+    for (name, diameter) in [
+        ("M24", None),
+        ("M30", None),
+        ("1/4-20 UNC", None),
+        ("#10-32 UNF", None),
+        ("G1/4", None),
+        ("Rp1/4", None),
+        ("M10", Some(9.7)),
+        ("M8", Some(7.9)),
+    ] {
         let size = kmb_cad_hole::thread::parse_size(name).unwrap();
+        let diameter = diameter.unwrap_or(size.major);
         let mut b = DocBuilder::new();
         let mut circle = SketchBuilder::new(SketchPlane::Xy);
         let center = circle.fixed_point(0.0, 0.0);
@@ -328,7 +345,7 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
                 size.major / 2.0 + 4.0,
             );
         }
-        circle.circle(center, &format!("{} mm", size.major), size.major / 2.0);
+        circle.circle(center, &format!("{diameter} mm"), diameter / 2.0);
         let sketch = b.feature(kmb_sketch::SKETCH, "円", circle.build());
         let cylinder = b.feature(
             EXTRUDE,
@@ -350,13 +367,16 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
             .into_iter()
             .find(|edge| {
                 kmb_cad_hole::thread::cylinder_of(k.as_ref(), body, &edge.faces[1]).is_ok_and(|c| {
-                    c.internal == name.starts_with("Rp") && (c.diameter - size.major).abs() < 1e-4
+                    c.internal == name.starts_with("Rp") && (c.diameter - diameter).abs() < 1e-4
                 })
             })
             .unwrap()
             .faces[1]
             .clone();
-        let args = serde_json::json!({"feature":cylinder.0,"face":face,"size":name});
+        let mut args = serde_json::json!({"feature":cylinder.0,"face":face});
+        if diameter == size.major {
+            args["size"] = serde_json::json!(name);
+        }
         let cx = Context {
             args: &args,
             ..Context::new(doc.data(), &report, &reg, &k)
@@ -480,9 +500,6 @@ fn legacy_thread_countersink_keeps_the_omitted_diameter() {
         let (actual_diameter, angle) = info.countersink.unwrap();
         assert!((actual_diameter - countersink).abs() < 1e-9, "{name}");
         assert!((angle - 90f64.to_radians()).abs() < 1e-9, "{name}");
-        eprintln!(
-            "{name}: omitted volume {actual}, explicit volume {expected}, diameter {actual_diameter}, angle {angle}"
-        );
         assert!(
             (actual - expected).abs() < 0.01,
             "{name}: {actual} vs {expected}"
