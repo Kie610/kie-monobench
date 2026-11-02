@@ -35,7 +35,11 @@ fn exact_half_side_fillets_make_a_slot_without_zero_length_lines() {
     }
     assert_eq!(lines(&sketch).len(), 2);
     assert_eq!(
-        sketch.entities.iter().filter(|e| matches!(e, Entity::Arc { .. })).count(),
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Arc { .. }))
+            .count(),
         2
     );
     for (_, a, b) in lines(&sketch) {
@@ -54,7 +58,11 @@ fn exact_half_side_fillets_make_a_circle_from_a_square() {
     }
     assert!(lines(&sketch).is_empty());
     assert_eq!(
-        sketch.entities.iter().filter(|e| matches!(e, Entity::Circle { .. })).count(),
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Circle { .. }))
+            .count(),
         1
     );
     assert_closed_corner_profile(&sketch, 10.0, 1);
@@ -65,10 +73,29 @@ fn exact_half_side_chamfers_leave_a_closed_diamond() {
     let (mut sketch, corners) = rectangle_corners(20.0, 20.0);
     for corner in corners {
         sketch
-            .chamfer_corner_with(corner, None, &Chamfer::Equal { d: 10.0, value: "10 mm".into() })
+            .chamfer_corner_with(
+                corner,
+                None,
+                &Chamfer::Equal {
+                    d: 10.0,
+                    value: "10 mm".into(),
+                },
+            )
             .expect("辺をちょうど使い切る面取りを受ける");
     }
-    let visible = sketch.entities.iter().filter(|e|matches!(e, Entity::Line {construction: false,..})).count();
+    let visible = sketch
+        .entities
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                Entity::Line {
+                    construction: false,
+                    ..
+                }
+            )
+        })
+        .count();
     assert_eq!(visible, 4);
     assert_closed_corner_profile(&sketch, 10.0, 4);
 }
