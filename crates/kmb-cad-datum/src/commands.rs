@@ -308,7 +308,7 @@ impl Extension for DatumCommands {
                             ("three_points", "3 点を通る平面"),
                         ],
                     ),
-                    Arg::value("plane", &format!("元の平面: xy・yz・zx・face(選んでいる平らな面)か作業平面の機能の番号(省くと選んでいる面か作業平面)。{}", kmb_sketch::base_plane_axis_help())),
+                    Arg::value("plane", &format!("元の平面: xy・yz・zx・face(選んでいる平らな面)か作業平面の機能の番号(省くと選んでいる面か作業平面)。{}", kmb_core::Plane::base_axis_names())),
                     Arg::text("distance", "浮かせる距離(式可。負なら裏の側)").default("10 mm"),
                     Arg::choice("axis", "傾ける軸(省くと選んでいる辺)", &[("x", "X"), ("y", "Y"), ("z", "Z")]),
                     Arg::text("angle", "傾ける角度(式可)").default("30 deg"),
@@ -326,7 +326,7 @@ impl Extension for DatumCommands {
                         crate::axis::AXIS_METHODS,
                     ),
                     Arg::value("edge", "辺: {\"feature\": 機能の番号, \"edge\": [面, 面]}(省くと選んでいる辺)"),
-                    Arg::value("plane", &format!("交わりの 1 つ目の平面: xy・yz・zx か作業平面の機能の番号(省くと選んでいる平らな面)。{}", kmb_sketch::base_plane_axis_help())),
+                    Arg::value("plane", &format!("交わりの 1 つ目の平面: xy・yz・zx か作業平面の機能の番号(省くと選んでいる平らな面)。{}", kmb_core::Plane::base_axis_names())),
                     Arg::value("other", "交わりの 2 つ目の平面(plane と同じ書き方)"),
                 ])
                 .menu("構築")

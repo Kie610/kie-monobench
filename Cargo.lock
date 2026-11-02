@@ -2438,7 +2438,6 @@ dependencies = [
  "kmb-cad",
  "kmb-core",
  "kmb-interchange",
- "kmb-sketch",
  "kmb-workspace-hack",
  "log",
  "serde",

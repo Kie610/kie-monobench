@@ -96,39 +96,6 @@ const BASE_PLANES: [(&str, &str, kmb_core::Plane); 3] = [
     ("zx", "ZX 平面", kmb_core::Plane::ZX),
 ];
 
-/// 基準平面の横・縦・法線の向き。説明も平面の実際の軸から作る。
-pub fn base_plane_axis_help() -> String {
-    let axis_name = |axis: [f64; 3], signed: bool| {
-        ["X", "Y", "Z"]
-            .into_iter()
-            .zip(axis)
-            .find(|(_, value)| value.abs() == 1.0)
-            .map(|(name, value)| {
-                let sign = if value < 0.0 {
-                    "-"
-                } else if signed {
-                    "+"
-                } else {
-                    ""
-                };
-                format!("{sign}{name}")
-            })
-            .unwrap_or_else(|| format!("{axis:?}"))
-    };
-    BASE_PLANES
-        .iter()
-        .map(|(key, _, plane)| {
-            format!(
-                "{key}: 横={}・縦={}・法線={}",
-                axis_name(plane.x_axis, false),
-                axis_name(plane.y_axis, false),
-                axis_name(plane.normal(), true)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("、")
-}
-
 fn base_plane(key: &str) -> Option<SketchPlane> {
     Some(match key {
         "xy" => SketchPlane::Xy,
@@ -394,7 +361,7 @@ impl Extension for SketchCommands {
         let on_face: &[Place] = if face { &[Place::FaceMenu] } else { &[] };
         vec![
             Action::new(ADD_SKETCH, "スケッチを作成", "cad")
-                .args([kmb_core::Arg::value("plane", &format!("描く平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面か作業平面、なければ XY)。{}", base_plane_axis_help())), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
+                .args([kmb_core::Arg::value("plane", &format!("描く平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面か作業平面、なければ XY)。{}", kmb_core::Plane::base_axis_names())), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
                 .menu("作成")
                 .icon("sketch")
                 .aliases("すけっち sketch")
@@ -409,7 +376,7 @@ impl Extension for SketchCommands {
                 .at(on_face)
                 .disabled_if((!face).then_some(NEED_FACE)),
             Action::new(REDEFINE_PLANE, "スケッチ平面を再定義", "cad")
-                .arg(kmb_core::Arg::value("plane", &format!("新しい平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面)。{}", base_plane_axis_help())))
+                .arg(kmb_core::Arg::value("plane", &format!("新しい平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面)。{}", kmb_core::Plane::base_axis_names())))
                 .menu("作成")
                 .icon("replane")
                 .aliases("へいめん さいていぎ redefine plane めん うつす")
