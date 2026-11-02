@@ -1,6 +1,6 @@
 //! 研究の欄(式の文字)の読み方。強度・熱(kmb-fea)と流れ(kmb-flow)が同じ物を使う。
 
-use kmb_core::{Dim, EvalCtx, EvalError};
+use kmb_core::{Dim, EvalCtx, EvalError, FeatureId, InputRef, expr_inputs};
 
 /// 欄が空(空白だけ)か。空の欄は「自動」や既定の値を表す。
 pub fn is_empty(s: &str) -> bool {
@@ -48,4 +48,30 @@ pub fn rename_exprs<'a>(
         }
     }
     Ok(changed)
+}
+
+/// 研究の入力: 選んだボディの出力 `body` と、式の欄 `exprs` が使う値(空の欄は飛ばす、重ねない)。
+/// 研究の種類の `Feature::inputs` が使う。
+pub fn inputs<'a>(
+    bodies: impl IntoIterator<Item = FeatureId>,
+    exprs: impl IntoIterator<Item = &'a String>,
+) -> Result<Vec<InputRef>, EvalError> {
+    let mut v: Vec<InputRef> = bodies
+        .into_iter()
+        .map(|feature| InputRef::Output {
+            feature,
+            slot: "body".into(),
+        })
+        .collect();
+    for e in exprs {
+        if is_empty(e) {
+            continue;
+        }
+        for i in expr_inputs(e)? {
+            if !v.contains(&i) {
+                v.push(i);
+            }
+        }
+    }
+    Ok(v)
 }

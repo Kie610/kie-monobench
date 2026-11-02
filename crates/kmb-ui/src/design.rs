@@ -24,6 +24,8 @@ pub(crate) mod view_ui;
 #[cfg(test)]
 mod body_hover_tests;
 #[cfg(test)]
+mod browser_regions_tests;
+#[cfg(test)]
 mod browser_tests;
 #[cfg(test)]
 mod canvas_tests;
@@ -47,6 +49,8 @@ mod param_table_tests;
 mod param_views_tests;
 #[cfg(test)]
 mod pick_tests;
+#[cfg(test)]
+mod polish_tests;
 #[cfg(test)]
 mod press_pull_tests;
 #[cfg(test)]

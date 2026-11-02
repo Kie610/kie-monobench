@@ -725,6 +725,32 @@ fn transient_insulated_body_and_cancel_keep_completed_frames() {
     );
 }
 
+/// 確かめること: 最後の計算の進みを受けて中止しても、完走した全コマは途中扱いにならない。
+#[test]
+fn review_imported_transient_completed_frames_ignore_late_cancel() {
+    use std::cell::Cell;
+    let p = prepared(&box_mesh([2.0; 3]), 1.0);
+    let mut i = transient_case();
+    i.thermal.rest_h = None;
+    i.frames = 2;
+    let cancelled = Cell::new(false);
+    let out = crate::thermal::solve_transient(&p, &i, &|| cancelled.get(), &|fraction| {
+        if fraction >= 1.0 {
+            cancelled.set(true);
+        }
+    })
+    .unwrap();
+    assert!(cancelled.get());
+    assert_eq!(out.frames.len(), i.frames + 1);
+    assert_eq!(out.frames.last().unwrap().time, i.end);
+    assert!(
+        out.frames
+            .iter()
+            .all(|frame| frame.t.iter().all(|t| (t - i.initial).abs() < 1e-6))
+    );
+    assert!(!out.cancelled, "全コマの計算が終わった結果は完走です");
+}
+
 /// 確かめること: 時間が空の古い文書は、時刻の欄があっても定常の温度が変わらない。
 #[test]
 fn transient_empty_time_preserves_old_document_results() {
