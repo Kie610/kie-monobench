@@ -320,3 +320,60 @@ fn clicking_the_view_while_typing_a_value_keeps_the_keyboard_in_the_field() {
         "クリックの後も値の欄に入力が戻る"
     );
 }
+
+#[test]
+fn three_point_holes_hide_their_sketch_after_ok_and_show_it_only_while_editing() {
+    use kmb_samples::sample::{DocBuilder, SketchBuilder};
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(Default::default());
+    let corner = s.fixed_point(0.0, 0.0);
+    s.rectangle(corner, "20 mm", "20 mm", [0.0, 0.0, 20.0, 20.0]);
+    let profile = b.feature(kmb_sketch::SKETCH, "板の輪郭", s.build());
+    let plate=b.feature(kmb_cad_extrude::EXTRUDE,"板",serde_json::json!({"profile":profile.0,"distance":"10 mm","operation":"new","direction":"normal"}));
+    let mut s = SketchBuilder::new(Default::default());
+    let points = [s.point(5.0, 5.0), s.point(15.0, 5.0), s.point(10.0, 15.0)];
+    let mut positions = s.build();
+    positions.offset = Some("10 mm".into());
+    let sketch = b.feature(kmb_sketch::SKETCH, "穴の位置", positions);
+    let mut ws = Workspace::new(b.finish("3点の穴"), None, kmb_bundle::modules());
+    ws.wait();
+    let point_marks = |ws: &Workspace| {
+        ws.sketch_lines()
+            .iter()
+            .filter(|(p, _)| p.len() == 1)
+            .count()
+    };
+    assert_eq!(point_marks(&ws), 3, "穴の前は3点が出る");
+    ws.clear_selection();
+    let hole = ws.add_described(kmb_cad_hole::HOLE).unwrap();
+    let mut data = ws.document().data().feature(hole).unwrap().data.clone();
+    data["target"] = serde_json::json!(plate.0);
+    data["sketch"] = serde_json::json!(sketch.0);
+    data["points"] = serde_json::json!(points.map(|id| id.0));
+    data["diameter"] = serde_json::json!("2 mm");
+    data["depth"] = serde_json::json!("5 mm");
+    assert!(ws.set_feature_data(hole, data));
+    ws.wait();
+    assert!(matches!(
+        ws.cur.work.report().feature(hole),
+        Some(kmb_core::FeatureStatus::Ok { .. })
+    ));
+    ws.finish_edit();
+    let mut h = harness(ws);
+    assert!(
+        h.state().is_hidden(sketch),
+        "OKの後は位置のスケッチが隠れる"
+    );
+    assert_eq!(point_marks(h.state()), 0, "穴の中にも点を描かない");
+    let eyes = h.state().document().data().sections.clone();
+    h.state_mut().open_edit(hole);
+    h.run();
+    assert!(!h.state().is_hidden(sketch));
+    assert!(h.state().is_own_hidden(sketch), "保存する目は閉じたまま");
+    assert_eq!(point_marks(h.state()), 3, "穴を直す間だけ3点が出る");
+    assert_eq!(h.state().document().data().sections, eyes);
+    h.state_mut().finish_edit();
+    h.run();
+    assert!(h.state().is_hidden(sketch));
+    assert_eq!(point_marks(h.state()), 0);
+}
