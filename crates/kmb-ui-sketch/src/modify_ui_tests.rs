@@ -314,6 +314,7 @@ fn corner_rectangle() -> Harness<'static, Workspace> {
 }
 
 fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifiers) {
+    assert_eq!(editor(h.state_mut()).editor.tool, Tool::Select);
     let sol = solution(h);
     let points: Vec<_> = current_sketch(h.state())
         .entities
@@ -328,6 +329,16 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
             modifiers
         };
         let pos = screen(h, p);
+        assert!(
+            editor(h.state_mut())
+                .view
+                .last
+                .as_ref()
+                .unwrap()
+                .rect
+                .contains(pos),
+            "point {p:?} at {pos:?}"
+        );
         h.event(egui::Event::ModifiersChanged(mods));
         h.hover_at(pos);
         h.run();
@@ -343,7 +354,14 @@ fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifier
     }
     h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
     h.run();
-    assert_eq!(editor(h.state_mut()).editor.selection.len(), 4);
+    assert_eq!(
+        editor(h.state_mut()).editor.selection.len(),
+        4,
+        "tool {:?}, points {:?}, selection {:?}",
+        editor(h.state_mut()).editor.tool,
+        current_sketch(h.state()).entities,
+        editor(h.state_mut()).editor.selection
+    );
 }
 
 #[test]
