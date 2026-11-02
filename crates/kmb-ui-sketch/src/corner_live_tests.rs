@@ -45,21 +45,19 @@ fn call(h: &mut Harness<'static, Workspace>, dir: &Path, tool: &str, args: Value
 
 #[test]
 fn live_corner_box_fillet_and_undo_use_ui_tools() {
-    let dir = Scratch(
-        std::env::temp_dir().join(format!(
+    let dir = Scratch(std::env::temp_dir().join(format!(
             "kmb-corner-live-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()
-        )),
-    );
+        )));
     std::fs::create_dir_all(&dir.0).unwrap();
     let mut ws = ws_of(Document::new(), None, reg()).with_data_dir(dir.0.clone());
     ws.layout_mut().ai_live = true;
     ws.layout_mut().commands_open = true;
-    ws.layout_mut().language = "ja".into();
+    ws.layout_mut().appearance.language = "ja".into();
     let mut h = Harness::builder()
         .with_size(egui::vec2(1400.0, 800.0))
         .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
