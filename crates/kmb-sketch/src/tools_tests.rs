@@ -919,7 +919,7 @@ fn exact_half_side_arc_merges_keep_radius_dimension_names() {
             if constraint.kind.value().is_some()
                 && !names.iter().any(|(id, _)| *id == constraint.id)
             {
-                names.push((constraint.id, s.dim_name(constraint.id).unwrap()));
+                names.push((constraint.id, s.dim_name(constraint.id).unwrap().to_owned()));
             }
         }
     }
