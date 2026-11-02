@@ -221,21 +221,19 @@ impl Workspace {
     }
 
     /// ファイルを開く。開いていればそのタブへ切り替え、今のタブが空でなければ新しいタブに開く
-    /// (前の文書はそのタブに残る)。開けなければ作ったタブを閉じる。
+    /// (前の文書はそのタブに残る)。読み取れたことを確かめてからタブを作る。
     pub fn open_in_tab(&mut self, path: &Path) -> bool {
         if let Some(i) = self.tab_of(path) {
             self.switch_tab(i);
             self.win.message = Some(format!("{} は開いています", path.display()));
             return true;
         }
-        let made = self.make_room();
-        let ok = self.load_path(path);
-        if !ok && made {
-            let m = self.win.message.take();
-            self.drop_tab();
-            self.win.message = m;
-        }
-        ok
+        let Some(opened) = self.prepare_path(path) else {
+            return false;
+        };
+        self.make_room();
+        self.load_prepared(path, opened);
+        true
     }
 
     /// 今のタブを確かめずに閉じる(最後の 1 つなら無題の文書にする)。
