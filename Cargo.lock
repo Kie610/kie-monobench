@@ -3478,6 +3478,7 @@ dependencies = [
  "kmb-strategy-pocket2d",
  "kmb-text",
  "kmb-ui-mouse3d",
+ "kmb-ui-sketch",
  "kmb-ui-view3d",
  "kmb-workspace-hack",
  "log",
