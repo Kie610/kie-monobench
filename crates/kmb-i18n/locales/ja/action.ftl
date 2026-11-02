@@ -150,11 +150,11 @@ action-cad-text-font-tip = 選んでいる文字を PC の輪郭のフォント(
 action-cad-text-at-point = スケッチの点に文字
 action-cad-text-at-point-tip = スケッチの単独の点を中心に文字を置く。点は拘束で動かせる
 action-cad-text-on-face = 面に文字
-action-cad-text-on-face-tip = 平らな面を選んでから押すと、面の中心に 1 本線のフォントの文字を置く。彫刻でなぞるか、押し出しで彫る・浮かせる
+action-cad-text-on-face-tip = 平らな面を選んでから押すと、面の中心に PC のゴシック体で文字を置く。書体が見つからない時は 1 本線にして知らせる。輪郭は押し出しで彫る・浮かせる
 action-cad-text-on-path = スケッチの線に文字
 action-cad-text-on-path-tip = スケッチの最初の線(補助線でもよい)に沿って文字を並べる。円なら真上に外向き
 action-cad-thread = ねじ
-action-cad-thread-tip = 押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いねじの呼びとピッチが入る。呼び・長さ・向きは欄で直し、OK か Enter で決める
+action-cad-thread-tip = 押してから円筒の面(ボスの外側か穴の内側)をクリックすると、面の径に近いねじの呼びとピッチが入る。呼び・長さ・向き・ねじ山は欄で直し、OK か Enter で決める
 action-cad-timeline-read-latest-bodies = 前の版の読み方をまとめて外す
 action-cad-timeline-read-latest-bodies-tip = 前の版の読み方で、選んだ時点のボディを読んでいる機能の全部に、最新の形を読ませる(1 回で取り消せる)
 action-cad-timeline-read-latest-body = 最新の形を読む
@@ -299,6 +299,8 @@ action-study-cancel = 中止
 action-study-cancel-tip = 計算をやめる(流れと時間で変わる熱は、ここまでのコマを結果に残す)
 action-study-run = 実行
 action-study-run-tip = 選んだ研究を解く。研究は自動では解きません。条件や形を変えると結果に「古い」が付きます
+action-wave-solve = 音の仕事を解く…
+action-wave-solve-tip = 音の仕事の JSON を境界要素法で解き、周波数ごとの表面と受け取る所の音圧を JSON で書き出す
 
 ## 機能の右クリックだけに出る操作(タイムライン・ブラウザ・3D のビュー)
 ## 機能の種類で説明の変わる操作(パラメータを既定として保存・進入位置を置く)は、説明を種類によらない文にした。
@@ -358,3 +360,7 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+action-hrtf-process = HRTF の形式をそろえる
+action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
+action-hrtf-compute = 頭の網から HRTF を計算…
+action-hrtf-compute-tip = 頭の網の仕事の JSON を境界要素法で解き、全方向の HRIR を SOFA で書き出す

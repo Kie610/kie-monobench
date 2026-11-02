@@ -25,6 +25,15 @@ fn mass(doc: &mut Document, k: &dyn Kernel, id: FeatureId) -> f64 {
     k.mass(*h).unwrap().volume
 }
 
+fn volume_close(k: &TestKernel, actual: f64, expected: f64) -> bool {
+    let tolerance = if k.is_truck() {
+        expected.abs() * 2e-3
+    } else {
+        1e-3
+    };
+    (actual - expected).abs() < tolerance
+}
+
 fn disk(hole: bool) -> (DocBuilder, FeatureId) {
     let mut b = DocBuilder::new();
     let mut s = SketchBuilder::new(SketchPlane::Xy);
@@ -74,7 +83,7 @@ fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
         let expected = 2.0 * std::f64::consts::PI.powi(2) * 5.0 * if hole { 3.0 } else { 4.0 };
         let actual = mass(&mut doc, &*k, r);
         assert!(
-            (actual - expected).abs() / expected < 2e-3,
+            volume_close(&k, actual, expected),
             "hole={hole}, volume={actual}, expected={expected}"
         );
         let reg = registry();
@@ -85,7 +94,7 @@ fn revolving_a_disk_face_keeps_the_hole_and_the_saved_reference() {
             .collect();
         assert_eq!(ids, vec![f, r]);
         let mut loaded = Document::from_json(&doc.to_json()).unwrap();
-        assert!((mass(&mut loaded, &*k, r) - expected).abs() / expected < 2e-3);
+        assert!(volume_close(&k, mass(&mut loaded, &*k, r), expected));
     }
 }
 
@@ -185,7 +194,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         let actual = mass(&mut doc, &*k, r);
         let expected = std::f64::consts::PI * 16.0 * length;
         assert!(
-            (actual - expected).abs() / expected < 2e-3,
+            volume_close(&k, actual, expected),
             "length={length}, volume={actual}, expected={expected}"
         );
     }
@@ -246,7 +255,7 @@ fn revolving_a_face_around_its_straight_edge_follows_dimensions() {
         ))
         .unwrap();
         let expected = std::f64::consts::PI * 16.0 * 15.0;
-        assert!((mass(&mut doc, &*k, r) - expected).abs() / expected < 2e-3);
+        assert!(volume_close(&k, mass(&mut doc, &*k, r), expected));
         if let Some((mut old, old_mesh)) = original_many {
             let report = doc.recompute(&reg, &*k);
             let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(r) else {
