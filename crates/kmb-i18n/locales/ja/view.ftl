@@ -114,3 +114,7 @@ view-candidates = 重なっているもの(手前から)
 
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+
+view-sketch-corner-cannot-fit = 選んだ角を処理できません。使える最大の長さは { $maximum } です(変更はしていません)
+view-sketch-corner-invalid = 選んだ角を処理できません。端でつながった2本の線分の角を選んでください(変更はしていません)
+view-sketch-corner-edge-limits = 選んだ角を処理できません。両側の辺で使える最大の長さは { $first } と { $second } です(変更はしていません)

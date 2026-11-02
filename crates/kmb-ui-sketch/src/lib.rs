@@ -1798,3 +1798,6 @@ mod tests;
 
 #[cfg(test)]
 mod plane_frame_tests;
+
+#[cfg(test)]
+mod corner_live_tests;

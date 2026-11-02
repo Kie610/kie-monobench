@@ -3,6 +3,7 @@
 use crate::Tool;
 use crate::tests::*;
 use egui_kittest::Harness;
+use egui_kittest::kittest::Queryable;
 use kmb_sketch::{ConstraintKind, Entity, EntityId};
 use kmb_ui::Workspace;
 
@@ -300,4 +301,262 @@ fn the_rounded_corner_is_previewed_with_the_typed_radius() {
     // 打った半径に合わせて形が変わる(直角の角の円弧の弦は半径の √2 倍)
     assert!((chord("3", &mut h) - 3.0 * 2f64.sqrt()).abs() < 1e-6);
     assert!((chord("1", &mut h) - 2f64.sqrt()).abs() < 1e-6);
+}
+
+fn corner_rectangle() -> Harness<'static, Workspace> {
+    let mut h = empty_sketch();
+    editor(h.state_mut()).set_tool(Tool::Rectangle);
+    h.run();
+    click_at(&mut h, [1.19, 18.97]);
+    click_at(&mut h, [21.19, -1.03]);
+    press_key(&mut h, egui::Key::Escape);
+    h
+}
+
+fn select_corners(h: &mut Harness<'static, Workspace>, modifiers: egui::Modifiers) {
+    assert_eq!(editor(h.state_mut()).editor.tool, Tool::Select);
+    let sol = solution(h);
+    let points: Vec<_> = current_sketch(h.state())
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Point { .. }))
+        .map(|e| sol.points[&e.id()])
+        .collect();
+    assert_eq!(points.len(), 4);
+    for (i, p) in points.into_iter().enumerate() {
+        let mods = if i == 0 {
+            egui::Modifiers::NONE
+        } else {
+            modifiers
+        };
+        let pos = screen(h, p);
+        assert!(
+            editor(h.state_mut())
+                .view
+                .seen
+                .as_ref()
+                .unwrap()
+                .1
+                .contains(pos),
+            "point {p:?} at {pos:?}"
+        );
+        h.event(egui::Event::ModifiersChanged(mods));
+        h.hover_at(pos);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: mods,
+            });
+            h.step();
+        }
+    }
+    h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+    h.run();
+    let points = current_sketch(h.state()).entities;
+    let e = &editor(h.state_mut()).editor;
+    assert_eq!(
+        e.selection.len(),
+        4,
+        "tool {:?}, points {points:?}, selection {:?}",
+        e.tool,
+        e.selection
+    );
+}
+
+#[test]
+fn selected_corners_fillet_with_one_value_and_one_undo() {
+    let mut h = corner_rectangle();
+    select_corners(&mut h, egui::Modifiers::SHIFT);
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Fillet);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Arc { .. }
+        )),
+        4
+    );
+    h.get_by_label("元に戻す").click();
+    h.run();
+    assert_eq!(current_sketch(h.state()), before);
+}
+
+#[test]
+fn selected_corners_chamfer_with_one_value_and_one_undo() {
+    let mut h = corner_rectangle();
+    select_corners(
+        &mut h,
+        egui::Modifiers {
+            ctrl: true,
+            command: true,
+            ..egui::Modifiers::NONE
+        },
+    );
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Chamfer);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Line {
+                construction: false,
+                ..
+            }
+        )),
+        8
+    );
+    h.get_by_label("元に戻す").click();
+    h.run();
+    assert_eq!(current_sketch(h.state()), before);
+}
+
+#[test]
+fn selected_corners_from_a_box_are_processed_together() {
+    let mut h = corner_rectangle();
+    drag_on(&mut h, [0.15, 20.0], [22.23, -2.0], egui::Modifiers::NONE);
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 8);
+    editor(h.state_mut()).set_tool(Tool::Fillet);
+    h.run();
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    assert_eq!(
+        count_of(&current_sketch(h.state()), |e| matches!(
+            e,
+            Entity::Arc { .. }
+        )),
+        4
+    );
+}
+
+#[test]
+fn selected_corners_refuse_all_when_only_one_corner_is_too_small() {
+    for (tool, lang) in [
+        (Tool::Fillet, "ja"),
+        (Tool::Chamfer, "ja"),
+        (Tool::Fillet, "en"),
+        (Tool::Chamfer, "en"),
+    ] {
+        let mut h = corner_rectangle();
+        h.state_mut().layout_mut().appearance.language = lang.into();
+        h.run();
+        let large = current_sketch(h.state());
+        editor(h.state_mut()).set_tool(Tool::Rectangle);
+        h.run();
+        click_at(&mut h, [24.0, 10.0]);
+        click_at(&mut h, [26.0, 8.0]);
+        press_key(&mut h, egui::Key::Escape);
+        let before = current_sketch(h.state());
+        let sol = solution(&h);
+        let corners: Vec<_> = before
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Point { .. }))
+            .map(|e| sol.points[&e.id()])
+            .collect();
+        assert_eq!(corners.len(), 8);
+        // 大きな四角の4隅と、小さな四角の1隅だけを、同じ囲みに入れる。
+        drag_on(&mut h, [0.15, 20.0], [24.1, 9.0], egui::Modifiers::NONE);
+        // この囲みでは大きな四角の下の隅が外れるので、Shift の短いクリックで足す。
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::SHIFT));
+        for p in &corners {
+            if p[0] < 22.0 && p[1] < 9.0 {
+                let pos = screen(&h, *p);
+                h.hover_at(pos);
+                h.step();
+                for pressed in [true, false] {
+                    h.event(egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::SHIFT,
+                    });
+                    h.step();
+                }
+            }
+        }
+        h.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
+        h.run();
+        let selected_points = editor(h.state_mut())
+            .editor
+            .selection
+            .iter()
+            .filter(|id| matches!(before.entity(**id), Some(Entity::Point { .. })))
+            .count();
+        assert_eq!(selected_points, 5);
+        editor(h.state_mut()).set_tool(tool);
+        h.run();
+        type_text(&mut h, "5");
+        press_enter(&mut h);
+        assert_eq!(current_sketch(h.state()), before, "{tool:?} は全部断る");
+        let notice = editor(h.state_mut())
+            .editor
+            .notice
+            .clone()
+            .expect("作れない角の理由を出す");
+        assert!(
+            notice.starts_with(if lang == "en" {
+                "The selected corners cannot be processed."
+            } else {
+                "選んだ角を処理できません。"
+            }),
+            "{notice}"
+        );
+        let maximum = notice
+            .split_whitespace()
+            .find_map(|s| s.trim_matches(['\u{2068}', '\u{2069}']).parse::<f64>().ok())
+            .expect("使える上限の数を出す");
+        // クリック位置は画面の単精度の座標を通る。
+        assert!((maximum - 2.0).abs() < 1e-5, "{notice}");
+        assert!(notice.contains("mm"), "{notice}");
+        h.get_by_label(if lang == "en" { "Undo" } else { "元に戻す" })
+            .click();
+        h.run();
+        assert_eq!(
+            current_sketch(h.state()),
+            large,
+            "失敗で取り消しの段を増やさない"
+        );
+    }
+}
+
+#[test]
+fn selected_corners_two_distance_chamfer_reports_both_edges() {
+    let mut h = empty_sketch();
+    editor(h.state_mut()).set_tool(Tool::Rectangle);
+    h.run();
+    click_at(&mut h, [1.19, 18.97]);
+    click_at(&mut h, [21.19, 8.97]);
+    press_key(&mut h, egui::Key::Escape);
+    quick_click(&mut h, [1.19, 18.97]);
+    h.run();
+    assert_eq!(editor(h.state_mut()).editor.selection.len(), 1);
+    let before = current_sketch(h.state());
+    editor(h.state_mut()).set_tool(Tool::Chamfer);
+    h.run();
+    type_text(&mut h, "21,11");
+    press_enter(&mut h);
+    assert_eq!(current_sketch(h.state()), before);
+    let notice = editor(h.state_mut())
+        .editor
+        .notice
+        .clone()
+        .expect("辺で使える長さを出す");
+    let limits: Vec<f64> = notice
+        .split_whitespace()
+        .filter_map(|s| s.trim_matches(['\u{2068}', '\u{2069}']).parse().ok())
+        .collect();
+    for expected in [10.0, 20.0] {
+        assert!(
+            limits.iter().any(|n| (*n - expected).abs() < 1e-5),
+            "{notice}"
+        );
+    }
 }

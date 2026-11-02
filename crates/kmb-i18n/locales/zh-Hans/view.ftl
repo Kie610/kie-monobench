@@ -4,3 +4,7 @@
 
 # view-keycast-drag = Drag
 # view-keycast-mouse3d-button = 3D mouse button { $number }
+
+# view-sketch-corner-cannot-fit = The selected corners cannot be processed. The maximum available length is { $maximum }. Nothing was changed.
+# view-sketch-corner-invalid = The selected corners cannot be processed. Select corners where two line segments meet at their endpoints. Nothing was changed.
+# view-sketch-corner-edge-limits = The selected corners cannot be processed. The available lengths along the two adjoining edges are { $first } and { $second }. Nothing was changed.

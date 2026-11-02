@@ -337,6 +337,57 @@ fn selected(editor: &Editor, sketch: &Sketch) -> Vec<EntityId> {
         .collect()
 }
 
+/// 角の処理を全部断った理由。文章への変換は、画面の表示言語が分かる所で行う。
+pub(crate) enum CornerFailure {
+    TooLong { maximum: f64 },
+    Edges { lengths: [f64; 2] },
+    Invalid,
+}
+
+/// 選んだ角を先に集め、全部作れた時だけひとつの変更として返す。
+pub(crate) fn apply_corners(
+    editor: &mut Editor,
+    sketch: &Sketch,
+    sol: &Solution,
+    corners: &[(EntityId, Option<EntityId>)],
+) -> Option<Sketch> {
+    let text = if editor.typed.trim().is_empty() {
+        editor.dim_text.clone()
+    } else {
+        std::mem::take(&mut editor.typed)
+    };
+    let value = if text.trim().is_empty() {
+        crate::view::default_corner()
+    } else {
+        typed_value(&text)
+    };
+    let radius = typed_length(&value).unwrap_or(2.0);
+    let chamfer = chamfer_kind(&text);
+    let mut s = sketch.clone();
+    s.adopt_solution(sol);
+    for &(corner, first) in corners {
+        let limit = s.corner_limits(corner);
+        let done = if editor.tool == Tool::Fillet {
+            s.fillet_corner(corner, radius, &value).is_some()
+        } else {
+            s.chamfer_corner_with(corner, first, &chamfer).is_some()
+        };
+        if !done {
+            editor.notice = None;
+            editor.corner_error = Some(match limit {
+                Some((radius, _)) if editor.tool == Tool::Fillet => {
+                    CornerFailure::TooLong { maximum: radius }
+                }
+                Some((_, lengths)) => CornerFailure::Edges { lengths },
+                None => CornerFailure::Invalid,
+            });
+            return None;
+        }
+    }
+    editor.clear_selection();
+    Some(s)
+}
+
 /// 道具の操作。変えたスケッチを返す。
 pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
     let typed = (inp.enter && !editor.typed.trim().is_empty()).then(|| editor.typed.clone());
@@ -719,20 +770,7 @@ pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
                     }
                 }
             };
-            let text = if editor.typed.trim().is_empty() {
-                editor.dim_text.clone()
-            } else {
-                std::mem::take(&mut editor.typed)
-            };
-            let kind = chamfer_kind(&text);
-            let mut s = inp.start();
-            out = s.chamfer_corner_with(corner, first, &kind).map(|_| s);
-            if out.is_none() {
-                editor.notice = Some(
-                    "角を落とせません: 2 本の線分が交わる角を押してください(距離が辺より長い時も作れません)"
-                        .into(),
-                );
-            }
+            out = apply_corners(editor, inp.sketch, inp.sol, &[(corner, first)]);
         }
         Tool::LinearPattern => {
             let w = click?;

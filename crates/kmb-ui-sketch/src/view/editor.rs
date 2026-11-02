@@ -75,6 +75,8 @@ pub(crate) struct Editor {
     pub(crate) placing: Option<Placing>,
     /// 道具の知らせ(拘束の道具で、既に決まっているので付けなかった時など)。案内の下に出す
     pub(crate) notice: Option<String>,
+    /// 角の処理を断った、このコマの理由。描く前に現在の言語の知らせにする。
+    pub(crate) corner_error: Option<crate::more_tools::CornerFailure>,
     /// パレットの「正面から見る」を押した(ビューが 3D の視点を正面へ回す。N1c)
     pub(crate) look_front: bool,
     /// ビューが 3D の視点で見ている(パレットの「正面から見る」を押せる)
@@ -233,6 +235,7 @@ impl Default for Editor {
             pattern_input: None,
             placing: None,
             notice: None,
+            corner_error: None,
             look_front: false,
             in_space: false,
             infer: crate::infer::State::default(),
@@ -314,6 +317,7 @@ impl Editor {
             self.dim_text.clear();
         }
         self.notice = None;
+        self.corner_error = None;
         self.infer.clear();
         self.placing = None;
         self.dim_typed_click = false;

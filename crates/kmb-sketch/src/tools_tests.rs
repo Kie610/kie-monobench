@@ -1,6 +1,105 @@
 use crate::*;
 use std::collections::HashMap;
 
+fn rectangle_corners(width: f64, height: f64) -> (Sketch, [EntityId; 4]) {
+    let mut sketch = Sketch::default();
+    let corners = [[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]]
+        .map(|p| sketch.add_point(p[0], p[1]));
+    for i in 0..4 {
+        sketch.add_line(corners[i], corners[(i + 1) % 4]);
+    }
+    (sketch, corners)
+}
+
+fn assert_closed_corner_profile(sketch: &Sketch, value: f64, edges: usize) {
+    let values: HashMap<_, _> = sketch
+        .constraints
+        .iter()
+        .filter(|c| c.kind.value().is_some())
+        .map(|c| (c.id, value))
+        .collect();
+    let solution = solve(sketch, &values).expect("角を落とした形を解ける");
+    let (profile, bad) = profile_of(sketch, &solution, kmb_core::Plane::XY);
+    assert!(bad.is_empty(), "{bad:?}");
+    assert_eq!(profile.regions.len(), 1);
+    assert_eq!(profile.regions[0].outer.edges.len(), edges);
+}
+
+#[test]
+fn exact_half_side_fillets_make_a_slot_without_zero_length_lines() {
+    let (mut sketch, corners) = rectangle_corners(50.0, 20.0);
+    for corner in corners {
+        sketch
+            .fillet_corner(corner, 10.0, "10 mm")
+            .expect("短辺をちょうど使い切る半径を受ける");
+    }
+    assert_eq!(lines(&sketch).len(), 2);
+    assert_eq!(
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Arc { .. }))
+            .count(),
+        2
+    );
+    for (_, a, b) in lines(&sketch) {
+        assert!(!near(sketch.pos(a).unwrap(), sketch.pos(b).unwrap()));
+    }
+    assert_closed_corner_profile(&sketch, 10.0, 4);
+}
+
+#[test]
+fn exact_half_side_fillets_make_a_circle_from_a_square() {
+    let (mut sketch, corners) = rectangle_corners(20.0, 20.0);
+    for corner in corners {
+        sketch
+            .fillet_corner(corner, 10.0, "10 mm")
+            .expect("正方形の辺の半分の半径で丸める");
+    }
+    assert!(lines(&sketch).is_empty());
+    assert_eq!(
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, Entity::Circle { .. }))
+            .count(),
+        1
+    );
+    assert_closed_corner_profile(&sketch, 10.0, 1);
+}
+
+#[test]
+fn exact_half_side_chamfers_leave_a_closed_diamond() {
+    let (mut sketch, corners) = rectangle_corners(20.0, 20.0);
+    for corner in corners {
+        sketch
+            .chamfer_corner_with(
+                corner,
+                None,
+                &Chamfer::Equal {
+                    d: 10.0,
+                    value: "10 mm".into(),
+                },
+            )
+            .expect("辺をちょうど使い切る面取りを受ける");
+    }
+    let visible = sketch
+        .entities
+        .iter()
+        .filter(|e| {
+            matches!(
+                e,
+                Entity::Line {
+                    construction: false,
+                    ..
+                }
+            )
+        })
+        .count();
+    assert_eq!(visible, 4);
+    assert_closed_corner_profile(&sketch, 10.0, 4);
+}
+
 /// 寸法の式をすべて `v` mm とみなして解く。
 fn solve_all(s: &Sketch, v: f64) -> Solution {
     let values: HashMap<ConstraintId, f64> = s
@@ -761,4 +860,145 @@ fn tangent_intersections_stay_single_at_different_scales_and_angles() {
             }
         }
     }
+}
+
+#[test]
+fn exact_half_side_limits_allow_equality_but_refuse_values_beyond_epsilon() {
+    let (s, corners) = rectangle_corners(10.0, 20.0);
+    let (radius, sides) = s.corner_limits(corners[0]).unwrap();
+    assert!((radius - 10.0).abs() < crate::geom::EPS);
+    assert_eq!(sides, [10.0, 20.0]);
+    let mut accepted = s.clone();
+    assert!(
+        accepted
+            .fillet_corner(corners[0], 10.0 + crate::geom::EPS / 2.0, "10 mm")
+            .is_some()
+    );
+    let mut refused = s.clone();
+    assert!(
+        refused
+            .fillet_corner(corners[0], 10.0 + 2.0 * crate::geom::EPS, "10 mm")
+            .is_none()
+    );
+    assert_eq!(refused, s);
+    let mut accepted = s.clone();
+    assert!(
+        accepted
+            .chamfer_corner_with(
+                corners[0],
+                None,
+                &Chamfer::Equal {
+                    d: 10.0 + crate::geom::EPS / 2.0,
+                    value: "10 mm".into()
+                }
+            )
+            .is_some()
+    );
+    assert!(
+        refused
+            .chamfer_corner_with(
+                corners[0],
+                None,
+                &Chamfer::Equal {
+                    d: 10.0 + 2.0 * crate::geom::EPS,
+                    value: "10 mm".into()
+                }
+            )
+            .is_none()
+    );
+    assert_eq!(refused, s);
+}
+
+#[test]
+fn exact_half_side_arc_merges_keep_radius_dimension_names() {
+    let (mut s, corners) = rectangle_corners(20.0, 20.0);
+    let mut names = Vec::new();
+    for corner in corners {
+        s.fillet_corner(corner, 10.0, "10 mm").unwrap();
+        s = s.with_dim_names(&mut kmb_core::Names::default()).unwrap();
+        for constraint in &s.constraints {
+            if constraint.kind.value().is_some()
+                && !names.iter().any(|(id, _)| *id == constraint.id)
+            {
+                names.push((constraint.id, s.dim_name(constraint.id).unwrap().to_owned()));
+            }
+        }
+    }
+    assert_eq!(names.len(), 4);
+    for (id, name) in names {
+        assert_eq!(s.dim_name(id), Some(name.as_str()));
+        let constraint = s.constraints.iter().find(|c| c.id == id).unwrap();
+        let ConstraintKind::Radius { circle, .. } = constraint.kind else {
+            panic!("半径の寸法を残す")
+        };
+        assert!(matches!(s.entity(circle), Some(Entity::Circle { .. })));
+    }
+    assert_closed_corner_profile(&s, 10.0, 1);
+}
+
+#[test]
+fn exact_half_side_fillets_preserve_rectangle_guides_and_their_endpoints() {
+    let mut s = Sketch::default();
+    s.add_rectangle((None, [0.0, 0.0]), (None, [20.0, 20.0]))
+        .unwrap();
+    let corners: Vec<_> = s
+        .entities
+        .iter()
+        .filter(|e| matches!(e, Entity::Point { .. }))
+        .map(Entity::id)
+        .collect();
+    for corner in corners {
+        s.fillet_corner(corner, 10.0, "10 mm").unwrap();
+    }
+    assert!(s.entities.iter().any(|e| matches!(
+        e,
+        Entity::Line {
+            construction: true,
+            ..
+        }
+    )));
+    for e in &s.entities {
+        for point in e.points() {
+            assert!(
+                matches!(s.entity(point), Some(Entity::Point { .. })),
+                "{:?} が指す点 {point:?} が無い",
+                e.id()
+            );
+        }
+    }
+    assert_closed_corner_profile(&s, 10.0, 1);
+}
+
+#[test]
+fn exact_half_side_keeps_a_projected_arc_separate_from_new_fillet_arcs() {
+    let (mut s, corners) = rectangle_corners(20.0, 20.0);
+    let arc = s.fillet_corner(corners[0], 10.0, "10 mm").unwrap();
+    let original = s.entity(arc).unwrap().clone();
+    let projection = Projection {
+        entity: arc,
+        source: ProjectionSource::Sketch {
+            feature: kmb_core::FeatureId(42),
+            item: arc,
+        },
+    };
+    s.projections.push(projection.clone());
+    for corner in &corners[1..] {
+        s.fillet_corner(*corner, 10.0, "10 mm").unwrap();
+    }
+    assert_eq!(
+        s.entity(arc),
+        Some(&original),
+        "写した円弧は元の形へ取り直す単位を保つ"
+    );
+    assert_eq!(s.projections, [projection]);
+    let values: HashMap<_, _> = s
+        .constraints
+        .iter()
+        .filter(|c| c.kind.value().is_some())
+        .map(|c| (c.id, 10.0))
+        .collect();
+    let sol = solve(&s, &values).unwrap();
+    let (profile, bad) = profile_of(&s, &sol, kmb_core::Plane::XY);
+    assert!(bad.is_empty(), "{bad:?}");
+    assert_eq!(profile.regions.len(), 1);
 }

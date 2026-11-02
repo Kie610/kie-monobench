@@ -42,25 +42,8 @@ pub(super) fn act(ui: &mut egui::Ui, editor: &mut Editor, input: Input<'_>, out:
                 shared
             });
             if let Some(corner) = corner {
-                let value = if !editor.typed.trim().is_empty() {
-                    typed_value(&std::mem::take(&mut editor.typed))
-                } else if editor.dim_text.trim().is_empty() {
-                    default_corner()
-                } else {
-                    typed_value(&editor.dim_text)
-                };
-                // 式が数でなければ 2 mm で作り、解く時に寸法の値へ合わせる
-                let r = typed_length(&value).unwrap_or(2.0);
-                let shown = shown_length(r);
-                let mut s = sketch.clone();
-                s.adopt_solution(sol);
-                if s.fillet_corner(corner, r, &value).is_some() {
-                    out.result = Some(s);
-                } else {
-                    editor.notice = Some(format!(
-                        "角を丸められません: 2 本の線分が交わる角を押してください(半径 {shown} が辺より長い時も作れません)"
-                    ));
-                }
+                out.result =
+                    crate::more_tools::apply_corners(editor, sketch, sol, &[(corner, None)]);
             }
         }
         Tool::Trim => {
