@@ -1,6 +1,78 @@
 use crate::*;
 use std::collections::HashMap;
 
+fn rectangle_corners(width: f64, height: f64) -> (Sketch, [EntityId; 4]) {
+    let mut sketch = Sketch::default();
+    let corners = [[0.0, 0.0], [width, 0.0], [width, height], [0.0, height]]
+        .map(|p| sketch.add_point(p[0], p[1]));
+    for i in 0..4 {
+        sketch.add_line(corners[i], corners[(i + 1) % 4]);
+    }
+    (sketch, corners)
+}
+
+fn assert_closed_corner_profile(sketch: &Sketch, value: f64, edges: usize) {
+    let values: HashMap<_, _> = sketch
+        .constraints
+        .iter()
+        .filter(|c| c.kind.value().is_some())
+        .map(|c| (c.id, value))
+        .collect();
+    let solution = solve(sketch, &values).expect("角を落とした形を解ける");
+    let (profile, bad) = profile_of(sketch, &solution, kmb_core::Plane::XY);
+    assert!(bad.is_empty(), "{bad:?}");
+    assert_eq!(profile.regions.len(), 1);
+    assert_eq!(profile.regions[0].outer.edges.len(), edges);
+}
+
+#[test]
+fn exact_half_side_fillets_make_a_slot_without_zero_length_lines() {
+    let (mut sketch, corners) = rectangle_corners(50.0, 20.0);
+    for corner in corners {
+        sketch
+            .fillet_corner(corner, 10.0, "10 mm")
+            .expect("短辺をちょうど使い切る半径を受ける");
+    }
+    assert_eq!(lines(&sketch).len(), 2);
+    assert_eq!(
+        sketch.entities.iter().filter(|e| matches!(e, Entity::Arc { .. })).count(),
+        2
+    );
+    for (_, a, b) in lines(&sketch) {
+        assert!(!near(sketch.pos(a).unwrap(), sketch.pos(b).unwrap()));
+    }
+    assert_closed_corner_profile(&sketch, 10.0, 4);
+}
+
+#[test]
+fn exact_half_side_fillets_make_a_circle_from_a_square() {
+    let (mut sketch, corners) = rectangle_corners(20.0, 20.0);
+    for corner in corners {
+        sketch
+            .fillet_corner(corner, 10.0, "10 mm")
+            .expect("正方形の辺の半分の半径で丸める");
+    }
+    assert!(lines(&sketch).is_empty());
+    assert_eq!(
+        sketch.entities.iter().filter(|e| matches!(e, Entity::Circle { .. })).count(),
+        1
+    );
+    assert_closed_corner_profile(&sketch, 10.0, 1);
+}
+
+#[test]
+fn exact_half_side_chamfers_leave_a_closed_diamond() {
+    let (mut sketch, corners) = rectangle_corners(20.0, 20.0);
+    for corner in corners {
+        sketch
+            .chamfer_corner_with(corner, None, &Chamfer::Equal { d: 10.0, value: "10 mm".into() })
+            .expect("辺をちょうど使い切る面取りを受ける");
+    }
+    let visible = sketch.entities.iter().filter(|e|matches!(e, Entity::Line {construction: false,..})).count();
+    assert_eq!(visible, 4);
+    assert_closed_corner_profile(&sketch, 10.0, 4);
+}
+
 /// 寸法の式をすべて `v` mm とみなして解く。
 fn solve_all(s: &Sketch, v: f64) -> Solution {
     let values: HashMap<ConstraintId, f64> = s
