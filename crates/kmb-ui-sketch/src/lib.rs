@@ -22,6 +22,9 @@ mod snap;
 mod space3d;
 mod view;
 
+#[cfg(test)]
+mod tool_button_tests;
+
 pub use space3d::{Sketch3dEditor, Tool3};
 pub use view::Tool;
 
