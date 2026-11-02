@@ -108,6 +108,21 @@ pub enum FieldKind {
     },
 }
 
+/// 選択肢の説明図の線。座標の単位と形はモジュールが決め、画面は縦横比を保って収める。
+pub type ChoiceLines = Vec<(Vec<[f64; 2]>, crate::LineInk)>;
+
+/// 選択肢をかざした時の説明図。文書は変えず、今の欄の値と計算済みのパラメータから描く。
+#[derive(Debug, Clone, Copy)]
+pub struct ChoiceIllustration(
+    pub fn(&crate::Context<'_>, &serde_json::Value, &str, &str) -> ChoiceLines,
+);
+
+impl PartialEq for ChoiceIllustration {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::fn_addr_eq(self.0, other.0)
+    }
+}
+
 /// 設定欄の 1 つ。`key` はデータの中の場所で、`.` で区切って入れ子をたどる(例: `stock.margin_top`)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Field {
@@ -157,6 +172,9 @@ pub struct Field {
     ///
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub origin_planes: bool,
+    /// 選択肢ごとの任意の説明図。保存するデータや欄の値には含めない。
+    #[serde(skip)]
+    pub illustration: Option<ChoiceIllustration>,
 }
 
 /// 欄の既定の単位: 数だけを打った時に、その欄が何の量として読むか。画面は欄の名前から単位を
@@ -301,7 +319,14 @@ impl Field {
             unit: None,
             follows: None,
             origin_planes: false,
+            illustration: None,
         }
+    }
+
+    /// 選択肢の説明図をモジュールから受け取る。
+    pub fn illustrate(mut self, draw: ChoiceIllustration) -> Self {
+        self.illustration = Some(draw);
+        self
     }
 
     /// 選択肢の値の `origin_xy`・`origin_yz`・`origin_zx` を原点の平面として見せる([`Field::origin_planes`])。

@@ -26,8 +26,9 @@ mod transaction;
 pub use args::{Arg, ArgKind};
 pub use bodies::{BodyId, BodyLine, BodyState, BodyTable};
 pub use descriptor::{
-    CHOICES_TYPE, Choice, Descriptor, Field, FieldKind, FieldUnit, Fix, PickOn, Retarget, Slider,
-    Step, Suggest, When, category, choices_of, choices_value, row_name,
+    CHOICES_TYPE, Choice, ChoiceIllustration, ChoiceLines, Descriptor, Field, FieldKind, FieldUnit,
+    Fix, PickOn, Retarget, Slider, Step, Suggest, When, category, choices_of, choices_value,
+    row_name,
 };
 pub use document::{
     Component, DOCUMENT_EXTENSION, DOCUMENT_EXTENSIONS, DocEvent, Document, DocumentData,
