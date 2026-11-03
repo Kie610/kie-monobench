@@ -211,7 +211,19 @@ pub fn outline(p: &Params, v_groove: bool) -> Result<Outline, String> {
             if !radius.is_finite() || !center[0].is_finite() {
                 return Err("中高の円弧を作れない寸法です".into());
             }
-            edges.push(arc("crown", center, radius, [r, 0.0], [r, p.width], true));
+            let crown = arc("crown", center, radius, [r, 0.0], [r, p.width], true);
+            // 大きな円の差し引きで端点を失う寸法は、開いた断面にせず入力で止める。
+            let tolerance = 1e-8 * r.max(p.width).max(1.0);
+            for (actual, expected) in [
+                (crown.from_point(), [r, 0.0]),
+                (crown.to_point(), [r, p.width]),
+            ] {
+                let distance = (actual[0] - expected[0]).hypot(actual[1] - expected[1]);
+                if !distance.is_finite() || distance > tolerance {
+                    return Err("中高の円弧の端点を保てない寸法です".into());
+                }
+            }
+            edges.push(crown);
         }
         edges.push(line("end_finish", [r, p.width], [b, p.width]));
         edges.push(line("bore", [b, p.width], [b, 0.0]));
