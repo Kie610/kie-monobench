@@ -7,3 +7,11 @@ common-close = 閉じる
 
 common-open-dwg = DWG は読めません。元のソフトで DXF か STEP に書き出してから開いてください
 common-open-dwg-version = 版の印: { $version }
+common-param-batch-enable = まとめて適用
+common-param-batch-enable-tip = 変えた式をため、適用でまとめて確定します。切ると未適用の式を捨てます。
+common-param-batch-apply = 適用
+common-param-batch-discard = やめる
+common-param-batch-pending = { $count } 件の未適用
+common-param-batch-errors = 式を直してから適用してください
+
+common-param-expression-label = { $name } の式

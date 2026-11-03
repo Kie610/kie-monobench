@@ -407,3 +407,5 @@ action-cad-thicken = 厚みを付ける
 action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
 action-cad-import-iges = IGES を読み込む…
 action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す
+action-params-apply-batch = 式をまとめて適用
+action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する

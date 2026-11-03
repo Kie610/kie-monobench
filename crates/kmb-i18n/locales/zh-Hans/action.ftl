@@ -56,3 +56,5 @@
 # action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
 # action-cad-import-iges = Import IGES…
 # action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.
+# action-params-apply-batch = Apply expressions together
+# action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid
