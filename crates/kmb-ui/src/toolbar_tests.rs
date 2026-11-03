@@ -354,18 +354,14 @@ fn drawing_exports_live_in_the_existing_export_menu() {
         "drawing.export_svg",
     ] {
         let key = format!("a:{id}");
-        let places = tabs
-            .iter()
-            .flat_map(|tab| {
-                tab.groups.iter().filter_map(|group| {
-                    group
-                        .items
-                        .iter()
-                        .any(|item| item.key == key)
-                        .then_some((tab.name.as_str(), group.name.as_str()))
-                })
-            })
-            .collect::<Vec<_>>();
+        let mut places = Vec::new();
+        for tab in &tabs {
+            for group in &tab.groups {
+                if group.items.iter().any(|item| item.key == key) {
+                    places.push((tab.name.as_str(), group.name.as_str()));
+                }
+            }
+        }
         assert_eq!(places, [("ソリッド", "書き出し")], "{id} の置き場");
         let tab = tabs.iter().find(|tab| tab.name == "ソリッド").unwrap();
         let group = tab
