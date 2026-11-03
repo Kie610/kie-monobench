@@ -5,6 +5,11 @@
 # action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 # action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 
+# action-study-converge = Check accuracy
+# action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+# action-study-check = Check conditions
+# action-study-check-tip = List missing study conditions and explain how to fix them before solving
 # action-view-part-hues = Color by Component
 # action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 # action-cad-sketch-dxf-layers = List DXF layers

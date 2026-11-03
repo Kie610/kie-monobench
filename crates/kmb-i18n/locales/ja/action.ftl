@@ -369,6 +369,11 @@ action-cam-nest-remove-part-tip = 板への配置から、指定した番号の�
 action-cam-nest-set-part = 配置する部品を直す
 action-cam-nest-set-part-tip = 部品の個数、回してよい向き、上に向ける面を直す
 
+action-study-converge = 精度を確かめる
+action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる
+
+action-study-check = 点検
+action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 action-cad-sketch-dxf-layers = DXF の画層を一覧

@@ -368,6 +368,11 @@ action-cam-nest-remove-part-tip = Remove the part with the specified index from 
 action-cam-nest-set-part = Edit nesting part
 action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper face of a part
 
+action-study-converge = Check accuracy
+action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+action-study-check = Check conditions
+action-study-check-tip = List missing study conditions and explain how to fix them before solving
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 action-cad-sketch-dxf-layers = List DXF layers
