@@ -105,6 +105,21 @@ pub fn describe(g: &Geo) -> Vec<(String, String)> {
             }
             v
         }
+        Kind::Sphere(s) => vec![
+            row("直径", mm(2.0 * s.radius)),
+            row("半径", mm(s.radius)),
+            row("中心", xyz(s.center)),
+            row("面積(網で)", area(s.area)),
+        ],
+        Kind::Torus(t) => vec![
+            row("直径", mm(2.0 * t.minor_radius)),
+            row("半径", mm(t.minor_radius)),
+            row("大きい直径", mm(2.0 * t.major_radius)),
+            row("大きい半径", mm(t.major_radius)),
+            row("軸の向き", numbers(t.axis).replace(".000", "")),
+            row("軸の中心", xyz(t.center)),
+            row("面積(網で)", area(t.area)),
+        ],
         Kind::Curve { length } => vec![row("長さ(網で)", mm(*length))],
         Kind::Plane {
             normal, area: a, ..
@@ -400,10 +415,12 @@ pub fn compare(a: &Geo, b: &Geo, want: Basis, xyz_rows: bool) -> Report {
         }
     }
     // 曲面・曲線は網(表示の許容差 0.05 mm)で測るので、そう断る
-    if [a, b]
-        .iter()
-        .any(|g| matches!(g.kind, Kind::Surface { .. } | Kind::Curve { .. }))
-    {
+    if [a, b].iter().any(|g| {
+        matches!(
+            g.kind,
+            Kind::Surface { .. } | Kind::Curve { .. } | Kind::Sphere(_) | Kind::Torus(_)
+        )
+    }) {
         r.rows
             .push(row("注", "曲面は網で測るため ±0.05 mm ほど".into()));
     }

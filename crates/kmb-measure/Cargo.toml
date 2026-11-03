@@ -15,5 +15,10 @@ kmb-core.workspace = true
 serde.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-samples.workspace = true
+serde_json.workspace = true
+
 [lints]
 workspace = true

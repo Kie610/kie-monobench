@@ -129,3 +129,12 @@ view-candidates = Overlapping items (front to back)
 
 view-keycast-drag = Drag
 view-keycast-mouse3d-button = 3D mouse button { $number }
+
+view-measure-radius = Radius
+view-measure-diameter = Diameter
+view-measure-major-radius = Major radius
+view-measure-major-diameter = Major diameter
+view-measure-center = Center
+view-measure-axis = Axis direction
+view-measure-axis-center = Axis center
+view-measure-mesh-area = Area (mesh)
