@@ -116,3 +116,8 @@ view-part-hues = 部品ごとに色を変える
 view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+view-candidate-edge = 辺({ $faces })
+view-candidate-vertex = 頂点({ $position })
+
+view-others = ほかを選ぶ…(長押しでも)
+view-others-help = 右クリックした所に重なっている面・辺・頂点の一覧から選びます。左ボタンの長押しでも開けます。
