@@ -1,6 +1,7 @@
 //! 画面の配置(作業空間、パネルの幅と開閉、ツールバーのピン、マウスの割り当て)。
 //! PC ごとに覚え、データフォルダの `layout.json` に書く。文書には入れない。
 
+pub use crate::keycast::{KeycastPlace, KeycastSettings};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -358,6 +359,9 @@ pub struct Layout {
     pub free_orbit: bool,
     /// 3D マウスの速さ・割り当て(設定の「マウス」)
     pub mouse3d: crate::mouse3d::Mouse3dSettings,
+    /// 録画・解説向けの操作の表示(無い欄は既定で切)。
+    #[serde(default)]
+    pub keycast: KeycastSettings,
     pub brightness: Brightness,
     /// 3D のビューの表示の形
     pub shading: Shading,
@@ -450,6 +454,7 @@ impl Default for Layout {
             middle_drag: MiddleDrag::Pan,
             free_orbit: false,
             mouse3d: Default::default(),
+            keycast: Default::default(),
             brightness: Brightness::System,
             shading: Shading::ShadedEdges,
             effects: Effects::default(),
@@ -542,6 +547,7 @@ impl Layout {
             middle_drag: self.middle_drag,
             free_orbit: self.free_orbit,
             mouse3d: self.mouse3d.clone(),
+            keycast: self.keycast.clone(),
             brightness: self.brightness,
             shading: self.shading,
             effects: self.effects.clone(),

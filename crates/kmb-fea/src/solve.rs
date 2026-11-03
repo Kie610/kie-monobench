@@ -200,3 +200,58 @@ pub fn solve(
     );
     Ok((rep, amg))
 }
+
+/// 同じ行列・固定値で右辺だけを変えて解く。前処理と固定値の右辺への寄与を保持する。
+pub struct ReusableSolve {
+    amg: Amg,
+    lift: Vec<f64>,
+    fixed: Vec<(usize, f64)>,
+}
+
+impl ReusableSolve {
+    pub fn new(mut a: Csr, fixed: &[(usize, f64)]) -> Result<Self, String> {
+        let mut lift = vec![0.0; a.rows];
+        apply_fixed(&mut a, &mut lift, fixed);
+        let mut free = vec![1.0; a.rows];
+        for &(d, _) in fixed {
+            free[d] = 0.0;
+        }
+        let fixed = fixed.iter().map(|&(d, _)| (d, lift[d])).collect();
+        let amg = Amg::new(a, blocks(lift.len(), 1), vec![free])?;
+        Ok(Self { amg, lift, fixed })
+    }
+
+    pub fn solve(&self, b: &[f64], x: &mut [f64]) -> Result<CgReport, String> {
+        let mut rhs: Vec<f64> = b.iter().zip(&self.lift).map(|(b, l)| b + l).collect();
+        for &(d, v) in &self.fixed {
+            rhs[d] = v;
+        }
+        pcg(
+            self.amg.matrix(),
+            &rhs,
+            x,
+            &|r, z| self.amg.apply(r, z),
+            1e-9,
+            1000,
+        )
+    }
+}
+
+#[cfg(test)]
+mod reusable_tests {
+    use super::*;
+
+    /// 確かめること: 右辺を変えても固定温度と固定列の寄与を毎回守る。
+    #[test]
+    fn reusable_thermal_solve_applies_fixed_values_to_each_rhs() {
+        let mut a = Csr::from_pattern(2, vec![vec![0, 1], vec![0, 1]]);
+        a.val = vec![2.0, -1.0, -1.0, 2.0];
+        let prepared = ReusableSolve::new(a, &[(0, 10.0)]).unwrap();
+        let mut x = vec![10.0, 0.0];
+        for (rhs, want) in [(0.0, 5.0), (4.0, 7.0), (-2.0, 4.0)] {
+            prepared.solve(&[123.0, rhs], &mut x).unwrap();
+            assert!((x[0] - 10.0).abs() < 1e-10);
+            assert!((x[1] - want).abs() < 1e-10);
+        }
+    }
+}

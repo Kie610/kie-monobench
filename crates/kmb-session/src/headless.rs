@@ -11,7 +11,7 @@ use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-/// ボディ 1 つの質量の値(M47)。`props` の項目はそのまま並べる(前の `mass` の形に足しただけ)。
+/// ボディごとの測定値。ソリッドには体積と質量、面のボディには面積と外形を返す。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct BodyMass {
     /// ブラウザと同じボディの名前
@@ -19,7 +19,9 @@ pub struct BodyMass {
     /// ボディを最初に作った機能(材料はこの ID に付く)
     pub root: FeatureId,
     #[serde(flatten)]
-    pub props: MassProps,
+    pub props: Option<MassProps>,
+    #[serde(flatten)]
+    pub sheet: Option<SheetFacts>,
     /// 付けた物理材料
     #[serde(skip_serializing_if = "Option::is_none")]
     pub material: Option<String>,
@@ -29,6 +31,16 @@ pub struct BodyMass {
     /// 質量(g)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mass: Option<f64>,
+}
+
+/// 面のボディの測定値。体積と質量の項目を持たない。
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct SheetFacts {
+    pub body_kind: kmb_core::kernel::BodyKind,
+    pub description: String,
+    pub area: f64,
+    pub min: [f64; 3],
+    pub max: [f64; 3],
 }
 
 /// 画面で選んでいる物(操作の文脈に渡す)。CLI・MCP は機能を 1 つ選ぶだけ([`Headless::run`])。
@@ -85,16 +97,26 @@ pub enum Ran {
 mod actions;
 mod active;
 mod background;
+#[cfg(test)]
+mod named_parameter_tests;
+mod open;
+mod pack;
 mod params;
 mod status;
+mod view;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
+pub use open::OpenedDocument;
+pub use pack::{OpenedDesign, PackOptions, PackSkipped, Packed, load_design};
 
 /// 開いている文書。CLI・MCP は変更のたびにその場で再計算する。画面は裏で再計算する
 /// ([`Headless::in_background`])。
 pub struct Headless {
     doc: Document,
     path: Option<PathBuf>,
+    view: crate::doc_view::DocView,
+    /// None は CLI・MCP の自動選択、Some(None) は画面の保存なし。
+    view_directory: Option<Option<PathBuf>>,
     modules: Modules,
     report: RecomputeReport,
     /// 次の計算でも捨てずに残させる形(画面に出している形。計算が失敗しても出し続けるため、M27)
@@ -136,24 +158,33 @@ impl Headless {
         // 古い版の文書の、読むボディを固定する印のうち要らない物を外す(読む形は変わらない)
         doc.release_pins(&modules.registry);
         let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
-        let mut h = Headless {
-            doc,
-            path,
-            modules,
-            report,
-            keep: vec![],
-            background: None,
-            active: Default::default(),
-            recomputes: 1,
-            hold: Hold::Off,
-            creating: None,
-            just_hidden: BTreeSet::new(),
-            old_names: true,
-        };
+        let mut h = Self::uncomputed(modules, doc, path);
+        h.report = report;
+        h.recomputes = 1;
         if h.rename_old_faces() {
             h.recompute();
         }
         h
+    }
+
+    /// 再計算前の状態。ファイルを読み取る準備では、今の文書の形を捨てないため計算しない。
+    fn uncomputed(modules: Modules, doc: Document, path: Option<PathBuf>) -> Self {
+        Self {
+            doc,
+            path,
+            view: Default::default(),
+            view_directory: None,
+            modules,
+            report: RecomputeReport::default(),
+            keep: vec![],
+            background: None,
+            active: Default::default(),
+            recomputes: 0,
+            hold: Hold::Off,
+            creating: None,
+            just_hidden: BTreeSet::new(),
+            old_names: true,
+        }
     }
 
     /// 開いた後の最初の計算の結果で、前の版の伸びた面の名前の参照を今の名前に直す
@@ -166,10 +197,10 @@ impl Headless {
                 > 0
     }
 
-    /// ファイルを開く。
+    /// ファイルを開く。DXF とzipは保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
-        let doc = crate::load(path)?;
-        Ok(Self::with_document(modules, doc, Some(path.to_path_buf())))
+        let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
+        Ok(Self::with_document(modules, opened.document, opened.path))
     }
 
     /// 文書を入れ替える(開く、見本)。裏で前の文書を計算している時は、その結果を使わない。
@@ -182,6 +213,7 @@ impl Headless {
         self.doc.release_pins(&self.modules.registry);
         self.path = path;
         self.active = Default::default();
+        self.restore_view();
         self.old_names = true;
         self.recompute();
         old
@@ -296,7 +328,7 @@ impl Headless {
             })
             .unwrap_or_default();
         crate::save_with(&p, &self.doc, &snap, "")?;
-        self.path = Some(p.clone());
+        self.set_path(Some(p.clone()));
         Ok(p)
     }
 
@@ -530,6 +562,13 @@ impl Headless {
 
     /// 組み立てた変更([`crate::edit`])を適用して再計算する。
     pub fn apply(&mut self, tx: Transaction) -> Result<(), String> {
+        let tx = crate::params::complete_named_parameter_change(
+            &mut self.doc,
+            &self.modules.registry,
+            &self.report,
+            tx,
+        )
+        .map_err(|e| e.to_string())?;
         let touched: Vec<FeatureId> = tx
             .ops
             .iter()
@@ -853,6 +892,9 @@ impl Headless {
     /// 保存先を変える(名前を付けて保存した時など)。
     pub fn set_path(&mut self, path: Option<PathBuf>) {
         self.path = path;
+        if let Err(why) = self.save_doc_view(self.view.clone()) {
+            log::warn!("文書の見え方を書けません: {why}");
+        }
     }
 
     /// 前の文書と、その時の計算の結果に戻す(開くのをやめた時)。走っている計算は入れ替える前の
@@ -863,6 +905,7 @@ impl Headless {
         }
         self.doc = doc;
         self.path = path;
+        self.restore_view();
         self.report = report;
         self.recompute();
     }
@@ -948,3 +991,6 @@ impl Headless {
         self.apply(tx)
     }
 }
+
+#[cfg(test)]
+mod hole_visibility_tests;

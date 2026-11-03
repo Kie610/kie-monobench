@@ -1,6 +1,8 @@
-//! 文書ファイル(JSON)を操作する CLI。1 回の実行が 1 つのトランザクションになる。
+//! 文書を操作し、ファイルの変換と文書の命令の一括実行を行う CLI。
 
 //! 文書の扱いとモジュールの操作は、MCP と同じ [`kmb_session::Headless`] に任せる。
+
+mod batch;
 
 use clap::{Parser, Subcommand};
 use kmb_bundle::Sample;
@@ -122,6 +124,25 @@ enum Command {
         #[arg(long)]
         each: bool,
     },
+    /// 設計・G-code・段取り表をzipにまとめて渡す
+    Pack {
+        file: PathBuf,
+        out: PathBuf,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().gcode, action = clap::ArgAction::Set)]
+        gcode: bool,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().sheet, action = clap::ArgAction::Set)]
+        sheet: bool,
+        #[arg(long)]
+        models: bool,
+    },
+    /// 文書を作らずに形式を変換する(STEP → STL・3MF・OBJ など、DXF → SVG など)
+    Convert {
+        input: PathBuf,
+        out: PathBuf,
+        /// 書き出しの操作に渡す引数。宣言に無い鍵は誤り
+        #[arg(long = "arg", value_name = "鍵=値")]
+        args: Vec<String>,
+    },
     /// 基準部品の文書を作る
     Sample {
         file: PathBuf,
@@ -169,10 +190,20 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// 操作を ID で実行する(`kmb actions` の一覧の ID)。文書を変える操作は保存し、書き出しは `--out` へ書く
+    /// 操作を ID で実行する。ID を省くと file を台本として順に流す(文書の命令のみ)。
+    /// 台本は空の文書から始める。--document で始めの文書、--save で保存先、--export で書き出し先を指定する
     Run {
         file: PathBuf,
-        id: String,
+        id: Option<String>,
+        /// 台本を流す前の文書(省くと空の文書)。操作の ID と同時には使わない
+        #[arg(long, conflicts_with = "id")]
+        document: Option<PathBuf>,
+        /// 台本がすべて成功したら文書を保存する
+        #[arg(long, conflicts_with = "id")]
+        save: Option<PathBuf>,
+        /// 台本がすべて成功したら拡張子で形式を選んで書き出す
+        #[arg(long, conflicts_with = "id")]
+        export: Option<PathBuf>,
         /// 引数 `鍵=値`(いくつでも)。値は JSON として読めなければ文字。長さは `5 mm`・`0.2 in` とも書ける。
         /// 操作が宣言しない鍵や型の違いは誤り
         #[arg(long = "arg", value_name = "鍵=値")]
@@ -463,6 +494,14 @@ fn activate(w: &mut Headless, component: Option<u64>) -> Result<(), String> {
 
 fn json_arg(s: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(s).map_err(|e| format!("データが JSON として読めません: {e}"))
+}
+
+fn show_output_warnings(info: &serde_json::Value) {
+    if let Some(warnings) = info.get("warnings").and_then(|w| w.as_array()) {
+        for warning in warnings.iter().filter_map(|w| w.as_str()) {
+            eprintln!("警告: {warning}");
+        }
+    }
 }
 
 fn write(out: &Path, contents: &[u8]) -> Result<(), Problem> {
@@ -796,6 +835,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             for b in w.mass()? {
                 match (b.material, b.mass) {
                     (Some(m), Some(g)) => println!("{}: {m}、{g:.3} g", b.name),
+                    _ if b.sheet.is_some() => println!("{}: 面のボディ(体積なし)", b.name),
                     _ => println!("{}: 材料なし", b.name),
                 }
             }
@@ -811,8 +851,19 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             } else {
                 let r3 = |p: [f64; 3]| p.map(|v| (v * 1e3).round() / 1e3 + 0.0);
                 for b in &all {
-                    let m = &b.props;
                     println!("{}:", b.name);
+                    let Some(m) = &b.props else {
+                        if let Some(sheet) = &b.sheet {
+                            println!("  {}", sheet.description);
+                            println!("  面積 {:.3} mm²", sheet.area);
+                            println!(
+                                "  外形 最小 {:?}、最大 {:?} mm",
+                                r3(sheet.min),
+                                r3(sheet.max)
+                            );
+                        }
+                        continue;
+                    };
                     println!("  体積   {:.3} mm³", m.volume);
                     println!("  表面積 {:.3} mm²", m.area);
                     println!(
@@ -832,6 +883,31 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                     }
                 }
             }
+        }
+        Command::Pack {
+            file,
+            out,
+            gcode,
+            sheet,
+            models,
+        } => {
+            let mut work = open(&file)?;
+            let packed = work.pack(
+                kmb_session::PackOptions {
+                    gcode,
+                    sheet,
+                    models,
+                },
+                None,
+            )?;
+            write(&out, &packed.contents)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &json!({"written":out,"included":packed.included,"skipped":packed.skipped})
+                )
+                .unwrap()
+            );
         }
         Command::Export {
             file,
@@ -863,8 +939,12 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 };
             }
             match w.run(&action, None, None, &args) {
-                Ok(Ran::File { contents, .. }) => write(&out, &contents)?,
-                Ok(Ran::Files { files, .. }) => {
+                Ok(Ran::File { contents, info, .. }) => {
+                    show_output_warnings(&info);
+                    write(&out, &contents)?;
+                }
+                Ok(Ran::Files { files, info }) => {
+                    show_output_warnings(&info);
                     for p in Headless::write_files(&out, &files)? {
                         println!("{}", p.display());
                     }
@@ -878,6 +958,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 }
             }
         }
+        Command::Convert { input, out, args } => batch::convert(&input, &out, &args)?,
         Command::Sample { file, cam, three_d } => {
             if file.exists() {
                 return Err(Problem::new(
@@ -992,12 +1073,32 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
         Command::Run {
             file,
             id,
+            document,
+            save,
+            export,
             args,
             selected,
             input,
             out,
             component,
         } => {
+            let Some(id) = id else {
+                if !args.is_empty()
+                    || selected.is_some()
+                    || input.is_some()
+                    || out.is_some()
+                    || component.is_some()
+                {
+                    return Err("台本では --document・--save・--export を使ってください".into());
+                }
+                batch::script(
+                    &file,
+                    document.as_deref(),
+                    save.as_deref(),
+                    export.as_deref(),
+                )?;
+                return Ok(ExitCode::SUCCESS);
+            };
             let mut w = open(&file)?;
             activate(&mut w, component)?;
             let args = kmb_session::run_args::parse_pairs(&args)?;
@@ -1012,18 +1113,22 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                         println!("{a}");
                     }
                 }
-                Ran::File { contents, .. } => match out {
-                    Some(o) => write(&o, &contents)?,
-                    None => match String::from_utf8(contents) {
-                        Ok(t) => print!("{t}"),
-                        Err(_) => {
-                            return Err(
-                                "中身が文字でないので --out で書き出す先を指定します".into()
-                            );
-                        }
-                    },
-                },
-                Ran::Files { files, .. } => {
+                Ran::File { contents, info, .. } => {
+                    show_output_warnings(&info);
+                    match out {
+                        Some(o) => write(&o, &contents)?,
+                        None => match String::from_utf8(contents) {
+                            Ok(t) => print!("{t}"),
+                            Err(_) => {
+                                return Err(
+                                    "中身が文字でないので --out で書き出す先を指定します".into()
+                                );
+                            }
+                        },
+                    }
+                }
+                Ran::Files { files, info } => {
+                    show_output_warnings(&info);
                     let o = out.ok_or("いくつものファイルを書くので --out で名前を指定します")?;
                     for p in Headless::write_files(&o, &files)? {
                         println!("{}", p.display());

@@ -6,9 +6,9 @@
 action-anim-appearance = Appearance
 action-anim-appearance-tip = Add a step that changes the selected part's appearance over the step's length (the design's appearance is unchanged). Pick the appearance again on the step bar
 action-anim-auto-explode-all = Auto Explode: All Levels
-action-anim-auto-explode-all-tip = Move parts away from the assembly center automatically, and parts inside parts away from that part's center. Choose one step or sequential, trail lines and explode scale, then OK
+action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-auto-explode-one = Auto Explode: One Level
-action-anim-auto-explode-one-tip = Move parts away from the assembly center automatically (direct children only; parts inside are not moved). Choose one step (all at once) or sequential (1 second per part), trail lines and explode scale, then OK
+action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-drive = Joint Motion
 action-anim-drive-tip = Add a step that drives a joint from its lower to its upper limit (without limits: 90 deg for revolute, the part's length for slider). Edit the values and length on the step bar
 action-anim-explode = Explode Move
@@ -30,6 +30,12 @@ action-asm-contacts = Enable Contact Sets
 action-asm-contacts-tip = Toggle whether dragging a joint's part stops at partners in contact sets (each set can also be toggled with the eye of "Contact Sets" in the browser)
 action-asm-fastener = Standard Parts
 action-asm-fastener-tip = Insert screws, nuts, washers or ball bearings into holes: hole's top face → hole's top circles (any number) → Enter. The size is picked from the hole diameter; type and length can be changed later. Counts appear in the bill of materials
+action-asm-place-occurrence = Place Another Instance
+action-asm-place-occurrence-tip = Place the selected component once more without copying its shape (an occurrence). Editing the original changes every occurrence, and the bill of materials counts them as the same part. Use Make Independent to cut an occurrence loose from the original
+action-asm-occurrence-detach = Make Independent
+action-asm-occurrence-detach-tip = Turn the occurrence into an ordinary component holding a copy of its current shape. Later edits to the original no longer change it
+action-asm-occurrence-sync = Match Original
+action-asm-occurrence-sync-tip = Add bodies that were later added to the original component to this occurrence, placed the same way
 action-asm-interference = Interference
 action-asm-interference-tip = Check visible bodies for overlaps, list the volume per pair in a table and show the overlaps in red in 3D (at the positions joints have moved them to). "Include coincident faces" also lists pairs that only touch at a face
 action-asm-joint = As-built Joint
@@ -54,6 +60,8 @@ action-asm-new-contact-set = New Contact Set
 action-asm-new-contact-set-tip = Make the selected bodies (two or more) a contact set. While contact sets are enabled, dragging a joint's part stops just before it digs into a partner in the same set
 action-asm-new-rigid-group = Rigid Group
 action-asm-new-rigid-group-tip = Make the selected components (two or more) one block. Whichever part a joint or drag moves, they all move together
+action-asm-planetary-link = Link Planetary Set
+action-asm-planetary-link-tip = Link the rotations of the sun, carrier and ring (and the planet spin) of a planetary gear set by an equation from the tooth counts. The latest joint in the timeline follows the earlier two. For a differential, give the ring the same tooth count as the sun
 action-asm-snap-joint = Joint
 action-asm-snap-joint-tip = Move part 1 to meet part 2 and join them: face of part 1 → origin → face of part 2 → origin. Type, angle and offset can be changed later
 
@@ -97,6 +105,7 @@ action-cad-import-step = Import STEP…
 action-cad-import-step-tip = Import a part made in another CAD program. Add holes and pockets to it and use it for machining and measuring
 action-cad-loft = Loft
 action-cad-loft-tip = Press, then click the sections (profiles drawn on different planes) in the order to join them, and pick guide rail lines (or press Enter if none)
+action-cad-loft-point = Reselect End Point
 action-cad-measure = Measure Volume
 action-cad-measure-tip = Volume, surface area and bounding box of the selected body (or the last body)
 action-cad-mirror-on-face = Mirror on This Face
@@ -120,7 +129,7 @@ action-cad-sketch-auto-constrain-tip = Add the coincident, horizontal, vertical,
 action-cad-sketch-export-dxf = Save as DXF…
 action-cad-sketch-export-dxf-tip = Export the lines of the selected sketch (except construction lines) to DXF
 action-cad-sketch-export-svg = Save as SVG…
-action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit (opens at the same size in laser cutter software such as LightBurn; connected lines are joined into closed outlines)
+action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit; join connected lines into closed outlines
 action-cad-sketch-find = Find Sketch Entities
 action-cad-sketch-find-tip = List the points, lines, circles and so on of the selected sketch in a table, filtered by type, construction, how constrained, length, radius and region
 action-cad-sketch-insert-dxf = Insert DXF…
@@ -142,11 +151,11 @@ action-cad-text-font-tip = Use an outline font on this PC (TrueType, OpenType) f
 action-cad-text-at-point = Text at Sketch Point
 action-cad-text-at-point-tip = Place text centered on a lone sketch point. The point can be moved with constraints
 action-cad-text-on-face = Text on Face
-action-cad-text-on-face-tip = Select a flat face, then press to place single-line font text at the face's center. Trace it with engraving, or cut or raise it with an extrude
+action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.
 action-cad-text-on-path = Text on Sketch Line
 action-cad-text-on-path-tip = Lay text along the first line of the sketch (construction lines too). On a circle it starts at the top, facing out
 action-cad-thread = Thread
-action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the metric thread size and pitch nearest the face's diameter. Edit size, length and direction in the fields, then OK or Enter
+action-cad-thread-tip = Press, then click a cylindrical face (outside of a boss or inside of a hole) to fill in the thread size and pitch nearest the face's diameter. Edit size, length, direction and thread form in the fields, then OK or Enter
 action-cad-timeline-read-latest-bodies = Read Latest Bodies Everywhere
 action-cad-timeline-read-latest-bodies-tip = Make every feature that still reads a body as it was when picked (the older reading) read the latest shape instead (one undo step)
 action-cad-timeline-read-latest-body = Read Latest Body
@@ -191,7 +200,7 @@ action-cam-add-pocket-tip = Select bottom faces in the 3D view, then press (Shif
 action-cam-add-project3d = Project (3D)
 action-cam-add-project3d-tip = Drop sketch lines straight down onto the part's faces and trace them. A negative stock to leave cuts below the faces. A selected sketch gives its lines; with nothing selected, the last sketch (uses a ball end mill if there is one)
 action-cam-add-radial3d = Radial (3D)
-action-cam-add-radial3d-tip = Finish by tracing lines radiating out and in from the part's center (uses a ball end mill if there is one)
+action-cam-add-radial3d-tip = Finish by tracing radial lines from the part's center. Choose depth levels and back-and-forth or one-way cutting (uses a ball end mill if there is one)
 action-cam-add-ramp3d = Ramp (3D)
 action-cam-add-ramp3d-tip = Finish vertical walls and steep slopes without breaks, going down diagonally 0.5 mm per lap (uses a ball end mill if there is one)
 action-cam-add-raster3d = Parallel (3D)
@@ -205,7 +214,7 @@ action-cam-add-setup-tip = Add a setup to machine the last body
 action-cam-add-slot = Slot
 action-cam-add-slot-tip = Cut a slot of a set width and depth along the sketch's lines as its center. A selected sketch gives its lines; with nothing selected, the last sketch
 action-cam-add-spiral3d = Spiral (3D)
-action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in (uses a ball end mill if there is one)
+action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in. Choose depth levels and cutting direction (uses a ball end mill if there is one)
 action-cam-add-thread = Thread Milling
 action-cam-add-thread-tip = Cut a thread into the selected hole or boss wall with a thread mill. Needs a thread mill in the tool library
 action-cam-add-trace = Trace
@@ -288,9 +297,11 @@ action-render-turntable-tip = Make a video going once around the bodies. The fil
 ## Simulation
 
 action-study-cancel = Cancel
-action-study-cancel-tip = Stop solving (for flow, the frames so far are kept in the results)
+action-study-cancel-tip = Stop solving (for flow and time-varying heat, the frames so far are kept in the results)
 action-study-run = Solve
 action-study-run-tip = Solve the selected study. Studies are not solved automatically. Changing conditions or shapes marks the results as "Out of date"
+action-wave-solve = Solve Sound Job…
+action-wave-solve-tip = Solve a sound job JSON with the boundary element method and write the surface and receiver pressures for each frequency as JSON
 
 ## Commands shown only in the feature right-click menu (timeline, browser, 3D view)
 ## For commands whose description depends on the feature type (Save as Default, Place Entry Point), the description is written to fit every type.
@@ -325,5 +336,81 @@ action-cam-setup-origin-pick = Pick Origin in 3D
 action-cam-setup-origin-pick-tip = Click a stock box corner, edge midpoint or face center, a point of the part's bounding box, or a part corner to make it the work coordinate origin
 action-cam-template-save = Save as Template…
 action-cam-template-save-tip = Save the selected operations (all operations inside, for a setup) on this PC under a name to use in another setup or document. Faces and lines are not saved; select them again when using it
+
+## Drawing
+
+action-drawing-add-sheet = Add sheet
+action-drawing-add-sheet-tip = Add a sheet to the drawing
+action-drawing-base-view = Base view
+action-drawing-base-view-tip = Create a base view from the model and a named orientation
+action-drawing-projected-view = Projected view
+action-drawing-projected-view-tip = Create a projected view from its parent
+action-drawing-section-view = Section view
+action-drawing-section-view-tip = Create a section from a cutting line in its parent view
+action-drawing-detail-view = Detail view
+action-drawing-detail-view-tip = Enlarge the region inside a circle in the parent view
+action-drawing-move-view = Move view
+action-drawing-move-view-tip = Change the paper position or distance from the parent
+action-drawing-set-view = Edit view
+action-drawing-set-view-tip = Change the scale and visibility of hidden and tangent lines
+action-drawing-delete = Delete drawing
+action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
+action-drawing-picture = Export drawing lines
+action-drawing-picture-tip = Export the sheet geometry and problems as JSON
+action-cad-surface-patch = Surface patch
+action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
+action-view-part-hues = Color by Component
+action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
+action-cad-sketch-dxf-layers = List DXF layers
+action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design
+action-cad-sketch-project-axis = Project Datum Axis
+action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
+action-hrtf-process = Align HRTF formats
+action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
+action-hrtf-compute = Compute HRTF from Head Mesh…
+action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA
+action-cad-sketch-regions = List sketch regions
+action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
+action-drawing-dimension = Dimension
+action-drawing-dimension-tip = Place a dimension that refers to view edges and shows the model value
+
+action-drawing-dimension-set = Place dimensions
+action-drawing-dimension-set-tip = Place baseline, chain, or ordinate dimensions once from selected points
+
+action-drawing-import-dimensions = Import model dimensions
+action-drawing-import-dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
+
+action-drawing-note = Annotation
+action-drawing-note-tip = Place text with an optional leader on the sheet
+
+action-drawing-center-mark = Center mark
+action-drawing-center-mark-tip = Mark the center of a circle or arc
+
+action-drawing-center-line = Centerline
+action-drawing-center-line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
+
+action-drawing-balloon = Balloon
+action-drawing-balloon-tip = Place a balloon linked to a parts table row at a chosen position
+
+action-drawing-renumber-balloons = Renumber balloons
+action-drawing-renumber-balloons-tip = Match balloon numbers to the current order of parts table rows
+
+action-drawing-align-balloons = Align balloons
+action-drawing-align-balloons-tip = Align selected balloons horizontally or vertically with the first balloon
+
+action-drawing-parts-table = Parts table
+action-drawing-parts-table-tip = Place selected parts table columns on the sheet as lines and text
+
+action-drawing-set-style = Dimension style
+action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
+action-cad-thicken = Thicken
+action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+action-cad-import-iges = Import IGES…
+action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.
+action-params-apply-batch = Apply expressions together
+action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid

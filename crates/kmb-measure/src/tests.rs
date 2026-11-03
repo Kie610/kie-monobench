@@ -462,3 +462,131 @@ fn two_edges_sharing_a_corner_report_the_obtuse_angle() {
     let rep = compare(&e1, &apart, Basis::Center, true);
     assert_eq!(row(&rep, "角度"), "60.00°");
 }
+
+/// 同じ部品を何百個置いても、網にするのは元の形 1 回だけ。出現の網は元の網を行列で動かした物で、
+/// 鏡に映して置いた出現は三角形の向きを裏返して表を外へ保つ。
+#[test]
+fn occurrences_reuse_the_mesh_of_their_source() {
+    use kmb_core::kernel::{Matrix4, translation};
+    struct Placed {
+        made: std::sync::atomic::AtomicUsize,
+    }
+    fn place(h: ShapeHandle) -> Matrix4 {
+        if h.0 == 999 {
+            let mut m = translation([0.0, 0.0, 0.0]);
+            m[0][0] = -1.0;
+            return m;
+        }
+        translation([h.0 as f64 * 20.0, 0.0, 0.0])
+    }
+    impl Kernel for Placed {
+        fn name(&self) -> &str {
+            "placed-test"
+        }
+        fn instance_of(&self, h: ShapeHandle) -> Option<(ShapeHandle, Matrix4)> {
+            (h.0 > 1).then(|| (ShapeHandle(1), place(h)))
+        }
+        fn mesh(&self, h: ShapeHandle, _: f64) -> Result<Mesh, kmb_core::KernelError> {
+            self.made.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let m = Mesh {
+                positions: vec![[0., 0., 0.], [10., 0., 0.], [0., 10., 0.]],
+                normals: vec![[0., 0., 1.]; 3],
+                triangles: vec![[0, 1, 2]],
+                triangle_faces: vec![0],
+                face_names: vec!["上".into()],
+                edges: vec![vec![[0., 0., 0.], [10., 0., 0.]]],
+            };
+            Ok(match self.instance_of(h) {
+                Some((_, p)) => placed_mesh(&m, &p),
+                None => m,
+            })
+        }
+    }
+    let k = Placed {
+        made: Default::default(),
+    };
+    let bodies: Vec<(FeatureId, ShapeHandle)> = (1..=400)
+        .chain([999])
+        .map(|i| (FeatureId(i), ShapeHandle(i)))
+        .collect();
+    let out = meshes(&k, &bodies);
+    assert_eq!(out.len(), 401);
+    assert_eq!(
+        k.made.load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "元の形だけ網にする"
+    );
+    let (_, third) = &out[2];
+    assert_eq!(third.positions[1], [70.0, 0.0, 0.0]);
+    assert_eq!(third.edges[0][0], [60.0, 0.0, 0.0]);
+    assert_eq!(third.face_names, ["上"]);
+    let (_, mirrored) = &out[400];
+    assert_eq!(mirrored.positions[1], [-10.0, 0.0, 0.0]);
+    assert_eq!(mirrored.triangles, [[0, 2, 1]], "鏡に映したら向きを裏返す");
+    assert_eq!(mirrored.normals[0], [0.0, 0.0, 1.0]);
+}
+
+/// 確かめること: 円・円弧の長さは表示の弦から独立し、円の式で求まる。
+#[test]
+fn round_edges_use_the_circle_formula_instead_of_the_display_chords() {
+    // 半径の推定の丸めと長さの式を分けて確かめるため、f32 でも正確な四方向の点を使う。
+    let circle = vec![
+        [10.0, 0.0, 0.0],
+        [0.0, 10.0, 0.0],
+        [-10.0, 0.0, 0.0],
+        [0.0, -10.0, 0.0],
+        [10.0, 0.0, 0.0],
+    ];
+    let arc = circle[..4].to_vec();
+    let meshes = vec![(
+        FeatureId(1),
+        Mesh {
+            edges: vec![circle, arc],
+            ..Default::default()
+        },
+    )];
+    for (edge, closed, angle, label, text) in [
+        (0, true, std::f64::consts::TAU, "周の長さ", "62.832 mm"),
+        (
+            1,
+            false,
+            1.5 * std::f64::consts::PI,
+            "弧の長さ",
+            "47.124 mm",
+        ),
+    ] {
+        let mut geo = resolve(
+            &meshes,
+            &Target::Edge {
+                feature: FeatureId(1),
+                edge,
+            },
+        )
+        .unwrap();
+        let Kind::Circle(c) = &geo.kind else {
+            panic!("円として計測する: {:?}", geo.kind)
+        };
+        assert_eq!(c.closed, closed);
+        let exact = 10.0 * angle;
+        let measured = c.radius
+            * if c.closed {
+                std::f64::consts::TAU
+            } else {
+                c.sweep.abs()
+            };
+        assert!(
+            (measured - exact).abs() / exact < 1e-9,
+            "{measured} != {exact}"
+        );
+        let chord_length: f64 = geo.segs.iter().map(|s| dist(s[0], s[1])).sum();
+        assert!(
+            (chord_length - exact).abs() / exact > 1e-9,
+            "弦の和なら厳しい比較で差が出る"
+        );
+        let before = describe(&geo);
+        assert_eq!(before.iter().find(|(key, _)| key == label).unwrap().1, text);
+        // 距離を測るための線分を変えても、長さの表示は円の式を使う。
+        geo.segs.truncate(1);
+        assert_eq!(describe(&geo), before);
+    }
+}

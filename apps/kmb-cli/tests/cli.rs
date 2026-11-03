@@ -426,3 +426,324 @@ fn a_feature_made_with_component_goes_into_that_component() {
     let doc = read(&d.join("a.json"));
     assert_eq!(doc["components"][0]["bodies"], serde_json::json!([made]));
 }
+
+#[test]
+fn obj_export_writes_indexed_triangles_without_a_material_file() {
+    let d = temp_dir("obj-indexed-triangles");
+    let document = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
+    ok(&d, &["sample", &document]);
+    let result = Command::new(env!("CARGO_BIN_EXE_kmb"))
+        .args([
+            "run",
+            &document,
+            "io.export_obj",
+            "--arg",
+            "unit=cm",
+            "--out",
+            "part.obj",
+        ])
+        .current_dir(&d)
+        .env("XDG_DATA_HOME", d.join("data"))
+        .env("APPDATA", d.join("data"))
+        .env(kmb_session::logging::ENV, "info")
+        .output()
+        .expect("OBJ の書き出しを起動できる");
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let logs = kmb_session::logging::log_dir(&d.join("data").join(kmb_session::DATA_DIR_NAME));
+    let logs = std::fs::read_dir(logs)
+        .unwrap()
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        logs.contains("OBJ を書き出す: ボディ 1 個、三角形") && logs.contains("単位 cm"),
+        "OBJ のボディ数・三角形数・単位をログに残す: {logs}"
+    );
+    let text = std::fs::read_to_string(d.join("part.obj")).unwrap();
+    let mut vertices: Vec<[f64; 3]> = Vec::new();
+    let mut normals: Vec<[f64; 3]> = Vec::new();
+    let mut faces = Vec::new();
+    let mut names = Vec::new();
+    for line in text.lines() {
+        let mut words = line.split_whitespace();
+        match words.next() {
+            Some("v") | Some("vn") => {
+                let values = words.map(|v| v.parse::<f64>().unwrap()).collect::<Vec<_>>();
+                assert_eq!(values.len(), 3);
+                assert!(values.iter().all(|x| x.is_finite()));
+                let point = [values[0], values[1], values[2]];
+                if line.starts_with("vn ") {
+                    normals.push(point);
+                } else {
+                    vertices.push(point);
+                }
+            }
+            Some("o") => names.push(words.collect::<Vec<_>>().join(" ")),
+            Some("f") => faces.push(
+                words
+                    .map(|v| {
+                        let (vertex, normal) = v.split_once("//").unwrap();
+                        (
+                            vertex.parse::<usize>().unwrap(),
+                            normal.parse::<usize>().unwrap(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => {}
+        }
+    }
+    assert!(!vertices.is_empty() && !normals.is_empty() && !faces.is_empty() && !names.is_empty());
+    let mut volume = 0.;
+    for face in faces {
+        assert_eq!(face.len(), 3);
+        for &(v, n) in &face {
+            assert!((1..=vertices.len()).contains(&v));
+            assert!((1..=normals.len()).contains(&n));
+        }
+        let [a, b, c] = [
+            vertices[face[0].0 - 1],
+            vertices[face[1].0 - 1],
+            vertices[face[2].0 - 1],
+        ];
+        volume += (a[0] * (b[1] * c[2] - b[2] * c[1])
+            + a[1] * (b[2] * c[0] - b[0] * c[2])
+            + a[2] * (b[0] * c[1] - b[1] * c[0]))
+            / 6.;
+    }
+    assert!(volume > 0., "外向きの三角形で正の体積になる: {volume}");
+    assert!(!std::fs::read_dir(&d).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .path()
+            .extension()
+            .is_some_and(|ext| ext == "mtl")
+    }));
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn pack_writes_a_zip_that_the_cli_can_open() {
+    let dir = temp_dir("pack");
+    let file = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
+    ok(&dir, &["sample", &file]);
+    let result = ok(
+        &dir,
+        &[
+            "pack",
+            &file,
+            "delivery.zip",
+            "--gcode",
+            "false",
+            "--sheet",
+            "false",
+        ],
+    );
+    let result: Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(result["included"].as_array().unwrap().len(), 2);
+    assert!(result["skipped"].as_array().unwrap().is_empty());
+    ok(&dir, &["recompute", "delivery.zip", "--json"]);
+    let original = kmb_session::Headless::open(kmb_bundle::modules(), &dir.join(&file)).unwrap();
+    let reopened = kmb_session::load_design(&dir.join("delivery.zip")).unwrap();
+    assert_eq!(reopened.document.to_json(), original.doc().to_json());
+    assert!(reopened.path.is_none());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn convert_reads_a_step_without_a_document_and_writes_mesh_formats() {
+    let d = temp_dir("convert-step");
+    ok(&d, &["sample", "part.json"]);
+    ok(&d, &["export", "part.json", "part.STEP"]);
+    for (out, prefix) in [
+        ("part.stl", None),
+        ("part.3mf", Some(b"PK".as_slice())),
+        ("part.obj", None),
+    ] {
+        ok(&d, &["convert", "part.STEP", out]);
+        let bytes = std::fs::read(d.join(out)).unwrap();
+        assert!(bytes.len() > 100, "{out}");
+        if let Some(prefix) = prefix {
+            assert!(bytes.starts_with(prefix));
+        }
+        if out.ends_with(".obj") {
+            assert!(
+                String::from_utf8(bytes)
+                    .unwrap()
+                    .lines()
+                    .any(|l| l.starts_with("v "))
+            );
+        }
+    }
+    ok(
+        &d,
+        &[
+            "convert",
+            "part.STEP",
+            "tolerance.stl",
+            "--arg",
+            "tolerance=0.1 mm",
+        ],
+    );
+    assert!(std::fs::metadata(d.join("tolerance.stl")).unwrap().len() > 100);
+    assert_eq!(
+        exit_code(
+            &d,
+            &["convert", "part.STEP", "bad.stl", "--arg", "tolerence=0.1"]
+        ),
+        1
+    );
+    assert!(!d.join("bad.stl").exists());
+    assert_eq!(
+        exit_code(&d, &["convert", "part.STEP", "out.unsupported"]),
+        4
+    );
+    assert_eq!(
+        exit_code(&d, &["convert", "missing.step", "missing.stl"]),
+        5
+    );
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn convert_reads_a_dxf_sketch_and_selects_its_svg_writer() {
+    let d = temp_dir("convert-dxf");
+    std::fs::write(
+        d.join("line.dxf"),
+        "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n20\n21\n10\n0\nENDSEC\n0\nEOF\n",
+    )
+    .unwrap();
+    ok(&d, &["convert", "line.dxf", "line.svg"]);
+    let svg = std::fs::read_to_string(d.join("line.svg")).unwrap();
+    assert!(
+        svg.contains("<svg") && (svg.contains("<path") || svg.contains("<line")),
+        "{svg}"
+    );
+    assert_eq!(exit_code(&d, &["convert", "line.dxf", "line.stl"]), 4);
+    assert_eq!(
+        exit_code(&d, &["convert", "line.unsupported", "line.svg"]),
+        4
+    );
+    assert_eq!(
+        exit_code(
+            &d,
+            &["convert", "line.dxf", "line.svg", "--arg", "unknown=true"]
+        ),
+        1
+    );
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn a_script_runs_two_lines_and_saves_only_after_success() {
+    let d = temp_dir("batch-script");
+    std::fs::write(
+        d.join("parameters.jcs"),
+        "# 寸法\nadd_param width \"10 mm\"\nset_param width \"width + 5 mm\"\n",
+    )
+    .unwrap();
+    // 自分自身を読む式は計算の誤りで、行の番号を残す。
+    assert_eq!(
+        exit_code(&d, &["run", "parameters.jcs", "--save", "failed.json"]),
+        2
+    );
+    assert!(!d.join("failed.json").exists());
+    std::fs::write(
+        d.join("parameters.jcs"),
+        "add_param width \"10 mm\"\nadd_param height \"width * 2\"\n",
+    )
+    .unwrap();
+    ok(&d, &["run", "parameters.jcs", "--save", "saved.json"]);
+    let doc = read(&d.join("saved.json"));
+    assert_eq!(doc["params"].as_array().unwrap().len(), 2);
+    assert_eq!(doc["params"][1]["expr"], "width * 2");
+    std::fs::write(
+        d.join("bad.jcs"),
+        "add_param width \"10 mm\"\nunknown_command\nadd_param height \"20 mm\"\n",
+    )
+    .unwrap();
+    let (success, _, err) = jc(&d, &["run", "bad.jcs", "--save", "partial.json"]);
+    assert!(!success && err.contains("2 行目"), "{err}");
+    assert!(!d.join("partial.json").exists());
+    assert_eq!(exit_code(&d, &["run", "missing.jcs"]), 5);
+    std::fs::write(d.join("screen.jcs"), "click \"押し出し\"\n").unwrap();
+    assert_eq!(exit_code(&d, &["run", "screen.jcs"]), 4);
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn a_script_can_edit_an_existing_document_and_export_the_result() {
+    let d = temp_dir("batch-existing");
+    ok(&d, &["sample", "part.json"]);
+    std::fs::write(
+        d.join("change.jcs"),
+        "set_param width \"70 mm\"\nset_param width \"75 mm\"\n",
+    )
+    .unwrap();
+    ok(
+        &d,
+        &[
+            "run",
+            "change.jcs",
+            "--document",
+            "part.json",
+            "--save",
+            "changed.json",
+            "--export",
+            "changed.stl",
+        ],
+    );
+    let changed = read(&d.join("changed.json"));
+    let width = changed["params"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "width")
+        .unwrap();
+    assert_eq!(width["expr"], "75 mm");
+    assert_ne!(read(&d.join("part.json")), changed);
+    assert!(std::fs::metadata(d.join("changed.stl")).unwrap().len() > 100);
+    // 操作の ID を渡す既存の使い方も、同じ run で続けて使える。
+    ok(
+        &d,
+        &["run", "changed.json", "io.export_stl", "--out", "again.stl"],
+    );
+    assert_eq!(
+        exit_code(
+            &d,
+            &["run", "changed.json", "io.export_stl", "--save", "no.json"]
+        ),
+        1
+    );
+    let (_, help, _) = jc(&d, &["run", "--help"]);
+    assert!(help.contains("台本") && help.contains("--document") && help.contains("--save"));
+    std::fs::remove_dir_all(d).ok();
+}
+
+#[test]
+fn an_empty_script_does_not_save_a_document_with_recompute_errors() {
+    let d = temp_dir("batch-empty-errors");
+    ok(&d, &["new", "bad.json"]);
+    ok(&d, &["param", "add", "bad.json", "width", "missing + 1 mm"]);
+    std::fs::write(d.join("empty.jcs"), "# 計算の結果も確かめる\n").unwrap();
+    assert_eq!(
+        exit_code(
+            &d,
+            &[
+                "run",
+                "empty.jcs",
+                "--document",
+                "bad.json",
+                "--save",
+                "out.json"
+            ]
+        ),
+        2
+    );
+    assert!(!d.join("out.json").exists());
+    std::fs::remove_dir_all(d).ok();
+}

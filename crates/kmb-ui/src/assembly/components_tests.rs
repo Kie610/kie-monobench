@@ -656,7 +656,7 @@ fn components_and_bodies_move_in_the_tree() {
     );
 }
 
-/// 部品の複製: 中の部品ごと写し、元の横(幅 30 + 隙間 10)に置く。元を直すと写しも変わる。1 回で戻る。
+/// 部品の複製: 中の部品ごと出現にし、元の横(幅 30 + 隙間 10)に置く。元を直すと出現も変わる。1 回で戻る。
 #[test]
 fn a_component_is_duplicated_beside_the_original() {
     let mut ws = two_plates();
@@ -670,7 +670,7 @@ fn a_component_is_duplicated_beside_the_original() {
     assert_eq!(ws.cur.work.doc().undo_depth(), depth + 1);
     let data = ws.cur.work.doc().data();
     let made = data.component(top).unwrap();
-    assert_eq!(made.name, "蓋の部品 (2)");
+    assert_eq!(made.name, "蓋の部品:2");
     assert_eq!(made.parent, None);
     assert_eq!(made.bodies.len(), 1);
     // 元のすぐ後ろに並び、中の部品も写す

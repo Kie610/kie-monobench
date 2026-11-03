@@ -299,6 +299,11 @@ impl Section {
             .ok_or_else(|| EvalError::InvalidData("輪郭の断面にはスケッチを選んでください".into()))
     }
     fn point(&self) -> Result<&PointRef, EvalError> {
+        if self.profile.is_some() {
+            return Err(EvalError::InvalidData(
+                "点の断面には輪郭を同時に指定できません".into(),
+            ));
+        }
         self.point
             .as_ref()
             .ok_or_else(|| EvalError::InvalidData("端の点を選んでください".into()))
@@ -985,6 +990,32 @@ pub fn module() -> kmb_core::Module {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 確かめること: 点の断面に輪郭も指定した時は、輪郭を黙って捨てず止まる。
+    #[test]
+    fn a_point_section_rejects_a_simultaneous_profile() {
+        let loft = Loft {
+            sections: vec![
+                Section {
+                    profile: Some(FeatureId(1)),
+                    ..Default::default()
+                },
+                Section {
+                    kind: SectionKind::Point,
+                    profile: Some(FeatureId(2)),
+                    point: Some(PointRef::Datum {
+                        feature: FeatureId(3),
+                    }),
+                    ..Default::default()
+                },
+            ],
+            rails: vec![],
+            operation: Operation::New,
+            target: None,
+        };
+        let error = loft.inputs().unwrap_err().to_string();
+        assert!(error.contains("同時"), "{error}");
+    }
 
     fn line(a: [f64; 2], b: [f64; 2]) -> Segment {
         Segment::Line { a, b }

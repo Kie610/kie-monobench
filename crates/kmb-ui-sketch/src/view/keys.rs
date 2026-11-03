@@ -201,7 +201,7 @@ pub(super) fn keys(
             || !editor.regions.is_empty()
             || editor.picked_constraint.is_some()
         {
-            editor.selection.clear();
+            editor.clear_selection();
             editor.regions.clear();
             editor.picked_constraint = None;
         } else {
@@ -273,16 +273,16 @@ pub(super) fn keys(
                 .map(|(id, _)| *id);
             if let Some(id) = label.or_else(|| crate::marks::at(&state.marks, p)) {
                 // 拘束の印か寸法の値の札: その拘束を選んでから出す
-                editor.selection.clear();
+                editor.clear_selection();
                 editor.regions.clear();
                 editor.picked_constraint = Some(id);
             } else if let Some(h) = base_sketch.hit_test(base_sol, w[0], w[1], tol)
                 && !editor.selection.contains(&h.entity)
             {
-                editor.selection.clear();
+                editor.clear_selection();
                 editor.regions.clear();
                 editor.picked_constraint = None;
-                editor.selection.insert(h.entity);
+                editor.select(h.entity);
             }
         }
         editor.menu = Some(crate::menu::Context {

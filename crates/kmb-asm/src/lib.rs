@@ -12,7 +12,7 @@
 //! - 規格部品(ねじ・ナット・座金・玉軸受)を穴に挿す(`asm.fastener@1`。[`fastener`])。
 //! - 選んだ面の組から位置を解く拘束(`asm.constraint@1`。[`constraint`])、部品を 1 つの塊にする
 //!   剛性グループ(`asm.rigid_group@1`。[`rigid`])、2 つのジョイントを比でつなぐモーション リンク
-//!   ([`motion_link`])。
+//!   ([`motion_link`])、遊星歯車・差動の 3 つの回転を歯数の 1 次式で結ぶ([`planetary`])。
 //! - モーション スタディ([`motion`])と接触セット([`contact`])。中身は文書の区画に持つ(形は変えない)。
 
 pub mod anim;
@@ -24,7 +24,9 @@ pub mod joint;
 pub mod link;
 pub mod motion;
 pub mod motion_link;
+pub mod occurrence;
 pub mod part;
+pub mod planetary;
 pub mod position;
 pub mod rigid;
 pub mod snap;
@@ -36,6 +38,9 @@ pub use inspect::{
 };
 pub use joint::{Frame, How, JOINT, Joint, JointKind, Origin, Snap, TRANSFORM_TYPE};
 pub use link::{LINK, LINK_BODY, Link, LinkBody, LinkCommands};
+pub use occurrence::{
+    DETACH_OCCURRENCE, OCCURRENCE, Occurrence, PLACE_OCCURRENCE, SYNC_OCCURRENCE,
+};
 pub use part::{Part, heir_before};
 pub use position::{DRAG_POSITION, MOVE_PART, POSITION, Position};
 pub use snap::SnapPick;
@@ -71,6 +76,7 @@ pub fn register(reg: &mut Registry) {
     reg.declare_section::<kmb_interchange::animation::Storyboard>();
     joint::register(reg);
     link::register(reg);
+    occurrence::register(reg);
     fastener::register(reg);
     position::register(reg);
     rigid::register(reg);
@@ -100,15 +106,18 @@ fn fastener_handles(cx: &Context<'_>) -> Vec<Handle> {
 /// 規格部品を挿す: 規格部品の機能と、穴ごとのボディの機能を足し、ボディを新しい部品にまとめる
 /// (穴のボディが部品に入っていれば、その中に。ジョイントで一緒に動く)。
 fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
-    let mouths: Vec<fastener::HoleMouth> = cx
+    let values = cx
         .arg("holes")
         .and_then(|v| v.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                .collect()
+        .ok_or("挿す穴の口の円を並びで指定してください")?;
+    let mouths: Vec<fastener::HoleMouth> = values
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            serde_json::from_value(v.clone())
+                .map_err(|e| format!("穴{} の口の指定が読めません: {e}", i + 1))
         })
-        .unwrap_or_default();
+        .collect::<Result<_, _>>()?;
     if mouths.is_empty() {
         return Err("挿す穴の口の円を選んでいません".into());
     }
@@ -128,6 +137,36 @@ fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         })
         .map(|c| c.id);
     let mut f = fastener::new_fastener(kind, &mouths);
+    if let Some(size) = cx.arg_str("size") {
+        f.size = size.trim().into();
+    }
+    if let Some(len) = cx.arg_f64("length")? {
+        if len <= 0.0
+            || kmb_core::Quantity::new(len, kmb_core::Dim::LENGTH)
+                .size_problem()
+                .is_some()
+        {
+            return Err("長さは正の、形に使える大きさで指定してください".into());
+        }
+        f.length = format!("{len} mm");
+    }
+    for (i, m) in mouths.iter().enumerate() {
+        if m.center.iter().chain(&m.normal).any(|v| !v.is_finite())
+            || kmb_core::kernel::dot(m.normal, m.normal) < 1e-18
+            || !m.diameter.is_finite()
+            || m.diameter <= 0.0
+            || !m.depth.is_finite()
+            || m.depth < 0.0
+            || !m.through.is_finite()
+            || m.through < 0.0
+        {
+            return Err(format!("穴{} の位置・向き・径・深さを確かめてください", i + 1).into());
+        }
+        if fastener::fits_mouth(kind, &f.size, m) != Some(true) {
+            return Err(format!("穴{} の径 {} mm に呼び {} が合いません。合う穴だけを選ぶか、共通の呼びを指定してください",i+1,m.diameter,f.size).into());
+        }
+    }
+    f.instances = true;
     // 穴のあるボディを覚え、穴の径が後で呼びと合わなくなったら知らせる(合わせ直しはしない)。
     // 同じ穴の口に座金・ナットが挿してあれば、その上に重ねる
     for (p, m) in f.places.iter_mut().zip(&mouths) {
@@ -147,10 +186,14 @@ fn new_fastener(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         data: serde_json::to_value(&f).map_err(|e| e.to_string())?,
     }];
     for i in 0..mouths.len() {
+        let mut data = json!({"fastener":{"$new":0},"index":i});
+        if i > 0 {
+            data["prototype"] = json!({"$new":1});
+        }
         edits.push(Edit::Insert {
             type_id: fastener::FASTENER_BODY.into(),
             name: format!("{name} の穴{}", i + 1),
-            data: json!({"fastener": {"$new": 0}, "index": i}),
+            data,
         });
     }
     edits.push(Edit::AddBodies {
@@ -508,9 +551,20 @@ pub fn joint_table(cx: &Context<'_>) -> kmb_core::Table {
                 .collect();
             let link = match (j.drive_by, j.link_joint) {
                 (joint::DriveBy::Link, Some(from)) => {
-                    let from_name = cx.data.feature(from).map_or("", |f| f.name.as_str());
+                    let from_name =
+                        |f: FeatureId| cx.data.feature(f).map_or("", |f| f.name.as_str());
+                    let second = j.link_joint2.map_or(String::new(), |f2| {
+                        format!(
+                            "、「{}」#{} が {} 動く時に {} を足す",
+                            from_name(f2),
+                            f2.0,
+                            j.link_lead2,
+                            j.link_follow2
+                        )
+                    });
                     format!(
-                        "「{from_name}」#{} が {} 動く時に {}{}",
+                        "「{}」#{} が {} 動く時に {}{second}{}",
+                        from_name(from),
                         from.0,
                         j.link_lead,
                         j.link_follow,
@@ -851,6 +905,33 @@ impl Extension for AsmCommands {
                 .icon("component")
                 .aliases("ぶひん 部品 こんぽーねんと コンポーネント component くみたて 組立")
                 .hint("選んでいるボディをまとめて部品にする(選んでいなければ空の部品)。ブラウザの部品の木に出て、名前は右クリックの「名前変更」で変える"),
+            Action::new(PLACE_OCCURRENCE, "部品をもう 1 つ置く", "cad")
+                .args([
+                    Arg::integer("part", "置く部品の番号(省くと選んでいるボディの部品。出現なら元の部品)"),
+                    Arg::integer("count", "置く数(1〜1000)").default(1),
+                    Arg::length("x", "1 つごとの X のずらし(省くと元の幅と隙間だけ横へ)"),
+                    Arg::length("y", "1 つごとの Y のずらし"),
+                    Arg::length("z", "1 つごとの Z のずらし"),
+                ])
+                .menu("組立")
+                .icon("component")
+                .aliases("しゅつげん 出現 おなじ 同じ ぶひん 部品 おく 置く ふやす 増やす いんすたんす インスタンス occurrence instance")
+                .hint("選んだ部品を形を写さずにもう 1 つ置く(出現)。元を直すと全部が変わり、部品表では同じ部品として数える。出現の部品は「独立した部品にする」で元から切り離せる")
+                .disabled_if(occurrence::place_why(cx)),
+            Action::new(DETACH_OCCURRENCE, "独立した部品にする", "cad")
+                .arg(Arg::integer("part", "出現の部品の番号(省くと選んでいるボディの部品)"))
+                .menu("組立")
+                .icon("component")
+                .aliases("どくりつ 独立 しゅつげん 出現 きりはなす 切り離す detach")
+                .hint("出現の部品を、今の形を写した普通の部品にする。以後は元を直しても変わらない")
+                .disabled_if(occurrence::detach_why(cx)),
+            Action::new(SYNC_OCCURRENCE, "元にそろえる", "cad")
+                .arg(Arg::integer("part", "出現の部品の番号(省くと選んでいるボディの部品)"))
+                .menu("組立")
+                .icon("component")
+                .aliases("もと 元 そろえる 揃える しゅつげん 出現 sync")
+                .hint("元の部品に後から足したボディを、出現の部品にも同じ置き方で足す")
+                .disabled_if(occurrence::sync_why(cx).as_deref()),
             Action::new(NEW_SNAP_JOINT, "ジョイント", "cad")
                 .args([
                     Arg::value("moving", "部品 1(動かす部品)の面"),
@@ -880,6 +961,8 @@ impl Extension for AsmCommands {
                     Arg::value("face", "穴の口の面"),
                     Arg::list("holes", "穴の口の円(手順の値の並び)"),
                     Arg::text("kind", "種類(省くとねじ)"),
+                    Arg::text("size", "共通の呼び(省くと最初の穴の径から選ぶ。選んだすべての穴に合う物だけ使える)"),
+                    Arg::length("length", "共通の長さ(mm。省くと最も深い穴から選ぶ)"),
                 ])
                 .menu("組立")
                 .icon("fastener")
@@ -917,6 +1000,7 @@ impl Extension for AsmCommands {
                 ),
             Action::new(MOVE_PART, "部品を移動", "cad")
                 .arg(Arg::list("bodies", "動かす部品のボディの機能の番号の並び(省くと選んでいる面のボディと選んでいるボディ)"))
+                .args(position::placement_args(true))
                 .menu("組立")
                 .icon("movecopy")
                 .aliases("ぶひん 部品 いどう 移動 うごかす 動かす move component")
@@ -964,6 +1048,27 @@ impl Extension for AsmCommands {
                     (cx.data.features.iter().filter(|f| f.type_id == JOINT
                         && kmb_interchange::animation::drive_of(cx.report, f.id).is_some()).count() < 2)
                     .then_some("回転かスライダのジョイントが 2 つ以上いります"),
+                ),
+            Action::new(planetary::PLANETARY_LINK, "遊星の組をつなぐ", "cad")
+                .args([
+                    Arg::feature("sun", "太陽歯車の回転のジョイントの機能の番号(差動は 1 つ目の横の歯車)").required(),
+                    Arg::feature("carrier", "腕(キャリア)の回転のジョイントの機能の番号(差動は箱)").required(),
+                    Arg::feature("ring", "外輪の回転のジョイントの機能の番号(差動は 2 つ目の横の歯車)").required(),
+                    Arg::feature("planet", "遊星の自転(腕に対して回る)の回転のジョイントの機能の番号(省くとつながない)"),
+                    Arg::integer("sun_teeth", "太陽の歯数").required(),
+                    Arg::integer("ring_teeth", "外輪の歯数(省くと太陽と同じ = 差動)"),
+                    Arg::integer("planet_teeth", "遊星の歯数(遊星をつなぐ時)"),
+                ])
+                // 「組立 ▾」の一覧だけに出す(前には出さない)。歯数を画面で打つ欄はまだ無いので、
+                // 歯数はコマンド欄・CLI・MCP で渡す(歯車の諸元から読むのは歯車の土台の後)
+                .menu("組立")
+                .icon("joint")
+                .aliases("ゆうせい 遊星 はぐるま 歯車 ぎや ギヤ ぷらねたり planetary たいよう 太陽 きゃりあ キャリア うで 腕 がいりん 外輪 さどう 差動 differential でふ デフ れんどう 連動")
+                .hint("遊星歯車の太陽・腕・外輪(と遊星の自転)の回転を、歯数から決まる式でつなぐ。タイムラインでいちばん後ろのジョイントが前の 2 つに連動する。差動は外輪の歯数を太陽と同じにする")
+                .disabled_if(
+                    (cx.data.features.iter().filter(|f| f.type_id == JOINT
+                        && kmb_interchange::animation::drive_of(cx.report, f.id).is_some_and(|d| !d.slide)).count() < 3)
+                    .then_some("回転のジョイントが 3 つ以上いります"),
                 ),
             Action::new(contact::NEW_CONTACT_SET, "新しい接触セット", "cad")
                 .args([
@@ -1043,6 +1148,7 @@ impl Extension for AsmCommands {
                 .disabled_if(none),
             Action::new(anim::AUTO_EXPLODE_ONE, "自動分解: 1 レベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1051,12 +1157,13 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode one level 1れべる いちれべる")
-                .hint("部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .at(&[Place::Toolbar])
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::AUTO_EXPLODE_ALL, "自動分解: すべてのレベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1065,7 +1172,7 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode all levels すべて")
-                .hint("部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::VISIBILITY, "表示/非表示", "anim")
@@ -1134,6 +1241,7 @@ impl Extension for AsmCommands {
             anim::EXPLODE => Some(anim::explode_handles(cx)),
             anim::DRIVE => Some(anim::drive_handles(cx)),
             motion_link::MOTION_LINK => Some(motion_link::handles(cx)),
+            planetary::PLANETARY_LINK => Some(planetary::handles(cx)),
             anim::VISIBILITY | anim::APPEARANCE => Some(anim::part_handles(cx)),
             _ => None,
         }
@@ -1155,6 +1263,9 @@ impl Extension for AsmCommands {
             NEW_JOINT => new_joint(cx),
             NEW_SNAP_JOINT => new_snap_joint(cx),
             NEW_FASTENER => new_fastener(cx),
+            PLACE_OCCURRENCE => occurrence::place(cx),
+            DETACH_OCCURRENCE => occurrence::detach(cx),
+            SYNC_OCCURRENCE => occurrence::sync(cx),
             anim::EXPLODE => anim::explode(cx),
             anim::DRIVE => anim::drive(cx),
             motion::MOTION_STUDY => motion::run(cx),
@@ -1162,6 +1273,7 @@ impl Extension for AsmCommands {
             contact::CONTACTS => contact::toggle(cx),
             contact::REACH => contact::reach(cx),
             motion_link::MOTION_LINK => motion_link::run(cx),
+            planetary::PLANETARY_LINK => planetary::run(cx),
             rigid::NEW_RIGID_GROUP => rigid::new_group(cx, &picked_roots(cx)),
             constraint::NEW_CONSTRAINT => constraint::new_constraint(cx),
             anim::VIEW => anim::view(cx),
@@ -1305,3 +1417,12 @@ pub fn module() -> kmb_core::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod auto_explode_tests;
+
+#[cfg(test)]
+mod snap_tests;
+
+#[cfg(test)]
+mod numeric_placement_tests;

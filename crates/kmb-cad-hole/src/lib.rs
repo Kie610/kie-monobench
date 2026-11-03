@@ -1,5 +1,5 @@
 //! スケッチの点にあける穴(`solid.hole@1`)。種類(単純・ザグリ・皿)、止まり穴の先端の角度、
-//! ネジ(通し穴・ネジ穴。ネジ山の形は作らず、径を表から決めて属性として残す)を持つ。
+//! ネジ(通し穴・ねじ穴。径を表から決め、ねじ穴は山の形も作れる)を持つ。
 mod shape;
 pub mod thread;
 pub use shape::{Fit, HoleKind, Piece, Section, THREADS, Tap, ThreadSize, Tip, pieces, thread};
@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 pub const HOLE: &str = "solid.hole@1";
+
+fn no_thread_depth(value: &Option<String>) -> bool {
+    value.as_deref().is_none_or(|s| s.trim().is_empty())
+}
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
@@ -39,6 +43,9 @@ pub struct Hole {
     /// 面から、径いっぱいの部分の終わりまでの深さ(先端の円すいは含まない)。省くと貫通
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<String>,
+    /// ねじ部の長さ。空なら穴の深さ全体で、穴の形は変えない。
+    #[serde(default, skip_serializing_if = "no_thread_depth")]
+    pub thread_depth: Option<String>,
     #[serde(default, skip_serializing_if = "is_default")]
     pub kind: HoleKind,
     /// ザグリの径・深さ(空ならネジの表、なければ穴の径から)
@@ -51,6 +58,9 @@ pub struct Hole {
     pub countersink_diameter: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub countersink_angle: Option<String>,
+    /// ザグリ・皿の省略値に、追加した呼びも含む表を使う。省略は保存された既定の読み方。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub standard_recesses: bool,
     /// 止まり穴の底(貫通では使わない)
     #[serde(default, skip_serializing_if = "is_default")]
     pub tip: Tip,
@@ -70,6 +80,14 @@ pub struct Hole {
     /// 範囲が「対象まで」の時の面(機能 `feature` の出力 `body` の平らな面)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to_face: Option<HoleStop>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub form: thread::Form,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clearance: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub end: thread::End,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub flip: bool,
 }
 
 /// 穴の深さの決め方: 深さの欄(空なら貫通)か、選んだ面まで。
@@ -104,11 +122,15 @@ impl Exprs for Hole {
             &mut self.countersink_diameter,
             &mut self.countersink_angle,
             &mut self.tip_angle,
+            &mut self.clearance,
         ]
         .into_iter()
         .flatten()
         {
             v.push(d);
+        }
+        if !no_thread_depth(&self.thread_depth) {
+            v.extend(self.thread_depth.as_mut());
         }
         v
     }
@@ -116,6 +138,23 @@ impl Exprs for Hole {
 
 /// 道具の上の面を穴の面からはみ出させる量(押し出しと同じ候補を順に試す)。
 const ABOVE: [f64; 4] = EXTENSIONS;
+
+/// 斜めの底で、各穴の円周すべてが材料の中にある最も浅い深さ。
+fn full_thread_depth(
+    plane: &k::Plane,
+    centers: &[k::P2],
+    radius: f64,
+    stop: kmb_core::PlanarFace,
+) -> f64 {
+    let n = k::normalize(plane.normal());
+    let m = k::normalize(stop.normal);
+    let c = k::dot(m, n);
+    let rim_depth = radius * (1.0 - c * c).max(0.0).sqrt() / c.abs();
+    centers
+        .iter()
+        .map(|q| k::dot(k::sub(plane.to_world(*q), stop.point), m) / c - rim_depth)
+        .fold(f64::INFINITY, f64::min)
+}
 
 impl Hole {
     /// 単純な貫通穴(径は空)。残りの項目を `..Hole::new(target, sketch)` で埋めるのに使う。
@@ -126,11 +165,13 @@ impl Hole {
             points: vec![],
             diameter: String::new(),
             depth: None,
+            thread_depth: None,
             kind: HoleKind::Simple,
             counterbore_diameter: None,
             counterbore_depth: None,
             countersink_diameter: None,
             countersink_angle: None,
+            standard_recesses: true,
             tip: Tip::Flat,
             tip_angle: None,
             tap: Tap::Simple,
@@ -138,6 +179,10 @@ impl Hole {
             fit: Fit::Normal,
             extent: HoleExtent::Distance,
             to_face: None,
+            form: thread::Form::Cosmetic,
+            clearance: None,
+            end: thread::End::RunOut,
+            flip: false,
         }
     }
 
@@ -155,7 +200,7 @@ impl Hole {
         plane: &k::Plane,
         centers: &[k::P2],
         radius: f64,
-    ) -> Result<(f64, Option<StopPlane>), EvalError> {
+    ) -> Result<(f64, Option<StopPlane>, f64), EvalError> {
         let bad = |m: &str| EvalError::InvalidData(m.into());
         let t = self.to_face.as_ref().ok_or_else(|| {
             bad("止める面をまだ選んでいません。「穴を止める面を選ぶ」を押して、平らな面か頂点をクリックしてください")
@@ -172,7 +217,8 @@ impl Hole {
         };
         if let Some(v) = &t.vertex {
             let p = stop_at::vertex_at(ctx.kernel(), body, v).map_err(EvalError::InvalidData)?;
-            return Ok((deeper(-k::dot(k::sub(p, plane.origin), n))?, None));
+            let d = deeper(-k::dot(k::sub(p, plane.origin), n))?;
+            return Ok((d, None, d));
         }
         let face = ctx
             .kernel()
@@ -192,7 +238,8 @@ impl Hole {
         let m = k::normalize(p.normal);
         let c = k::dot(m, n);
         if c.abs() > 1.0 - 1e-6 {
-            return Ok((deeper(-k::dot(k::sub(p.point, plane.origin), n))?, None));
+            let d = deeper(-k::dot(k::sub(p.point, plane.origin), n))?;
+            return Ok((d, None, d));
         }
         if c.abs() < 1e-3 {
             return Err(bad(
@@ -223,6 +270,8 @@ impl Hole {
                 "止める面(を広げた平面)が穴の入口と交わっているか、掘る向きの先にありません。穴の全体が面の手前にある時だけ使えます",
             ));
         }
+        // 全径が残る深さは円周上の最浅点で決まる。道具を延ばす量をねじ部へ含めない。
+        let full_depth = full_thread_depth(plane, centers, radius, p);
         // 捨てる側: 掘る向きに面を越えた側
         let ahead = if c < 0.0 { 1.0 } else { -1.0 };
         Ok((
@@ -231,6 +280,7 @@ impl Hole {
                 point: p.point,
                 normal: k::scale(m, ahead),
             }),
+            full_depth,
         ))
     }
 
@@ -266,6 +316,26 @@ impl Hole {
             .transpose()
     }
 
+    /// ねじ部の指定値だけを評価する。貫通で材料の厚さを確定できない時は上限を設けない。
+    fn thread_length(
+        &self,
+        ctx: &EvalCtx<'_>,
+        limit: Option<f64>,
+    ) -> Result<Option<f64>, EvalError> {
+        if self.tap != Tap::Tapped {
+            return Ok(None);
+        }
+        let value = Self::opt_length(ctx, &self.thread_depth, "ねじ部の長さ")?;
+        if let (Some(value), Some(limit)) = (value, limit)
+            && value > limit + 1e-9 * limit.abs().max(1.0)
+        {
+            return Err(EvalError::InvalidData(format!(
+                "ねじ部の長さは穴の深さ以下にしてください(ねじ部 {value} mm、穴 {limit} mm)"
+            )));
+        }
+        Ok(value)
+    }
+
     /// ネジのサイズの名前(省いたら欄の最初の選択肢。画面は項目がなければ最初の選択肢を出す)。
     fn size_name(&self) -> &str {
         self.size
@@ -275,7 +345,7 @@ impl Hole {
             .unwrap_or(DEFAULT_SIZE)
     }
 
-    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は表(M2〜M12 並目)に無い呼びも、ねじの表にあれば
+    /// ネジの呼び(ネジを選んだ時だけ)。ネジ穴は通し穴の表に無い呼びも、ねじの表にあれば
     /// 打って使える(例: `M6x0.75`、`M16`)。通し穴は通し穴・ザグリ・皿の径が要るので表の呼びだけ。
     fn thread(&self) -> Result<Option<(thread::Size, Option<&'static ThreadSize>)>, EvalError> {
         if self.tap == Tap::Simple {
@@ -291,14 +361,19 @@ impl Hole {
         };
         let size = thread::parse_size(name).ok_or_else(|| {
             EvalError::InvalidData(format!(
-                "ネジのサイズ {name} は読めません(表の {} を選ぶか、M6x0.75・M16 のように打ってください)",
-                table()
+                "ネジのサイズ {name} は読めません。{}",
+                thread::unknown_size(name)
             ))
         })?;
-        let row = size
-            .coarse
+        if self.tap == Tap::Tapped && self.form == thread::Form::Modeled {
+            thread::validate_modeled_size(size).map_err(EvalError::InvalidData)?;
+        }
+        let row = (size.family == thread::Family::Metric && size.coarse)
             .then(|| THREADS.iter().find(|t| (t.major - size.major).abs() < 1e-9))
-            .flatten();
+            .flatten()
+            .filter(|row| {
+                self.tap != Tap::Tapped || self.standard_recesses || shape::v1_thread_row(row)
+            });
         if row.is_none() && self.tap == Tap::Clearance {
             return Err(EvalError::InvalidData(format!(
                 "通し穴の径は表の {} だけです({name} はネジ穴にするか、径を決めた穴にしてください)",
@@ -552,16 +627,22 @@ impl Feature for Hole {
             })?;
             centers.push((p, if flip { [c[0], -c[1]] } else { *c }));
         }
-        let (depth, stop) = match &self.depth {
+        let (depth, stop, thread_limit) = match &self.depth {
             _ if self.extent == HoleExtent::ToFace => {
                 let at: Vec<k::P2> = centers.iter().map(|(_, c)| *c).collect();
-                self.depth_to_face(ctx, &plane, &at, self.diameter(ctx)? / 2.0)?
+                let (depth, stop, full_depth) =
+                    self.depth_to_face(ctx, &plane, &at, self.diameter(ctx)? / 2.0)?;
+                (depth, stop, Some(full_depth))
             }
-            Some(src) => (Self::positive(ctx, src, "穴の深さ")?, None),
+            Some(src) => {
+                let depth = Self::positive(ctx, src, "穴の深さ")?;
+                (depth, None, Some(depth))
+            }
             // 貫通: 外形の箱のいちばん深い角より 1 mm 先まで。長すぎる道具は
             // truck のブーリアンで誤った結果になることがあった(実測)ため、必要な分だけにする
-            None => ((if flip { above } else { below }) + 1.0, None),
+            None => ((if flip { above } else { below }) + 1.0, None, None),
         };
+        let thread_depth = self.thread_length(ctx, thread_limit)?;
         let mut section = self.section(ctx, depth)?;
         if stop.is_some() {
             // 斜めの面で切る底は面に沿う(先端の角は付けない)
@@ -579,7 +660,7 @@ impl Feature for Hole {
         if let Some(info) = out
             .get("recipe")
             .and_then(Recipe::from_value)
-            .and_then(|r| self.info(&r))
+            .and_then(|r| self.info(&r, thread_depth))
         {
             out.insert(
                 kmb_interchange::HOLE_OUTPUT.into(),
@@ -590,22 +671,51 @@ impl Feature for Hole {
         if self.tap == Tap::Tapped
             && let Some((size, _)) = self.thread()?
         {
-            let axis = k::scale(k::normalize(plane.normal()), -1.0);
-            let marks = centers
-                .iter()
-                .map(|(_, c)| kmb_interchange::ThreadMark {
-                    start: plane.to_world(*c),
-                    axis,
-                    length: depth,
-                    radius: size.tap_drill() / 2.0,
-                    pitch: size.pitch,
-                    internal: true,
-                })
-                .collect();
-            out.insert(
-                kmb_interchange::THREAD_MARKS_OUTPUT.into(),
-                Payload::to_value(&kmb_interchange::ThreadMarks { marks }),
-            );
+            if self.form == thread::Form::Modeled {
+                let clearance = self
+                    .clearance
+                    .as_deref()
+                    .map(|s| length(ctx, s, "すき間"))
+                    .transpose()?
+                    .unwrap_or(0.0);
+                let mut body = match out.get("body") {
+                    Some(Value::Shape(h)) => *h,
+                    _ => return Err(EvalError::InvalidData("穴のボディがありません".into())),
+                };
+                let mut warnings = Vec::new();
+                for (p, _) in &centers {
+                    let face = format!(
+                        "{}:side:{}",
+                        tag(ctx),
+                        kmb_interchange::hole::edge_name(p.0, "wall")
+                    );
+                    let (result, warn) = thread::cut_modeled(ctx.kernel(), body, &face, size, if through { None } else { Some(depth) }, clearance, self.end, self.flip, thread::Hand::Right, &format!("{}:thread:{}", tag(ctx), p.0)).map_err(|error| match error {
+                        EvalError::InvalidData(message) if message.starts_with("ねじの長さは最大") => EvalError::InvalidData(format!("{message}。穴のねじ山を属性のみにし、ねじの機能を別に追加して長さを短くしてください")),
+                        other => other,
+                    })?;
+                    body = result;
+                    warnings.extend(warn);
+                }
+                out.insert("body".into(), Value::Shape(body));
+                kmb_core::add_warnings(&mut out, warnings);
+            } else {
+                let axis = k::scale(k::normalize(plane.normal()), -1.0);
+                let marks = centers
+                    .iter()
+                    .map(|(_, c)| kmb_interchange::ThreadMark {
+                        start: plane.to_world(*c),
+                        axis,
+                        length: thread_depth.unwrap_or(depth),
+                        radius: size.tap_drill() / 2.0,
+                        pitch: size.pitch,
+                        internal: true,
+                    })
+                    .collect();
+                out.insert(
+                    kmb_interchange::THREAD_MARKS_OUTPUT.into(),
+                    Payload::to_value(&kmb_interchange::ThreadMarks { marks }),
+                );
+            }
         }
         // 黙った失敗を防ぐ: 何も削れなければ誤りにする(点が形の外にある時など)
         if let Some(Value::Shape(body)) = out.get("body")
@@ -627,7 +737,11 @@ impl Feature for Hole {
 
 impl Hole {
     /// 加工に渡す穴の情報(道具の作り方 `recipe` から寸法を読む)。
-    fn info(&self, recipe: &Recipe) -> Option<kmb_interchange::HoleInfo> {
+    fn info(
+        &self,
+        recipe: &Recipe,
+        thread_depth: Option<f64>,
+    ) -> Option<kmb_interchange::HoleInfo> {
         use kmb_interchange::hole as x;
         let mut i = x::HoleInfo {
             kind: match self.kind {
@@ -641,6 +755,7 @@ impl Hole {
                 Tap::Tapped => x::Tap::Tapped,
             },
             size: self.size.clone(),
+            thread_depth,
             ..Default::default()
         };
         let parts: Vec<&Recipe> = match recipe {
@@ -711,23 +826,28 @@ const TAPS: &[(&str, &str)] = &[
 ];
 // 画面は項目がなければ最初の選択肢を出すので、既定の値を最初に置く
 const FITS: &[(&str, &str)] = &[("normal", "中"), ("close", "精"), ("loose", "粗")];
-/// ネジのサイズを省いた時の値(欄の最初の選択肢)。
+/// ネジのサイズを省いた時の値。
 pub(crate) const DEFAULT_SIZE: &str = "M3";
 
 /// 穴の設定欄(欄で指定する穴と、面に穴の作っている途中のパネルで同じものを使う)。
 pub fn hole_fields() -> Vec<Field> {
-    // よく使う M3 を最初(既定)にし、M4 から M12、最後に M2・M2.5 を並べる
-    let mut sizes: Vec<&str> = THREADS.iter().map(|t| t.name).collect();
-    let first = sizes.iter().position(|s| *s == DEFAULT_SIZE).unwrap_or(0);
-    sizes.rotate_left(first);
-    vec![
+    // 通し穴にも使えるメートル並目を径の小さい順に並べ、ほかの族のねじ穴の呼びを続ける。
+    let mut sizes: Vec<String> = THREADS.iter().map(|t| t.name.to_string()).collect();
+    sizes.extend(
+        thread::sizes()
+            .into_iter()
+            .filter(|s| s.family != thread::Family::Metric)
+            .map(|s| s.name()),
+    );
+    let names: Vec<&str> = sizes.iter().map(String::as_str).collect();
+    let mut fields = vec![
         Field::choice("kind", "穴のタイプ", KINDS),
         Field::choice("tap", "ねじ穴のタイプ", TAPS)
-            .help("ネジ山の形は作らない。径を表から決め、ネジの属性として残す"),
+            .help("径を表から決める。ねじ穴はねじ山を属性のみか形を作るか選べる"),
         Field::text("size", "サイズ")
-            .suggest(&sizes)
+            .suggest(&names)
             .unless("tap", "simple")
-            .help("一覧の呼び(並目)を選ぶか、M6x0.75(細目)・M16 のように打つ(ネジ穴だけ。通し穴は一覧の呼び)"),
+            .help("呼びを選ぶか、M6x0.75・1/4-20 UNC・G1/4・Rp1/4 のように打つ。通し穴はメートル並目の表の呼びだけ"),
         Field::choice("fit", "はめあい", FITS)
             .only("tap", "clearance", "simple")
             .help("通し穴の径(ISO 273 の精・中・粗)"),
@@ -745,6 +865,9 @@ pub fn hole_fields() -> Vec<Field> {
         Field::opt_expr("depth", "深さ").length()
             .only("extent", "distance", "distance")
             .help("空なら貫通"),
+        Field::opt_expr("thread_depth", "ねじ部の長さ").length()
+            .only("tap", "tapped", "simple")
+            .help("空なら穴の深さ全体。先端の円すいは含めない"),
         Field::info("to_face.face", "止める面")
             .help("「穴を止める面を選ぶ」を押して、平らな面か頂点をクリックして選ぶ"),
         Field::info("to_face.vertex", "止める頂点")
@@ -765,7 +888,13 @@ pub fn hole_fields() -> Vec<Field> {
         Field::opt_expr("tip_angle", "先端の角度").angle()
             .only("tip", "angled", "flat")
             .help("空なら 118 deg"),
-    ]
+    ];
+    fields.extend(
+        thread::form_fields()
+            .into_iter()
+            .map(|f| f.and_only("tap", "tapped", "simple")),
+    );
+    fields
 }
 
 /// 機能の種類を登録する。
@@ -782,9 +911,11 @@ pub fn register(reg: &mut Registry) {
     for f in hole_fields() {
         d = d.field(f);
     }
-    reg.register_described(d.template(json!({"diameter": "5 mm"})), |d| {
-        Ok(Box::new(parse::<Hole>(d)?))
-    });
+    reg.register_described(
+        d.create_defaults(json!({"standard_recesses": true}))
+            .template(json!({"diameter": "5 mm", "standard_recesses": true})),
+        |d| Ok(Box::new(parse::<Hole>(d)?)),
+    );
     thread::register(reg);
 }
 
@@ -821,6 +952,7 @@ fn hole_args() -> Vec<Arg> {
         Arg::vector("point", "穴の中心(世界座標の mm。省くと面の中心)"),
         Arg::length("diameter", "径(mm)").default(DIAMETER),
         Arg::length("depth", "深さ(mm。省くと貫通)"),
+        Arg::length("thread_depth", "ねじ部の長さ(mm。省くと穴の深さ全体)"),
     ];
     for (k, h) in [
         ("kind", "穴の種類"),
@@ -832,6 +964,7 @@ fn hole_args() -> Vec<Arg> {
         // 値は穴の機能の同じ名前の欄と同じ(中身は穴の機能が確かめる)
         v.push(Arg::text(k, &format!("{h}(穴の機能の欄 {k} の値)")));
     }
+    v.extend(thread::form_args());
     v
 }
 
@@ -870,6 +1003,7 @@ fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         "target": pick.feature.0,
         "sketch": {"$new": 0},
         "diameter": format!("{} mm", round(dia)),
+        "standard_recesses": true,
     });
     // 深さ(省けば貫通)
     if let Some(d) = cx.arg_f64("depth")? {
@@ -878,11 +1012,20 @@ fn hole_on_face(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         }
         hole["depth"] = json!(format!("{} mm", round(d)));
     }
+    if let Some(d) = cx.arg_f64("thread_depth")? {
+        hole["thread_depth"] = json!(format!("{d} mm"));
+    }
     // 種類・ネジなど(CLI・MCP から。画面では作った後の欄で直す)。中身は穴の機能が確かめる
-    for key in ["kind", "tip", "tap", "size", "fit"] {
+    for key in ["kind", "tip", "tap", "size", "fit", "form", "end"] {
         if let Some(v) = cx.arg(key).and_then(|v| v.as_str()) {
             hole[key] = json!(v);
         }
+    }
+    if let Some(clearance) = cx.arg_f64("clearance")? {
+        hole["clearance"] = json!(format!("{clearance} mm"));
+    }
+    if let Some(flip) = cx.arg("flip") {
+        hole["flip"] = flip.clone();
     }
     if hole.get("tap").is_some_and(|t| t != "simple") {
         // 径はネジの表から決める
@@ -1578,4 +1721,90 @@ pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-hole", register)
         .with_extension(HoleCommands)
         .with_extension(ThreadCommands)
+}
+
+#[cfg(test)]
+mod thread_depth_tests {
+    use super::*;
+
+    #[test]
+    fn tapped_thread_depth_is_a_separate_optional_length() {
+        let hole: Hole = serde_json::from_value(json!({
+            "target": 1, "sketch": 2, "tap": "tapped", "size": "M4",
+            "depth": "8 mm", "thread_depth": "5 mm",
+        }))
+        .expect("ねじ部の長さは穴の深さと別に読める");
+        let back = serde_json::to_value(&hole).unwrap();
+        assert_eq!(back["depth"], "8 mm");
+        assert_eq!(back["thread_depth"], "5 mm");
+    }
+    #[test]
+    fn omitted_and_blank_thread_depth_keep_the_legacy_data() {
+        let old = json!({"target": 1, "sketch": 2, "tap": "tapped", "depth": "8 mm"});
+        for value in [None, Some(""), Some("  ")] {
+            let mut data = old.clone();
+            if let Some(v) = value {
+                data["thread_depth"] = json!(v);
+            }
+            let hole: Hole = serde_json::from_value(data).unwrap();
+            assert!(
+                serde_json::to_value(&hole)
+                    .unwrap()
+                    .get("thread_depth")
+                    .is_none()
+            );
+            assert!(hole.inputs().is_ok());
+        }
+    }
+
+    #[test]
+    fn thread_depth_field_has_length_units_and_only_applies_to_tapped_holes() {
+        let field = hole_fields()
+            .into_iter()
+            .find(|f| f.key == "thread_depth")
+            .unwrap();
+        assert_eq!(field.unit, Some(kmb_core::FieldUnit::Length));
+        assert!(field.applies(&json!({"tap":"tapped"})));
+        for tap in ["simple", "clearance"] {
+            assert!(!field.applies(&json!({"tap":tap})));
+        }
+        assert!(!field.applies(&json!({})));
+    }
+
+    #[test]
+    fn thread_depth_expression_is_an_input_and_can_be_renamed() {
+        let hole: Hole = serde_json::from_value(json!({
+            "target":1, "sketch":2, "tap":"tapped", "thread_depth":"thread_len * 2",
+        }))
+        .unwrap();
+        assert!(hole.inputs().unwrap().contains(&InputRef::Param {
+            name: "thread_len".into()
+        }));
+        let renamed = hole.rename_param("thread_len", "new_len").unwrap().unwrap();
+        assert_eq!(renamed["thread_depth"], "new_len * 2");
+    }
+    #[test]
+    fn tilted_stop_uses_the_shallowest_full_diameter_depth() {
+        let plane = k::Plane {
+            origin: [0.0, 0.0, 10.0],
+            x_axis: [1.0, 0.0, 0.0],
+            y_axis: [0.0, 1.0, 0.0],
+        };
+        let angle = 17f64.to_radians();
+        let stop = kmb_core::PlanarFace {
+            point: [0.0, 0.0, 2.0],
+            normal: [angle.sin(), angle.cos(), 1.0],
+        };
+        let value = full_thread_depth(&plane, &[[0.0, 0.0], [-2.0, 0.0]], 1.0, stop);
+        assert!((value - (7.0 - 2.0 * angle.sin())).abs() < 1e-12);
+    }
+    #[test]
+    fn hole_action_declares_the_thread_depth_with_length_units() {
+        let arg = hole_args()
+            .into_iter()
+            .find(|a| a.key == "thread_depth")
+            .unwrap();
+        assert_eq!(arg.unit, Some(kmb_core::FieldUnit::Length));
+        assert_eq!(arg.default, None);
+    }
 }

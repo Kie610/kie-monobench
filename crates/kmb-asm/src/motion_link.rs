@@ -110,6 +110,10 @@ pub fn run(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     j.link_lead = lead_amount.clone();
     j.link_follow = follow_amount.clone();
     j.link_flip = cx.arg("flip").and_then(|v| v.as_bool()).unwrap_or(false);
+    // 2 つのジョイントの比にする(遊星の組の 2 つ目の連動元は外す)
+    j.link_joint2 = None;
+    j.link_lead2.clear();
+    j.link_follow2.clear();
     let label = format!("{follow_name} を {lead_name} に連動({lead_amount} で {follow_amount})");
     log::info!("{label}");
     Ok(Outcome::Change {

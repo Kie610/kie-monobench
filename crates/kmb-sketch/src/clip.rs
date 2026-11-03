@@ -12,6 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Clip {
     pub entities: Vec<Entity>,
     pub constraints: Vec<Constraint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub centerlines: Vec<EntityId>,
 }
 
 impl Clip {
@@ -92,6 +94,12 @@ impl Sketch {
         Some(Clip {
             entities,
             constraints,
+            centerlines: self
+                .centerlines
+                .iter()
+                .copied()
+                .filter(|id| set.contains(id))
+                .collect(),
         })
     }
 
@@ -156,6 +164,13 @@ impl Sketch {
                 n.at = c.at.map(|p| [p[0] + d[0], p[1] + d[1]]);
             }
         }
+        for id in &clip.centerlines {
+            if let Some(new) = m.get(id)
+                && !self.is_centerline(*new)
+            {
+                self.toggle_centerline(*new);
+            }
+        }
         out
     }
 }
@@ -194,6 +209,48 @@ mod tests {
             value: "50 mm".into(),
         });
         (s, lines.to_vec())
+    }
+
+    #[test]
+    fn an_old_clip_without_centerlines_keeps_the_same_json() {
+        let old = r#"{"entities":[],"constraints":[]}"#;
+        let clip: Clip = serde_json::from_str(old).unwrap();
+        assert!(clip.centerlines.is_empty());
+        assert_eq!(serde_json::to_string(&clip).unwrap(), old);
+    }
+
+    #[test]
+    fn pasting_keeps_centerlines_separate_from_other_construction_lines() {
+        let mut source = Sketch::default();
+        let a = source.add_point(0.0, 0.0);
+        let b = source.add_point(0.0, 10.0);
+        let axis = source.add_line(a, b);
+        source.toggle_centerline(axis);
+        let c = source.add_point(5.0, 0.0);
+        let d = source.add_point(5.0, 10.0);
+        let guide = source.add_line(c, d);
+        source.set_construction(guide, true);
+        let clip = source.copy_entities(&[axis, guide]).unwrap();
+        let clip: Clip = serde_json::from_str(&serde_json::to_string(&clip).unwrap()).unwrap();
+        let mut target = Sketch::default();
+        target.add_point(100.0, 100.0);
+        let pasted = target.paste(&clip, [20.0, 0.0]);
+        let lines: Vec<_> = pasted
+            .into_iter()
+            .filter(|id| matches!(target.entity(*id), Some(Entity::Line { .. })))
+            .collect();
+        assert_eq!(lines.len(), 2);
+        assert!(target.is_centerline(lines[0]), "中心線の印を写す");
+        assert!(
+            !target.is_centerline(lines[1]),
+            "普通の補助線は中心線にしない"
+        );
+        assert!(
+            lines
+                .iter()
+                .all(|id| target.entity(*id).unwrap().is_construction())
+        );
+        assert_eq!(source.centerlines, vec![axis]);
     }
 
     #[test]

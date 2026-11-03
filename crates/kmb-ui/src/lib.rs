@@ -17,16 +17,20 @@ mod doc_state;
 mod dock_ui;
 pub mod drive;
 mod editor;
+mod field_text;
+pub use field_text::translated_field;
 mod fonts;
 mod frame_ui;
 mod gesture;
 mod help_ui;
 mod icons;
+mod keycast;
 pub mod keys;
 pub mod layout;
 mod live_ui;
 mod menus_ui;
 mod mouse3d;
+mod named_parameter_text;
 mod outer_ui;
 mod plain_error;
 pub mod ribbon;
@@ -36,6 +40,7 @@ pub mod theme;
 pub mod themes;
 mod titlebar_ui;
 mod window_state;
+pub use named_parameter_text::named_parameter_error;
 use window_state::Tone;
 mod workspace;
 
@@ -80,6 +85,9 @@ pub use live_ui::LiveState;
 pub use tabs_ui::KernelFactory;
 pub use versions_ui::paint_fit;
 pub use view3d::Pick;
+
+#[cfg(test)]
+mod named_parameter_tests;
 
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;
@@ -281,6 +289,7 @@ impl Workspace {
                 safe_mode: false,
                 renderer_note: None,
                 mouse3d: None,
+                keycast: Default::default(),
                 view_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
                 view_panes: None,
                 history: Vec::new(),
@@ -358,8 +367,10 @@ impl Workspace {
                 context_others: (egui::Pos2::ZERO, Vec::new()),
             },
             home: home::HomeState {
+                pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
+                discard_recoveries: None,
                 projects: Default::default(),
                 recent: kmb_session::Recent::default(),
                 recent_missing: Default::default(),
@@ -614,6 +625,7 @@ impl Workspace {
         }
         set_doc_scope(ui.ctx(), self.tab_uid());
         self.feed_mouse3d(ui.ctx());
+        self.take_keycast(ui.ctx());
         // 編集器が Tab を使っている(描いている途中の寸法の欄): 画面の欄へ入力を移さない
         let ctx = ui.ctx();
         if ctx
@@ -624,6 +636,7 @@ impl Workspace {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         self.poll_job();
+        self.measure_tick(ui.ctx());
         self.poll_task();
         self.follow_editing_for_hidden();
         // 画面の部品を名前で操作する差し込み口(コマンド欄・AI の接続・バッチの e2e が使う)。
@@ -695,7 +708,11 @@ impl Workspace {
                             self.start_action_with(&a, args["args"].clone());
                         }
                         Some(a) => {
-                            self.run_action(&a);
+                            if args["args"].is_object() {
+                                self.run_action_args(&a, args["args"].clone());
+                            } else {
+                                self.run_action(&a);
+                            }
                         }
                         None => {}
                     }
@@ -828,6 +845,7 @@ impl Workspace {
                 ui.push_id(("doc_tab", self.tab_uid()), |ui| self.dock_ui(ui));
             });
         self.window_edges(ui);
+        self.show_keycast(&ctx);
         self.settle_auto_open();
         self.save_layout_if_changed(&ctx);
         self.save_doc_view_if_changed(&ctx);
@@ -881,6 +899,8 @@ pub(crate) fn action_row(ui: &mut egui::Ui, a: &kmb_core::Action, keys: &str) ->
 }
 
 #[cfg(test)]
+mod field_text_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod toolbar_tests;
@@ -910,3 +930,14 @@ mod settings_tests;
 mod tabs_tests;
 #[cfg(test)]
 mod units_tests;
+
+#[cfg(test)]
+mod component_colors_tests;
+#[cfg(test)]
+mod wide_toolbar_tests;
+
+#[cfg(test)]
+mod mass_progress_tests;
+
+#[cfg(test)]
+mod mass_progress_live_tests;

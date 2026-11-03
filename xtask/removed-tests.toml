@@ -4,6 +4,8 @@
 # 名前を変えた・ほかのファイルへ移しただけ(同じ crate の中)なら、書かなくてよい。
 
 [removed]
+"kmb-io-stl test_exported_sample_has_valid_indexed_triangles" = "2026-10-27 CIで走るkmb-cliのobj_export_writes_indexed_triangles_without_a_material_fileへ移した。頂点・法線・面の番号、体積、材料ファイルなしの確認を保つ"
+"kmb-ui-sketch dragging_the_count_shows_the_result_before_release" = "2026-10-27 typing_a_count_expression_previews_then_commits_on_enter へ改名。式の入力中の見本と Enter 後の反映を確かめる本体は保持"
 # 2026-10-21 構造のレビュー 0a: 層の検査を xtask の点検(xtask/src/layers.rs)へ移した。毎回流れる
 "kmb-bundle the_graph_is_read_and_the_core_depends_only_on_the_expression_crate" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"
 "kmb-bundle every_crate_names_its_layer" = "2026-10-21 Kie 承認(判断の札): xtask の点検へ移した"

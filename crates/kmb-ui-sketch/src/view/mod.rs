@@ -255,7 +255,17 @@ pub(crate) fn sketch_view(
     let shift = ui.input(|i| i.modifiers.shift);
     let mut wants = snap_wants(editor.tool);
     wants.crossings &= !ctrl;
-    let aug = crate::snap::augment(sketch, sol, refs, wants);
+    let crossings = wants
+        .crossings
+        .then(|| editor.infer.crossings.get(sketch, sol));
+    let mut aug = crate::snap::augment_with_crossings(sketch, sol, refs, wants, crossings);
+    if editor.tool == Tool::Line
+        && !ctrl
+        && !editor.hud.pinned()
+        && let Some(start) = editor.pending.and_then(|p| p.point)
+    {
+        aug.add_opposites(start);
+    }
     let (sketch, sol) = (&aug.sketch, &aug.sol);
     // 描く道具: カーソルを曲線の上や、通った点と並ぶ位置へ寄せる。線分は向きも推測する(infer.rs)
     let (mut cursor, mut snapped, mut line_rel) =

@@ -253,3 +253,81 @@ fn removing_a_direction_line_keeps_the_angle_and_other_expressions() {
     let p = s.patterns[0].copies.last().unwrap().entities[0];
     assert!(crate::tests::close(sol.points[&p], [0.0, 8.0]));
 }
+
+#[test]
+fn pattern_expression_errors_identify_the_actual_field() {
+    for (field, expression, label) in [
+        (0, "missing", "パターンの数"),
+        (0, "(", "パターンの数"),
+        (1, "missing", "パターンの角度"),
+        (1, "(", "パターンの角度"),
+        (1, "2 mm", "パターンの角度"),
+    ] {
+        let mut sketch = circular("3");
+        let Some(PatternExpressions::Circular { count, angle }) =
+            &mut sketch.patterns[0].expressions
+        else {
+            unreachable!()
+        };
+        *if field == 0 { count } else { angle } = expression.into();
+        let error = dimension_values(&sketch, &|_| None).unwrap_err();
+        assert!(error.contains(label), "{expression}: {error}");
+        for field in sketch.pattern_exprs().unwrap() {
+            assert!(!error.contains(&format!("{} の寸法", field.id)), "{error}");
+        }
+    }
+    for direction in 0..2 {
+        for (field, expression, label) in [
+            (0, "missing", "パターンの数"),
+            (0, "(", "パターンの数"),
+            (1, "missing", "パターンの距離"),
+            (1, "(", "パターンの距離"),
+            (1, "20 deg", "パターンの距離"),
+            (2, "missing", "パターンの向き"),
+            (2, "(", "パターンの向き"),
+            (2, "2 mm", "パターンの向き"),
+        ] {
+            let mut sketch = rectangular("3");
+            let Some(PatternExpressions::Rectangular { directions }) =
+                &mut sketch.patterns[0].expressions
+            else {
+                unreachable!()
+            };
+            let text = match field {
+                0 => &mut directions[direction].count,
+                1 => &mut directions[direction].distance,
+                _ => directions[direction].angle.as_mut().unwrap(),
+            };
+            *text = expression.into();
+            let error = dimension_values(&sketch, &|_| None).unwrap_err();
+            assert!(
+                error.contains(label),
+                "方向 {direction}, {expression}: {error}"
+            );
+            for field in sketch.pattern_exprs().unwrap() {
+                assert!(!error.contains(&format!("{} の寸法", field.id)), "{error}");
+            }
+        }
+    }
+}
+
+#[test]
+fn pattern_field_labels_do_not_shadow_document_parameter_names() {
+    let (sketch, _) = resolved(&circular("パターンの数"), &|name| {
+        (name == "パターンの数").then(|| kmb_core::Quantity::scalar(5.0))
+    });
+    assert_eq!(sketch.patterns[0].copies.len(), 4);
+    let mut sketch = rectangular("3");
+    let Some(PatternExpressions::Rectangular { directions }) = &mut sketch.patterns[0].expressions
+    else {
+        unreachable!()
+    };
+    directions[0].distance = "パターンの距離".into();
+    let (sketch, _) = resolved(&sketch, &|name| {
+        (name == "パターンの距離").then(|| kmb_core::Quantity::mm(4.0))
+    });
+    let PatternDef::Rectangular(pattern) = &sketch.patterns[0].def else {
+        unreachable!()
+    };
+    assert_eq!(pattern.directions[0].distance, 4.0);
+}

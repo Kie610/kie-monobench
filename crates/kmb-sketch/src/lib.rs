@@ -16,6 +16,8 @@ mod chain;
 mod clip;
 mod commands;
 mod curve;
+#[cfg(test)]
+mod datum_projection_tests;
 mod dimension;
 mod display;
 mod draw;
@@ -25,6 +27,7 @@ mod ends;
 mod find;
 mod freeform;
 mod geom;
+mod groups;
 mod import;
 mod label;
 mod model;
@@ -83,12 +86,14 @@ pub use pattern_expr::{DirectionExpressions, PatternExpressions};
 pub use profile::{curves_of, entity_segments, faces_of, open_ends_of, profile_of};
 pub use reference::{
     ITEMS_TYPE, ItemShape, RefItem, RefShape, SketchItem, SketchItems, body_edge_refs, body_refs,
-    origin_ref, refresh_projections, sketch_items, sketch_refs,
+    datum_axis_ref, origin_ref, refresh_projections, refresh_projections_with_values, sketch_items,
+    sketch_refs,
 };
 pub use section::{SECTION_TOL, section, section_pieces, section_refs, section_segments};
 pub use silhouette::{BODY_MESH_TOL, face_under, samples as reference_samples, silhouette_refs};
 pub use solver::{
-    NO_SHAPE, SketchError, Solution, SolveStatus, redundant_with, solve, solve_dragging,
+    NO_SHAPE, SketchError, Solution, SolveStatus, inconsistency_reason, redundant_with, solve,
+    solve_dragging,
 };
 pub use tools::Spot;
 
@@ -183,6 +188,15 @@ impl Payload for Solution {
     const TYPE: &'static str = SOLUTION_TYPE;
 }
 
+/// 解けない時だけ付ける派生出力の説明。既存の解と保存する文書の形は変えない。
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+struct SolveDiagnosis(String);
+
+impl Payload for SolveDiagnosis {
+    const TYPE: &'static str = "sketch.diagnosis@1";
+}
+
 /// 出力の値から、補助線も含めた線を取り出す。
 pub fn paths_of(v: &Value) -> Option<Vec<(EntityId, kmb_core::Segment)>> {
     Paths::from_value(v).map(|p| p.0)
@@ -226,6 +240,19 @@ impl Feature for Sketch {
             };
             if !out.contains(&i) {
                 out.push(i);
+            }
+        }
+        for feature in self
+            .projections
+            .iter()
+            .filter_map(|p| p.source.datum_axis())
+        {
+            let input = InputRef::Output {
+                feature,
+                slot: kmb_interchange::DATUM_OUTPUT.into(),
+            };
+            if !out.contains(&input) {
+                out.push(input);
             }
         }
         let offset = self.offset.as_deref();
@@ -314,7 +341,29 @@ impl Feature for Sketch {
                     refs.extend(sketch_refs(&items, f, &plane));
                 }
             }
-            let lost = refresh_projections(&mut sketch, &refs);
+            for pr in &sketch.projections {
+                if let Some(f) = pr.source.datum_axis() {
+                    let axis = kmb_interchange::DatumAxis::from_value(
+                        ctx.output(f, kmb_interchange::DATUM_OUTPUT)?,
+                    )
+                    .ok_or_else(|| {
+                        EvalError::InvalidData(format!(
+                            "投影元 {} は作業軸ではありません。作業軸を選び直してください",
+                            f.0
+                        ))
+                    })?;
+                    refs.push(datum_axis_ref(axis, f, &plane).map_err(EvalError::InvalidData)?);
+                }
+            }
+            let lost = refresh_projections_with_values(&mut sketch, &refs, &values)
+                .map_err(EvalError::InvalidData)?;
+            if sketch
+                .projections
+                .iter()
+                .any(|p| p.source.datum_axis().is_some() && lost.contains(&p.entity))
+            {
+                return Err(EvalError::InvalidData("作業軸の投影が線から点、または点から線に変わりました。投影を選び直してください".into()));
+            }
             if !lost.is_empty() {
                 let ids: Vec<String> = lost.iter().map(ToString::to_string).collect();
                 warnings.push(format!(
@@ -343,6 +392,9 @@ impl Feature for Sketch {
             ("items".to_string(), items.to_value()),
         ]
         .into();
+        if let Some(reason) = inconsistency_reason(sketch, &solution) {
+            out.insert("diagnosis".into(), SolveDiagnosis(reason).to_value());
+        }
         kmb_core::add_warnings(&mut out, warnings);
         Ok(out)
     }
@@ -443,7 +495,7 @@ pub fn dimension_values(
             }
             q.value
         } else {
-            names::checked(d.id, d.name, d.expr, q, d.angle, d.signed)?
+            d.checked(q)?
         };
         values.insert(d.id, v);
     }
@@ -483,3 +535,6 @@ mod silhouette_tests;
 mod symmetric_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod plane_arg_help_tests;

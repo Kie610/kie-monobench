@@ -21,8 +21,11 @@ pub(crate) struct DocState {
     /// 文書の変更もここを通す
     pub(crate) work: kmb_session::Headless,
     pub(crate) selected: Option<FeatureId>,
+    /// ブラウザで選んだ部品。作業先の部品とは別に持ち、文書には保存しない。
+    pub(crate) selected_component: Option<u64>,
     /// 編集中のパラメータの式・名前(確定前)
     pub(crate) expr_edits: HashMap<ParamId, FieldEdit>,
+    pub(crate) param_batch: crate::design::params_ui::BatchDraft,
     pub(crate) name_edits: HashMap<ParamId, FieldEdit>,
     pub(crate) new_param: (String, String),
     /// パラメータの表の追加の行の単位
@@ -66,6 +69,8 @@ pub(crate) struct DocState {
     pub(crate) playing: Option<f64>,
     /// 解析の結果のコマを再生している間の、始めた時刻(秒)とその時のコマ。止めていれば `None`
     pub(crate) frames_playing: Option<(f64, usize)>,
+    /// 揺れの再生時計。角度0は静止した最大の形で、止めても角度は保つ。
+    pub(crate) phase_playback: Option<result_ui::PhasePlayback>,
     /// 3D のビューで部品を引いてジョイントを動かしている途中(`joint_drag_ui`)
     pub(crate) joint_drag: Option<joint_drag_ui::JointDrag>,
     /// 回転・スライダを引いている間と、離して形を作り直し終わるまで、3D のビューのボディを動かして
@@ -167,6 +172,7 @@ pub(crate) struct DocState {
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
     pub(crate) measure: Option<measure_ui::Measure>,
+    pub(crate) measure_job: Option<measure_ui::BodyReadTask>,
     /// 断面で切って見る平面(開いている時だけ。M48)
     pub(crate) section: Option<section_ui::SectionView>,
     /// キャンバス内レンダリング(レンダリングの作業空間で押している時だけ)
@@ -220,10 +226,14 @@ impl DocState {
         saved: kmb_core::DocumentData,
         modules: kmb_core::Modules,
     ) -> Self {
+        let mut work = kmb_session::Headless::in_background(modules, doc, path);
+        work.set_view_directory(None);
         DocState {
-            work: kmb_session::Headless::in_background(modules, doc, path),
+            work,
             selected: None,
+            selected_component: None,
             expr_edits: HashMap::new(),
+            param_batch: Default::default(),
             name_edits: HashMap::new(),
             new_param: (String::new(), String::new()),
             new_param_unit: kmb_core::ParamUnit::Length,
@@ -250,6 +260,7 @@ impl DocState {
             autosave: None,
             playing: None,
             frames_playing: None,
+            phase_playback: None,
             joint_drag: None,
             drag_pose: None,
             moved: None,
@@ -298,6 +309,7 @@ impl DocState {
             view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,
+            measure_job: None,
             section: None,
             canvas_render: None,
             anim: Default::default(),

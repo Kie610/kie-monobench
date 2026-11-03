@@ -1,0 +1,16 @@
+[package]
+name = "kmb-view-lines"
+description = "網の平行投影・曲面の輪郭・隠れ線を求める純関数"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "core"
+
+[dependencies]
+kmb-core.workspace = true
+
+[lints]
+workspace = true

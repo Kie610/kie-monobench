@@ -3,7 +3,9 @@
 //! ここの [`selected_sketch`]・[`insert_file`] を使う。
 
 use crate::{Imported, SKETCH, Sketch, SketchPlane};
-use kmb_core::{Action, Context, Edit, Extension, Gesture, Handle, HandleChoice, Outcome, Place};
+use kmb_core::{
+    Action, Context, Edit, Extension, Gesture, Handle, HandleChoice, Outcome, Payload, Place,
+};
 
 pub const ADD_SKETCH: &str = "cad.add.sketch";
 pub const SKETCH_ON_FACE: &str = "cad.sketch_on_face";
@@ -11,6 +13,10 @@ pub const SKETCH_ON_FACE: &str = "cad.sketch_on_face";
 pub const REDEFINE_PLANE: &str = "cad.sketch.redefine_plane";
 /// 選んでいるスケッチに、足りない拘束と寸法を付ける
 pub const AUTO_CONSTRAIN: &str = "cad.sketch.auto_constrain";
+/// 押し出しなどで指定できる領域の名前を読む。
+pub const LIST_REGIONS: &str = "cad.sketch.regions";
+
+pub const PROJECT_AXIS: &str = "cad.sketch.project_axis";
 
 const NEED_FACE: &str = "3D のビューで平らな面を選んでから使う";
 
@@ -142,6 +148,32 @@ pub fn selected_sketch(cx: &Context<'_>) -> Option<(kmb_core::FeatureId, Sketch)
     Some((id, serde_json::from_value(f.data.clone()).ok()?))
 }
 
+fn list_regions(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let id = cx
+        .arg("feature")
+        .and_then(serde_json::Value::as_u64)
+        .map(kmb_core::FeatureId)
+        .or_else(|| selected_sketch(cx).map(|(id, _)| id))
+        .ok_or("スケッチを選ぶか、feature にスケッチの機能の番号を指定してください")?;
+    if cx.data.feature(id).is_none_or(|f| f.type_id != SKETCH) {
+        return Err("指定した機能はスケッチではありません".into());
+    }
+    let faces = cx
+        .output(id, "faces")
+        .and_then(kmb_core::ProfileFaces::from_value)
+        .ok_or("スケッチの領域を計算できません。スケッチの誤りを直してください")?;
+    Ok(Outcome::Table {
+        title: "スケッチの領域".into(),
+        table: kmb_core::Table {
+            key: LIST_REGIONS.into(),
+            columns: vec![kmb_core::TableColumn::new("key", "領域の名前", false, true)],
+            rows: faces.faces.iter().map(|f| vec![f.key.clone()]).collect(),
+            empty: "閉じた領域がありません".into(),
+            ..Default::default()
+        },
+    })
+}
+
 /// ファイル(DXF・SVG)の挿入: `read` で読んだ形を、選んでいるスケッチへ足す(なければ XY 平面の
 /// 新しいスケッチ)。置く位置はファイルの座標のまま。
 /// `kind` はファイルの種類の名前(知らせに使う)。
@@ -191,6 +223,84 @@ pub fn insert_imported(
             format!("スケッチ{}", cx.count_of(SKETCH) + 1),
             data,
         ),
+    })
+}
+
+fn project_axis(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let id = cx
+        .arg("feature")
+        .and_then(serde_json::Value::as_u64)
+        .map(kmb_core::FeatureId)
+        .or(cx.selected)
+        .ok_or("投影先のスケッチを選んでください")?;
+    let entry = cx
+        .data
+        .feature(id)
+        .filter(|f| f.type_id == SKETCH)
+        .ok_or("投影先はスケッチを指定してください")?;
+    let axis_id = cx
+        .arg("axis")
+        .and_then(serde_json::Value::as_u64)
+        .map(kmb_core::FeatureId)
+        .ok_or("作業軸を指定してください")?;
+    if !cx
+        .data
+        .features
+        .iter()
+        .take_while(|f| f.id != id)
+        .any(|f| f.id == axis_id)
+    {
+        return Err("投影先より前の作業軸を指定してください".into());
+    }
+    let axis = cx
+        .output(axis_id, kmb_interchange::DATUM_OUTPUT)
+        .and_then(kmb_interchange::DatumAxis::from_value)
+        .ok_or("投影元の作業軸を計算できません。作業軸の誤りを直してください")?;
+    let plane = cx
+        .output(id, "profile")
+        .and_then(kmb_core::Profile::from_value)
+        .ok_or("投影先のスケッチを計算できません。先に誤りを直してください")?
+        .plane;
+    let item = crate::datum_axis_ref(axis, axis_id, &plane)?;
+    let mut sketch: Sketch =
+        serde_json::from_value(entry.data.clone()).map_err(|e| e.to_string())?;
+    if sketch
+        .projections
+        .iter()
+        .any(|p| p.source.same(&item.source))
+    {
+        return Err("この作業軸はもう写してあります".into());
+    }
+    let solution = cx
+        .output(id, "sketch")
+        .and_then(crate::solution_of)
+        .ok_or("スケッチの解がありません")?;
+    sketch.adopt_solution(&solution);
+    let entity = sketch.add_projection(&item);
+    if cx.arg("link").and_then(serde_json::Value::as_bool) == Some(false) {
+        sketch.projections.retain(|p| p.entity != entity);
+        let mut points = sketch.entity(entity).expect("写した要素").points();
+        if matches!(sketch.entity(entity), Some(crate::Entity::Point { .. })) {
+            points.push(entity);
+        }
+        let (projected, _) = sketch.projected_parts();
+        for point in points {
+            if !projected.contains(&point)
+                && !sketch
+                    .constraints
+                    .iter()
+                    .any(|c| matches!(c.kind, crate::ConstraintKind::Fix { point:p } if p == point))
+            {
+                sketch.add_constraint(crate::ConstraintKind::Fix { point });
+            }
+        }
+    }
+    Ok(Outcome::Change {
+        label: "作業軸を投影".into(),
+        edits: vec![Edit::SetData {
+            id,
+            data: serde_json::to_value(sketch).expect("JSON にできる"),
+        }],
     })
 }
 
@@ -308,7 +418,32 @@ pub(crate) fn status_text(s: &crate::Solution) -> String {
 }
 
 impl Extension for SketchCommands {
+    fn status(&self, cx: &Context<'_>) -> Vec<(String, serde_json::Value)> {
+        let diagnoses: Vec<_> = cx
+            .report
+            .features
+            .iter()
+            .filter_map(|feature| {
+                let kmb_core::FeatureStatus::Ok { outputs, .. } = &feature.status else {
+                    return None;
+                };
+                let reason = outputs
+                    .values()
+                    .find_map(crate::SolveDiagnosis::from_value)?;
+                Some(serde_json::json!({"feature": feature.id.0, "reason": reason.0}))
+            })
+            .collect();
+        if diagnoses.is_empty() {
+            Vec::new()
+        } else {
+            vec![("sketch_diagnostics".into(), serde_json::json!(diagnoses))]
+        }
+    }
+
     fn describe(&self, v: &kmb_core::Value) -> Option<String> {
+        if let Some(reason) = crate::SolveDiagnosis::from_value(v) {
+            return Some(reason.0);
+        }
         if let Some(s) = crate::solution_of(v) {
             return Some(format!("スケッチ({})", status_text(&s)));
         }
@@ -333,8 +468,11 @@ impl Extension for SketchCommands {
         let face = cx.picked_plane().is_some();
         let on_face: &[Place] = if face { &[Place::FaceMenu] } else { &[] };
         vec![
+            Action::new(LIST_REGIONS, "スケッチの領域を一覧", "cad")
+                .args([kmb_core::Arg::feature("feature", "スケッチの機能の番号(省くと選んでいるスケッチ)")])
+                .hint("スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む"),
             Action::new(ADD_SKETCH, "スケッチを作成", "cad")
-                .args([kmb_core::Arg::value("plane", "描く平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面か作業平面、なければ XY)"), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
+                .args([kmb_core::Arg::value("plane", &format!("描く平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面か作業平面、なければ XY)。{}", kmb_core::Plane::base_axis_names())), kmb_core::Arg::flag("project_edges", "面の外周の辺を投影する(省くと設定の「面の辺を投影する」)")])
                 .menu("作成")
                 .icon("sketch")
                 .aliases("すけっち sketch")
@@ -349,7 +487,7 @@ impl Extension for SketchCommands {
                 .at(on_face)
                 .disabled_if((!face).then_some(NEED_FACE)),
             Action::new(REDEFINE_PLANE, "スケッチ平面を再定義", "cad")
-                .arg(kmb_core::Arg::value("plane", "新しい平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面)"))
+                .arg(kmb_core::Arg::value("plane", &format!("新しい平面: xy・yz・zx・face(手順でクリックした面)か作業平面の機能の番号(省くと選んでいる面)。{}", kmb_core::Plane::base_axis_names())))
                 .menu("作成")
                 .icon("replane")
                 .aliases("へいめん さいていぎ redefine plane めん うつす")
@@ -360,6 +498,15 @@ impl Extension for SketchCommands {
                     &[]
                 })
                 .disabled_if(selected_sketch(cx).is_none().then_some("スケッチを選んでから使う")),
+            Action::new(PROJECT_AXIS, "作業軸を投影", "cad")
+                .args([
+                    kmb_core::Arg::feature("feature", "投影先のスケッチ(省くと選んでいるスケッチ)"),
+                    kmb_core::Arg::feature("axis", "投影する作業軸の機能の番号").required(),
+                    kmb_core::Arg::flag("link", "元の作業軸とのリンクを保つ").default(true),
+                ])
+                .role(kmb_interchange::role::action::PROJECT_DATUM_AXIS)
+                .keep_edit()
+                .hint("作業軸をスケッチへ投影し、軸を動かすと線や点も付いてくる"),
             Action::new(AUTO_CONSTRAIN, "自動拘束", "cad")
                 .args([
                     kmb_core::Arg::flag("dimensions", "寸法(直径・半径・長さと、原点からの横と縦の距離)も付ける").default(true),
@@ -420,6 +567,8 @@ impl Extension for SketchCommands {
             },
             REDEFINE_PLANE => redefine_plane(cx),
             AUTO_CONSTRAIN => auto_constrain(cx),
+            LIST_REGIONS => list_regions(cx),
+            PROJECT_AXIS => project_axis(cx),
             _ => return None,
         })
     }
@@ -480,5 +629,60 @@ impl Extension for SketchCommands {
                 Gesture::Choice,
             )
         }])
+    }
+}
+
+#[cfg(test)]
+mod region_tests {
+    use super::*;
+    use kmb_core::{Extensions, NullKernel};
+    use std::sync::Arc;
+
+    #[test]
+    fn region_names_are_read_only_and_use_the_declared_action_path() {
+        let (mut doc, id) = crate::tests::doc_with_rectangle();
+        let registry = crate::tests::registry();
+        let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+        let report = doc.recompute(&registry, kernel.as_ref());
+        let before = doc.to_json();
+        let ext = Extensions(vec![Arc::new(SketchCommands::default())]);
+        let args = serde_json::json!({"feature": id.0});
+        let mut cx = Context::new(doc.data(), &report, &registry, &kernel);
+        cx.args = &args;
+        let Outcome::Table { table, .. } = ext.run(LIST_REGIONS, &cx).unwrap() else {
+            panic!("領域の一覧");
+        };
+        let faces = cx
+            .output(id, "faces")
+            .and_then(kmb_core::ProfileFaces::from_value)
+            .unwrap();
+        assert!(!faces.faces.is_empty());
+        assert_eq!(
+            table.rows,
+            faces
+                .faces
+                .iter()
+                .map(|f| vec![f.key.clone()])
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(doc.to_json(), before);
+        cx.args = &serde_json::Value::Null;
+        cx.selected = Some(id);
+        let Outcome::Table {
+            table: selected, ..
+        } = ext.run(LIST_REGIONS, &cx).unwrap()
+        else {
+            panic!("選んだスケッチ");
+        };
+        assert_eq!(selected.rows, table.rows);
+        let bad = serde_json::json!({"feature": id.0, "regions": []});
+        cx.args = &bad;
+        assert!(ext.run(LIST_REGIONS, &cx).is_err(), "宣言のない引数は断る");
+        let missing = serde_json::json!({"feature": 99999});
+        cx.args = &missing;
+        assert!(
+            ext.run(LIST_REGIONS, &cx).is_err(),
+            "別のスケッチに読み替えない"
+        );
     }
 }

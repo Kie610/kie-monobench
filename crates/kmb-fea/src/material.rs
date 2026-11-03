@@ -1,9 +1,8 @@
 //! 解析に使う材料の値。名前はコアの物理材料の表([`kmb_look::material::PHYS_MATERIALS`])と同じで、
 //! 密度はそちらから引く。
 //!
-//! 値は一般的な文献値の目安(A)で、品種・樹種・造形の向きで大きく変わる。木・MDF・PLA は
-//! 向きで強さが大きく違う(直交異方性)が、ここでは等方性として扱い、注意を出す。木の値は
-//! 米国森林製品研究所の『Wood Handbook』(FPL-GTR-282)の広葉樹の繊維方向の値の範囲から取った。
+//! 値は一般的な目安で、品種・樹種・造形の向きで大きく変わる。木・MDF・PLA は
+//! 向きで強さが大きく違う(直交異方性)が、ここでは等方性として扱い、注意を出す。
 
 /// 解析の材料。
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -19,6 +18,8 @@ pub struct FeaMaterial {
     pub strength_kind: &'static str,
     /// 熱伝導率 W/(m·K)
     pub k: f64,
+    /// 比熱 J/(kg·K)
+    pub cp: f64,
     /// 向きで強さが大きく違う材料(等方性で扱う注意を出す)
     pub anisotropic: bool,
 }
@@ -31,6 +32,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 276.0,
         strength_kind: "降伏応力(6061-T6)",
         k: 167.0,
+        cp: 900.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -40,6 +42,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 245.0,
         strength_kind: "降伏応力(一般構造用)",
         k: 50.0,
+        cp: 470.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -49,6 +52,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 205.0,
         strength_kind: "降伏応力(304)",
         k: 16.0,
+        cp: 500.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -58,6 +62,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 200.0,
         strength_kind: "降伏応力",
         k: 120.0,
+        cp: 380.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -67,6 +72,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 70.0,
         strength_kind: "降伏応力(焼きなまし)",
         k: 390.0,
+        cp: 385.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -76,6 +82,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 80.0,
         strength_kind: "曲げ強さ(繊維方向)",
         k: 0.15,
+        cp: 1700.0,
         anisotropic: true,
     },
     FeaMaterial {
@@ -85,6 +92,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 30.0,
         strength_kind: "曲げ強さ",
         k: 0.12,
+        cp: 1700.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -94,6 +102,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 70.0,
         strength_kind: "引張強さ",
         k: 0.19,
+        cp: 1470.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -103,6 +112,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 40.0,
         strength_kind: "引張強さ(ABS)",
         k: 0.17,
+        cp: 1300.0,
         anisotropic: false,
     },
     FeaMaterial {
@@ -112,6 +122,7 @@ pub const FEA_MATERIALS: &[FeaMaterial] = &[
         strength: 50.0,
         strength_kind: "引張強さ(層の向きで大きく下がる)",
         k: 0.13,
+        cp: 1800.0,
         anisotropic: true,
     },
 ];

@@ -25,7 +25,11 @@ pub mod action {
     /// 名前で出す)。テンプレートごとに付く([`super::MARKERS`])
     pub const USE_TEMPLATE: ActionRole = ActionRole("use_template");
     /// STEP のファイルを読み込む(CLI・MCP の短い命令が使う)
+    /// STL・3MF の網を読み込む。
+    pub const IMPORT_MESH: ActionRole = ActionRole("import_mesh");
     pub const IMPORT_STEP: ActionRole = ActionRole("import_step");
+    /// IGES の面・立体を読み込み、上向きの軸を確かめる。
+    pub const IMPORT_IGES: ActionRole = ActionRole("import_iges");
     /// タイムラインのロールバックの位置を動かす。引数 `position`(先頭から効かせる機能の数。省くと
     /// 最後まで進める)。CLI・MCP の短い命令が使う
     pub const ROLL_BACK: ActionRole = ActionRole("roll_back");
@@ -41,10 +45,14 @@ pub mod action {
     pub const INSERT_LINK: ActionRole = ActionRole("insert_link");
     /// DXF のファイルを、選んでいるスケッチへ挿入する(スケッチの編集器の「挿入」が使う)
     pub const INSERT_DXF: ActionRole = ActionRole("insert_dxf");
+    /// 作業軸をスケッチへ投影する。引数 feature(投影先)・axis(元の作業軸)・link(リンクを保つか)。
+    pub const PROJECT_DATUM_AXIS: ActionRole = ActionRole("project_datum_axis");
     /// SVG のファイルを、選んでいるスケッチへ挿入する(スケッチの編集器の「挿入」が使う)
     pub const INSERT_SVG: ActionRole = ActionRole("insert_svg");
     /// 選んでいるスケッチを DXF で保存する(スケッチの編集器の右クリックが使う)
     pub const EXPORT_SKETCH_DXF: ActionRole = ActionRole("export_sketch_dxf");
+    /// 選んでいるスケッチを SVG で保存する(スケッチの編集器の右クリックが使う)
+    pub const EXPORT_SKETCH_SVG: ActionRole = ActionRole("export_sketch_svg");
     /// 選んでいるスケッチの点に文字を置く(スケッチの編集器の「文字」が使う。引数 `point` に
     /// 基準にする点の番号)
     pub const TEXT_AT_POINT: ActionRole = ActionRole("text_at_point");
@@ -77,22 +85,30 @@ pub mod action {
     /// (見せるか。省くと、対象が 1 つでも見えていれば全部隠し、全部隠れていれば全部出す)
     pub const SET_VISIBILITY: ActionRole = ActionRole("set_visibility");
 
+    /// パラメータの表の式をまとめて検査し、1回の変更として適用する。
+    pub const APPLY_PARAM_BATCH: ActionRole = ActionRole("apply_param_batch");
+
     /// 全部(名前の重なりの試験に使う)。
     pub const ALL: &[ActionRole] = &[
+        APPLY_PARAM_BATCH,
         EXTRUDE,
         FILLET_EDGES,
         HOLE_ON_FACE,
         EXPORT_BODIES,
         USE_TEMPLATE,
         IMPORT_STEP,
+        IMPORT_MESH,
+        IMPORT_IGES,
         ROLL_BACK,
         EXPORT_GCODE,
         SETUP_SHEET,
         SIMULATE,
         INSERT_LINK,
         INSERT_DXF,
+        PROJECT_DATUM_AXIS,
         INSERT_SVG,
         EXPORT_SKETCH_DXF,
+        EXPORT_SKETCH_SVG,
         TEXT_AT_POINT,
         AUTO_EXPLODE,
         ANIMATION_VIEW,
@@ -123,6 +139,9 @@ pub mod kind {
     /// 面に絵を貼るだけで形を変えない(デカール)。静止画の書き出しは、この種類の誤りだけなら
     /// その分を除いて描く
     pub const DECAL: KindRole = KindRole("decal");
+    /// 同じ部品を写さずに別の位置に置く(出現)。データ `{"of": 元のボディ, "place": [行列 16 個]}`
+    /// (行の順。元の定義の座標から置き場所へ)。画面の部品の複製が、元を直すと付いて来る写しに使う
+    pub const OCCURRENCE: KindRole = KindRole("occurrence");
 
     /// 全部(名前の重なりの試験に使う)。
     pub const ALL: &[KindRole] = &[
@@ -131,6 +150,7 @@ pub mod kind {
         COPY_BODY,
         COMPONENT_POSITION,
         DECAL,
+        OCCURRENCE,
     ];
 }
 

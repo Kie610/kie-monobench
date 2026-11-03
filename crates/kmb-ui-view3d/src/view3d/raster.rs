@@ -7,7 +7,7 @@ pub(super) fn lerp_color(c: Color32, k: f32) -> Color32 {
 }
 
 /// 深度つきでソフトウェア描画する。`size` は画素数、`ppp` は 1 point あたりの画素数。
-/// 裏向きの三角形は描かない(閉じたソリッドなので見えない)。
+/// ソリッドの裏向きの三角形は間引き、面のボディは両面を描く。
 /// `shading` が線だけなら、面は選んだ面とマウスの下の面だけ塗り、辺は隠れた所も描く。
 #[allow(clippy::too_many_arguments)]
 pub fn render(
@@ -16,7 +16,7 @@ pub fn render(
     size: [usize; 2],
     ppp: f32,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
 ) -> egui::ColorImage {
@@ -54,7 +54,7 @@ pub fn render_guided(
     size: [usize; 2],
     ppp: f32,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
     guides: Guides,
@@ -123,7 +123,7 @@ pub fn render_guided(
     let env_frame = kmb_render::EnvFrame::world();
     let section = scene.section;
     let hidden_alpha = crate::render::current().hidden_alpha;
-    // 稜線の太さ(描く先の画素の本数。1 本なら今までと同じ)
+    // 稜線の太さ(描く先の画素の本数)。
     let edge_copies = {
         let r = crate::render::current();
         (r.edge_px * r.scale).round().max(1.0) as usize
@@ -156,7 +156,7 @@ pub fn render_guided(
                 continue;
             }
             let gn = cross(sub(wpos(1), wpos(0)), sub(wpos(2), wpos(0)));
-            if dot(gn, cam.toward_eye(wpos(0), eye_pos)) <= 0.0 {
+            if !b.two_sided && dot(gn, cam.toward_eye(wpos(0), eye_pos)) <= 0.0 {
                 // 断面で切った時は、裏の面を切り口の蓋の色で平らに、斜めの縞を入れて塗る
                 // (切り口が開いて見えない)
                 if section.is_some() {
@@ -183,7 +183,7 @@ pub fn render_guided(
             let mut from_face = false;
             let base = if picked.iter().any(|p| is(Some(p))) {
                 colors.picked
-            } else if is(hover) {
+            } else if hover.is_some_and(|h| h.matches_face(b.feature, name)) {
                 colors.hover
             } else if shading.faces() {
                 match b.colors.get(*face as usize).copied().flatten() {
@@ -300,7 +300,7 @@ pub fn render_guided(
     }
     // 稜線は全部のボディの面を塗った後に描く(後のボディの面に隠れた辺も点線にできる)
     for (bi, b) in scene.bodies.iter().enumerate().filter(|_| shading.edges()) {
-        let line = line_color(scene.body_color(bi, colors), colors.dark);
+        let line = hover_edge_color(hover, b.feature, scene.body_color(bi, colors), colors);
         // 稜線は少し手前に寄せて、隠れていない部分だけ描く(線だけの表示では全部描く)。
         // 陰影と隠れ線では、隠れた部分を薄い点線で描く
         let see_through = !shading.faces();

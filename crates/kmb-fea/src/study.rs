@@ -12,7 +12,7 @@ use crate::result::{fmt, geometry};
 use crate::singular;
 use crate::statics::{Dir, Load, LoadKind, StaticInput, solve_static};
 use crate::tetmesh::{MAX_TETS, bounds, estimate_tets, expected_tets, size_for};
-use crate::thermal::{ThermalInput, solve_thermal};
+use crate::thermal::{HeatTime, ThermalInput, TransientInput, solve_thermal, solve_transient};
 use crate::topology::{TopologyInput, solve_topology};
 use kmb_core::{
     Descriptor, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Mesh, Outputs, Payload,
@@ -102,6 +102,10 @@ pub struct ValueRow {
     pub faces: Vec<Ref>,
     #[serde(default)]
     pub value: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub from: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub until: String,
 }
 
 /// 研究のデータ(種類ごとに使う項目が違う)。
@@ -129,6 +133,15 @@ pub struct StudyData {
     /// まわりの空気の温度 ℃
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ambient: String,
+    /// 空なら定常、transient なら時間で変わる熱。
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub time: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub end: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub frames: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub initial: String,
     /// 求める固有振動の数
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub modes: String,
@@ -165,6 +178,10 @@ impl StudyData {
             &self.size,
             &self.at,
         ];
+        if self.time == "transient" {
+            v.extend([&self.end, &self.frames, &self.initial]);
+            v.extend(self.heats.iter().flat_map(|r| [&r.from, &r.until]));
+        }
         v.extend(self.loads.iter().map(|r| &r.value));
         for rows in [&self.temps, &self.heats, &self.convs] {
             v.extend(rows.iter().map(|r| &r.value));
@@ -172,6 +189,7 @@ impl StudyData {
         v
     }
 
+    /// 保存した式は、使わないモードの欄もパラメータの名前変更に追従する。
     fn exprs_mut(&mut self) -> Vec<&mut String> {
         let mut v: Vec<&mut String> = vec![
             &mut self.rest_h,
@@ -181,9 +199,14 @@ impl StudyData {
             &mut self.size,
             &mut self.at,
         ];
+        v.extend([&mut self.end, &mut self.frames, &mut self.initial]);
         v.extend(self.loads.iter_mut().map(|r| &mut r.value));
-        for rows in [&mut self.temps, &mut self.heats, &mut self.convs] {
+        for rows in [&mut self.temps, &mut self.convs] {
             v.extend(rows.iter_mut().map(|r| &mut r.value));
+        }
+        for r in &mut self.heats {
+            v.push(&mut r.value);
+            v.extend([&mut r.from, &mut r.until]);
         }
         v
     }
@@ -379,14 +402,15 @@ impl Feature for Study {
                 } else {
                     Some(number(ctx, &self.data.rest_h, "残りの面の熱伝達係数")?)
                 };
-                Solve::Thermal(ThermalInput {
+                let thermal = ThermalInput {
                     k: mat.k,
                     temps: self.rows(ctx, &self.data.temps, "温度")?,
                     heats: self.rows(ctx, &self.data.heats, "熱")?,
                     convs: self.rows(ctx, &self.data.convs, "熱伝達係数")?,
                     rest_h,
                     ambient,
-                })
+                };
+                thermal_mode(&self.data, &mat, thermal, &|s, name| number(ctx, s, name))?
             }
             Kind::Modal => {
                 let count = if is_empty(&self.data.modes) {
@@ -437,6 +461,7 @@ impl Feature for Study {
         };
         let key = job.key();
         let steps = job.steps();
+        let keeps_partial = matches!(&job.solve, Solve::Transient(_));
         kmb_study::prepare(ctx, key, Arc::new(job));
         let mut out: Outputs = [(
             PLAN.to_string(),
@@ -444,7 +469,7 @@ impl Feature for Study {
                 key,
                 steps,
                 section,
-                ..Plan::default()
+                keeps_partial,
             }
             .to_value(),
         )]
@@ -463,8 +488,82 @@ impl Feature for Study {
 enum Solve {
     Static(StaticInput),
     Thermal(ThermalInput),
+    Transient(TransientInput),
     Modal(ModalInput),
     Topology(TopologyInput),
+}
+
+fn thermal_mode(
+    data: &StudyData,
+    mat: &FeaMaterial,
+    thermal: ThermalInput,
+    read: &dyn Fn(&str, &str) -> Result<f64, EvalError>,
+) -> Result<Solve, EvalError> {
+    Ok(match data.time.as_str() {
+        "" => Solve::Thermal(thermal),
+        "transient" => {
+            let end = read(&data.end, "終わりの時刻")?;
+            if !end.is_finite() || end <= 0.0 {
+                return Err(EvalError::InvalidData(
+                    "終わりの時刻は 0 より大きくしてください".into(),
+                ));
+            }
+            let frames = if is_empty(&data.frames) {
+                50.0
+            } else {
+                read(&data.frames, "コマの数")?
+            };
+            if !(2.0..=200.0).contains(&frames) || frames.fract() != 0.0 {
+                return Err(EvalError::InvalidData(
+                    "コマの数は 2 から 200 の整数にしてください".into(),
+                ));
+            }
+            let initial = if is_empty(&data.initial) {
+                thermal.ambient
+            } else {
+                read(&data.initial, "初めの温度")?
+            };
+            if !initial.is_finite() {
+                return Err(EvalError::InvalidData(
+                    "初めの温度は有限の数にしてください".into(),
+                ));
+            }
+            let mut heat_times = Vec::new();
+            for r in data.heats.iter().filter(|r| !r.faces.is_empty()) {
+                let from = if is_empty(&r.from) {
+                    0.0
+                } else {
+                    read(&r.from, "入れ始め")?
+                };
+                let until = if is_empty(&r.until) {
+                    end
+                } else {
+                    read(&r.until, "入れ終わり")?
+                };
+                if !from.is_finite()
+                    || !until.is_finite()
+                    || from < 0.0
+                    || until <= from
+                    || until > end
+                {
+                    return Err(EvalError::InvalidData(
+                        "熱の時刻は 0 ≦ 入れ始め < 入れ終わり ≦ 終わりの時刻にしてください".into(),
+                    ));
+                }
+                heat_times.push(HeatTime { from, until });
+            }
+            Solve::Transient(TransientInput {
+                thermal,
+                density: density(mat),
+                cp: mat.cp,
+                end,
+                frames: frames as usize,
+                initial,
+                heat_times,
+            })
+        }
+        _ => return Err(EvalError::InvalidData("時間の選び方が分かりません".into())),
+    })
 }
 
 /// 研究 1 つの解く仕事(評価で作り、「実行」で解く)。
@@ -481,6 +580,19 @@ struct Job {
 }
 
 impl Job {
+    /// 解いた後に中止が届いた場合も、結果を残せるかを確かめる。
+    fn check_cancelled(&self, c: &Control, mut result: SimResult) -> Result<SimResult, String> {
+        if c.cancelled() {
+            if matches!(self.solve, Solve::Transient(_)) {
+                result.partial = true;
+            }
+            if !result.partial {
+                return Err(CANCELLED.into());
+            }
+        }
+        Ok(result)
+    }
+
     /// 同じ条件・同じ形なら同じ鍵。
     fn key(&self) -> u64 {
         let mut h = Fnv::default();
@@ -510,6 +622,7 @@ impl Job {
     fn steps(&self) -> Vec<String> {
         let solve = match self.kind {
             Kind::Static => "つり合いを解く",
+            Kind::Thermal if matches!(self.solve, Solve::Transient(_)) => "時間を進める",
             Kind::Thermal => "温度を解く",
             Kind::Modal => "固有振動を解く",
             Kind::Topology => "残す所を探す",
@@ -604,15 +717,14 @@ impl Task for Job {
         let (p, notes) = self.prepare(c)?;
         c.step(1);
         c.progress(0.2, format!("要素 {} 個", p.mesh.tets.len()));
-        let mut r = match &self.solve {
+        let r = match &self.solve {
             Solve::Static(i) => static_result(&p, &self.mat, i)?,
             Solve::Thermal(i) => thermal_result(&p, &self.mat, i)?,
+            Solve::Transient(i) => transient_result(&p, &self.mat, i, c)?,
             Solve::Modal(i) => modal_result(&p, &self.mat, i)?,
             Solve::Topology(i) => topology_result(&p, &self.mat, i, c)?,
         };
-        if c.cancelled() {
-            return Err(CANCELLED.into());
-        }
+        let mut r = self.check_cancelled(c, r)?;
         c.step(2);
         c.progress(0.98, "");
         let st = &p.mesh.stats;
@@ -880,10 +992,96 @@ fn thermal_result(
         ("空気へ逃げた熱".into(), format!("{} W", fmt(out.to_air))),
         (
             "材料".into(),
-            format!("{}(熱伝導率 {} W/(m·K))", mat.name, fmt(mat.k)),
+            format!(
+                "{}(熱伝導率 {} W/(m·K)、比熱 {} J/(kg·K))",
+                mat.name,
+                fmt(mat.k),
+                fmt(mat.cp)
+            ),
         ),
     ];
     r.summary = format!("最高 {} ℃・最低 {} ℃", fmt(tmax), fmt(tmin));
+    Ok(r)
+}
+
+fn transient_result(
+    p: &Prepared,
+    mat: &FeaMaterial,
+    input: &TransientInput,
+    c: &Control,
+) -> Result<SimResult, String> {
+    let out = solve_transient(p, input, &|| c.cancelled(), &|f| {
+        c.progress((0.2 + 0.75 * f) as f32, format!("{} s", fmt(input.end * f)))
+    })?;
+    let keep = vec![true; p.mesh.tets.len()];
+    let (mut r, nodes) = surface_result(p, &keep);
+    r.quantities = vec![Quantity::scalar("温度", "℃", 0)];
+    r.frames = out
+        .frames
+        .iter()
+        .map(|f| Frame {
+            label: format!("{} s", fmt(f.time)),
+            time: Some(f.time),
+            values: vec![Values::exact(on_surface(&nodes, |n| f.t[n]))],
+        })
+        .collect();
+    r.series = [("最高の温度(℃)", false), ("空気へ逃げた熱(W)", true)]
+        .into_iter()
+        .map(|(name, air)| kmb_core::Series {
+            name: name.into(),
+            x_name: "時刻 s".into(),
+            note: String::new(),
+            points: out
+                .frames
+                .iter()
+                .map(|f| {
+                    [
+                        f.time,
+                        if air {
+                            f.to_air
+                        } else {
+                            f.t.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+                        },
+                    ]
+                })
+                .collect(),
+        })
+        .collect();
+    let last = out.frames.last().ok_or("温度のコマがありません")?;
+    let high = last.t.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let low = last.t.iter().copied().fold(f64::INFINITY, f64::min);
+    r.numbers = vec![
+        ("最高の温度".into(), format!("{} ℃", fmt(high))),
+        ("最低の温度".into(), format!("{} ℃", fmt(low))),
+        ("使った刻みの数".into(), out.steps.to_string()),
+        (
+            "最小の刻み".into(),
+            if out.steps == 0 {
+                "—".into()
+            } else {
+                format!("{} s", fmt(out.min_step))
+            },
+        ),
+        (
+            "材料".into(),
+            format!(
+                "{}(熱伝導率 {} W/(m·K)、比熱 {} J/(kg·K))",
+                mat.name,
+                fmt(mat.k),
+                fmt(mat.cp)
+            ),
+        ),
+    ];
+    r.summary = format!(
+        "{} s・最高 {} ℃・最低 {} ℃",
+        fmt(last.time),
+        fmt(high),
+        fmt(low)
+    );
+    r.partial = out.cancelled;
+    if out.coarse {
+        r.note = "網の細かさでは、初めの数刻みの急な変化を表せません(要素の大きさを小さくすると表せます)".into();
+    }
     Ok(r)
 }
 
@@ -1105,9 +1303,13 @@ pub fn register(reg: &mut Registry) {
             .icon("fea_thermal")
             .order(2)
             .pinned()
-            .hint("温度を決める面・熱が入る面・空気へ逃げる面を付けて、定常の温度の分布を色で見る")
+            .hint("温度を決める面・熱が入る面・空気へ逃げる面を付けて、定常や時間で変わる温度の分布を色で見る")
             .aliases("ねつ おんど ほうねつ 熱 温度 放熱 thermal heat")
             .field(material_field())
+            .field(Field::choice("time", "時間", &[("", "定常"), ("transient", "時間で変わる")]))
+            .field(Field::expr("end", "終わりの時刻(s)").plain("s").only("time", "transient", ""))
+            .field(Field::opt_expr("frames", "コマの数").unitless().only("time", "transient", "").help("空なら 50。2 から 200 の整数。時刻 0 のコマも加える"))
+            .field(Field::opt_expr("initial", "初めの温度(℃)").plain("℃").only("time", "transient", "").help("空ならまわりの温度"))
             .field(Field::rows(
                 "temps",
                 "温度を決める面",
@@ -1123,6 +1325,8 @@ pub fn register(reg: &mut Registry) {
                     Field::pick("faces", "面", &[RefKind::Face], 1, None),
                     Field::expr("value", "熱(W、面全体)").plain("W")
                         .help("LED やモータードライバーの発熱など。面全体の合計"),
+                    Field::opt_expr("from", "入れ始め(s)").plain("s").only("time", "transient", "").help("時間で変わる熱だけに使う。空なら 0"),
+                    Field::opt_expr("until", "入れ終わり(s)").plain("s").only("time", "transient", "").help("時間で変わる熱だけに使う。空なら終わりの時刻"),
                 ],
             ))
             .field(Field::rows(
@@ -1188,8 +1392,229 @@ fn from(d: &serde_json::Value) -> Result<StudyData, EvalError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    pub(crate) fn old_thermal_document_keeps_steady_results() {
+        let old = from(&json!({"rest_h":"100", "ambient":"20"})).unwrap();
+        let mut filled = old.clone();
+        filled.end = "invalid".into();
+        filled.frames = "0".into();
+        filled.initial = "invalid".into();
+        filled.heats.push(ValueRow {
+            from: "invalid".into(),
+            until: "-1".into(),
+            ..ValueRow::default()
+        });
+        let mut thermal = crate::validation_tests::transient_case().thermal;
+        thermal.temps = vec![(vec!["x0".into()], 100.0)];
+        let mat = fea_material("").unwrap();
+        let read = |_: &str, _: &str| -> Result<f64, EvalError> {
+            panic!("定常では時刻を読まない")
+        };
+        let a = thermal_mode(&old, mat, thermal.clone(), &read).unwrap();
+        let b = thermal_mode(&filled, mat, thermal, &read).unwrap();
+        assert_eq!(a, b);
+        let p =
+            Prepared::new(&crate::validation_tests::box_mesh([2.0; 3]), 1.0, &|| false).unwrap();
+        let Solve::Thermal(a) = a else {
+            panic!("定常を選ぶ")
+        };
+        let Solve::Thermal(b) = b else {
+            panic!("定常を選ぶ")
+        };
+        let a = thermal_result(&p, mat, &a).unwrap();
+        let b = thermal_result(&p, mat, &b).unwrap();
+        assert_eq!(a.frames, b.frames);
+        assert_eq!(a.frames.len(), 1);
+        assert_eq!(a.frames[0].time, None);
+    }
+
+    /// 確かめること: 過渡の欄の既定値と入力の範囲、熱の時刻の範囲。
+    #[test]
+    fn transient_fields_validate_defaults_and_ranges() {
+        let mat = fea_material("").unwrap();
+        let thermal = crate::validation_tests::transient_case().thermal;
+        let read = |s: &str, _: &str| {
+            s.parse::<f64>()
+                .map_err(|_| EvalError::InvalidData("数を入れてください".into()))
+        };
+        let mut d = from(&json!({"time":"transient", "end":"10"})).unwrap();
+        let Solve::Transient(i) = thermal_mode(&d, mat, thermal.clone(), &read).unwrap() else {
+            panic!("過渡を選ぶ")
+        };
+        assert_eq!(i.frames, 50);
+        assert_eq!(i.initial, thermal.ambient);
+        for end in ["", "0", "-1"] {
+            d.end = end.into();
+            assert!(thermal_mode(&d, mat, thermal.clone(), &read).is_err());
+        }
+        d.end = "10".into();
+        for frames in ["1", "201", "2.5"] {
+            d.frames = frames.into();
+            assert!(thermal_mode(&d, mat, thermal.clone(), &read).is_err());
+        }
+        d.frames.clear();
+        d.heats = vec![ValueRow {
+            faces: vec![Ref::Face {
+                feature: FeatureId(1),
+                face: "x0".into(),
+            }],
+            value: "1".into(),
+            ..Default::default()
+        }];
+        let mut thermal = thermal;
+        thermal.heats = vec![(vec!["x0".into()], 1.0)];
+        let Solve::Transient(defaults) = thermal_mode(&d, mat, thermal.clone(), &read).unwrap()
+        else {
+            panic!("過渡を選ぶ")
+        };
+        assert_eq!(
+            defaults.heat_times,
+            vec![HeatTime {
+                from: 0.0,
+                until: 10.0
+            }]
+        );
+        for (from, until) in [
+            ("-1", "5"),
+            ("5", "5"),
+            ("6", "5"),
+            ("0", "11"),
+            ("NaN", "5"),
+        ] {
+            d.heats[0].from = from.into();
+            d.heats[0].until = until.into();
+            assert!(thermal_mode(&d, mat, thermal.clone(), &read).is_err());
+        }
+    }
+
+    /// 確かめること: 時刻 0 を含むコマ、共通の範囲、推移、途中結果の受け渡し。
+    #[test]
+    fn transient_results_have_times_series_and_partial_frames() {
+        let p =
+            Prepared::new(&crate::validation_tests::box_mesh([2.0; 3]), 1.0, &|| false).unwrap();
+        let mat = fea_material("").unwrap();
+        let mut i = crate::validation_tests::transient_case();
+        i.frames = 2;
+        let c = Control::new();
+        let result = transient_result(&p, mat, &i, &c).unwrap();
+        assert_eq!(result.frames.len(), 3);
+        assert_eq!(result.frames[0].time, Some(0.0));
+        assert_eq!(result.frames[2].time, Some(i.end));
+        assert_eq!(result.series.len(), 2);
+        assert!(result.series.iter().all(|s| s.points.len() == 3));
+        let range = result.range(0, None);
+        assert!((range.1 - i.initial as f32).abs() < 1e-4);
+        assert!(range.0 < range.1);
+        assert!(result.number("使った刻みの数").is_some());
+        c.cancel();
+        let partial = transient_result(&p, mat, &i, &c).unwrap();
+        assert!(partial.partial);
+        assert_eq!(partial.frames.len(), 1);
+        assert_eq!(partial.frames[0].time, Some(0.0));
+        i.thermal.k = 1.0;
+        i.thermal.rest_h = Some(1e9);
+        i.end = 0.01;
+        let abrupt = transient_result(&p, mat, &i, &Control::new()).unwrap();
+        assert!(
+            abrupt
+                .note
+                .contains("網の細かさでは、初めの数刻みの急な変化を表せません")
+        );
+    }
+
+    /// 確かめること: 解いた後の中止でも、完成した過渡のコマを捨てない。
+    #[test]
+    fn transient_late_cancel_keeps_completed_frames() {
+        let input = crate::validation_tests::transient_case();
+        let job = |solve| Job {
+            kind: Kind::Thermal,
+            mat: *fea_material("").unwrap(),
+            h: 1.0,
+            auto: false,
+            volume: 8.0,
+            mesh: Mesh::default(),
+            solve,
+        };
+        let transient = job(Solve::Transient(input.clone()));
+        let steady = job(Solve::Thermal(input.thermal));
+        let result = SimResult {
+            frames: vec![Frame {
+                label: "1 s".into(),
+                time: Some(1.0),
+                values: vec![Values::exact(vec![25.0])],
+            }],
+            ..Default::default()
+        };
+        let c = Control::new();
+        c.cancel();
+        let partial = transient
+            .check_cancelled(&c, result.clone())
+            .expect("完成したコマを保持する");
+        assert!(partial.partial);
+        assert_eq!(partial.frames, result.frames);
+        assert!(steady.check_cancelled(&c, result).is_err());
+    }
+
+    /// 確かめること: 過渡専用の式は入力として宣言され、時刻の列も名前変更に追従する。
+    #[test]
+    fn transient_field_expressions_declare_parameters_and_rename_time_columns() {
+        let mut study = Study { kind: Kind::Thermal, data: from(&json!({
+            "time":"transient", "end":"duration", "frames":"2 * nframes", "initial":"room + 5",
+            "heats":[{"faces":{"kind":"face","feature":1,"face":"end"},"value":"power","from":"heat_start","until":"heat_end"}]
+        })).unwrap() };
+        let inputs = study.inputs().unwrap();
+        for key in [
+            "duration",
+            "nframes",
+            "room",
+            "power",
+            "heat_start",
+            "heat_end",
+        ] {
+            assert!(
+                inputs
+                    .iter()
+                    .any(|i| matches!(i, InputRef::Param { name } if name == key)),
+                "{key}"
+            );
+        }
+        for (old, new) in [
+            ("duration", "run_time"),
+            ("heat_start", "start_at"),
+            ("heat_end", "finish_at"),
+        ] {
+            study.data = from(&study.rename_param(old, new).unwrap().unwrap()).unwrap();
+        }
+        assert_eq!(study.data.end, "run_time");
+        assert_eq!(study.data.heats[0].from, "start_at");
+        assert_eq!(study.data.heats[0].until, "finish_at");
+        study.data.time.clear();
+        let steady_inputs = study.inputs().unwrap();
+        for key in ["run_time", "nframes", "room", "start_at", "finish_at"] {
+            assert!(
+                !steady_inputs
+                    .iter()
+                    .any(|i| matches!(i, InputRef::Param { name } if name == key)),
+                "{key}"
+            );
+        }
+        study.data = from(&study.rename_param("run_time", "duration").unwrap().unwrap()).unwrap();
+        assert_eq!(study.data.end, "duration");
+        study.data = from(&study.rename_param("start_at", "begin_at").unwrap().unwrap()).unwrap();
+        study.data = from(&study.rename_param("finish_at", "end_at").unwrap().unwrap()).unwrap();
+        assert_eq!(study.data.heats[0].from, "begin_at");
+        assert_eq!(study.data.heats[0].until, "end_at");
+        for key in ["duration", "begin_at", "end_at"] {
+            assert!(
+                !study
+                    .inputs()
+                    .unwrap()
+                    .contains(&InputRef::Param { name: key.into() })
+            );
+        }
+    }
 
     /// 自動の大きさ: 厚さ 1 mm の板(200×200)は、体積だけで決めた大きさでは薄い所で要素が
     /// 上限を超える(失敗した時に h の 0.8・0.64 倍と小さい方で作り直すやり方では、3 回とも

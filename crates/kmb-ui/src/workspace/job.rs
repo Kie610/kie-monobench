@@ -2,6 +2,8 @@
 
 use crate::*;
 
+type SceneRead = Box<dyn FnOnce(&dyn kmb_core::Kernel, &[(FeatureId, ShapeHandle)]) + Send>;
+
 impl Workspace {
     /// 文書が変わった後の再計算。計算は kmb-session の裏の再計算で行う(CLI・MCP と同じ部品)。
     /// 画面を出さない時(試験・書き出し)は、その場で終わるまで待つ。
@@ -15,6 +17,7 @@ impl Workspace {
     /// 計算が要る印を付け、走っていなければ裏で始める(走っていれば、終わった後でやり直す)。
     /// 寸法の名前(d1 など)は kmb-session が文書を写す前にそろえる。
     pub(crate) fn start_recompute(&mut self) {
+        self.measure_document_changed();
         // 文書が変わった(取り消し・やり直しも): リンクの様子を次の描画で調べ直す
         self.cur.links_at = None;
         // 目は文書の区画なので、取り消し・やり直しでも読み直す(形を計算し直さない変更もある)
@@ -26,15 +29,7 @@ impl Workspace {
         if !self.cur.work.needs_recompute() {
             return;
         }
-        // 網を作り直すかは結果を見ないと分からないので、今の表示の鍵を渡す
-        let scene_key = self.cur.scene.key().to_vec();
-        let tolerance = self.cur.scene.tolerance();
-        let after: kmb_session::After = Box::new(move |kernel, bodies| {
-            (scene_key.as_slice() != bodies).then(|| {
-                Box::new(view3d::build_meshes_at(kernel, bodies, tolerance))
-                    as Box<dyn std::any::Any + Send>
-            })
-        });
+        let after = self.scene_after(None);
         // 画面を出さない時はその場で待つので、描き直しを頼まない(待った後の描画で出る)
         let wake = self
             .win
@@ -44,6 +39,22 @@ impl Workspace {
             .map(|ctx| Box::new(move || ctx.request_repaint()) as Box<dyn FnOnce() + Send>);
         self.cur.work.start_recompute(after, wake);
         self.cur.busy_since.get_or_insert_with(Instant::now);
+    }
+
+    /// 描画の網と、必要なら同じスレッドで行う派生データの読み取り。
+    pub(crate) fn scene_after(&self, read: Option<SceneRead>) -> kmb_session::After {
+        let scene_key = self.cur.scene.key().to_vec();
+        let tolerance = self.cur.scene.tolerance();
+        Box::new(move |kernel, bodies| {
+            let meshes = (scene_key.as_slice() != bodies).then(|| {
+                Box::new(view3d::build_meshes_at(kernel, bodies, tolerance))
+                    as Box<dyn std::any::Any + Send>
+            });
+            if let Some(read) = read {
+                read(kernel, bodies);
+            }
+            meshes
+        })
     }
 
     /// 新しい計算の結果(`self.cur.work.report()`)で、形を出し直さずに前の形を出し続けるか(M27)。
@@ -159,6 +170,9 @@ impl Workspace {
             .and_then(|e| e.downcast::<Vec<(FeatureId, Mesh)>>().ok())
         {
             self.cur.scene.set(&r.bodies, *meshes);
+            self.cur
+                .scene
+                .set_body_kinds(self.cur.work.kernel().as_ref());
         } else if self.cur.scene.needs(&r.bodies) {
             self.cur
                 .scene
@@ -178,7 +192,7 @@ impl Workspace {
 
     /// 再計算が走っているか。
     pub fn is_busy(&self) -> bool {
-        self.cur.work.is_recomputing()
+        self.cur.work.is_recomputing() && !self.only_measure_read_is_running()
     }
 
     /// 走っている再計算が(やり直しも含めて)終わるまで待つ。

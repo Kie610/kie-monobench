@@ -1,0 +1,12 @@
+# 角度のスライダを引いている間も、別の欄に入れた式をそのまま保つ。
+#! sample box
+
+dclick "button:蝶番"
+type "角度の下限" "-55 deg * 2"
+type "角度の上限" "10 deg - 10 deg"
+expect "角度の下限" = "-55 deg * 2"
+expect "角度の上限" = "10 deg - 10 deg"
+# 引く間の確認
+drag "slider:" -650 80
+expect "角度の下限" = "-55 deg * 2"
+expect "角度の上限" = "10 deg - 10 deg"

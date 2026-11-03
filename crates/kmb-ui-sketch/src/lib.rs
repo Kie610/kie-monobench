@@ -38,16 +38,18 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 pub struct SketchEditor {
     view: view::ViewState,
     editor: view::Editor,
+    /// 下の帯へ出した失敗の理由。解けた時は自分が出した知らせだけを消す。
+    diagnosis: Option<(kmb_core::FeatureId, String)>,
     /// 置いた面の輪郭(ボディと面の名前ごとに作り置く)
     outline: Option<(FaceKey, Vec<[[f64; 2]; 2]>)>,
     /// 既存の形をスケッチの平面へ写したもの(平面と、元のボディ・前のスケッチごとに作り置く)
-    refs: Option<((RefsKey, SketchesKey), Vec<kmb_sketch::RefItem>)>,
+    refs: Option<(ProjectionKey, Vec<kmb_sketch::RefItem>)>,
     /// 前にできたボディの断面(スライスと交差の道具。平面と元のボディごとに作り置く)
     sections: Option<(RefsKey, Vec<view::Section>)>,
     /// 前にできたボディの網(投影の道具。平面と元のボディごとに作り置く)
     bodies: Option<(RefsKey, Vec<view::BodyMesh>)>,
     /// 写した交差とシルエットの元(元が見つかるかを見る。平面と、それを写したボディごと)
-    linked: Option<((RefsKey, SketchesKey), Vec<kmb_sketch::RefItem>)>,
+    linked: Option<(ProjectionKey, Vec<kmb_sketch::RefItem>)>,
     /// `名前=値` と打った寸法: 先にパラメータを作ってもらい、次の更新で置くスケッチ
     deferred: Option<(kmb_core::FeatureId, Sketch)>,
     /// 面の上のスケッチの原点の候補(ボディと面の名前ごとに作り置く)
@@ -66,6 +68,10 @@ struct FaceOrigins {
 
 /// 写した形の作り置きのキー(スケッチの平面と、元のボディ)。
 /// 前のスケッチと、その写せる要素(K8)。
+type ProjectionKey = (RefsKey, SketchesKey, AxesKey);
+
+type AxesKey = Vec<(kmb_core::FeatureId, kmb_interchange::DatumAxis)>;
+
 type SketchesKey = Vec<(kmb_core::FeatureId, kmb_sketch::SketchItems)>;
 
 type RefsKey = (
@@ -76,6 +82,23 @@ type RefsKey = (
 impl SketchEditor {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    fn show_diagnosis(
+        &mut self,
+        host: &mut EditorHost<'_>,
+        id: kmb_core::FeatureId,
+        reason: Option<String>,
+    ) {
+        let diagnosis = reason.map(|reason| (id, reason));
+        if diagnosis != self.diagnosis {
+            let previous = self.diagnosis.as_ref().map(|(_, reason)| reason);
+            let next = diagnosis.as_ref().map(|(_, reason)| reason);
+            if next.is_some() || host.message.as_ref() == previous {
+                *host.message = next.cloned();
+            }
+            self.diagnosis = diagnosis;
+        }
     }
 
     /// 面の上のスケッチなら、原点にできる所(作り置く)。
@@ -178,33 +201,39 @@ fn name_cycle(host: &EditorHost<'_>, before: &Sketch, after: &Sketch) -> Option<
         })
 }
 
-/// 寸法の値の `名前 = 式` を `名前` に直し、作るパラメータ(名前と式)を返す(
-/// 寸法の欄で `w=20` と打つと w というパラメータができ、寸法は w になる)。
-/// 数だけの式には寸法の単位(mm・deg)を補う。
-pub(crate) fn split_new_param(sketch: &mut Sketch) -> Option<(String, String)> {
+/// 寸法の名前付きの式を共有の規則で調べ、式を新しいパラメータの名前にする。
+fn split_new_param(
+    host: &EditorHost<'_>,
+    sketch: &mut Sketch,
+) -> Result<Option<kmb_session::params::NamedParameter>, kmb_session::params::NamedParamError> {
     for c in &mut sketch.constraints {
-        let angle = c.kind.is_angle();
+        let unit = if c.kind.is_angle() {
+            kmb_core::FieldUnit::Angle
+        } else {
+            kmb_core::FieldUnit::Length
+        };
         let Some(v) = c.kind.value_mut() else {
             continue;
         };
-        let Some((name, expr)) = v.split_once('=') else {
-            continue;
-        };
-        let (name, expr) = (name.trim().to_string(), expr.trim());
-        if name.is_empty() || expr.is_empty() || expr.contains('=') {
-            continue;
+        // 寸法が単位を省いた時は、平面の座標と同じ mm・deg として扱う。
+        if let Some(param) = kmb_session::params::parse_named_parameter(
+            host.data,
+            host.report,
+            v,
+            Some(&unit),
+            kmb_core::LengthUnit::Mm,
+        )? {
+            *v = param.name.clone();
+            return Ok(Some(param));
         }
-        let unit = if angle { "0 deg" } else { "0 mm" };
-        let expr = kmb_ui::with_unit_of(expr, unit);
-        *v = name.clone();
-        return Some((name, expr));
     }
-    None
+    Ok(None)
 }
 
 /// `名前=式` で作るパラメータを調べ、よければ画面へパラメータを作るよう頼んで、スケッチは
 /// 次の更新まで取っておく(パラメータができてから置く)。
 fn defer_with_param(
+    ctx: &egui::Context,
     host: &mut EditorHost<'_>,
     before: &Sketch,
     mut after: Sketch,
@@ -212,38 +241,15 @@ fn defer_with_param(
     deferred: &mut Option<(kmb_core::FeatureId, Sketch)>,
     feature: kmb_core::FeatureId,
 ) -> Option<Sketch> {
-    let Some((name, expr)) = split_new_param(&mut after) else {
-        return refuse_broken_dims(host, before, after, editor);
-    };
-    // 単位や組み込みの名前(mm、pi など)は、パラメータがなくても値になる
-    let reserved = kmb_core::eval_str(&name, &|_| None).is_ok();
-    let valid = name
-        .chars()
-        .next()
-        .is_some_and(|c| c.is_alphabetic() || c == '_')
-        && name.chars().all(|c| c.is_alphanumeric() || c == '_');
-    if !valid || reserved {
-        editor.dim_error = Some(format!("「{name}」はパラメータの名前に使えません"));
-        return None;
-    }
-    if host.name_taken(&name) {
-        let what = if host.data.param_by_name(&name).is_some() {
-            "パラメータ"
-        } else {
-            "寸法の名前"
-        };
-        editor.dim_error = Some(format!(
-            "{what}「{name}」は既にあります(値に {name} とだけ打てば使えます)"
-        ));
-        return None;
-    }
-    let value = match host.eval(&expr) {
-        Ok(v) => v,
-        Err(e) => {
-            editor.dim_error = Some(format!("{expr} を計算できません: {e}"));
+    let param = match split_new_param(host, &mut after) {
+        Ok(Some(p)) => p,
+        Ok(None) => return refuse_broken_dims(host, before, after, editor),
+        Err(error) => {
+            editor.dim_error = Some(kmb_ui::named_parameter_error(ctx, &error));
             return None;
         }
     };
+    let kmb_session::params::NamedParameter { name, expr, value } = param;
     let s = refuse_broken_dims_with(host, before, after, editor, Some((&name, value)))?;
     *host.then = Some((
         kmb_ui::APP_ADD_PARAM.into(),
@@ -543,6 +549,25 @@ fn bodies_before(
         bodies.push((*feature, *h));
     }
     bodies
+}
+
+/// 出力の型で作業軸を探す。写す候補は目を開けた物、追従の確認は隠した元も読む。
+fn axes_before(host: &EditorHost<'_>, entry: &FeatureEntry, include_hidden: bool) -> AxesKey {
+    use kmb_core::Payload;
+    host.data
+        .features
+        .iter()
+        .take_while(|f| f.id != entry.id)
+        .filter(|f| !f.suppressed && (include_hidden || !host.hidden.contains(&f.id)))
+        .filter_map(|f| {
+            Some((
+                f.id,
+                kmb_interchange::DatumAxis::from_value(
+                    host.output(f.id, kmb_interchange::DATUM_OUTPUT)?,
+                )?,
+            ))
+        })
+        .collect()
 }
 
 /// 機能 `entry` より前の、隠していないスケッチと、その写せる要素(K8)。
@@ -916,9 +941,16 @@ impl FeatureEditor for SketchEditor {
             let why = host
                 .failure(entry.id)
                 .unwrap_or_else(|| "表示できるスケッチではありません".into());
+            self.show_diagnosis(host, entry.id, Some(why.clone()));
             ui.colored_label(ui.visuals().error_fg_color, why);
             return None;
         };
+        self.editor.reconcile_line_points(&sketch);
+        self.show_diagnosis(
+            host,
+            entry.id,
+            kmb_sketch::inconsistency_reason(&sketch, &solution),
+        );
         let values = dimension_values(host, &sketch);
         // 原点を選ぶ道具: 面の角(円の中心)を、今のスケッチの平面の座標で
         let origins: Vec<([f64; 2], kmb_sketch::FaceOrigin)> =
@@ -985,6 +1017,7 @@ impl FeatureEditor for SketchEditor {
                 let key = (
                     (plane, bodies_before(host, entry, &sketch)),
                     sketches_before(host, entry),
+                    axes_before(host, entry, false),
                 );
                 if self.refs.as_ref().is_none_or(|(k, _)| *k != key) {
                     let mut items = vec![kmb_sketch::origin_ref(&plane)];
@@ -994,6 +1027,11 @@ impl FeatureEditor for SketchEditor {
                     // 前のスケッチの線・円・点(寸法・拘束の道具で押すと写す。K8)
                     for (f, it) in &key.1 {
                         items.extend(kmb_sketch::sketch_refs(it, *f, &plane));
+                    }
+                    for (f, axis) in &key.2 {
+                        if let Ok(item) = kmb_sketch::datum_axis_ref(*axis, *f, &plane) {
+                            items.push(item);
+                        }
                     }
                     self.refs = Some((key, items));
                 }
@@ -1038,6 +1076,15 @@ impl FeatureEditor for SketchEditor {
                     .collect::<Vec<_>>(),
                 ),
                 sketches_used(host, entry, &used_sketches),
+                axes_before(host, entry, true)
+                    .into_iter()
+                    .filter(|(f, _)| {
+                        sketch
+                            .projections
+                            .iter()
+                            .any(|p| p.source.datum_axis() == Some(*f))
+                    })
+                    .collect::<Vec<_>>(),
             );
             if self.linked.as_ref().is_none_or(|(k, _)| *k != key) {
                 let mut items = Vec::new();
@@ -1060,6 +1107,11 @@ impl FeatureEditor for SketchEditor {
                 }
                 for (f, it) in &key.1 {
                     items.extend(kmb_sketch::sketch_refs(it, *f, &plane));
+                }
+                for (f, axis) in &key.2 {
+                    if let Ok(item) = kmb_sketch::datum_axis_ref(*axis, *f, &plane) {
+                        items.push(item);
+                    }
                 }
                 self.linked = Some((key, items));
             }
@@ -1138,7 +1190,7 @@ impl FeatureEditor for SketchEditor {
         let title = format!(
             "{} ・ {place} ・ {}",
             entry.name,
-            view::status_text(&solution)
+            view::status_text(&sketch, &solution)
         );
         self.editor.feature = Some(entry.id);
         // 前にできたボディを描く。3D の視点でも平らな図(正面の図)でも描く(ブラウザの目で隠した物は
@@ -1176,6 +1228,15 @@ impl FeatureEditor for SketchEditor {
         if let Some(role) = self.editor.run_action.take() {
             *host.then = Some((kmb_ui::APP_RUN.into(), serde_json::json!({ "role": role })));
         }
+        if let Some((axis, link)) = self.editor.project_axis.take() {
+            *host.then = Some((
+                kmb_ui::APP_RUN.into(),
+                serde_json::json!({
+                    "role": kmb_interchange::role::action::PROJECT_DATUM_AXIS,
+                    "args": { "feature": entry.id.0, "axis": axis.0, "link": link },
+                }),
+            ));
+        }
         // 文字の道具で置いた点: スケッチを終えて、その点を基準に文字を作る(K32)
         if std::mem::take(&mut self.editor.wants_text)
             && let Some(point) = changed.as_ref().and_then(|s| new_lone_point(&sketch, s))
@@ -1208,6 +1269,7 @@ impl FeatureEditor for SketchEditor {
         changed
             .and_then(|s| {
                 defer_with_param(
+                    ui.ctx(),
                     host,
                     &sketch,
                     s,
@@ -1337,6 +1399,7 @@ impl FeatureEditor for SketchEditor {
         )
         .and_then(|s| {
             defer_with_param(
+                ui.ctx(),
                 host,
                 &sketch,
                 s,
@@ -1595,7 +1658,11 @@ impl FeatureEditor for SketchEditor {
                 .map(to_value);
         }
         let name = id.strip_prefix("c:")?;
-        let sel = constraints_ui::selected(&self.editor, &sketch);
+        let sel = if name == "等しい" {
+            constraints_ui::selected_in_order(&self.editor, &sketch)
+        } else {
+            constraints_ui::selected(&self.editor, &sketch)
+        };
         // 図形の固定・図形どうしの対称・ポリゴンは、選んであればすぐ付ける
         let values = dimension_values(host, &sketch);
         if let Some(out) = constraint_tool::try_multi(
@@ -1649,7 +1716,7 @@ impl FeatureEditor for SketchEditor {
                 // 組の途中になる選びは残し、そうでなければ外す
                 let tool = constraint_tool::tool_of(name)?;
                 if !constraint_tool::usable(name, &sketch, &sel) {
-                    self.editor.selection.clear();
+                    self.editor.clear_selection();
                 }
                 self.editor.set_tool(tool);
                 None
@@ -1749,6 +1816,8 @@ mod label_tests;
 #[cfg(test)]
 mod modify_ui_tests;
 #[cfg(test)]
+mod multi_equal_ui_tests;
+#[cfg(test)]
 mod ops_tests;
 #[cfg(test)]
 mod origin_tests;
@@ -1764,3 +1833,13 @@ mod sketch_aids_tests;
 mod space_view_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod cursor_readout_tests;
+#[cfg(test)]
+mod datum_axis_ui_tests;
+#[cfg(test)]
+mod plane_frame_tests;
+
+#[cfg(test)]
+mod undo_line_tests;

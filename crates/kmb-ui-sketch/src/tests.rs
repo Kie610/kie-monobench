@@ -55,6 +55,106 @@ fn sample_is_well_constrained_and_shown() {
 }
 
 #[test]
+fn an_inconsistent_sketch_shows_the_same_reason_as_command_outputs() {
+    let mut sketch = kmb_sketch::Sketch::default();
+    let a = sketch.add_point(0.0, 0.0);
+    let b = sketch.add_point(10.0, 0.0);
+    let line = sketch.add_line(a, b);
+    sketch.add_constraint(ConstraintKind::Fix { point: a });
+    sketch.add_constraint(ConstraintKind::Horizontal { line });
+    for length in [10, 12] {
+        sketch.add_constraint(ConstraintKind::Length {
+            line,
+            value: format!("{length} mm"),
+        });
+    }
+    let mut doc = Document::new();
+    let id = doc.alloc_feature_id();
+    doc.apply(kmb_core::Transaction::new(
+        "スケッチ",
+        vec![kmb_core::Op::InsertFeature {
+            index: None,
+            entry: kmb_core::FeatureEntry {
+                id,
+                type_id: kmb_sketch::SKETCH.into(),
+                name: "矛盾するスケッチ".into(),
+                data: serde_json::to_value(&sketch).unwrap(),
+                suppressed: false,
+                pin_bodies: false,
+            },
+        }],
+    ))
+    .unwrap();
+    let mut ws = ws_of(doc, None, reg());
+    ws.open_edit(id);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let Some(FeatureStatus::Ok { outputs, .. }) = h.state().report().feature(id) else {
+        panic!("矛盾したスケッチも診断と形を返す");
+    };
+    let solution = kmb_sketch::solution_of(&outputs["sketch"]).unwrap();
+    let reason = kmb_sketch::inconsistency_reason(&sketch, &solution).unwrap();
+    assert!(reason.contains("長さ 2件"), "{reason}");
+    let modules = reg();
+    let context = kmb_core::Context::new(
+        h.state().document().data(),
+        h.state().report(),
+        &modules.registry,
+        &modules.kernel,
+    );
+    let status = modules.extensions.status(&context);
+    let diagnoses = status
+        .iter()
+        .find(|(key, _)| key == "sketch_diagnostics")
+        .expect("MCP の状態に診断がある");
+    assert_eq!(diagnoses.1[0]["reason"], reason);
+    assert!(outputs.values().any(|value| {
+        modules
+            .extensions
+            .describe(value)
+            .is_some_and(|text| text == reason)
+    }));
+    assert!(
+        h.get_all_by_label(&reason)
+            .any(|node| node.rect().top() > 750.0),
+        "画面の下の帯にも同じ理由を出す"
+    );
+    sketch.constraints.pop();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    assert_eq!(
+        h.query_all_by_label(&reason).count(),
+        0,
+        "解けたら理由を消す"
+    );
+    // 投影の追従を含め、機能が理由を返して止まった時も下の帯へ渡す。
+    let length = sketch
+        .constraints
+        .iter_mut()
+        .find_map(|constraint| constraint.kind.value_mut())
+        .unwrap();
+    *length = "unknown_length".into();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    let Some(FeatureStatus::Error { message }) = h.state().report().feature(id) else {
+        panic!("理由を返して止まる");
+    };
+    assert!(
+        h.get_all_by_label(message)
+            .any(|node| node.rect().top() > 750.0),
+        "機能が止まった理由も下の帯へ出す"
+    );
+}
+
+#[test]
 fn editing_a_parameter_updates_the_sketch_and_can_be_undone() {
     let mut h = harness();
     h.run();
@@ -2112,4 +2212,238 @@ pub(crate) fn menu_item<'h, S>(h: &'h Harness<'_, S>, label: &'h str) -> egui_ki
                 .total_cmp(&b.rect().distance_sq_to_pos(at))
         })
         .unwrap_or_else(|| panic!("右クリックのメニューに「{label}」が無い"))
+}
+
+#[test]
+fn point_touching_regions_keep_only_the_clicked_region_when_enter_is_pressed() {
+    let mut h = empty_sketch();
+    let id = h.state().selected().unwrap();
+    let mut sketch = kmb_sketch::Sketch::default();
+    sketch
+        .add_rectangle((None, [0.0, 0.0]), (None, [10.0, 10.0]))
+        .unwrap();
+    sketch
+        .add_rectangle((None, [10.0, 10.0]), (None, [20.0, 20.0]))
+        .unwrap();
+    assert!(
+        h.state_mut()
+            .set_feature_data(id, serde_json::to_value(&sketch).unwrap())
+    );
+    h.run();
+    click_at(&mut h, [5.0, 5.0]);
+    let chosen = editor(h.state_mut()).editor.regions.clone();
+    assert_eq!(chosen.len(), 1);
+    press_enter(&mut h);
+    assert_eq!(editor(h.state_mut()).editor.regions, chosen);
+    assert_eq!(h.state().report().error_count(), 0);
+    press_key(&mut h, egui::Key::E);
+    type_text(&mut h, "5");
+    press_enter(&mut h);
+    h.state_mut().wait();
+    let data = h.state().document().data();
+    let extrude = data
+        .features
+        .iter()
+        .find(|f| f.type_id == "solid.extrude@1")
+        .expect("選んだ領域を押し出す");
+    assert_eq!(extrude.data["profile"], serde_json::json!(id.0));
+    assert_eq!(extrude.data["regions"], serde_json::json!(chosen));
+    assert_eq!(extrude.data["distance"], serde_json::json!("5 mm"));
+    assert_eq!(h.state().report().error_count(), 0);
+}
+
+#[test]
+fn selected_dimension_labels_can_move_with_arrow_keys_without_changing_the_shape() {
+    let mut h = sketch_with_rectangle();
+    let feature = h.state().selected().unwrap();
+    let mut sketch = current_sketch(h.state());
+    let line = sketch
+        .entities
+        .iter()
+        .find(|e| matches!(e, kmb_sketch::Entity::Line { .. }))
+        .unwrap()
+        .id();
+    let dimension = sketch.add_constraint(ConstraintKind::Length {
+        line,
+        value: "10 mm".into(),
+    });
+    sketch.constraints.last_mut().unwrap().reference = true;
+    h.state_mut()
+        .set_feature_data(feature, serde_json::to_value(&sketch).unwrap());
+    h.run();
+    let label = editor(h.state_mut())
+        .view
+        .labels
+        .iter()
+        .find(|(id, _)| *id == dimension)
+        .unwrap()
+        .1;
+    click_px(&mut h, label.center());
+    assert_eq!(
+        editor(h.state_mut()).editor.picked_constraint,
+        Some(dimension)
+    );
+    let shape = solved(h.state());
+    press_key(&mut h, egui::Key::ArrowRight);
+    let now = current_sketch(h.state());
+    let c = now.constraints.iter().find(|c| c.id == dimension).unwrap();
+    let sol = solved(h.state());
+    let at = now.label_at(c, &sol).expect("矢印で札の位置を残す");
+    assert!((screen(&h, at).x - label.center().x - 5.0).abs() < 0.1);
+    assert_eq!(sol.points, shape.points, "札だけを動かす");
+    let placed = c.label;
+    editor(h.state_mut()).editor.edit_dim = Some((dimension, "10 mm".into()));
+    editor(h.state_mut()).editor.edit_dim_fresh = true;
+    h.run();
+    press_key(&mut h, egui::Key::ArrowLeft);
+    let now = current_sketch(h.state());
+    assert_eq!(
+        now.constraints
+            .iter()
+            .find(|c| c.id == dimension)
+            .unwrap()
+            .label,
+        placed,
+        "値の入力中は札を動かさない"
+    );
+    press_key(&mut h, egui::Key::Escape);
+    h.state_mut().undo();
+    h.run();
+    let now = current_sketch(h.state());
+    assert!(
+        now.constraints
+            .iter()
+            .find(|c| c.id == dimension)
+            .unwrap()
+            .label
+            .is_none(),
+        "一回の取り消しで札を戻す"
+    );
+}
+
+#[test]
+fn releasing_a_drag_commits_the_point_and_requests_the_next_frame() {
+    let mut h = empty_sketch();
+    let feature = h.state().selected().unwrap();
+    let mut sketch = kmb_sketch::Sketch::default();
+    let point = sketch.add_point(4.0, 4.0);
+    sketch.add_point(15.0, 12.0);
+    h.state_mut()
+        .set_feature_data(feature, serde_json::to_value(&sketch).unwrap());
+    h.run();
+    let (a, b) = (screen(&h, [4.0, 4.0]), screen(&h, [7.0, 8.0]));
+    h.hover_at(a);
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: a,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.run();
+    for k in 1..=4 {
+        h.event(egui::Event::PointerMoved(a + (b - a) * (k as f32 / 4.0)));
+        h.run();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: b,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    h.step();
+    let now = current_sketch(h.state());
+    let Some(kmb_sketch::Entity::Point { x, y, .. }) = now.entity(point) else {
+        panic!("点");
+    };
+    assert!(
+        (*x - 7.0).hypot(*y - 8.0) < 0.1,
+        "離したフレームで確定する: {x},{y}"
+    );
+    assert!(h.ctx.has_requested_repaint(), "マウスを動かさず次を描く");
+    fn point_drawn(shape: &egui::epaint::Shape, at: egui::Pos2) -> bool {
+        match shape {
+            egui::epaint::Shape::Vec(shapes) => shapes.iter().any(|shape| point_drawn(shape, at)),
+            egui::epaint::Shape::Circle(c) => {
+                c.center.distance(at) < 0.1 && (3.4..=4.6).contains(&c.radius)
+            }
+            _ => false,
+        }
+    }
+    assert!(
+        h.output().shapes.iter().any(|c| point_drawn(&c.shape, b)),
+        "離した最初のフレームにも移動先の点を描く"
+    );
+}
+
+#[test]
+fn sketch_labels_fit_at_1280_with_large_text() {
+    let mut sketch = kmb_sketch::Sketch::default();
+    let edges = sketch
+        .add_rectangle((None, [0.0, 0.0]), (None, [40.0, 30.0]))
+        .unwrap();
+    for (line, length) in edges.into_iter().zip([40, 30, 40, 30]) {
+        sketch.add_constraint(ConstraintKind::Length {
+            line,
+            value: format!("{length} mm"),
+        });
+        sketch.constraints.last_mut().unwrap().reference = true;
+    }
+    let mut builder = kmb_samples::sample::DocBuilder::new();
+    let id = builder.feature(kmb_sketch::SKETCH, "寸法の輪郭", sketch);
+    let mut ws = ws_of(builder.finish("寸法の札"), None, reg());
+    ws.layout_mut().appearance.text_scale = 2.5;
+    ws.open_edit(id);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let view = &editor(h.state_mut()).view;
+    assert_eq!(view.labels.len(), 4);
+    for (i, (_, a)) in view.labels.iter().enumerate() {
+        for (_, b) in &view.labels[i + 1..] {
+            assert!(!a.intersects(*b), "寸法の札: {a:?} {b:?}");
+        }
+        for mark in &view.marks {
+            assert!(!a.intersects(mark.rect), "拘束の印: {a:?} {:?}", mark.rect);
+        }
+    }
+    fn guide_text(shape: &egui::epaint::Shape, out: &mut Vec<(String, egui::Rect)>) {
+        match shape {
+            egui::epaint::Shape::Vec(shapes) => {
+                for shape in shapes {
+                    guide_text(shape, out);
+                }
+            }
+            egui::epaint::Shape::Text(t) => {
+                let text = t.galley.text();
+                if ["X", "Y", "Z"].contains(&text) || text.starts_with("格子") {
+                    out.push((text.to_string(), shape.visual_bounding_rect()));
+                }
+            }
+            _ => {}
+        }
+    }
+    // 同じ窓でスケッチを終え、形のビューの軸と格子の札も比べる。
+    h.get_all_by_label("✓  スケッチを終了")
+        .last()
+        .unwrap()
+        .click();
+    h.run();
+    let mut guides = Vec::new();
+    for clipped in &h.output().shapes {
+        guide_text(&clipped.shape, &mut guides);
+    }
+    let grid: Vec<_> = guides
+        .iter()
+        .filter(|(name, _)| name.starts_with("格子"))
+        .collect();
+    assert!(!grid.is_empty(), "格子の札を描く");
+    for (_, a) in grid {
+        for (name, b) in &guides {
+            if ["X", "Y", "Z"].contains(&name.as_str()) {
+                assert!(!a.intersects(*b), "軸と格子の札: {a:?} {b:?}");
+            }
+        }
+    }
 }

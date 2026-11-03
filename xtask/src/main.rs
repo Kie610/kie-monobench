@@ -1,10 +1,11 @@
 //! 開発用の道具。変えた crate だけをテストと clippy に掛ける(全体を作り直さない)。
 //!
 //! ```text
-//! cargo xtask affected [--base <ref>] [--dependents]
+//! cargo xtask affected [--base <ref>] [--dependents | --dependents-lower]
 //! cargo xtask checks [--base <ref>]
-//! cargo xtask verify [<crate>...] [--base <ref>] [--dependents] [--all] [--truck] [--no-clippy]
+//! cargo xtask verify [<crate>...] [--base <ref>] [--dependents | --dependents-lower] [--all] [--truck] [--no-clippy]
 //! cargo xtask sweep [--yes] [--keep-days <日数>]
+//! cargo xtask warm
 //! cargo xtask docs
 //! cargo xtask labels
 //! cargo xtask api
@@ -16,7 +17,9 @@
 //!
 //! - crate を書かなければ、`--base`(既定は `origin/main`)から変えたファイル(まだコミットして
 //!   いないもの、git に入れていないものを含む)を持つ crate を選ぶ。
-//! - `--dependents` は、選んだ crate に依存する crate も足す(プッシュの前に)。
+//! - `--dependents` は、選んだ crate に依存する crate も足す(PR の CI が流す)。
+//! - `--dependents-lower` は、依存する crate のうち組み立てと入口の層(`UPPER_LAYERS`)の手前までを足す
+//!   (プッシュの前に。小さいディスクで担当分を確かめる。上の層と全体は PR の CI に任せる、2026-10-29 Kie)。
 //! - `--all` はワークスペース全体。`--truck` は `JC_KERNEL=truck` でもう一度テストする(形の計算の
 //!   試験だけ。`TRUCK_TESTS`)。普段は付けず、公開の準備の時だけ流す(2026-10-18 Kie)。
 //! - cargo-nextest があれば、テストは nextest で crate をまたいで並べて流し、SMLib の回・truck の回・
@@ -24,7 +27,8 @@
 //!
 //! - `verify` は、どの crate を選んでも(docs だけの変更で選ばなくても)最初に組み立てずに点検する:
 //!   層の向き(layers.rs)、ソースの書き方(layers/code.rs)、他の層の名前(layers/names.rs)、理由の
-//!   無い飛ばしと消えたテスト(skips.rs)。`--all` ではライセンス(cargo-deny)も。`--all`・`--dependents` は cargo-nextest が無ければ失敗にする。
+//!   無い飛ばしと消えたテスト(skips.rs)。`--all` ではライセンス(cargo-deny)も。`--all`・`--dependents`・
+//!   `--dependents-lower` は cargo-nextest が無ければ失敗にする。
 //! - 点検には資料の形(docs.rs)も入る: docs/機能/ の断片、凍結した経緯、地図.md の crate の一覧。
 //!   `docs` は断片から一覧の表を target/docs/ に作り、地図.md の crate の一覧を書き直す。
 //! - Issue のひな型が付けるラベルが `.github/labels.yml` にあるか(labels.rs)。`labels` はその定義を
@@ -32,7 +36,7 @@
 //! - 毎回読む骨格の資料(agents.rs): AGENTS.md と .claude/rules/ に書いた名前・パス・節の実在、
 //!   大きさの上限、決まりに付けた点検の名前、層の表(`docs` が layers.rs から作る)。
 //! - コアの公開の項目(api.rs)が分かれ目から変わっていれば、契約テスト(kmb-contract)を使う crate を
-//!   全部足して流す(`CORE_API_VERSION` は公開まで上げない、2026-10-21)。`api` は今の一覧を出す。
+//!   足して流す(`--dependents-lower` は下位だけ。`CORE_API_VERSION` は公開まで上げない)。`api` は今の一覧を出す。
 //! - `release` はアプリを release で作り、exe にこの PC のパス(ユーザー名を含むホームなど)が残って
 //!   いないかを数える。`paths` は数えるだけ(release.rs)。組み立てた後、exe の横に他者の部品の
 //!   許諾文の一覧(THIRD-PARTY-LICENSES.txt)を置く。`licenses` はその一覧だけを作る(licenses.rs)。
@@ -50,6 +54,9 @@
 //!   問い合わせる sweep を `--all` の時だけにし、ほかは作り直して要らなくなった物だけを消す
 //!   (space.rs。依存の宣言が変わって下流の指紋が全部変わった時に、組み立てと sweep で尽きていた)。
 //! - クラウド(Linux)では、cargo-nextest と cargo-hakari が無ければ `scripts/install-*.sh` で入れる。
+//!
+//! - `warm` は組み立てと入口の層より下の全部を、テストを流さずに組んでおく(並列の作業場の共通部分。
+//!   作業場の準備の台本と、共有フォルダに置く依存だけの写しで使う。warm.rs)。
 //!
 //! - 段を流してログから件数を読むのは jobs.rs、空きを保つ片付けは space.rs と sweep.rs。
 //!
@@ -73,6 +80,8 @@ mod skips;
 mod source;
 mod space;
 mod sweep;
+mod warm;
+mod wide;
 mod words;
 
 use jobs::{Done, run_counting_compiles, spawn, step, wait_all};
@@ -169,8 +178,14 @@ fn classify(files: &[String], packages: &[Package]) -> Changes {
 const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     // 押し出し・ブーリアン・フィレット・面取り・穴など、形そのものの試験
     ("kmb-solid", None),
+    ("kmb-drawing", None),
+    ("kmb-view-lines", None),
+    ("kmb-samples", Some("drawing_tests::")),
+    ("kmb-cad-surface", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
+    // 干渉の円筒の一致は、円の辺・面積・面の網を使う
+    ("kmb-asm", Some("inspect::cylinder_tests::")),
 ];
 
 /// truck の回で流す試験のうち、選んだ crate にあるもの。
@@ -197,13 +212,47 @@ fn truck_filter(ts: &[(&str, Option<&str>)]) -> String {
         .join(" | ")
 }
 
+/// 組み立てと入口の層。どの機能を変えても組み立て(kmb-bundle)を通ってここまで届き、画面の GPU・
+/// 両方のカーネル・WASM を全部組むので、`--dependents-lower` はこの層を自動で選ばない。
+/// crate の名前を明示した時は、その crate 自身を検査する。
+const UPPER_LAYERS: [&str; 4] = ["assembly", "session", "ui", "app"];
+
 /// `roots` と、それに(間接に)依存する crate。
 fn with_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
+    dependents_where(roots, packages, |_| true)
+}
+
+fn is_lower_package(p: &Package) -> bool {
+    !p.layer
+        .as_deref()
+        .is_some_and(|l| UPPER_LAYERS.contains(&l))
+}
+
+/// `roots` と、それに(間接に)依存する crate のうち `UPPER_LAYERS` の手前まで(その層の crate を
+/// 通って先へも進まない)。
+fn with_lower_dependents(roots: &BTreeSet<String>, packages: &[Package]) -> BTreeSet<String> {
+    let lower_roots = packages
+        .iter()
+        .filter(|p| roots.contains(&p.name) && is_lower_package(p))
+        .map(|p| p.name.clone())
+        .collect();
+    let mut out = dependents_where(&lower_roots, packages, is_lower_package);
+    // 直接選んだ上位の crate は残すが、依存を辿る起点にはしない。
+    out.extend(roots.iter().cloned());
+    out
+}
+
+fn dependents_where(
+    roots: &BTreeSet<String>,
+    packages: &[Package],
+    keep: impl Fn(&Package) -> bool,
+) -> BTreeSet<String> {
     let mut out = roots.clone();
     loop {
         let more: Vec<String> = packages
             .iter()
-            .filter(|p| !out.contains(&p.name) && p.deps.iter().any(|d| out.contains(d)))
+            .filter(|p| !out.contains(&p.name) && keep(p))
+            .filter(|p| p.deps.iter().any(|d| out.contains(d)))
             .map(|p| p.name.clone())
             .collect();
         if more.is_empty() {
@@ -347,6 +396,8 @@ struct Options {
     crates: Vec<String>,
     base: String,
     dependents: bool,
+    /// `--dependents-lower`
+    lower: bool,
     all: bool,
     truck: bool,
     clippy: bool,
@@ -368,12 +419,16 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                     .clone()
             }
             "--dependents" => o.dependents = true,
+            "--dependents-lower" => o.lower = true,
             "--all" => o.all = true,
             "--truck" => o.truck = true,
             "--no-clippy" => o.clippy = false,
             s if s.starts_with('-') => return Err(format!("知らない指定です: {s}")),
             s => o.crates.push(s.into()),
         }
+    }
+    if o.dependents && o.lower {
+        return Err("--dependents と --dependents-lower はどちらか 1 つにしてください".into());
     }
     Ok(o)
 }
@@ -387,7 +442,7 @@ fn select(
     if o.all {
         return Ok(None);
     }
-    let roots: BTreeSet<String> = if o.crates.is_empty() {
+    let mut roots: BTreeSet<String> = if o.crates.is_empty() {
         let c = classify(changed, packages);
         if !c.unrelated.is_empty() {
             println!(
@@ -396,6 +451,18 @@ fn select(
             );
         }
         if c.everything {
+            if o.lower {
+                println!(
+                    "ワークスペース全体に効くファイルを変えたので、下位の crate を全部検査します"
+                );
+                return Ok(Some(
+                    packages
+                        .iter()
+                        .filter(|p| is_lower_package(p))
+                        .map(|p| p.name.clone())
+                        .collect(),
+                ));
+            }
             println!("ワークスペース全体に効くファイルを変えたので、全体を検査します");
             return Ok(None);
         }
@@ -408,8 +475,18 @@ fn select(
         }
         o.crates.iter().cloned().collect()
     };
+    if o.lower && o.crates.is_empty() {
+        // 自動選択は、直接変えたファイルの持ち主でも上位の層を選ばない。
+        roots.retain(|name| {
+            packages
+                .iter()
+                .any(|p| p.name == *name && is_lower_package(p))
+        });
+    }
     Ok(Some(if o.dependents {
         with_dependents(&roots, packages)
+    } else if o.lower {
+        with_lower_dependents(&roots, packages)
     } else {
         roots
     }))
@@ -507,16 +584,15 @@ fn verify_lock(ws: &Workspace) -> Result<fs::File, String> {
     }
 }
 
-/// nextest で検査する。組み立ては 1 回だけにし、できたテストの実行ファイルを SMLib の回と
-/// truck の回で使い回す(cargo を呼ばないので、同時に動かす clippy と錠を取り合わない)。
-fn verify_nextest(
-    o: &Options,
+/// 選択した試験だけを組み立て、後の段へ渡す metadata を独立したフォルダへ置く。
+fn build_nextest(
     sel: &Option<BTreeSet<String>>,
     ws: &Workspace,
-) -> Result<Vec<Done>, String> {
+    dir: &Path,
+    stage: &str,
+) -> Result<(Done, PathBuf, PathBuf), String> {
     let pk = package_args(sel);
-    let dir = ws.target_dir.join("verify");
-    fs::create_dir_all(&dir).map_err(|e| format!("{} を作れません: {e}", dir.display()))?;
+    fs::create_dir_all(dir).map_err(|e| format!("{} を作れません: {e}", dir.display()))?;
     let meta = dir.join("cargo-metadata.json");
     let bins = dir.join("binaries.json");
     fs::write(&meta, &ws.metadata).map_err(|e| e.to_string())?;
@@ -530,7 +606,7 @@ fn verify_nextest(
         "--message-format",
         "json",
     ]);
-    println!("\n== 組み立て: {list:?}");
+    println!("\n== {stage}: {list:?}");
     let out = fs::File::create(&bins).map_err(|e| e.to_string())?;
     let since = SystemTime::now();
     let target = ws.target_dir.clone();
@@ -550,8 +626,22 @@ fn verify_nextest(
         ok = ok2;
         compiled += again;
     }
-    let mut built = Done::new("組み立て", ok, t.elapsed().as_secs_f64());
+    let mut built = Done::new(stage, ok, t.elapsed().as_secs_f64());
     built.detail = Some(format!("コンパイル {compiled} 個"));
+    Ok((built, meta, bins))
+}
+
+/// nextest の通常の試験。できた実行ファイルを SMLib と truck の回で使う。
+/// テスト実行中は cargo を呼ばず、同時に動く clippy と target の錠を取り合わない。
+fn verify_nextest(
+    o: &Options,
+    sel: &Option<BTreeSet<String>>,
+    ws: &Workspace,
+) -> Result<Vec<Done>, String> {
+    let pk = package_args(sel);
+    let dir = ws.target_dir.join("verify");
+    let (built, meta, bins) = build_nextest(sel, ws, &dir, "組み立て")?;
+    let ok = built.ok;
     let mut results = vec![built];
     if !ok {
         return Ok(results);
@@ -706,8 +796,20 @@ fn core_api(ws: &Workspace, fork: &str) -> Option<(api::Api, api::Api)> {
     Some((old, now))
 }
 
+/// 契約テストを使う crate を足す。既に選ばれた上位の crate は消さない。
+fn extend_contract_users(s: &mut BTreeSet<String>, packages: &[Package], lower: bool) {
+    s.insert("kmb-contract".into());
+    s.extend(
+        packages
+            .iter()
+            .filter(|p| !lower || is_lower_package(p))
+            .filter(|p| p.edges.iter().any(|e| e.name == "kmb-contract"))
+            .map(|p| p.name.clone()),
+    );
+}
+
 /// コアの公開の項目が変わっていれば、契約テストを使う crate(と kmb-contract)を選びに足す。
-fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<String>>) {
+fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<String>>, lower: bool) {
     let Some(s) = sel.as_mut() else {
         return;
     };
@@ -719,9 +821,10 @@ fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<Stri
         return;
     }
     println!(
-        "コアの公開の項目が変わった(消えた {}・増えた {})ので、契約テストを使う crate を全部足します",
+        "コアの公開の項目が変わった(消えた {}・増えた {})ので、契約テストを使う{} crate を全部足します",
         lost.len(),
-        gained.len()
+        gained.len(),
+        if lower { "下位の" } else { "" }
     );
     for (sign, v) in [("-", &lost), ("+", &gained)] {
         for x in v.iter().take(10) {
@@ -731,12 +834,7 @@ fn add_contract_users(ws: &Workspace, fork: &str, sel: &mut Option<BTreeSet<Stri
             println!("  {sign} …ほか {} 件", v.len() - 10);
         }
     }
-    s.insert("kmb-contract".into());
-    for p in &ws.packages {
-        if p.edges.iter().any(|e| e.name == "kmb-contract") {
-            s.insert(p.name.clone());
-        }
-    }
+    extend_contract_users(s, &ws.packages, lower);
 }
 
 fn checks(ws: &Workspace, fork: &str, changed: &[String]) -> Done {
@@ -1025,6 +1123,32 @@ fn install_on_linux(script: &str) {
     }
 }
 
+/// クラウドの作業場(Linux)で、組み立ての前に共通部分だけの写しを target に足す
+/// (`scripts/cloud-target-cache.sh restore-deps`。並列の作業場がそれぞれ空の target から外の crate と
+/// SMLib を組み直していた。2026-10-29)。共有フォルダの無い所と、target を別の場所に置いた時は
+/// 何もしない。同じ組は 2 度戻さない。`JC_DEPS_CACHE=off` で使わない。
+fn restore_shared_deps(ws: &Workspace) {
+    let script = "scripts/cloud-target-cache.sh";
+    if !cfg!(target_os = "linux")
+        || std::env::var("JC_DEPS_CACHE").is_ok_and(|v| v.trim() == "off")
+        || ws.target_dir != ws.root.join("target")
+        || !Path::new(script).is_file()
+    {
+        return;
+    }
+    println!(
+        "
+== 共通部分だけの写しを確かめます({script} restore-deps)"
+    );
+    if !Command::new("sh")
+        .args([script, "restore-deps"])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("戻せませんでした(一から組み立てます)");
+    }
+}
+
 /// nextest を使わないと明示したか(`JC_VERIFY_NEXTEST=off`)。
 fn nextest_off() -> bool {
     std::env::var("JC_VERIFY_NEXTEST").is_ok_and(|v| v.trim() == "off")
@@ -1034,7 +1158,7 @@ fn run() -> Result<ExitCode, String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some((cmd, rest)) = args.split_first() else {
         return Err(
-            "使い方: cargo xtask affected|checks|verify|sweep|docs|labels|io|api|dxc|release|paths [...](docs/verify.md)"
+            "使い方: cargo xtask affected|checks|verify|sweep|warm|docs|labels|io|api|dxc|release|paths [...](docs/verify.md)"
                 .into(),
         );
     };
@@ -1053,6 +1177,11 @@ fn run() -> Result<ExitCode, String> {
                 ExitCode::FAILURE
             },
         );
+    }
+    if cmd == "warm" {
+        let ws = workspace()?;
+        restore_shared_deps(&ws);
+        return warm::run(&ws);
     }
     if cmd == "release" {
         let ws = workspace()?;
@@ -1148,7 +1277,7 @@ fn run() -> Result<ExitCode, String> {
     let changed = changed_files(&fork)?;
     let mut sel = select(&o, &ws.packages, &changed)?;
     if o.crates.is_empty() {
-        add_contract_users(&ws, &fork, &mut sel);
+        add_contract_users(&ws, &fork, &mut sel, o.lower);
     }
     match cmd.as_str() {
         "checks" => {
@@ -1182,7 +1311,11 @@ fn run() -> Result<ExitCode, String> {
             let _ = fs::remove_file(skip_log(&ws));
             let started = SystemTime::now();
             let testing = !sel.as_ref().is_some_and(BTreeSet::is_empty);
-            if testing && !nextest_off() && !nextest_available() {
+            if testing {
+                restore_shared_deps(&ws);
+            }
+            let wide_plan = wide::plan(&o);
+            if (testing || wide_plan == wide::Plan::Run) && !nextest_off() && !nextest_available() {
                 install_on_linux("scripts/install-nextest.sh");
             }
             if !testing {
@@ -1193,10 +1326,10 @@ fn run() -> Result<ExitCode, String> {
             } else if nextest_available() {
                 free_before_build(&ws);
                 results.extend(verify_nextest(&o, &sel, &ws)?);
-            } else if (o.all || o.dependents) && !nextest_off() {
+            } else if (o.all || o.dependents || o.lower) && !nextest_off() {
                 // nextest の無い回は件数が残らないので、手渡しやプッシュの前の検査には使わない
                 println!(
-                    "\n== テスト: cargo-nextest が無いので失敗にします(--all・--dependents は nextest で流す。\
+                    "\n== テスト: cargo-nextest が無いので失敗にします(--all・--dependents・--dependents-lower は nextest で流す。\
                      入れ方は docs/verify.md の 1 節、クラウドは scripts/install-nextest.sh。\
                      nextest なしで流すなら JC_VERIFY_NEXTEST=off)"
                 );
@@ -1207,6 +1340,17 @@ fn run() -> Result<ExitCode, String> {
                 free_before_build(&ws);
                 results.extend(verify_cargo_test(&o, &sel, &ws));
             }
+            // 通常の試験と cargo の列が終わってから、別の選択・metadata で広い段を流す。
+            let wide_not_run = match wide_plan {
+                wide::Plan::Run => {
+                    results.extend(wide::verify(&ws)?);
+                    None
+                }
+                wide::Plan::NotRun(reason) => {
+                    println!("\n== 広い操作の試験: 未実行({reason})");
+                    Some(reason)
+                }
+            };
             remember_hack(&ws, &results);
             results.extend(runtime_skips(&ws));
             let lock_changed = changed
@@ -1237,7 +1381,7 @@ fn run() -> Result<ExitCode, String> {
             }
             let total = t.elapsed().as_secs_f64();
             println!("合わせて {total:.1} 秒");
-            history::record(&ws.target_dir, rest, &results, total);
+            history::record(&ws.target_dir, rest, &results, total, wide_not_run);
             sweep_if_low(&ws, &results, started, o.all);
             Ok(if results.iter().all(|d| d.ok) {
                 ExitCode::SUCCESS
@@ -1333,18 +1477,224 @@ mod tests {
     }
 
     #[test]
+    fn lower_dependents_stop_before_the_assembly_and_entry_layers() {
+        let layered = |name: &str, layer: &str, deps: &[&str]| Package {
+            layer: Some(layer.into()),
+            ..pkg(name, &format!("crates/{name}"), deps)
+        };
+        let w = vec![
+            layered("kmb-core", "core", &[]),
+            layered("kmb-cam", "cam", &["kmb-core"]),
+            layered("kmb-cam-commands", "cam", &["kmb-cam"]),
+            layered("kmb-bundle", "assembly", &["kmb-cam-commands"]),
+            // 組み立てを通ってしか届かない crate は足さない
+            layered("kmb-io", "io", &["kmb-bundle"]),
+            layered("kmb-session", "session", &["kmb-core"]),
+            layered("kmb-ui", "ui", &["kmb-cam"]),
+            layered("kmb-app", "app", &["kmb-ui", "kmb-bundle"]),
+        ];
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-cam"]), &w),
+            set(&["kmb-cam", "kmb-cam-commands"])
+        );
+        // 選んだ crate が上の層なら、それ自身は検査する
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui"])
+        );
+        assert_eq!(
+            with_dependents(&set(&["kmb-cam"]), &w),
+            set(&[
+                "kmb-cam",
+                "kmb-cam-commands",
+                "kmb-bundle",
+                "kmb-io",
+                "kmb-ui",
+                "kmb-app"
+            ])
+        );
+    }
+
+    fn layered_selection_workspace() -> Vec<Package> {
+        [
+            ("kmb-core", "core", false),
+            ("kmb-contract", "test", false),
+            ("kmb-cad", "cad", true),
+            ("kmb-bundle", "assembly", true),
+            ("kmb-session", "session", true),
+            ("kmb-ui", "ui", true),
+            ("kmb-app", "app", true),
+        ]
+        .into_iter()
+        .map(|(name, layer, contract)| Package {
+            layer: Some(layer.into()),
+            edges: if contract {
+                vec![Edge {
+                    name: "kmb-contract".into(),
+                    kind: Kind::Dev,
+                }]
+            } else {
+                vec![]
+            },
+            ..pkg(
+                name,
+                &format!("{}/{name}", if layer == "app" { "apps" } else { "crates" }),
+                &[],
+            )
+        })
+        .collect()
+    }
+
+    #[test]
+    fn lower_selection_also_limits_contract_users() {
+        let w = layered_selection_workspace();
+        let mut selected = set(&["kmb-core"]);
+        extend_contract_users(&mut selected, &w, true);
+        assert_eq!(selected, set(&["kmb-core", "kmb-contract", "kmb-cad"]));
+
+        // 直接選ばれた上位の crate 自身は残し、ほかの上位は足さない。
+        let mut selected = set(&["kmb-ui"]);
+        extend_contract_users(&mut selected, &w, true);
+        assert_eq!(selected, set(&["kmb-ui", "kmb-contract", "kmb-cad"]));
+
+        let mut selected = set(&["kmb-core"]);
+        extend_contract_users(&mut selected, &w, false);
+        assert_eq!(selected, w.iter().map(|p| p.name.clone()).collect());
+    }
+
+    #[test]
+    fn lower_selection_excludes_automatic_upper_roots() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        for (upper_file, owner) in [
+            ("crates/kmb-ui/src/lib.rs", "kmb-ui"),
+            ("apps/kmb-app/tests/ui/a.jcs", "kmb-app"),
+        ] {
+            assert_eq!(classify(&[upper_file.into()], &w).packages, set(&[owner]));
+            assert_eq!(
+                select(&options, &w, &[upper_file.into()]).unwrap(),
+                Some(BTreeSet::new())
+            );
+            assert_eq!(
+                select(
+                    &options,
+                    &w,
+                    &[upper_file.into(), "crates/kmb-cad/src/lib.rs".into()]
+                )
+                .unwrap(),
+                Some(set(&["kmb-cad"]))
+            );
+        }
+    }
+
+    #[test]
+    fn lower_selection_excludes_automatic_app_root() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        let file = "apps/kmb-app/tests/ui/a.jcs";
+        assert_eq!(classify(&[file.into()], &w).packages, set(&["kmb-app"]));
+        assert_eq!(
+            select(&options, &w, &[file.into()]).unwrap(),
+            Some(BTreeSet::new())
+        );
+    }
+
+    #[test]
+    fn lower_selection_limits_global_changes() {
+        let w = layered_selection_workspace();
+        let options = Options {
+            lower: true,
+            ..Default::default()
+        };
+        for global in ["Cargo.toml", "Cargo.lock", ".cargo/config.toml"] {
+            assert_eq!(
+                select(&options, &w, &[global.into()]).unwrap(),
+                Some(set(&["kmb-core", "kmb-contract", "kmb-cad"]))
+            );
+            assert_eq!(
+                select(
+                    &options,
+                    &w,
+                    &[global.into(), "crates/kmb-ui/src/lib.rs".into()]
+                )
+                .unwrap(),
+                Some(set(&["kmb-core", "kmb-contract", "kmb-cad"]))
+            );
+            for options in [
+                Options::default(),
+                Options {
+                    dependents: true,
+                    ..Default::default()
+                },
+                Options {
+                    all: true,
+                    lower: true,
+                    ..Default::default()
+                },
+            ] {
+                assert_eq!(select(&options, &w, &[global.into()]).unwrap(), None);
+            }
+        }
+        let options = Options {
+            crates: vec!["kmb-ui".into()],
+            lower: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            select(&options, &w, &["Cargo.lock".into()]).unwrap(),
+            Some(set(&["kmb-ui"]))
+        );
+    }
+
+    #[test]
+    fn lower_dependents_do_not_walk_through_an_upper_root() {
+        let w = vec![
+            Package {
+                layer: Some("ui".into()),
+                ..pkg("kmb-ui", "crates/kmb-ui", &[])
+            },
+            Package {
+                layer: Some("test".into()),
+                ..pkg("kmb-tests", "crates/kmb-tests", &["kmb-ui"])
+            },
+        ];
+        assert_eq!(
+            with_lower_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui"])
+        );
+        assert_eq!(
+            with_dependents(&set(&["kmb-ui"]), &w),
+            set(&["kmb-ui", "kmb-tests"])
+        );
+    }
+
+    #[test]
     fn truck_runs_only_the_shape_tests() {
         let mut w = ws();
         w.push(pkg("kmb-solid", "crates/kmb-solid", &[]));
         w.push(pkg("kmb-samples", "crates/kmb-samples", &[]));
+        w.push(pkg("kmb-drawing", "crates/kmb-drawing", &[]));
+        w.push(pkg("kmb-view-lines", "crates/kmb-view-lines", &[]));
         let all = truck_targets(&None, &w);
         assert_eq!(
             all,
-            [("kmb-solid", None), ("kmb-samples", Some("hole_tests::"))]
+            [
+                ("kmb-solid", None),
+                ("kmb-drawing", None),
+                ("kmb-view-lines", None),
+                ("kmb-samples", Some("drawing_tests::")),
+                ("kmb-samples", Some("hole_tests::"))
+            ]
         );
         assert_eq!(
             truck_filter(&all),
-            "package(kmb-solid) | (package(kmb-samples) & test(/^hole_tests::/))"
+            "package(kmb-solid) | package(kmb-drawing) | package(kmb-view-lines) | (package(kmb-samples) & test(/^drawing_tests::/)) | (package(kmb-samples) & test(/^hole_tests::/))"
         );
         // 選んだ crate に形の計算の試験がなければ流さない(画面や加工だけの変更)
         assert_eq!(
@@ -1416,6 +1766,8 @@ mod tests {
         assert_eq!(o.base, "main");
         assert_eq!(a(&[]).unwrap().base, "origin/main");
         assert!(a(&["--fast"]).is_err());
+        assert!(a(&["--dependents-lower"]).unwrap().lower);
+        assert!(a(&["--dependents", "--dependents-lower"]).is_err());
         assert_eq!(
             package_args(&Some(set(&["kmb-ui", "kmb-core"]))),
             ["-p", "kmb-core", "-p", "kmb-ui"]

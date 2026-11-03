@@ -136,6 +136,11 @@ impl Bvh {
     }
 }
 
+/// 視線 `o + t d` が箱 `min`〜`max` を `t_min` より先で通るか。
+pub fn ray_hits_box(min: [f32; 3], max: [f32; 3], o: [f32; 3], d: [f32; 3], t_min: f32) -> bool {
+    slab(min, max, o, d, d.map(|v| 1.0 / v), t_min)
+}
+
 fn bounds(m: &Mesh, tris: &[u32]) -> ([f32; 3], [f32; 3]) {
     let (mut min, mut max) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
     for &t in tris {

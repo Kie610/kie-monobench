@@ -9,6 +9,14 @@
 #   scripts/cloud-target-cache.sh restore   検査の前に(target/debug が無く、戻しても空きが 10 GB 残る時だけ戻す)
 #   scripts/cloud-target-cache.sh save      検査が通った後に(1 つだけ持つ。共有フォルダの空きを確かめ、前のものを消してから書く)
 #
+# 全体の写しのほかに、並列の作業場が共通に使う部分だけの写し(依存だけの組)も 1 つ持つ。組み立てと入口の
+# 層より下の外の crate・SMLib・ビルドスクリプトの結果で、固めて約 0.6 GB、戻して約 2.4 GB(2026-10-29)。
+# 押し出しの `--dependents-lower` が 375 秒から 148 秒になった(docs/verify.md の 1 節)。
+#
+#   scripts/cloud-target-cache.sh restore-deps   検査の前に。cargo xtask verify がクラウドで自分で呼ぶ。target/debug が
+#                                                あっても、無い物だけを足す(同じ名前の物は中身も同じ)。同じ組は 2 度戻さない
+#   scripts/cloud-target-cache.sh save-deps      `cargo xtask warm` の後に。incremental は置かない
+#
 # 共有フォルダは別のコンテナも同時に使う。読み書きは次の印で譲り合う。
 #   readers/<組>.<…>  restore が読んでいる間だけ置く。save はこれが消えるまで前の組を消さない
 #   saving/           save が書いている間だけ置く。ほかの save は置かずに終える。持ち主(owner)と、生きている
@@ -26,9 +34,15 @@
 set -eu
 root=${JC_CACHE_ROOT:-/mnt/project-files}
 dir=$root/.cache/target
-info=$dir/debug-linux.txt
+# 組の種類: debug は全体の写し、deps は依存だけの写し。索引・欠片の置き場・書く錠を種類ごとに分ける
+case "${1:-}" in
+*-deps) kind=deps ;;
+*) kind=debug ;;
+esac
+info=$dir/$kind-linux.txt
 readers=$dir/readers
 lock=$dir/saving
+[ "$kind" = debug ] || lock=$dir/saving-$kind
 part_mb=256
 margin_gb=10
 # restore は 3〜5 分(2026-10-23)。これより古い印は終わったコンテナが残した物
@@ -41,6 +55,7 @@ old_lock_stale_min=90
 wait_s=${JC_CACHE_WAIT_S:-900}
 cd "$(dirname "$0")/.."
 hack_sum() { sha256sum crates/kmb-workspace-hack/Cargo.toml | cut -c1-16; }
+lock_sum() { sha256sum Cargo.lock | cut -c1-16; }
 # 置かず戻さない物の型(tar の --exclude)。自前の crate のテストと実行ファイル(deps/<名前>-<16 桁>)、
 # lib(deps/lib<名前>-<16 桁>.rlib・.rmeta)、target/debug の直下の実行ファイル(deps の物と同じ実体)。
 # 置いた後に足した crate の物は残るが、次の save で除かれる。型を作れなければ何も除かない
@@ -59,6 +74,8 @@ for p in json.load(sys.stdin)["packages"]:
         if "bin" in t["kind"]:
             print("debug/" + t["name"])
 '
+    # 依存だけの組は incremental(自前の crate の途中結果)も置かない
+    [ "$kind" = debug ] || echo debug/incremental
 }
 # 古い印を消す
 drop_stale() { [ -d "$1" ] && find "$1" -mindepth 1 -maxdepth 1 -mmin +"$stale_min" -exec rm -rf {} + 2>/dev/null || true; }
@@ -115,11 +132,12 @@ fi
 rustc_v=$(rustc -V)
 
 case "${1:-}" in
-restore)
-    if [ -d target/debug ]; then
+restore | restore-deps)
+    if [ "$kind" = debug ] && [ -d target/debug ]; then
         echo "target/debug があるので戻しません"
         exit 0
     fi
+    restored=target/debug/.deps-restored
     rm -rf "$staging"
     # 組の名前を読み、読む印を置いてから、名前が変わっていないかをもう一度見る。save は debug-linux.txt を
     # 外してから印を見るので、もう一度見た時に名前が残っていれば、その組は読み終わるまで消されない
@@ -130,11 +148,15 @@ restore)
     fi
     parts=$(sed -n 's/^parts: //p' "$info" 2>/dev/null || true)
     if [ -z "$parts" ] || [ ! -d "$dir/$parts" ]; then
-        if ls -d "$dir"/debug-linux-* >/dev/null 2>&1; then
+        if ls -d "$dir"/$kind-linux-* >/dev/null 2>&1; then
             echo "置いた組の索引(debug-linux.txt)が無いので戻しません(前の save が途中で止まった残り。次の save が置き直します)"
         else
             echo "置いた target がまだありません($dir)"
         fi
+        exit 0
+    fi
+    if [ "$kind" = deps ] && [ "$(cat "$restored" 2>/dev/null)" = "$parts" ]; then
+        echo "依存だけの組($parts)はこの target に戻してあります"
         exit 0
     fi
     mkdir -p "$readers"
@@ -165,7 +187,13 @@ restore)
     # rmeta が incremental の物へのハードリンクになっていて、リンク先が無く取り出し全体が失敗する
     drop_incr=""
     saved_hack=$(printf '%s\n' "$snap" | sed -n 's/^hack: //p')
-    if [ -n "$saved_hack" ] && [ "$saved_hack" != "$(hack_sum)" ]; then
+    if [ "$kind" = deps ]; then
+        saved_lock=$(printf '%s\n' "$snap" | sed -n 's/^lock: //p')
+        if [ "$saved_hack" != "$(hack_sum)" ] || [ "$saved_lock" != "$(lock_sum)" ]; then
+            echo "依存(Cargo.lock か揃えた依存)が置いた時と違うので、合わない物は作り直します" \
+                "(cargo xtask warm の後に $0 save-deps で置き直せます)"
+        fi
+    elif [ -n "$saved_hack" ] && [ "$saved_hack" != "$(hack_sum)" ]; then
         echo "揃えた依存が置いた時と違うので、incremental は取り出した後で消します"
         drop_incr=1
     fi
@@ -183,22 +211,31 @@ restore)
     fi
     rm -f "$ex" "$failed"
     [ -z "$drop_incr" ] || rm -rf "$staging/debug/incremental"
-    mv "$staging/debug" target/debug
+    if [ -d target/debug ]; then
+        # 依存だけの組を今の target に足す。同じ名前の物は同じ指紋なので、今ある方を残す
+        cp -a -l --update=none "$staging/debug/." target/debug/
+    else
+        mv "$staging/debug" target/debug
+    fi
     rm -rf "$staging"
+    [ "$kind" = debug ] || echo "$parts" >"$restored"
     echo "target/debug を戻しました($(( $(date +%s) - start )) 秒、$(du -sh target/debug | cut -f1)、残りの空き $(df -Pk . | awk 'NR==2{printf "%.1f", $4/1e6}') GB)"
     printf '%s\n' "$snap" | sed 's/^/  /'
     ;;
-save)
+save | save-deps)
     [ -d target/debug ] || { echo "target/debug がありません"; exit 1; }
     start=$(date +%s)
     mkdir -p "$dir"
-    # 今の版が使わない古い成果物と incremental の前の回を除いてから固める(docs/verify.md の 8 節)
-    cargo xtask sweep --yes >/dev/null 2>&1 || echo "sweep に失敗(そのまま固めます)"
+    # 今の版が使わない古い成果物と incremental の前の回を除いてから固める(docs/verify.md の 8 節)。
+    # sweep は足りない物をワークスペース全体で作るので、下の層だけを組んだ依存だけの組では流さない
+    if [ "$kind" = debug ]; then
+        cargo xtask sweep --yes >/dev/null 2>&1 || echo "sweep に失敗(そのまま固めます)"
+    fi
     # 共有フォルダはプロジェクトで 10 GiB まで(2026-10-23 は 9 GiB 使っていた)。前の組(4.6 GB)を残したまま
     # 新しい組を書くと上限に当たるので、足りるかを先に確かめ、読み終わるのを待って前の組を消してから書く。
     # 消してから書き終わるまでの間に restore したコンテナは戻さず、一から組み立てるだけ
     old_kb=0
-    for old in "$dir"/debug-linux-* "$dir"/debug-linux.tar.zst; do
+    for old in "$dir"/$kind-linux-* "$dir"/$kind-linux.tar.zst; do
         [ -e "$old" ] && old_kb=$(( old_kb + $(du -sk "$old" | cut -f1) ))
     done
     # 新しい組の大きさの見込み: 前の組の 1.1 倍(前の組が無ければ、固める前の 3 割)
@@ -231,7 +268,7 @@ save)
     waited=0
     while :; do
         drop_stale "$readers"
-        busy=$(ls "$readers" 2>/dev/null | wc -l)
+        busy=$(ls "$readers" 2>/dev/null | grep -c "^$kind-linux-" || true)
         [ "$busy" -eq 0 ] && break
         if [ "$waited" -ge "$wait_s" ]; then
             [ -e "$lock/info" ] && mv "$lock/info" "$info"
@@ -244,10 +281,10 @@ save)
     done
     # ここから前の組を消すので、預けた索引も捨てる
     rm -f "$lock/info"
-    for old in "$dir"/debug-linux-* "$dir"/debug-linux.tar.zst; do
+    for old in "$dir"/$kind-linux-* "$dir"/$kind-linux.tar.zst; do
         if [ -e "$old" ]; then rm -rf "$old"; fi
     done
-    parts=debug-linux-$(date -u +%Y%m%d%H%M%S)
+    parts=$kind-linux-$(date -u +%Y%m%d%H%M%S)
     mkdir -p "$dir/$parts"
     ex=$(mktemp)
     ws_excludes >"$ex" || true
@@ -269,12 +306,13 @@ save)
         echo "size: $(du -sh "$dir/$parts" | cut -f1)(固める前 $(du -sh target/debug | cut -f1)、${part_mb} MB ずつ)"
         echo "bytes_kb: $kept_kb"
         echo "hack: $(hack_sum)"
+        echo "lock: $(lock_sum)"
     } >"$info"
     echo "target/debug を置きました($(( $(date +%s) - start )) 秒)"
     sed 's/^/  /' "$info"
     ;;
 *)
-    echo "使い方: $0 restore|save" >&2
+    echo "使い方: $0 restore|save|restore-deps|save-deps" >&2
     exit 2
     ;;
 esac

@@ -5,7 +5,7 @@ members = ["crates/*", "apps/*", "xtask"]
 exclude = ["third_party/truck-shapeops"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.89"
@@ -35,6 +35,8 @@ kmb-ui-view3d = { path = "crates/kmb-ui-view3d" }
 kmb-measure = { path = "crates/kmb-measure" }
 kmb-fea = { path = "crates/kmb-fea" }
 kmb-flow = { path = "crates/kmb-flow" }
+kmb-acoustics = { path = "crates/kmb-acoustics" }
+kmb-hrtf = { path = "crates/kmb-hrtf" }
 kmb-study = { path = "crates/kmb-study" }
 kmb-render = { path = "crates/kmb-render" }
 kmb-kernel-truck = { path = "crates/kmb-kernel-truck" }
@@ -44,6 +46,7 @@ kmb-solid = { path = "crates/kmb-solid" }
 kmb-cad = { path = "crates/kmb-cad" }
 kmb-interchange = { path = "crates/kmb-interchange" }
 kmb-cad-extrude = { path = "crates/kmb-cad-extrude" }
+kmb-cad-surface = { path = "crates/kmb-cad-surface" }
 kmb-cad-revolve = { path = "crates/kmb-cad-revolve" }
 kmb-cad-sweep = { path = "crates/kmb-cad-sweep" }
 kmb-cad-boolean = { path = "crates/kmb-cad-boolean" }
@@ -58,6 +61,8 @@ kmb-sketch-canvas = { path = "crates/kmb-sketch-canvas" }
 kmb-scene = { path = "crates/kmb-scene" }
 kmb-config = { path = "crates/kmb-config" }
 kmb-io-stl = { path = "crates/kmb-io-stl" }
+kmb-view-lines = { path = "crates/kmb-view-lines" }
+kmb-drawing = { path = "crates/kmb-drawing" }
 kmb-io-view = { path = "crates/kmb-io-view" }
 kmb-io-render = { path = "crates/kmb-io-render" }
 kmb-cam-tool = { path = "crates/kmb-cam-tool" }
@@ -89,9 +94,12 @@ kmb-cam-program = { path = "crates/kmb-cam-program" }
 kmb-bundle = { path = "crates/kmb-bundle", default-features = false }
 kmb-samples = { path = "crates/kmb-samples" }
 kmb-session = { path = "crates/kmb-session" }
+kmb-wave = { path = "crates/kmb-wave" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 miniz_oxide = "0.9.1"
+hdf5-pure = "0.47.0"
+sofar = { version = "0.4.0", default-features = false }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 trash = { version = "5.2.9", default-features = false, features = ["coinit_apartmentthreaded"] }
 crc32fast = "1.5.2"
@@ -106,8 +114,11 @@ skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 clap = { version = "4.6.7", features = ["derive"] }
 proptest = "1.12.0"
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
-egui = "0.36.2"
-egui-wgpu = { version = "0.36.2", default-features = false }
+# 画面の crate はどれを選んで組んでも、アプリ(eframe)と同じ機能の組み合わせにする。揃えた依存
+# (kmb-workspace-hack)に画面の依存を入れないので、ここで揃えないと `-p kmb-ui` などで組んだ時に
+# egui・wgpu・naga の機能がアプリと違い、同じ target に別の組ができる(docs/verify.md の 2 節)
+egui = { version = "0.36.2", features = ["bytemuck", "persistence"] }
+egui-wgpu = { version = "0.36.2", features = ["wayland", "winit", "x11"] }
 bytemuck = { version = "1.25.2", features = ["derive"] }
 eframe = { version = "0.36.2", default-features = false, features = ["default_fonts", "wgpu", "x11", "wayland", "persistence"] }
 rfd = "0.17.2"
@@ -198,8 +209,16 @@ opt-level = 2
 [profile.dev.package.kmb-flow]
 opt-level = 2
 
+# HRTF の格子の補間・再標本化・FFT は方向ごとに回すので、最適化なしだと数万方向の手順が重い
+[profile.dev.package.kmb-hrtf]
+opt-level = 2
+
 # 四面体の網づくりと代数的マルチグリッドは最適化なしだと 10 倍以上遅く、曲面の検算が長くなる
 [profile.dev.package.kmb-fea]
+opt-level = 2
+
+# 境界要素法の密な行列の組み立て(要素の対ごとの求積)は最適化なしだと 10 倍ほど遅く、球の検算が長くなる
+[profile.dev.package.kmb-wave]
 opt-level = 2
 
 # 結果の見せ方(断面・流線・帯の切り分け)はコマを送るたびに作るので、最適化なしだと再生が重い

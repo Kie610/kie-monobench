@@ -151,9 +151,11 @@ pub fn move_bodies(
 }
 
 /// 部品 `id` を中の部品ごと複製する変更(1 回の取り消し単位)と、作った部品の番号。中のボディは
-/// 元の形を追う写し(役割 `kmb_interchange::role::kind::COPY_BODY` の機能)にし、新しい部品は元の
-/// 部品のすぐ後ろ(同じ親)に置く。ボディがあれば、外形の X の幅と隙間だけ横へずらした位置(役割
-/// `kmb_interchange::role::kind::COMPONENT_POSITION` の機能)を足す。材料・外観・ボディの名前も写す。
+/// 出現(役割 `kmb_interchange::role::kind::OCCURRENCE` の機能。名前は「元の名前:2」)にし、外形の
+/// X の幅と隙間だけ横へずらして置く。出現の機能が無ければ、元の形を追う写し(役割
+/// `kmb_interchange::role::kind::COPY_BODY`)と、横へずらす位置(役割
+/// `kmb_interchange::role::kind::COMPONENT_POSITION`)にする。新しい部品は元の部品のすぐ後ろ
+/// (同じ親)に置く。材料・外観・ボディの名前も写す。
 pub fn duplicate_component(
     doc: &mut Document,
     registry: &Registry,
@@ -169,8 +171,13 @@ pub fn duplicate_component(
             .find(|d| d.role == Some(role))
             .map(|d| d.type_id)
     };
-    let copy_type = by_role(kmb_interchange::role::kind::COPY_BODY)
-        .ok_or("ボディを写す機能が組み込まれていないので、複製できません")?;
+    // 出現の機能があれば出現にする(元を直すと付いて来る。置き方に横へのずらしも入れる)
+    let occurrence_type = by_role(kmb_interchange::role::kind::OCCURRENCE);
+    let copy_type = match &occurrence_type {
+        Some(t) => t.clone(),
+        None => by_role(kmb_interchange::role::kind::COPY_BODY)
+            .ok_or("ボディを写す機能が組み込まれていないので、複製できません")?,
+    };
     let data = doc.data().clone();
     let orig = data
         .component(id)
@@ -199,48 +206,79 @@ pub fn duplicate_component(
     let (materials_before, looks_before) = (materials.clone(), looks.clone());
     let mut copies: HashMap<FeatureId, FeatureId> = HashMap::new();
     let mut new_ids = Vec::new();
-    for c in &tree {
-        let Some(comp) = data.component(*c) else {
+    let in_tree: Vec<FeatureId> = tree
+        .iter()
+        .filter_map(|c| data.component(*c))
+        .flat_map(|c| c.bodies.iter().copied())
+        .collect();
+    for (_, h, _) in in_tree.iter().filter_map(|r| bodies.get(r)) {
+        if let Ok((a, b)) = kernel.bounds(*h) {
+            for k in 0..3 {
+                lo[k] = lo[k].min(a[k]);
+                hi[k] = hi[k].max(b[k]);
+            }
+        }
+    }
+    let shift = ((hi[0] - lo[0] + DUPLICATE_GAP) * 10.0).round() / 10.0;
+    for root in &in_tree {
+        let Some((last, h, label)) = bodies.get(root) else {
             continue;
         };
-        for root in &comp.bodies {
-            let Some((last, h, label)) = bodies.get(root) else {
-                continue;
-            };
-            if let Ok((a, b)) = kernel.bounds(*h) {
-                for k in 0..3 {
-                    lo[k] = lo[k].min(a[k]);
-                    hi[k] = hi[k].max(b[k]);
-                }
-            }
-            let nid = doc.alloc_feature_id();
-            ops.insert_feature(
-                None,
-                FeatureEntry {
-                    id: nid,
-                    type_id: copy_type.clone(),
-                    name: format!("写し({label})"),
-                    data: serde_json::json!({"body": last.0, "copy": true}),
-                    suppressed: false,
-                    pin_bodies: false,
-                },
+        let nid = doc.alloc_feature_id();
+        let (name, d) = if occurrence_type.is_some() && shift.is_finite() {
+            // 元を動かした分(ジョイント・移動)も掛け、元の今の位置の横に置く
+            let moved = kernel
+                .instance_of(*h)
+                .map_or(kmb_core::kernel::IDENTITY, |(_, m)| m);
+            let m = kmb_core::kernel::mat_mul(
+                &kmb_core::kernel::translation([shift, 0.0, 0.0]),
+                &moved,
             );
-            if let Some(name) = data.body_names.get(root) {
-                ops.rename_body(nid, Some(name.clone()));
-            }
-            if let Some(m) = materials.get(*root).map(str::to_string) {
-                materials.set(nid, Some(&m));
-            }
-            if let Some(a) = looks.bodies.get(root).cloned() {
-                looks.set_body(nid, Some(&a));
-            }
-            copies.insert(*root, nid);
-            new_ids.push(nid);
+            let place: Vec<f64> = m.iter().flatten().copied().collect();
+            (
+                format!("出現({label})"),
+                serde_json::json!({"of": root.0, "place": place}),
+            )
+        } else {
+            (
+                format!("写し({label})"),
+                serde_json::json!({"body": last.0, "copy": true}),
+            )
+        };
+        ops.insert_feature(
+            None,
+            FeatureEntry {
+                id: nid,
+                type_id: copy_type.clone(),
+                name,
+                data: d,
+                suppressed: false,
+                pin_bodies: false,
+            },
+        );
+        if let Some(name) = data.body_names.get(root) {
+            ops.rename_body(nid, Some(name.clone()));
         }
+        if let Some(m) = materials.get(*root).map(str::to_string) {
+            materials.set(nid, Some(&m));
+        }
+        if let Some(a) = looks.bodies.get(root).cloned() {
+            looks.set_body(nid, Some(&a));
+        }
+        copies.insert(*root, nid);
+        new_ids.push(nid);
     }
     let comp_ids: HashMap<u64, u64> = tree.iter().map(|c| (*c, doc.alloc_group_id())).collect();
     let top = comp_ids[&id];
-    let name = kmb_core::unique_name(&orig.name, |t| data.components.iter().any(|c| c.name == t));
+    let taken = |t: &str| data.components.iter().any(|c| c.name == t);
+    let name = match occurrence_type {
+        // 出現の部品は「元の名前:2」(文書の中で同じ元の通し番号)
+        Some(_) => (2..)
+            .map(|n| format!("{}:{n}", orig.name))
+            .find(|t| !taken(t))
+            .unwrap_or_default(),
+        None => kmb_core::unique_name(&orig.name, taken),
+    };
     let made: Vec<Component> = tree
         .iter()
         .filter_map(|c| data.component(*c))
@@ -266,6 +304,7 @@ pub fn duplicate_component(
     let dx = hi[0] - lo[0];
     // 位置の機能も名前で呼ばず、記述子の役割で探す(組立のモジュールが無ければずらさない)
     if let Some(position_type) = by_role(kmb_interchange::role::kind::COMPONENT_POSITION)
+        && occurrence_type.is_none()
         && !new_ids.is_empty()
         && dx.is_finite()
     {

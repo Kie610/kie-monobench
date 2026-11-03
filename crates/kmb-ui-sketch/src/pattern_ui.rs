@@ -73,10 +73,10 @@ pub(crate) fn panel(
         return None;
     };
     let mut def = pattern.def.clone();
-    let mut expressions = editor
-        .pattern_input
-        .as_ref()
-        .filter(|(p, _)| *p == id)
+    let input = editor.pattern_input.as_ref().filter(|(p, _)| *p == id);
+    // 診断と見本の解除は、このパターンの欄で始めた入力だけに行う。
+    let owns_input = input.is_some();
+    let mut expressions = input
         .map(|(_, e)| e.clone())
         .or_else(|| pattern.expressions.clone())
         .unwrap_or_else(|| PatternExpressions::from_def(&def));
@@ -220,14 +220,18 @@ pub(crate) fn panel(
         return None;
     }
     if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-        editor.pattern_input = None;
-        editor.pattern_ghost = None;
-        editor.dim_error = None;
+        if owns_input {
+            editor.pattern_input = None;
+            editor.pattern_ghost = None;
+            editor.dim_error = None;
+        }
         return None;
     }
     let dirty = def != pattern.def || pattern.expressions.as_ref() != Some(&expressions);
     if !editing && !changed {
-        editor.pattern_ghost = None;
+        if owns_input {
+            editor.pattern_ghost = None;
+        }
         return None;
     }
     editor.pattern_input = Some((id, expressions.clone()));

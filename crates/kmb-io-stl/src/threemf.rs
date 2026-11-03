@@ -58,7 +58,7 @@ fn esc(s: &str) -> String {
 }
 
 /// 数を短く書く(小数 6 桁まで、末尾の 0 は落とす。`-0` は `0`)。
-fn num(v: f64) -> String {
+pub(crate) fn num(v: f64) -> String {
     let s = format!("{v:.6}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" || s.is_empty() {

@@ -35,4 +35,6 @@ pub use datum::{
 };
 pub use hole::{HOLE_OUTPUT, HoleInfo, HoleKind, HolePart, Tap};
 pub use segment::{SEGMENTS_OUTPUT, Segment, Segments, segment_axis, segments_now};
+
+pub mod drawing;
 pub use thread::{THREAD_MARKS_OUTPUT, ThreadMark, ThreadMarks};

@@ -656,12 +656,25 @@ pub fn pressed(ctx: &egui::Context, id: &str) -> bool {
         return false;
     }
     let map = current();
-    ctx.input(|i| {
+    let pressed = ctx.input(|i| {
         i.events.iter().any(|e| {
             matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. }
                 if map.matches(id, *key, *modifiers))
         })
-    })
+    });
+    if pressed && let Some(i) = row_index(id) {
+        crate::keycast::command_name(ctx, row_text(ctx, &KEYS[i]), true);
+    }
+    pressed
+}
+
+/// キーの表と操作の表示で使う、固定の働きの名前。
+pub(crate) fn row_text(ctx: &egui::Context, row: &Row) -> String {
+    if row.id.is_empty() {
+        return row.text.to_string();
+    }
+    crate::window_state::Words::of(ctx)
+        .t(&format!("settings-key-name-{}", row.id.replace('_', "-")))
 }
 
 /// 押したキーが `id` の行の割り当てか(イベントを自分で回す所が使う)。
@@ -768,6 +781,7 @@ impl Workspace {
 
     /// キーの行の働きをする。
     pub(crate) fn run_key(&mut self, ctx: &egui::Context, row: &Row) {
+        crate::keycast::command_name(ctx, row_text(ctx, row), true);
         log::info!("キー: {}({})", row.id, row.text);
         // 移動のキーは、部品を選んでいれば部品ごと動かす(10-22 a2)
         if matches!(row.does, Does::Kind(k) if k == kmb_interchange::role::kind::COPY_BODY)

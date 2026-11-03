@@ -15,6 +15,65 @@ use kmb_sketch::SketchPlane;
 use serde_json::json;
 use std::sync::Arc;
 
+#[test]
+fn expanded_thread_fasteners_include_large_metric_sizes() {
+    for name in ["M14", "M16", "M20", "M24", "M30"] {
+        let size = kmb_asm::fastener::metric(name).unwrap();
+        let hole = kmb_cad_hole::thread(name).unwrap();
+        assert_eq!(
+            (size.d, size.pitch, size.tap),
+            (hole.major, hole.pitch, hole.tap_drill)
+        );
+        assert_eq!(size.clearance, hole.clearance);
+        assert!(hole.counterbore.0 > size.socket[0]);
+        assert!(hole.counterbore.1 > size.socket[1]);
+    }
+}
+
+#[test]
+fn expanded_thread_large_bolts_nuts_and_washers_make_closed_bodies() {
+    for name in ["M24", "M30"] {
+        for kind in ["socket_head", "hex_bolt", "hex_nut", "washer"] {
+            let mut b = DocBuilder::new();
+            let fastener = b.feature(
+                FASTENER,
+                "規格部品",
+                json!({
+                    "kind":kind,"size":name,"length":"40 mm",
+                    "places":[{"center":[0,0,0],"normal":[0,0,1]}]
+                }),
+            );
+            b.feature(
+                kmb_asm::fastener::FASTENER_BODY,
+                "ボディ",
+                json!({"fastener":fastener.0,"index":0}),
+            );
+            let mut doc = b.finish("大きい規格部品");
+            let reg = registry();
+            let k = SmlibKernel::new();
+            let report = doc.recompute(&reg, &k);
+            assert_ok(&report);
+            let bodies = visible_bodies(doc.data(), &reg, &report);
+            assert_eq!(bodies.len(), 1);
+            let body = bodies[0].1;
+            assert_eq!(k.check(body).unwrap(), (true, 1, 0), "{name} {kind}");
+            assert!(k.mass(body).unwrap().volume > 0.0);
+            let table = kmb_asm::fastener::metric(name).unwrap();
+            let expected_height = match kind {
+                "socket_head" => 40.0 + table.socket[1],
+                "hex_bolt" => 40.0 + table.hex_head[1],
+                "hex_nut" => table.nut[1],
+                _ => table.washer[2],
+            };
+            let (min, max) = k.bounds(body).unwrap();
+            assert!(
+                (max[2] - min[2] - expected_height).abs() < 1e-3,
+                "{name} {kind}: {min:?} {max:?}"
+            );
+        }
+    }
+}
+
 struct Bench {
     doc: Document,
     reg: kmb_core::Registry,
@@ -447,7 +506,7 @@ fn names_follow_the_jis_thread_designation() {
     assert_eq!(size_name("M10×1.5"), "M10", "並目のピッチは省く");
     assert_eq!(size_name("m3"), "M3");
     assert!(thread("M10×1.75").is_none(), "M10 に 1.75 の細目は無い");
-    assert!(thread("M24").is_none());
+    assert!(thread("M27").is_none());
     assert!(thread("M1.6").is_some() && thread("M20×1.5").is_some());
     assert_eq!(fits(Kind::HexNut, "M10×1.25", 8.75, true), Some(true));
     assert_eq!(fits(Kind::HexNut, "M10", 8.75, true), Some(true));
@@ -558,4 +617,220 @@ fn small_screws_sit_on_or_in_the_hole() {
     assert_eq!(fits(Kind::FlatHead, "M3", 6.3, true), Some(true));
     assert_eq!(fits(Kind::PanHead, "M3", 6.3, true), Some(false));
     assert_eq!(fits(Kind::PanHead, "M8", 9.0, true), None);
+}
+
+fn four_hole_plate() -> (Document, FeatureId) {
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(Default::default());
+    let p = s.fixed_point(0.0, 0.0);
+    s.rectangle(p, "30 mm", "20 mm", [0.0, 0.0, 30.0, 20.0]);
+    let profile = b.feature(kmb_sketch::SKETCH, "板の輪郭", s.build());
+    let plate = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "板",
+        json!({"profile":profile.0,"distance":"8 mm","operation":"new","direction":"normal"}),
+    );
+    let mut s = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
+    let points = [[8.0, 5.0], [22.0, 5.0], [8.0, 15.0], [22.0, 15.0]].map(|[x, y]| s.point(x, y));
+    let sketch = b.feature(kmb_sketch::SKETCH, "穴の位置", s.build());
+    let hole = b.feature(
+        HOLE,
+        "4つの穴",
+        Hole {
+            points: points.map(|p| kmb_core::PointId(p.0)).to_vec(),
+            diameter: "3.4 mm".into(),
+            ..Hole::new(plate, sketch)
+        },
+    );
+    (b.finish("4つの穴の板"), hole)
+}
+
+#[test]
+fn batch_fasteners_share_one_shape_at_four_holes_and_undo_together() {
+    let (doc, hole) = four_hole_plate();
+    let mut b = Bench::new(doc);
+    let top = b.face(hole, [0.0, 0.0, 1.0]);
+    let args = json!({"face":top.face});
+    let handles = AsmCommands
+        .handles(kmb_asm::NEW_FASTENER, &b.cx(&args, Some(&top)))
+        .unwrap();
+    let mouths: Vec<_> = handles[1].choices.iter().map(|c| c.value.clone()).collect();
+    assert_eq!(mouths.len(), 4);
+    let centers: Vec<[f64; 3]> = mouths
+        .iter()
+        .map(|v| serde_json::from_value(v["center"].clone()).unwrap())
+        .collect();
+    let before = b.doc.undo_depth();
+    let start = std::time::Instant::now();
+    let added = b.run(
+        kmb_asm::NEW_FASTENER,
+        json!({"face":top.face,"holes":mouths}),
+        Some(top),
+    );
+    eprintln!("four hole insertion/recompute: {:?}", start.elapsed());
+    assert_eq!(added.len(), 5);
+    assert_eq!(b.doc.undo_depth(), before + 1);
+    let bodies = kmb_core::visible_bodies(b.doc.data(), &b.reg, &b.report);
+    assert_eq!(bodies.len(), 5);
+    let shape = |id| bodies.iter().find(|(i, _)| *i == id).unwrap().1;
+    for (id, center) in added[1..].iter().zip(&centers) {
+        let (lo, hi) = b.k.bounds(shape(*id)).unwrap();
+        for axis in 0..2 {
+            assert!(
+                ((lo[axis] + hi[axis]) / 2.0 - center[axis]).abs() < 1e-5,
+                "穴の中心に置く"
+            );
+        }
+    }
+    let first = shape(added[1]);
+    let prototype = b.k.instance_of(first).map_or(first, |(h, _)| h);
+    for id in &added[2..] {
+        let (base, _) = b.k.instance_of(shape(*id)).expect("同じ形を置いた出現");
+        assert_eq!(base, prototype);
+        let entry = b.doc.data().feature(*id).unwrap();
+        let feature = b
+            .reg
+            .instantiate(&entry.type_id, &entry.data)
+            .unwrap()
+            .unwrap();
+        assert!(
+            feature.instance_of().is_some(),
+            "コアにも出現として宣言する"
+        );
+    }
+    assert!(b.doc.undo());
+    b.recompute();
+    assert_eq!(
+        kmb_core::visible_bodies(b.doc.data(), &b.reg, &b.report).len(),
+        1
+    );
+    assert!(added.iter().all(|id| b.doc.data().feature(*id).is_none()));
+}
+
+#[test]
+fn batch_fasteners_use_the_common_argument_declaration_for_size_and_length() {
+    let (doc, hole) = four_hole_plate();
+    let b = Bench::new(doc);
+    let top = b.face(hole, [0.0, 0.0, 1.0]);
+    let args = json!({"face":top.face});
+    let handles = AsmCommands
+        .handles(kmb_asm::NEW_FASTENER, &b.cx(&args, Some(&top)))
+        .unwrap();
+    let mouths: Vec<_> = handles[1].choices.iter().map(|c| c.value.clone()).collect();
+    let extensions = kmb_core::Extensions(vec![Arc::new(AsmCommands)]);
+    let args = json!({"holes":mouths,"size":"M3","length":"1 in"});
+    let outcome = extensions
+        .run(kmb_asm::NEW_FASTENER, &b.cx(&args, Some(&top)))
+        .unwrap();
+    let Outcome::Change { edits, .. } = outcome else {
+        panic!("1回の変更")
+    };
+    let kmb_core::Edit::Insert { data, .. } = &edits[0] else {
+        panic!("規格部品を足す")
+    };
+    assert_eq!(data["size"], "M3");
+    assert_eq!(data["length"], "25.4 mm");
+    for key in ["undeclared", "length"] {
+        let mut invalid = args.clone();
+        invalid[key] = json!(if key == "length" { "20 deg" } else { "bad" });
+        assert_eq!(
+            extensions
+                .run(kmb_asm::NEW_FASTENER, &b.cx(&invalid, Some(&top)))
+                .unwrap_err()
+                .kind,
+            kmb_core::ProblemKind::Input
+        );
+    }
+}
+
+#[test]
+fn batch_fasteners_keep_the_legacy_separate_face_names_when_read_back() {
+    let mut b = DocBuilder::new();
+    let group=b.feature(FASTENER,"規格部品",json!({"size":"M3","length":"8 mm","places":[{"center":[0,0,0],"normal":[0,0,1]},{"center":[20,0,0],"normal":[0,0,1]}]}));
+    let first = b.feature(
+        kmb_asm::FASTENER_BODY,
+        "穴1",
+        json!({"fastener":group.0,"index":0}),
+    );
+    let second = b.feature(
+        kmb_asm::FASTENER_BODY,
+        "穴2",
+        json!({"fastener":group.0,"index":1}),
+    );
+    let b = Bench::new(b.finish("穴ごとの名前"));
+    let names = |b: &Bench, id| {
+        let (_, _, shape) = b.bodies().into_iter().find(|(i, _, _)| *i == id).unwrap();
+        let mut n = b.k.face_names(shape).unwrap();
+        n.sort();
+        n
+    };
+    let old = names(&b, second);
+    assert!(old.iter().any(|n| n.contains("p1")));
+    assert_ne!(names(&b, first), old, "穴ごとの名前を保つ");
+    let saved = b.doc.to_json();
+    let read = Bench::new(Document::from_json(&saved).unwrap());
+    assert_eq!(names(&read, second), old);
+    let data = read.doc.data().feature(group).unwrap().data.clone();
+    let parsed: Fastener = serde_json::from_value(data).unwrap();
+    assert!(!parsed.instances);
+}
+
+#[test]
+fn batch_fasteners_share_flat_heads_without_losing_each_countersink_seat() {
+    let mut b = DocBuilder::new();
+    let mut s = SketchBuilder::new(Default::default());
+    let p = s.fixed_point(0.0, 0.0);
+    s.rectangle(p, "30 mm", "20 mm", [0.0, 0.0, 30.0, 20.0]);
+    let profile = b.feature(kmb_sketch::SKETCH, "板の輪郭", s.build());
+    let plate = b.feature(
+        kmb_cad_extrude::EXTRUDE,
+        "板",
+        json!({"profile":profile.0,"distance":"8 mm","operation":"new","direction":"normal"}),
+    );
+    let mut target = plate;
+    for (x, dia) in [(8.0, "6.3 mm"), (22.0, "6.8 mm")] {
+        let mut s = SketchBuilder::new(SketchPlane::face(plate, format!("f{}:end", plate.0)));
+        let p = s.point(x, 10.0);
+        let sketch = b.feature(kmb_sketch::SKETCH, "位置", s.build());
+        target = b.feature(
+            HOLE,
+            "皿の穴",
+            Hole {
+                points: vec![kmb_core::PointId(p.0)],
+                diameter: "3.4 mm".into(),
+                kind: kmb_cad_hole::HoleKind::Countersink,
+                countersink_diameter: Some(dia.into()),
+                ..Hole::new(target, sketch)
+            },
+        );
+    }
+    let mut b = Bench::new(b.finish("違う皿の径"));
+    let top = b.face(target, [0.0, 0.0, 1.0]);
+    let args = json!({"face":top.face});
+    let choices = AsmCommands
+        .handles(kmb_asm::NEW_FASTENER, &b.cx(&args, Some(&top)))
+        .unwrap()[1]
+        .choices
+        .clone();
+    let mouths: Vec<HoleMouth> = choices
+        .iter()
+        .map(|c| serde_json::from_value(c.value.clone()).unwrap())
+        .collect();
+    assert_eq!(mouths.len(), 2);
+    let added = b.run(
+        kmb_asm::NEW_FASTENER,
+        json!({"holes":choices.iter().map(|c|c.value.clone()).collect::<Vec<_>>()}),
+        Some(top),
+    );
+    let mut shared = None;
+    for (id, mouth) in added[1..].iter().zip(mouths) {
+        let (_, _, shape) = b.bodies().into_iter().find(|(i, _, _)| i == id).unwrap();
+        let (_, max) = b.k.bounds(shape).unwrap();
+        assert!(
+            (max[2] - (8.0 + 3.0 - mouth.diameter / 2.0)).abs() < 5e-5,
+            "皿の径に合わせて頭が座る: max={max:?}, mouth={mouth:?}"
+        );
+        let base = b.k.instance_of(shape).map_or(shape, |(h, _)| h);
+        assert_eq!(*shared.get_or_insert(base), base);
+    }
 }

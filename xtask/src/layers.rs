@@ -98,6 +98,11 @@ pub const DEV_KERNEL: [&str; 1] = ["kmb-solid"];
 /// 開発用の依存で、上の表に入らない今の辺。(crate, 依存先, 理由)。直したら行を消す
 /// (消し忘れると「もう無い」で落ちる)。
 const DEV_KNOWN: &[(&str, &str, &str)] = &[
+    (
+        "kmb-solid",
+        "kmb-io-stl",
+        "細い面の形を実際の STL に書き、辺の閉じ方を読む試験",
+    ),
     // 画面の写真の試験(tests/screens.rs)が、書き出した 3MF の中身を形式の crate で読んで確かめる
     ("kmb-app", "kmb-io-stl", "写真の試験が書き出した 3MF を読む"),
 ];
@@ -617,6 +622,10 @@ const JSON_NAME_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-asm", "src/link.rs", 1),           // 部品を移した記録 moved.json
     ("kmb-cam-commands", "src/reuse.rs", 5), // 加工のテンプレートのファイル
     ("kmb-cam-tool", "src/exchange.rs", 2),  // 工具ライブラリのファイル
+    ("kmb-drawing", "src/commands.rs", 1),   // 用紙の計算結果。文書の保存形式ではない
+    ("kmb-hrtf", "src/table.rs", 1),         // 分けた表の大きさ layout.json
+    ("kmb-hrtf", "src/commands.rs", 1),      // 頭の網の仕事の JSON。文書の保存形式ではない
+    ("kmb-wave", "src/action.rs", 2),        // 音の仕事と結果の JSON。文書の保存形式ではない
     ("kmb-core", "src/document.rs", 1),      // 文書の拡張子の定数そのもの
     ("kmb-post-carvera-air", "src/machine.rs", 1), // 機械の台の穴の表
     ("kmb-session", "src/crash.rs", 5),      // 落ちた時の記録

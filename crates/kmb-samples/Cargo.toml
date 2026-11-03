@@ -10,6 +10,7 @@ rust-version.workspace = true
 layer = "assembly"
 
 [dependencies]
+kmb-drawing.workspace = true
 kmb-core.workspace = true
 kmb-sketch.workspace = true
 kmb-cad.workspace = true
@@ -29,6 +30,7 @@ serde_json.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-asm.workspace = true
 kmb-contract.workspace = true
 kmb-look.workspace = true
 kmb-cam-setup.workspace = true

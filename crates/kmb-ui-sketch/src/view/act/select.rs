@@ -30,6 +30,38 @@ pub(super) fn act(
         long_fired,
         ..
     } = input;
+    // 札だけを選んでいる時は、矢印で位置を微調整する。値の欄の入力は奪わない。
+    if input.free_keys
+        && editor.edit_dim.is_none()
+        && editor.placing.is_none()
+        && let Some((id, rect)) = editor.picked_constraint.and_then(|id| {
+            state
+                .labels
+                .iter()
+                .find(|(c, _)| *c == id)
+                .map(|(_, r)| (id, *r))
+        })
+        && let Some(delta) = ui.input_mut(|i| {
+            if !i.modifiers.is_none() {
+                return None;
+            }
+            [
+                (egui::Key::ArrowLeft, Vec2::new(-5.0, 0.0)),
+                (egui::Key::ArrowRight, Vec2::new(5.0, 0.0)),
+                (egui::Key::ArrowUp, Vec2::new(0.0, -5.0)),
+                (egui::Key::ArrowDown, Vec2::new(0.0, 5.0)),
+            ]
+            .into_iter()
+            .find_map(|(key, d)| i.consume_key(egui::Modifiers::NONE, key).then_some(d))
+        })
+    {
+        let mut s = base_sketch.clone();
+        s.adopt_solution(base_sol);
+        s.place_label(id, t.to_world(rect.center() + delta), base_sol);
+        out.result = Some(s);
+        ui.ctx().request_repaint();
+        return;
+    }
     // 長押し: 押した所に重なっている点・線・領域の一覧を出す(離した時のクリックは捨てる)
     if response.is_pointer_button_down_on()
         && primary_drag
@@ -94,7 +126,7 @@ pub(super) fn act(
             _ if label.is_some() => {
                 editor.dim_drag = label;
                 editor.picked_constraint = label;
-                editor.selection.clear();
+                editor.clear_selection();
             }
             Some(g) if !on_mark => editor.drag = Some(g),
             _ => {
@@ -195,7 +227,7 @@ pub(super) fn act(
                 crate::drag::Window::new(t.to_world(a), t.to_world(b))
             };
             if !add {
-                editor.selection.clear();
+                editor.clear_selection();
             }
             let mut path: Vec<[f64; 2]> = editor.lasso.drain(..).map(|p| t.to_world(p)).collect();
             path.push(t.to_world(b));
@@ -263,7 +295,7 @@ pub(super) fn act(
         })
     {
         // 寸法の値の札: その寸法を選ぶ(Delete で消す。値はダブルクリックで直す。網羅版 F6)
-        editor.selection.clear();
+        editor.clear_selection();
         editor.regions.clear();
         editor.picked_constraint = Some(id);
     } else if response.clicked()
@@ -274,7 +306,7 @@ pub(super) fn act(
             .and_then(|p| crate::marks::at(&state.marks, p))
     {
         // 拘束の印: その拘束を選ぶ(もう一度で外す)。Delete か右クリックで外せる
-        editor.selection.clear();
+        editor.clear_selection();
         editor.regions.clear();
         editor.picked_constraint = (editor.picked_constraint != Some(id)).then_some(id);
     } else if response.clicked()
@@ -298,22 +330,22 @@ pub(super) fn act(
         match hit {
             Some(h) => {
                 if !add {
-                    editor.selection.clear();
+                    editor.clear_selection();
                 }
                 if aug.kind(h.entity).is_some() {
                     // ボディの辺や角は選ぶだけでは写さない(網羅版 G10)。寸法や拘束に
                     // 使った時に写す(パネルの操作は lib.rs、道具は prune が残す)
                     if !(toggle && editor.selection.remove(&h.entity)) {
-                        editor.selection.insert(h.entity);
+                        editor.select(h.entity);
                     }
                 } else if !(toggle && editor.selection.remove(&h.entity)) {
-                    editor.selection.insert(h.entity);
+                    editor.select(h.entity);
                 }
             }
             None => {
                 // 線の無い所: 閉じた領域の中なら、その領域を選ぶ(Shift で足す、Ctrl で足し外し)
                 if !add {
-                    editor.selection.clear();
+                    editor.clear_selection();
                 }
                 let areas = crate::annot::regions(base_sketch, base_sol);
                 if editor.filter.profiles

@@ -18,9 +18,11 @@
 //! そのカーネルが持つ(網として表示・計測・加工に使える)。
 
 mod ffi;
+mod iges_in;
 mod names;
 mod skin;
 mod step_in;
+mod surface;
 
 // SMLib 本体の静的ライブラリをリンクさせる(Rust から直接は使わない)
 extern crate smlib_sys;
@@ -47,6 +49,8 @@ struct Shape {
     brep: Brep,
     /// 面ごとの名前。`brep.faces(..)` の順。
     names: Vec<String>,
+    /// 片側だけの縁の名前(all_edges の順)。
+    rims: Vec<Option<String>>,
 }
 
 #[derive(Default)]
@@ -89,7 +93,14 @@ impl Store {
         brep.set_tags(&tags).map_err(failed("面の名前付け"))?;
         self.next += 1;
         let id = self.next;
-        self.shapes.insert(id, Shape { brep, names });
+        self.shapes.insert(
+            id,
+            Shape {
+                brep,
+                names,
+                rims: Vec::new(),
+            },
+        );
         Ok(ShapeHandle(id))
     }
 }
@@ -218,7 +229,6 @@ impl SmlibKernel {
         self
     }
 
-    /// 読み込んだ形なら、任せたカーネルとその中の番号。
     /// 形を行列で写して動かした複製(面の名前の末尾に `suffix` を足す)。
     fn moved_copy(
         &self,
@@ -246,9 +256,18 @@ impl SmlibKernel {
         if count != names.len() {
             return Err(KernelError::Failed("移動で面の数が変わりました".into()));
         }
-        s.put(brep, names)
+        let rims = s
+            .get(shape)?
+            .rims
+            .iter()
+            .map(|n| n.as_ref().map(|n| format!("{n}{suffix}")))
+            .collect();
+        let h = s.put(brep, names)?;
+        s.shapes.get_mut(&h.0).expect("しまった形").rims = rims;
+        Ok(h)
     }
 
+    /// 読み込んだ形なら、任せたカーネルとその中の番号。
     fn imported(&self, h: ShapeHandle) -> Option<(&dyn Kernel, ShapeHandle)> {
         let inner = *self
             .imported
@@ -575,6 +594,55 @@ impl Kernel for SmlibKernel {
         "smlib"
     }
 
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let k = self
+            .step_import
+            .as_deref()
+            .ok_or_else(|| KernelError::Unsupported("網のボディ".into()))?;
+        Ok(self.adopt_imported(k.import_mesh(mesh, tag)?))
+    }
+
+    fn body_kind(&self, shape: ShapeHandle) -> Result<k::BodyKind, KernelError> {
+        if let Some((k, inner)) = self.imported(shape) {
+            return k.body_kind(inner);
+        }
+        let _g = ffi::lock();
+        let store = self.lock();
+        let shape = store.get(shape)?;
+        // 開いた縁を持つ面が混ざる時は、閉じた部分だけの体積を返さない。
+        Ok(
+            if shape.rims.iter().any(Option::is_some)
+                || shape.brep.is_sheet().map_err(failed("ボディの種類"))?
+            {
+                k::BodyKind::Sheet
+            } else {
+                k::BodyKind::Solid
+            },
+        )
+    }
+
+    fn planar_sheet(&self, profile: &Profile, tag: &str) -> Result<ShapeHandle, KernelError> {
+        surface::planar(self, profile, tag)
+    }
+
+    fn patch_sheet(
+        &self,
+        boundary: &[k::BoundarySegment],
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        surface::patch(self, boundary, tag)
+    }
+
+    fn thicken(
+        &self,
+        sheet: ShapeHandle,
+        thickness: f64,
+        side: k::ThickenSide,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        surface::thicken(self, sheet, thickness, side, tag)
+    }
+
     fn extrude(
         &self,
         profile: &Profile,
@@ -836,6 +904,16 @@ impl Kernel for SmlibKernel {
         self.skin_solid(surfaces, tag, "スイープ")
     }
 
+    fn helical_sweep(
+        &self,
+        profile: &Profile,
+        helix: &k::Helix,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let surfaces = skin::helical_sweep(profile, helix, tag).map_err(KernelError::Failed)?;
+        self.skin_solid(surfaces, tag, "らせんの掃引")
+    }
+
     fn loft(
         &self,
         sections: &[Profile],
@@ -880,6 +958,8 @@ impl Kernel for SmlibKernel {
         target: ShapeHandle,
         tool: ShapeHandle,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(target, "足し引き")?;
+        self.require_solid(tool, "足し引き")?;
         match (self.imported(target), self.imported(tool)) {
             (None, None) => {}
             (Some((k, a)), Some((_, b))) => {
@@ -888,7 +968,8 @@ impl Kernel for SmlibKernel {
             }
             _ => {
                 return Err(KernelError::Failed(
-                    "STEP から読み込んだ形と、ここで作った形は足し引きできません".into(),
+                    "網のボディは足し引きに使えません(三角形の網で、面と辺の形を持たないため)"
+                        .into(),
                 ));
             }
         }
@@ -981,9 +1062,10 @@ impl Kernel for SmlibKernel {
         to: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_brep(shape, "面の縁のままの押し出し")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Unsupported(
-                "STEP から読み込んだ形の面の縁のままの押し出し".into(),
+                "網のボディは面の縁のままの押し出しに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         if !(to - from).is_finite() || to <= from {
@@ -1049,9 +1131,10 @@ impl Kernel for SmlibKernel {
         thickness: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "シェル")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形はシェルにできません".into(),
+                "網のボディはシェルに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1086,9 +1169,11 @@ impl Kernel for SmlibKernel {
         distance: f64,
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "面のオフセット")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形は面をオフセットできません".into(),
+                "網のボディは面のオフセットに使えません(三角形の網で、面と辺の形を持たないため)"
+                    .into(),
             ));
         }
         if faces.is_empty() {
@@ -1212,7 +1297,7 @@ impl Kernel for SmlibKernel {
     ) -> Result<ShapeHandle, KernelError> {
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形の丸めは消せません".into(),
+                "網のボディの丸めは消せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1374,6 +1459,9 @@ impl Kernel for SmlibKernel {
         let _g = ffi::lock();
         let s = self.lock();
         let sh = s.get(shape)?;
+        if !sh.rims.is_empty() {
+            return surface::sheet_edges(sh);
+        }
         let all = sh.brep.all_edges().map_err(failed("辺の列挙"))?;
         let straight = sh.brep.edges().map_err(failed("辺の列挙"))?;
         let arcs = sh.brep.arc_edges().map_err(failed("円の辺の列挙"))?;
@@ -1430,9 +1518,10 @@ impl Kernel for SmlibKernel {
         blends: &[EdgeBlend],
         tag: &str,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_solid(shape, "辺の丸め")?;
         if self.imported(shape).is_some() {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形の辺は丸められません".into(),
+                "網のボディは辺の丸めに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1551,6 +1640,7 @@ impl Kernel for SmlibKernel {
     }
 
     fn mass(&self, shape: ShapeHandle) -> Result<MassProps, KernelError> {
+        self.require_solid(shape, "体積")?;
         if let Some((k, inner)) = self.imported(shape) {
             return k.mass(inner);
         }
@@ -1577,6 +1667,7 @@ impl Kernel for SmlibKernel {
     }
 
     fn volume(&self, shape: ShapeHandle) -> Result<f64, KernelError> {
+        self.require_solid(shape, "体積")?;
         if let Some((k, inner)) = self.imported(shape) {
             return k.volume(inner);
         }
@@ -1665,7 +1756,7 @@ impl Kernel for SmlibKernel {
         }
         if imported.iter().any(Option::is_some) {
             return Err(KernelError::Failed(
-                "STEP から読み込んだ形は、ここで作った形と一緒に STEP へ書き出せません".into(),
+                "網のボディは STEP に書き出せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
         let _g = ffi::lock();
@@ -1685,6 +1776,10 @@ impl Kernel for SmlibKernel {
         ffi::export_step(&breps, &names, product).map_err(failed("STEP の書き出し"))
     }
 
+    fn import_iges(&self, text: &str) -> Result<(ShapeHandle, Vec<String>), KernelError> {
+        iges_in::import(self, text).map_err(failed("IGES の読み込み"))
+    }
+
     fn import_step(&self, step: &str) -> Result<ShapeHandle, KernelError> {
         let why = match self.import_step_solid(step) {
             Ok(h) => return Ok(h),
@@ -1696,7 +1791,13 @@ impl Kernel for SmlibKernel {
             )));
         };
         log::info!("STEP を SMLib の立体に組めないので網で読みます: {why}");
-        let h = k.import_step(step)?;
+        // 網でも読めない時は、両方の理由を返す(網の読み手の理由だけでは、立体に組めなかった
+        // 本当の理由が見えない)
+        let h = k.import_step(step).map_err(|e| {
+            KernelError::Failed(format!(
+                "STEP を立体に組めません: {why}。網でも読めません: {e}"
+            ))
+        })?;
         Ok(self.adopt_imported(h))
     }
 

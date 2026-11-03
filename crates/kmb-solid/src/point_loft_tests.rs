@@ -730,3 +730,189 @@ fn the_loft_tip_can_be_repicked_while_its_reference_is_incomplete() {
         args["point"]
     );
 }
+
+/// 確かめること: 作業点の削除を理由つきで止め、他の点でロフトを続けない。
+#[test]
+fn a_loft_tip_stops_with_a_reason_when_its_datum_point_is_deleted() {
+    let kernel = SmlibKernel::new();
+    let mut b = DocBuilder::new();
+    let mut circle = SketchBuilder::xy();
+    let c = circle.fixed_point(0.0, 0.0);
+    circle.circle(c, "10 mm", 5.0);
+    let base = b.sketch("底面", circle);
+    let tip = b.feature(
+        kmb_cad_datum::DATUM_POINT,
+        "端の作業点",
+        json!({"point":{"kind":"at","at":[0.0,0.0,20.0]}}),
+    );
+    let loft = b.feature(
+        LOFT,
+        "点へのロフト",
+        Loft {
+            sections: vec![profile(base), point(PointRef::Datum { feature: tip })],
+            rails: vec![],
+            operation: Operation::New,
+            target: None,
+        },
+    );
+    let mut doc = b.finish("作業点を参照するロフト");
+    shape(&mut doc, &kernel, loft);
+    doc.apply(Transaction::new(
+        "作業点を削除",
+        vec![Op::RemoveFeature { id: tip }],
+    ))
+    .unwrap();
+    let report = doc.recompute(&registry(), &kernel);
+    let status = format!("{:?}", report.feature(loft));
+    assert!(
+        status.contains(&format!("参照先の機能 {tip} がありません")),
+        "{status}"
+    );
+    assert!(!matches!(
+        report.feature(loft),
+        Some(FeatureStatus::Ok { .. })
+    ));
+}
+
+/// 確かめること: スケッチから消えた点を、残った別の点に付け替えず止める。
+#[test]
+fn a_loft_tip_stops_with_a_reason_when_its_sketch_point_is_deleted() {
+    let kernel = SmlibKernel::new();
+    let mut b = DocBuilder::new();
+    let mut circle = SketchBuilder::xy();
+    let c = circle.fixed_point(0.0, 0.0);
+    circle.circle(c, "10 mm", 5.0);
+    let base = b.sketch("底面", circle);
+    let mut tip = SketchBuilder::xy();
+    tip.fixed_point(1.0, 1.0);
+    let p = tip.fixed_point(0.0, 0.0);
+    let mut tip = tip.build();
+    tip.offset = Some("20 mm".into());
+    let tip = b.feature(kmb_sketch::SKETCH, "端の点", tip);
+    let loft = b.feature(
+        LOFT,
+        "点へのロフト",
+        Loft {
+            sections: vec![
+                profile(base),
+                point(PointRef::Sketch {
+                    feature: tip,
+                    point: PointId(p.0),
+                }),
+            ],
+            rails: vec![],
+            operation: Operation::New,
+            target: None,
+        },
+    );
+    let mut doc = b.finish("スケッチの点を参照するロフト");
+    shape(&mut doc, &kernel, loft);
+    let mut remaining = SketchBuilder::xy();
+    remaining.fixed_point(1.0, 1.0);
+    let mut remaining = remaining.build();
+    remaining.offset = Some("20 mm".into());
+    doc.apply(Transaction::new(
+        "端の点を削除",
+        vec![Op::SetFeatureData {
+            id: tip,
+            data: serde_json::to_value(remaining).unwrap(),
+        }],
+    ))
+    .unwrap();
+    let report = doc.recompute(&registry(), &kernel);
+    assert!(matches!(
+        report.feature(tip),
+        Some(FeatureStatus::Ok { .. })
+    ));
+    let status = format!("{:?}", report.feature(loft));
+    assert!(
+        status.contains(&format!("スケッチの点 {} がありません", p.0))
+            && status.contains("端の点を選び直してください"),
+        "{status}"
+    );
+}
+
+/// 確かめること: 形の変更で頂点名が消えた時は、近くの頂点に付け替えず止める。
+#[test]
+fn a_loft_tip_stops_with_a_reason_when_its_vertex_name_disappears() {
+    let kernel = SmlibKernel::new();
+    let mut b = DocBuilder::new();
+    let mut circle = SketchBuilder::xy();
+    let c = circle.fixed_point(0.0, 0.0);
+    circle.circle(c, "10 mm", 5.0);
+    let base = b.sketch("底面", circle);
+    let mut square = SketchBuilder::xy();
+    let o = square.fixed_point(-2.0, -2.0);
+    square.rectangle(o, "4 mm", "4 mm", [-2.0, -2.0, 4.0, 4.0]);
+    let mut square = square.build();
+    square.offset = Some("20 mm".into());
+    let tip_profile = b.feature(kmb_sketch::SKETCH, "頂点を持つ板の輪郭", square);
+    let tip_body = b.feature(
+        crate::EXTRUDE,
+        "頂点を持つ板",
+        crate::Extrude {
+            profile: Some(tip_profile),
+            distance: "2 mm".into(),
+            ..Default::default()
+        },
+    );
+    let mut doc = b.finish("ボディの頂点を参照するロフト");
+    let body = shape(&mut doc, &kernel, tip_body);
+    let vertex = kmb_core::vertices(&kernel, body)
+        .into_iter()
+        .find(|v| {
+            (v.at[0] - 2.0).abs() < 1e-6
+                && (v.at[1] - 2.0).abs() < 1e-6
+                && (v.at[2] - 22.0).abs() < 1e-6
+        })
+        .unwrap();
+    let loft = add(
+        &mut doc,
+        LOFT,
+        "頂点へのロフト",
+        serde_json::to_value(Loft {
+            sections: vec![
+                profile(base),
+                point(PointRef::Vertex {
+                    feature: tip_body,
+                    vertex: vertex.name.clone(),
+                }),
+            ],
+            rails: vec![],
+            operation: Operation::New,
+            target: None,
+        })
+        .unwrap(),
+    );
+    shape(&mut doc, &kernel, loft);
+    let mut rounded = SketchBuilder::xy();
+    let c = rounded.fixed_point(0.0, 0.0);
+    rounded.circle(c, "4 mm", 2.0);
+    let mut rounded = rounded.build();
+    rounded.offset = Some("20 mm".into());
+    doc.apply(Transaction::new(
+        "板を円板にする",
+        vec![Op::SetFeatureData {
+            id: tip_profile,
+            data: serde_json::to_value(rounded).unwrap(),
+        }],
+    ))
+    .unwrap();
+    let report = doc.recompute(&registry(), &kernel);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(tip_body) else {
+        panic!("円板を作れる")
+    };
+    let Value::Shape(body) = outputs["body"] else {
+        panic!("円板の形")
+    };
+    assert!(
+        !kmb_core::vertices(&kernel, body)
+            .iter()
+            .any(|v| v.name == vertex.name)
+    );
+    let status = format!("{:?}", report.feature(loft));
+    assert!(
+        status.contains("端の頂点") && status.contains("がありません。点を選び直してください"),
+        "{status}"
+    );
+}

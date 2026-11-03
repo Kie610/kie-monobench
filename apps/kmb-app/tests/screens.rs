@@ -610,6 +610,100 @@ fn ui_script(name: &str) {
     }
 }
 
+/// 確かめること: 設定の部品から入れた操作表示を、暗明とビューの幅・字の倍率で比べる。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に操作の表示の前後の写真を書く"]
+fn write_keycast_screens() {
+    let dir = std::env::var("JC_SCREENS_OUT").expect("写真の出力先");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (theme, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        for (width, text_scale) in [(1280.0, 1.0), (1280.0, 2.5), (1920.0, 1.0), (1920.0, 2.5)] {
+            let mut ws = Workspace::new(
+                kmb_samples::reference_document(),
+                None,
+                kmb_bundle::modules(),
+            );
+            ws.layout_mut().brightness = brightness;
+            ws.layout_mut().appearance.text_scale = text_scale;
+            let mut screen = Screen::sized(ws, Some([width, 1000.0]));
+            let stem = format!(
+                "keycast-{theme}-{}-{}",
+                width as u32,
+                (text_scale * 100.0) as u32
+            );
+            screen.write(&dir, &format!("{stem}-before"));
+            let script = r#"key Ctrl+,
+click "マウスとキー"
+type ~"設定を探す" "操作の表示"
+shot settings-before
+click "押したキーとマウスを画面に出す(録画・解説向け)"
+expect "コマンドの名前も出す" exists
+shot settings-after
+key Ctrl+,
+key Ctrl+Z
+expect "操作の表示: Ctrl+Z 取り消す" exists
+"#;
+            let batch = screen.h.state_mut().run_script(script).unwrap();
+            let start = std::time::Instant::now();
+            loop {
+                screen.h.step();
+                if let Some(shot) = screen.h.state_mut().take_shot() {
+                    screen.write(&dir, &format!("{stem}-{shot}"));
+                }
+                if let Some(result) = screen.h.state_mut().script_result(batch) {
+                    assert!(result.ok, "{}", result.report());
+                    break;
+                }
+                assert!(start.elapsed().as_secs() < 60, "設定の部品が揃わない");
+            }
+            // 画面へ送るポインターの入力で、押して引いている最中のマウスも撮る。
+            let pos = egui::pos2(width * 0.6, 550.0);
+            screen.h.hover_at(pos);
+            screen.h.drag_at(pos);
+            screen.h.step();
+            screen.h.hover_at(pos + egui::vec2(10.0, 0.0));
+            screen.h.step();
+            // 偽機器の軸は実時間で戻るので、写真を描く直前に報告を渡してつなぐ。
+            let ws = std::mem::replace(
+                screen.h.state_mut(),
+                Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules()),
+            );
+            let device = kmb_ui_mouse3d::Mouse3d::fake();
+            device.feed(&[2, 0, 0, 0, 0, 0xA2, 0xFE]);
+            *screen.h.state_mut() = ws.with_mouse3d(device);
+            // 実際のキー入力を最後の描画フレームへ送り、押したままの札を撮る。
+            screen
+                .h
+                .input_mut()
+                .events
+                .push(egui::Event::ModifiersChanged(egui::Modifiers::CTRL));
+            screen.h.input_mut().events.push(egui::Event::Key {
+                key: egui::Key::Z,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::CTRL,
+            });
+            // 行が増えた後の領域の大きさが揃ってから、下端を合わせた写真を描く。
+            screen.h.step();
+            screen.write(&dir, &format!("{stem}-after"));
+            assert!(
+                screen
+                    .h
+                    .query_by_label("操作の表示: Ctrl+Z 取り消す")
+                    .is_some()
+            );
+            assert!(screen.h.query_by_label("操作の表示: マウス 左").is_some());
+            assert!(screen.h.query_by_label("ドラッグ").is_some());
+            assert!(screen.h.query_by_label("ひねる").is_some());
+            screen.h.drop_at(pos + egui::vec2(10.0, 0.0));
+        }
+    }
+}
+
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
 fn write_screens() {
@@ -2274,6 +2368,66 @@ fn write_study_screens() {
     s.write(&dir, "107-解析-3Dの流れ-断面も出す");
 }
 
+/// 108〜110・115〜117. 音の放射・散乱: 解析のツールバーのまとまり「音」から足した研究を「実行」で解き、
+/// 指向性(ボディの横の受け取りの球)と表面の音圧レベルを周波数のコマで見る。点音源の断面の音圧レベル(115・116)。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
+fn write_sound_screens() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    // 箱の上の面を振動させる(1〜4 kHz を 1 オクターブごと)
+    let (ws, id) = study_workspace(
+        false,
+        "wave.radiate@1",
+        serde_json::json!({"source": "none", "dir": "+x", "detail": "normal", "f_start": "1000", "f_end": "4000", "per_octave": "1"}),
+    );
+    let body = ws
+        .document()
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == "solid.extrude@1")
+        .unwrap()
+        .id
+        .0;
+    let mut data = ws.document().data().feature(id).unwrap().data.clone();
+    data["faces"] =
+        serde_json::json!([{"kind": "face", "feature": body, "face": format!("f{body}:end")}]);
+    let mut s = Screen::new(ws);
+    s.h.state_mut().set_feature_data(id, data);
+    s.h.state_mut().wait();
+    s.h.state_mut().select(id);
+    s.settle();
+    s.write(&dir, "108-解析-音の放射・散乱-実行前");
+    assert!(s.click_exact("▶  実行") || s.click_exact("実行"));
+    wait_run(&mut s, id);
+    s.write(&dir, "109-解析-音の放射・散乱-指向性");
+    assert!(s.click_exact("最初のコマ"));
+    s.write(&dir, "110-解析-音の放射・散乱-最初のコマ");
+    // 編集パネルの実行の欄に、周波数ごとの軸の上の音圧レベルのグラフ(対数の横軸)が開いて出る
+    s.h.state_mut().open_edit(id);
+    s.settle();
+    s.write(&dir, "117-解析-音の放射・散乱-周波数のグラフ");
+
+    // 箱の左に点音源を置き、真ん中を通る XY 平面の断面で音圧レベルを見る(8 kHz)
+    let (ws, id) = study_workspace(
+        false,
+        "wave.radiate@1",
+        serde_json::json!({"source": "point", "point": [-40.0, 10.0, 8.0], "detail": "normal", "section": "xy", "f_start": "8000", "f_end": "8000"}),
+    );
+    let mut s = Screen::new(ws);
+    s.h.state_mut().wait();
+    s.h.state_mut().select(id);
+    s.settle();
+    s.write(&dir, "115-解析-音の放射・散乱-点音源と断面-実行前");
+    assert!(s.click_exact("▶  実行") || s.click_exact("実行"));
+    wait_run(&mut s, id);
+    assert!(s.click_exact("全体表示"));
+    s.write(&dir, "116-解析-音の放射・散乱-点音源と断面");
+}
+
 /// 120〜123. 強度の網は形に沿った 2 次の四面体(穴とボスが残り、曲面に沿う)。断面で切ると中の応力、「網の質」で要素の形の良し悪しを色で見る。
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に画面の写真を書く(目で見る確かめ)"]
@@ -2490,4 +2644,35 @@ fn write_sketch_point_and_arc_screens() {
     s.h.state_mut().open_edit(id);
     s.settle();
     s.write(&dir, "円弧の端より外の半径の寸法");
+}
+
+/// 文書をまとめて渡すファイルメニュー。元のメニューと同じ条件で撮る。
+#[test]
+#[ignore = "道具: ファイルのメニューとまとめて渡す選択を写真に残す"]
+fn write_pack_menu_screen() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        let mut ws = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        );
+        ws.layout_mut().brightness = brightness;
+        let mut screen = Screen::sized(ws, Some([1280.0, 800.0]));
+        assert!(screen.click_exact("ファイル"));
+        screen.write(&dir, &format!("file-menu-{name}"));
+        let pack = screen.click("まとめて渡す…");
+        if std::env::var_os("JC_EXPECT_PACK_MENU").is_some() {
+            assert!(pack);
+        }
+        if pack {
+            screen.write(&dir, &format!("pack-menu-{name}"));
+        }
+    }
 }

@@ -153,3 +153,95 @@ fn a_flow_study_steps_through_its_frames_on_the_time_bar() {
         assert!(t0.elapsed().as_secs() < 20, "再生が進まない");
     }
 }
+
+/// 確かめること: 実際の固有振動の研究を画面の道具で解き、再生と停止で揺れの形が変わる。
+#[test]
+fn a_modal_study_plays_and_pauses_through_the_connected_ui_tools() {
+    let (mut ws, id) = with_study(
+        "fea.modal@1",
+        json!({
+            "material": "アルミ",
+            "fixed": {"kind": "face", "feature": 8, "face": "f8:side:e6"},
+            "size": "6 mm", "modes": "2",
+        }),
+    );
+    let dir = std::env::temp_dir().join(format!(
+        "modal-ui-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    ws = ws.with_data_dir(dir.clone());
+    // データフォルダの設定を読んだ後に、試す作業空間を選ぶ。
+    ws.switch_space(crate::layout::Space::Simulation);
+    ws.layout_mut().ai_live = true;
+    ws.open_edit(id);
+    let mut h = harness(ws);
+    let clock = std::cell::Cell::new(100.0);
+    let ask = |h: &mut Harness<'static, Workspace>, tool: &str, args: serde_json::Value| {
+        let data = dir.clone();
+        let tool = tool.to_string();
+        let request = std::thread::spawn(move || kmb_session::live::call(&data, &tool, args));
+        let start = std::time::Instant::now();
+        while !request.is_finished() {
+            h.input_mut().time = Some(clock.get());
+            h.step();
+            assert!(start.elapsed().as_secs() < 30, "画面への要求が終わらない");
+            std::thread::yield_now();
+        }
+        request.join().unwrap().unwrap()
+    };
+    h.run();
+    let clicked = ask(&mut h, "ui_click", json!({"target": "▶  実行"}));
+    assert_eq!(clicked["ok"], true, "{clicked}");
+    let start = std::time::Instant::now();
+    while h.state().run_state(id).unwrap().tone == RunTone::Busy {
+        h.input_mut().time = Some(clock.get());
+        h.step();
+        assert!(
+            start.elapsed().as_secs() < 120,
+            "固有振動の計算が終わらない"
+        );
+        std::thread::yield_now();
+    }
+    // 接続の処理と再生は有限のコマで確かめ、完了待ちの描き直しを待ち切ろうとしない。
+    for _ in 0..2 {
+        h.input_mut().time = Some(clock.get());
+        h.step();
+    }
+    assert_eq!(h.state().run_state(id).unwrap().tone, RunTone::Done);
+    let bar = h.state().frame_bar().expect("固有振動の帯");
+    assert!(bar.playable);
+    let before = h.state().overlay().shape.unwrap().mesh.positions.clone();
+    let data = h.state().document().data().clone();
+    assert!(
+        h.query_by_label("再生").is_some(),
+        "解けた後の実ボタンが無い: {:?}",
+        h.state().frame_bar()
+    );
+    let clicked = ask(&mut h, "ui_click", json!({"target": "再生"}));
+    assert_eq!(clicked["ok"], true, "{clicked}");
+    clock.set(100.25);
+    h.input_mut().time = Some(clock.get());
+    h.step();
+    assert!(h.state().cur.phase_playback.as_ref().unwrap().playing);
+    assert_ne!(h.state().overlay().shape.unwrap().mesh.positions, before);
+    let clicked = ask(&mut h, "ui_click", json!({"target": "一時停止"}));
+    assert_eq!(clicked["ok"], true, "{clicked}");
+    assert!(!h.state().cur.phase_playback.as_ref().unwrap().playing);
+    let stopped = h.state().overlay().shape.unwrap().mesh.positions.clone();
+    for time in [100.5, 100.75] {
+        clock.set(time);
+        h.input_mut().time = Some(time);
+        h.step();
+    }
+    assert_eq!(h.state().overlay().shape.unwrap().mesh.positions, stopped);
+    let clicked = ask(&mut h, "ui_click", json!({"target": "最初のコマ"}));
+    assert_eq!(clicked["ok"], true, "{clicked}");
+    assert_eq!(h.state().frame_bar().unwrap().at, 0);
+    assert_eq!(h.state().document().data(), &data);
+    h.state_mut().live_disconnect();
+    std::fs::remove_dir_all(dir).unwrap();
+}

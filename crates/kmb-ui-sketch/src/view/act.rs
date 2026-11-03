@@ -132,7 +132,7 @@ pub(super) fn act(
         editor.edit_dim = Some((id, value.to_string()));
         editor.edit_dim_fresh = true;
         editor.dim_error = None;
-        editor.selection.clear();
+        editor.clear_selection();
         editor.ghost = None;
         return out;
     }
@@ -244,12 +244,38 @@ pub(super) fn act(
             // 角・辺・円の中心はそれを、面の中なら面の縁を写す。シルエットなら押したボディの
             // 外形、「ボディの辺と角すべて」ならそのボディの辺と角をまとめて
             if let Some(w) = cursor {
-                let hits: Vec<EntityId> = sketch
-                    .hits(sol, w[0], w[1], tol)
-                    .into_iter()
-                    .map(|h| h.entity)
-                    .collect();
+                let raw_hits = sketch.hits(sol, w[0], w[1], tol);
+                let hits: Vec<EntityId> = raw_hits.iter().map(|h| h.entity).collect();
                 let part = hits.iter().copied().find(|id| aug.kind(*id).is_some());
+                // 原点と同じ位置の軸も選べる。別の距離の候補は追い越さない。
+                let axis = part.and_then(|id| {
+                    let distance = raw_hits.iter().find(|h| h.entity == id)?.distance;
+                    raw_hits
+                        .iter()
+                        .filter(|h| {
+                            aug.kind(h.entity).is_some() && h.distance.total_cmp(&distance).is_eq()
+                        })
+                        .find_map(|h| {
+                            sketch
+                                .projections
+                                .iter()
+                                .filter(|p| p.entity == h.entity)
+                                .find_map(|p| p.source.datum_axis())
+                        })
+                });
+                if editor.project_pick == ProjectPick::Parts
+                    && let Some(axis) = axis
+                {
+                    out.to_project = refs
+                        .iter()
+                        .filter(|r| r.source.datum_axis() == Some(axis))
+                        .cloned()
+                        .collect();
+                    if response.clicked() {
+                        editor.project_axis = Some((axis, editor.project_link));
+                    }
+                    return out;
+                }
                 let feature = part.into_iter().chain(hits.iter().copied()).find_map(|id| {
                     sketch
                         .projections
@@ -328,13 +354,13 @@ pub(super) fn act(
                 match base_sketch.hit_test(base_sol, w[0], w[1], tol) {
                     Some(h) => {
                         if editor.selection.len() >= 2 {
-                            editor.selection.clear();
+                            editor.clear_selection();
                         }
                         if !editor.selection.remove(&h.entity) {
                             editor.selection.insert(h.entity);
                         }
                     }
-                    None => editor.selection.clear(),
+                    None => editor.clear_selection(),
                 }
             }
             editor.measured = measure_text(base_sketch, base_sol, values, editor);

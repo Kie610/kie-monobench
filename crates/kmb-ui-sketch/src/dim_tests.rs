@@ -305,7 +305,7 @@ fn a_centerline_and_a_point_give_a_diameter_or_a_distance_from_the_menu() {
     press_key(&mut h, egui::Key::D);
     {
         let e = &mut editor(h.state_mut()).editor;
-        e.selection.clear();
+        e.clear_selection();
         e.selection.extend([left, corner]);
     }
     move_to(&mut h, [6.4, 4.89]);
@@ -346,7 +346,7 @@ fn a_circle_and_a_line_can_be_measured_from_the_near_edge() {
     press_key(&mut h, egui::Key::D);
     {
         let e = &mut editor(h.state_mut()).editor;
-        e.selection.clear();
+        e.clear_selection();
         e.selection.extend([circle, left]);
     }
     move_to(&mut h, [4.32, 18.97]);

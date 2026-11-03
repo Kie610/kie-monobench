@@ -106,7 +106,7 @@ fn polygon_sides_typed_before_the_center_are_kept_and_remembered() {
 #[test]
 fn move_started_without_a_selection_lets_you_pick_then_enter() {
     let mut h = sketch_with_rectangle();
-    editor(h.state_mut()).editor.selection.clear();
+    editor(h.state_mut()).editor.clear_selection();
     editor(h.state_mut()).set_tool(Tool::Move);
     h.run();
     assert!(editor(h.state_mut()).editor.choosing);
@@ -157,7 +157,7 @@ fn mirror_uses_the_centerline_with_enter() {
     h.run();
     h.get_by_label("中心線の切り替え").click();
     h.run();
-    editor(h.state_mut()).editor.selection.clear();
+    editor(h.state_mut()).editor.clear_selection();
     editor(h.state_mut()).set_tool(Tool::MirrorAxis);
     h.run();
     // 右の辺を選び、Enter で選び終え、もう一度 Enter で中心線を対称の線にする

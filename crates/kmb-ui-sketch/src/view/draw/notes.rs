@@ -54,7 +54,7 @@ pub(super) fn notes(
             (sum / pts.len() as f32).to_pos2()
         }
     };
-    let taken = std::cell::RefCell::new(Vec::new());
+    let taken = std::cell::RefCell::new(state.marks.iter().map(|m| m.rect).collect());
     let mut labels = Vec::new();
     let fmt = editor.fmt;
     for c in sketch.constraints.iter().filter(|_| editor.display.dims) {
@@ -216,7 +216,7 @@ pub(super) fn notes(
                             editor.dim_text.clear();
                         }
                         editor.dim_error = None;
-                        editor.selection.clear();
+                        editor.clear_selection();
                     }
                 }
             }

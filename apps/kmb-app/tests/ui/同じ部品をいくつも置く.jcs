@@ -1,0 +1,18 @@
+# 部品を選んで「部品をもう 1 つ置く」を数で流すと、元の幅と隙間ずつ横に並ぶ。置いた部品は元の
+# 形の網を動かして描く(出現ごとに形を網にしない)ので、元と同じ見た目で並ぶ。
+#! sample part
+
+rclick "ボディ1"
+click "新しい部品にする"
+wait
+expect "部品1" exists
+click "ボディ1"
+run asm.place_occurrence count=11
+wait
+expect "部品1:12" exists
+key Return
+wait
+expect "部品1:12" exists
+click "全体表示"
+wait
+shot 同じ部品を12個置いた

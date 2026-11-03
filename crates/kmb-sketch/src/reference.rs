@@ -31,6 +31,41 @@ pub enum RefShape {
     },
 }
 
+/// 作業軸を平面へ正射影する。表示範囲の両端を使い、垂直な軸は通る点になる。
+pub fn datum_axis_ref(
+    axis: kmb_interchange::DatumAxis,
+    feature: FeatureId,
+    plane: &Plane,
+) -> Result<RefItem, String> {
+    if !axis
+        .at
+        .into_iter()
+        .chain(axis.dir)
+        .chain(axis.span)
+        .all(f64::is_finite)
+        || dot(axis.dir, axis.dir) < 1e-20
+        || axis.span[1] <= axis.span[0]
+    {
+        return Err(format!(
+            "作業軸 {} の位置・向き・表示範囲が不正です。軸を直してから投影してください",
+            feature.0
+        ));
+    }
+    let [a, b] = axis.ends().map(|p| plane.to_local(p));
+    if !a.into_iter().chain(b).all(f64::is_finite) {
+        return Err(format!("作業軸 {} の投影を計算できません", feature.0));
+    }
+    let shape = if (a[0] - b[0]).hypot(a[1] - b[1]) <= 1e-9 {
+        RefShape::Point(plane.to_local(axis.at))
+    } else {
+        RefShape::Line(a, b)
+    };
+    Ok(RefItem {
+        source: ProjectionSource::DatumAxis { feature },
+        shape,
+    })
+}
+
 /// 原点の参照(スケッチの原点。XY・YZ・ZX と古い面のスケッチでは世界の原点を写した点、新しい
 /// 面のスケッチでは面の角。[`crate::FaceOrigin`])。
 pub fn origin_ref(plane: &Plane) -> RefItem {
@@ -260,6 +295,22 @@ pub fn refresh_projections(sketch: &mut Sketch, refs: &[RefItem]) -> Vec<crate::
     lost
 }
 
+/// 投影の固定目標と寸法を替え、更新前の形から近い解へ付いて行く。
+/// 形を保って解けなければ理由を返し、渡されたスケッチを変更しない。
+pub fn refresh_projections_with_values(
+    sketch: &mut Sketch,
+    refs: &[RefItem],
+    values: &std::collections::HashMap<crate::ConstraintId, f64>,
+) -> Result<Vec<crate::EntityId>, String> {
+    let before = sketch.clone();
+    let lost = refresh_projections(sketch, refs);
+    if let Err(reason) = crate::solver::follow_projection_targets(&before, sketch, values) {
+        *sketch = before;
+        return Err(reason);
+    }
+    Ok(lost)
+}
+
 fn point_of(sketch: &Sketch, id: crate::EntityId) -> P2 {
     match sketch.entity(id) {
         Some(Entity::Point { x, y, .. }) => [*x, *y],
@@ -289,13 +340,17 @@ impl Sketch {
         let mine = section(&item.source);
         let point = |s: &mut Sketch, p: P2| -> crate::EntityId {
             let (projected, _) = s.projected_parts();
-            // 点を使う投影が、どれも同じ種類(断面かそれ以外か)
+            // 断面は断面とだけ点を共有する。独立して動く作業軸は、別の元の点を使い回さない。
             let fits = |s: &Sketch, id: crate::EntityId| {
                 s.projections.iter().all(|pr| {
                     let uses = pr.entity == id
                         || s.entity(pr.entity)
                             .is_some_and(|e| e.points().contains(&id));
-                    !uses || section(&pr.source) == mine
+                    !uses
+                        || (section(&pr.source) == mine
+                            && ((pr.source.datum_axis().is_none()
+                                && item.source.datum_axis().is_none())
+                                || pr.source.same(&item.source)))
                 })
             };
             let near = s.entities.iter().find_map(|e| match e {

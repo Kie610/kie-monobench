@@ -9,6 +9,8 @@
 //!
 //! 面の名前は truck の読み込みと同じ `step{殻の番号}:f{殻の中の面の番号}`(殻は CLOSED_SHELL・
 //! OPEN_SHELL を番号の順に数える)。前に読み込んだ文書の加工や測る道具が面を名前で指しているため。
+//! 閉じた殻と一緒に置かれた OPEN_SHELL(面だけのボディ。公差の補助の面など)は立体に入れずに飛ばす
+//! (番号は数える)。殻が OPEN_SHELL だけの時は立体にできないので理由を返す。
 
 use kmb_core::kernel::{self as k, P3};
 use std::collections::HashMap;
@@ -50,6 +52,16 @@ struct Lexer<'a> {
 }
 
 impl<'a> Lexer<'a> {
+    /// 誤りの場所(何行目か)。
+    fn at(&self, i: usize) -> String {
+        let line = self.s[..i.min(self.s.len())]
+            .iter()
+            .filter(|&&c| c == b'\n')
+            .count()
+            + 1;
+        format!("{line} 行目")
+    }
+
     fn ws(&mut self) {
         loop {
             while self.i < self.s.len() && self.s[self.i].is_ascii_whitespace() {
@@ -76,7 +88,11 @@ impl<'a> Lexer<'a> {
             self.i += 1;
             Ok(())
         } else {
-            Err(format!("{} 文字目に「{}」がありません", self.i, c as char))
+            Err(format!(
+                "{}に「{}」がありません",
+                self.at(self.i),
+                c as char
+            ))
         }
     }
 
@@ -100,7 +116,7 @@ impl<'a> Lexer<'a> {
         }
         let t = std::str::from_utf8(&self.s[st..self.i]).unwrap_or("");
         t.parse::<f64>()
-            .map_err(|_| format!("{st} 文字目の数「{t}」を読めません"))
+            .map_err(|_| format!("{}の数「{t}」を読めません", self.at(st)))
     }
 
     fn params(&mut self) -> Result<Vec<P>, String> {
@@ -118,7 +134,7 @@ impl<'a> Lexer<'a> {
                     self.i += 1;
                     return Ok(out);
                 }
-                _ => return Err(format!("{} 文字目で引数の並びが閉じていません", self.i)),
+                _ => return Err(format!("{}で引数の並びが閉じていません", self.at(self.i))),
             }
         }
     }
@@ -175,14 +191,18 @@ impl<'a> Lexer<'a> {
                 self.word();
                 Ok(P::Typed(self.params()?))
             }
-            c => Err(format!("{} 文字目の「{}」を読めません", self.i, c as char)),
+            c => Err(format!(
+                "{}の「{}」を読めません",
+                self.at(self.i),
+                c as char
+            )),
         }
     }
 
     fn record(&mut self) -> Result<Rec, String> {
         let name = self.word();
         if name.is_empty() {
-            return Err(format!("{} 文字目に実体の名前がありません", self.i));
+            return Err(format!("{}に実体の名前がありません", self.at(self.i)));
         }
         Ok(Rec {
             name,
@@ -231,8 +251,8 @@ fn parse(text: &str) -> Result<HashMap<u64, Inst>, String> {
         }
         if lx.word() != "ENDSEC" {
             return Err(format!(
-                "{} 文字目で DATA の節が ENDSEC で終わっていません",
-                lx.i
+                "{}で DATA の節が ENDSEC で終わっていません",
+                lx.at(lx.i)
             ));
         }
         at = lx.i;
@@ -255,7 +275,7 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    fn at(&self, a: f64, b: f64, c: f64) -> P3 {
+    pub(crate) fn at(&self, a: f64, b: f64, c: f64) -> P3 {
         k::add(
             self.o,
             k::add(
@@ -265,7 +285,7 @@ impl Frame {
         )
     }
 
-    fn local(&self, p: P3) -> P3 {
+    pub(crate) fn local(&self, p: P3) -> P3 {
         let d = k::sub(p, self.o);
         [k::dot(d, self.x), k::dot(d, self.y), k::dot(d, self.z)]
     }
@@ -805,7 +825,7 @@ fn insert(c: &Nurbs, t: f64) -> Nurbs {
 }
 
 /// 曲線の `t0..t1` の部分(t0 < t1)。両端のノットを次数の数だけ差してから、その間の制御点を取る。
-fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
+pub(crate) fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
     let p = c.degree;
     let mut c = c.clone();
     let same = |a: f64, b: f64| (a - b).abs() < 1e-12;
@@ -832,7 +852,7 @@ fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
 }
 
 /// 曲線の上で点 `q` に一番近い値。
-fn param_of(c: &Nurbs, q: P3) -> f64 {
+pub(crate) fn param_of(c: &Nurbs, q: P3) -> f64 {
     let (t0, t1) = (c.knots[c.degree], c.knots[c.knots.len() - c.degree - 1]);
     let n = 64 * c.pts.len().max(4);
     let d2 = |t: f64| {
@@ -864,7 +884,7 @@ fn param_of(c: &Nurbs, q: P3) -> f64 {
 }
 
 /// 円(楕円)の `phi0` から `delta`(正なら左回り)の弧を、90 度以下の有理 2 次の区間で表す。
-fn arc(f: &Frame, ra: f64, rb: f64, phi0: f64, delta: f64) -> Nurbs {
+pub(crate) fn arc(f: &Frame, ra: f64, rb: f64, phi0: f64, delta: f64) -> Nurbs {
     let spans = ((delta.abs() / FRAC_PI_2) - 1e-9).ceil().max(1.0) as usize;
     let d = delta / spans as f64;
     let w = (d / 2.0).cos();
@@ -961,6 +981,21 @@ pub(crate) struct Model {
     pub voids: Vec<String>,
 }
 
+/// 殻が 1 つも無い時の理由。網だけの形(三角形の面)なら、そう書く。
+fn no_shell(recs: &HashMap<u64, Inst>) -> String {
+    let tessellated = recs.values().any(|i| match i {
+        Inst::Simple(r) => {
+            r.name.starts_with("TESSELLATED_") || r.name.starts_with("TRIANGULATED_")
+        }
+        Inst::Complex(_) => false,
+    });
+    if tessellated {
+        "STEP の形が三角形の網(TESSELLATED_SOLID など)だけで、面(B-rep)がありません".into()
+    } else {
+        "STEP に形(殻)がありません".into()
+    }
+}
+
 /// STEP を読み、殻ごとの面を返す。
 pub(crate) fn read(text: &str) -> Result<Model, String> {
     let recs = parse(text)?;
@@ -985,8 +1020,13 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
         .collect();
     shells.sort();
     if shells.is_empty() {
-        return Err("STEP に形(殻)がありません".into());
+        return Err(no_shell(&data.recs));
     }
+    // 立体と一緒に置かれた面だけのボディ(OPEN_SHELL。公差の補助の面など)は立体に入れない
+    // (読み込みの機能が注意を出す)。殻の番号は飛ばさずに数え、面の名前を網の読み手とそろえる
+    let solid = shells
+        .iter()
+        .any(|id| matches!(data.recs.get(id), Some(Inst::Simple(r)) if r.name == "CLOSED_SHELL"));
     let mut voids = Vec::new();
     for i in data.recs.values() {
         if let Inst::Simple(r) = i
@@ -1009,6 +1049,9 @@ pub(crate) fn read(text: &str) -> Result<Model, String> {
     for (n, sid) in shells.iter().enumerate() {
         let s = data.rec(*sid)?;
         if s.name == "OPEN_SHELL" {
+            if solid {
+                continue;
+            }
             return Err("閉じていない殻(OPEN_SHELL)は立体にできません".into());
         }
         for (i, f) in list(arg(s, 1)?)?.iter().enumerate() {

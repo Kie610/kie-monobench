@@ -6,6 +6,10 @@ use super::*;
 pub struct SceneBody {
     pub feature: FeatureId,
     pub mesh: Mesh,
+    /// 面のボディは裏からも描く。測定用の網は片面のまま保つ。
+    pub two_sided: bool,
+    /// 元の網の全ての辺が逆向きに対を持つ。断面の拾いに使い、帯と剛体移動では保つ。
+    pub(super) section_closed_boundary: bool,
     pub(super) edges: Vec<[[f32; 3]; 2]>,
     /// 面ごとの決まった色(`mesh.face_names` の順。`None` と足りない面はボディの色)
     pub colors: Vec<Option<Color32>>,
@@ -43,6 +47,8 @@ pub struct Scene {
     pub section: Option<Section>,
     /// ボディの外観の色([`SceneBody::tint`]。網を作り直しても残す)
     body_colors: std::collections::BTreeMap<FeatureId, Color32>,
+    /// 外観の無いボディに割り当てる色の番号(形や写実の書き出しは変えない)。
+    part_hues: std::collections::BTreeMap<FeatureId, usize>,
     /// ボディの材質([`SceneBody::look`]。網を作り直しても残す)
     body_looks: std::collections::BTreeMap<FeatureId, kmb_render::Look>,
     /// 面の外観の材質(ボディの最後の機能 → 面の名前 → 材質。[`SceneBody::face_looks`]。網を作り直しても残す)
@@ -250,7 +256,27 @@ impl Scene {
             return false;
         }
         self.set(bodies, build_meshes_at(kernel, bodies, self.tolerance()));
+        self.set_body_kinds(kernel);
         true
+    }
+
+    /// 作った網のボディの種類を反映する。裏側の三角形を測定用の網へ混ぜない。
+    pub fn set_body_kinds(&mut self, kernel: &dyn Kernel) {
+        let mut changed = false;
+        for b in self.bodies.iter_mut().chain(&mut self.stowed) {
+            let two_sided = self
+                .key
+                .iter()
+                .find(|(f, _)| *f == b.feature)
+                .is_some_and(|(_, h)| {
+                    kernel.body_kind(*h).ok() == Some(kmb_core::kernel::BodyKind::Sheet)
+                });
+            changed |= b.two_sided != two_sided;
+            b.two_sided = two_sided;
+        }
+        if changed {
+            self.sort_hidden();
+        }
     }
 
     /// 網の細かさ(mm)。
@@ -267,6 +293,7 @@ impl Scene {
         let bodies = self.key.clone();
         log::info!("網の細かさを {tolerance} mm にして作り直す");
         self.set(&bodies, build_meshes_at(kernel, &bodies, tolerance));
+        self.set_body_kinds(kernel);
         true
     }
 
@@ -287,21 +314,26 @@ impl Scene {
         self.bodies = meshes
             .into_iter()
             .map(|(feature, mesh)| {
+                let section_closed_boundary = has_closed_boundary(&mesh);
                 let (mesh, plain) = banded(mesh, self.threads.get(&feature));
-                (feature, mesh, plain)
+                (feature, mesh, plain, section_closed_boundary)
             })
-            .map(|(feature, mesh, plain)| SceneBody {
-                feature,
-                edges: feature_edges(&mesh),
-                look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
-                face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
-                mesh,
-                colors: Vec::new(),
-                tint: self.body_colors.get(&feature).copied(),
-                bvh: Default::default(),
-                rest: None,
-                plain,
-            })
+            .map(
+                |(feature, mesh, plain, section_closed_boundary)| SceneBody {
+                    feature,
+                    two_sided: false,
+                    section_closed_boundary,
+                    edges: feature_edges(&mesh),
+                    look: self.body_looks.get(&feature).map(|l| fit_look(l, &mesh)),
+                    face_looks: fit_face_looks(self.face_looks.get(&feature), &mesh),
+                    mesh,
+                    colors: Vec::new(),
+                    tint: self.body_colors.get(&feature).copied(),
+                    bvh: Default::default(),
+                    rest: None,
+                    plain,
+                },
+            )
             .collect();
         self.apply_poses();
         for b in &self.bodies {
@@ -426,6 +458,29 @@ impl Scene {
         &self.body_colors
     }
 
+    /// 部品ごとの色の番号を替える。網と拾いの控えは作り直さない。
+    pub fn set_part_hues(&mut self, hues: std::collections::BTreeMap<FeatureId, usize>) -> bool {
+        if self.part_hues == hues {
+            return false;
+        }
+        self.part_hues = hues;
+        true
+    }
+
+    pub fn part_hues(&self) -> &std::collections::BTreeMap<FeatureId, usize> {
+        &self.part_hues
+    }
+
+    fn part_color(&self, index: usize, colors: &Colors) -> Option<Color32> {
+        let body = self.bodies.get(index)?;
+        if body.tint.is_some() {
+            return None;
+        }
+        self.part_hues
+            .get(&body.feature)
+            .map(|n| colors.inks.part_hue[n % 8])
+    }
+
     /// ボディ(最後の機能の ID)ごとの材質を替える(網は作り直さない)。無いボディは材質なし。
     /// 変わったら真。
     pub fn set_body_looks(
@@ -521,7 +576,10 @@ impl Scene {
         }
         match &b.look {
             Some(l) => Some(l.clone()),
-            None if fx.all_bodies => Some(self.default_look(index, colors)),
+            None if fx.all_bodies => Some(match self.part_color(index, colors) {
+                Some(c) => kmb_render::Look::plain([c.r(), c.g(), c.b()]),
+                None => self.default_look(index, colors),
+            }),
             None => None,
         }
     }
@@ -579,6 +637,7 @@ impl Scene {
                 .bodies
                 .get(index)
                 .and_then(|b| b.tint)
+                .or_else(|| self.part_color(index, colors))
                 .unwrap_or(colors.body);
             return self.glow_tint(index, c);
         }
@@ -586,6 +645,7 @@ impl Scene {
             .bodies
             .get(index)
             .and_then(|b| b.tint)
+            .or_else(|| self.part_color(index, colors))
             .unwrap_or_else(|| body_tint(colors.body, colors.edge, index));
         match self.bodies.get(index) {
             // 淡く描くボディは色を抜く(形は見えるが目立たない)
@@ -653,7 +713,10 @@ impl Scene {
             return false;
         }
         self.bodies.get(index).is_some_and(|b| {
-            b.look.is_none() && b.tint.is_none() && !self.faded.contains(&b.feature)
+            b.look.is_none()
+                && b.tint.is_none()
+                && !self.part_hues.contains_key(&b.feature)
+                && !self.faded.contains(&b.feature)
         }) && !self.glows(index)
     }
 
@@ -781,6 +844,9 @@ pub(super) fn fit_look(l: &kmb_render::Look, mesh: &Mesh) -> kmb_render::Look {
 #[derive(Default)]
 pub(super) struct PickTree {
     pub(super) tree: std::sync::OnceLock<crate::pick_bvh::Bvh>,
+    /// 網の点を囲む箱(視線が通らないボディは木を作らずに飛ばす。同じ部品を何百個置いても、
+    /// 初めて拾う時に全部の木を作らない)
+    pub(super) bounds: std::sync::OnceLock<([f32; 3], [f32; 3])>,
     pub(super) started: std::sync::atomic::AtomicBool,
 }
 
@@ -810,6 +876,20 @@ impl SceneBody {
 
     /// 視線と交わる三角形ごとに `hit` を呼ぶ(木が出来ていれば木を通し、無ければ全部調べる)。
     pub(super) fn ray(&self, o: [f32; 3], d: [f32; 3], t_min: f32, hit: impl FnMut(u32, f32)) {
+        let (min, max) = *self.bvh.bounds.get_or_init(|| {
+            self.mesh.positions.iter().fold(
+                ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]),
+                |(lo, hi), p| {
+                    (
+                        [0, 1, 2].map(|k| lo[k].min(p[k])),
+                        [0, 1, 2].map(|k| hi[k].max(p[k])),
+                    )
+                },
+            )
+        });
+        if !crate::pick_bvh::ray_hits_box(min, max, o, d, t_min) {
+            return;
+        }
         match self.bvh() {
             Some(t) => t.ray(&self.mesh, o, d, t_min, hit),
             None => crate::pick_bvh::Bvh::ray_all(&self.mesh, o, d, t_min, hit),
@@ -837,6 +917,68 @@ impl SceneBody {
             cell.tree.get_or_init(|| build_bvh(&mesh));
         });
     }
+}
+
+/// 同じ座標の点を合わせ、境界が向き付きで閉じた網だけを認める。
+/// 許容差で穴を塞がず、不明な接続は開いた網と同じ扱いにする。
+fn has_closed_boundary(mesh: &Mesh) -> bool {
+    use std::collections::HashMap;
+    if mesh.triangles.is_empty() {
+        return false;
+    }
+    let mut points = HashMap::with_capacity(mesh.positions.len());
+    let mut ids = Vec::with_capacity(mesh.positions.len());
+    for p in &mesh.positions {
+        if p.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        let key = p.map(|v| if v == 0.0 { 0 } else { v.to_bits() });
+        let next = points.len();
+        ids.push(*points.entry(key).or_insert(next));
+    }
+    let mut faces = Vec::with_capacity(mesh.triangles.len());
+    let mut edges = Vec::with_capacity(mesh.triangles.len() * 3);
+    for tri in &mesh.triangles {
+        let mut vertices = [0; 3];
+        for i in 0..3 {
+            let Some(&id) = ids.get(tri[i] as usize) else {
+                return false;
+            };
+            vertices[i] = id;
+        }
+        if vertices[0] == vertices[1] || vertices[1] == vertices[2] || vertices[2] == vertices[0] {
+            return false;
+        }
+        let [a, b, c] = tri.map(|i| mesh.positions[i as usize]);
+        let normal = cross(sub(b, a), sub(c, a));
+        if normal == [0.0; 3] || normal.iter().any(|v| !v.is_finite()) {
+            return false;
+        }
+        let mut face = vertices;
+        face.sort_unstable();
+        faces.push(face);
+        for [a, b] in [
+            [vertices[0], vertices[1]],
+            [vertices[1], vertices[2]],
+            [vertices[2], vertices[0]],
+        ] {
+            edges.push(([a.min(b), a.max(b)], a < b));
+        }
+    }
+    faces.sort_unstable();
+    if faces.windows(2).any(|pair| pair[0] == pair[1]) {
+        return false;
+    }
+    edges.sort_unstable_by_key(|edge| edge.0);
+    let (pairs, remainder) = edges.as_chunks::<2>();
+    let mut previous = None;
+    for pair in pairs {
+        if pair[0].0 != pair[1].0 || pair[0].1 == pair[1].1 || previous == Some(pair[0].0) {
+            return false;
+        }
+        previous = Some(pair[0].0);
+    }
+    remainder.is_empty()
 }
 
 /// ねじの印 `marks` の円筒を帯に切った網と、切る前の網(切った時だけ)。
@@ -872,13 +1014,7 @@ pub fn build_meshes_at(
     bodies: &[(FeatureId, ShapeHandle)],
     tolerance: f64,
 ) -> Vec<(FeatureId, Mesh)> {
-    if (tolerance - kmb_measure::MESH_TOLERANCE).abs() < 1e-12 {
-        return build_meshes(kernel, bodies);
-    }
-    bodies
-        .iter()
-        .filter_map(|(f, h)| Some((*f, kernel.mesh(*h, tolerance).ok()?)))
-        .collect()
+    kmb_measure::meshes_at(kernel, bodies, tolerance)
 }
 
 /// 測る計算は、表示しているボディの網で測る。
@@ -897,4 +1033,197 @@ pub(super) fn feature_edges(m: &Mesh) -> Vec<[[f32; 3]; 2]> {
         .iter()
         .flat_map(|l| l.windows(2).map(|w| [w[0], w[1]]))
         .collect()
+}
+
+#[cfg(test)]
+mod sheet_tests {
+    use super::*;
+    #[test]
+    fn sheet_back_is_visible_without_doubling_the_measurement_mesh() {
+        struct SheetKernel;
+        impl Kernel for SheetKernel {
+            fn name(&self) -> &str {
+                "sheet-test"
+            }
+            fn body_kind(
+                &self,
+                _: ShapeHandle,
+            ) -> Result<kmb_core::kernel::BodyKind, kmb_core::KernelError> {
+                Ok(kmb_core::kernel::BodyKind::Sheet)
+            }
+        }
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [10., 0., 0.], [10., 10., 0.], [0., 10., 0.]],
+            normals: vec![[0., 0., 1.]; 4],
+            triangles: vec![[0, 1, 2], [0, 2, 3]],
+            triangle_faces: vec![0, 0],
+            face_names: vec!["face".into()],
+            edges: vec![],
+        };
+        let mut scene = Scene::default();
+        scene.set(
+            &[(FeatureId(1), ShapeHandle(1))],
+            vec![(FeatureId(1), mesh)],
+        );
+        let white = Color32::WHITE;
+        let colors = Colors::from_look(Palette {
+            dark: true,
+            canvas: Color32::BLACK,
+            ink: white,
+            ink2: white,
+            ink3: white,
+            err: white,
+            warn: white,
+            design: white,
+            cam: white,
+            shade3: white,
+            accent: white,
+            inks: Inks::DARK,
+        });
+        let rect = Rect::from_min_size(Pos2::ZERO, egui::vec2(128., 128.));
+        let mut cam = Camera::default();
+        cam.set_view(0., -90.);
+        cam.fit_box([0., 0., 0.], [10., 10., 0.], rect);
+        let draw = |scene: &Scene| {
+            render_guided(
+                scene,
+                &cam,
+                [128, 128],
+                1.,
+                &[],
+                None,
+                &colors,
+                Shading::Shaded,
+                Guides {
+                    grid: false,
+                    axes: false,
+                },
+                &[],
+                &Behind::default(),
+            )
+        };
+        let before = draw(&scene);
+        scene.set_body_kinds(&SheetKernel);
+        assert!(scene.bodies[0].two_sided);
+        let after = draw(&scene);
+        assert!(
+            before
+                .pixels
+                .iter()
+                .zip(&after.pixels)
+                .filter(|(a, b)| a != b)
+                .count()
+                > 1000,
+            "裏面の面積が見える"
+        );
+        assert_eq!(
+            scene.bodies[0].mesh.triangles.len(),
+            2,
+            "測定の面積は片面のまま"
+        );
+    }
+}
+
+#[cfg(test)]
+mod part_hue_tests {
+    use super::*;
+
+    fn colors(inks: Inks) -> Colors {
+        let white = Color32::WHITE;
+        Colors::from_look(Palette {
+            dark: false,
+            canvas: white,
+            ink: Color32::BLACK,
+            ink2: white,
+            ink3: white,
+            err: white,
+            warn: white,
+            design: white,
+            cam: white,
+            shade3: white,
+            accent: white,
+            inks,
+        })
+    }
+
+    #[test]
+    fn component_colors_change_only_paint_and_keep_overrides_and_export_looks() {
+        let mut scene = Scene::default();
+        let mesh = Mesh {
+            positions: vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]],
+            normals: vec![[0., 0., 1.]; 3],
+            triangles: vec![[0, 1, 2]],
+            triangle_faces: vec![0],
+            face_names: vec!["top".into()],
+            ..Mesh::default()
+        };
+        let ids: Vec<_> = (1..=10).map(FeatureId).collect();
+        scene.set(
+            &ids.iter()
+                .map(|&id| (id, ShapeHandle(id.0)))
+                .collect::<Vec<_>>(),
+            ids.iter().map(|&id| (id, mesh.clone())).collect(),
+        );
+        let tree = scene.bodies[0].bvh.clone();
+        let points = scene.bodies[0].mesh.positions.as_ptr();
+        let generation = scene.generation;
+        for inks in [Inks::LIGHT, Inks::DARK] {
+            let c = colors(inks);
+            let off: Vec<_> = (0..10).map(|i| scene.body_color(i, &c)).collect();
+            let exported: Vec<_> = scene
+                .render_scene(&c)
+                .objects
+                .iter()
+                .map(|o| o.look.clone())
+                .collect();
+            scene.set_part_hues(
+                ids.iter()
+                    .enumerate()
+                    .map(|(i, &id)| (id, if i == 1 { 0 } else { i % 8 }))
+                    .collect(),
+            );
+            assert_eq!(scene.body_color(0, &c), scene.body_color(1, &c));
+            assert_ne!(scene.body_color(0, &c), scene.body_color(2, &c));
+            assert_eq!(scene.body_color(0, &c), scene.body_color(8, &c));
+            assert!(!scene.steel_env(0));
+            scene.effects.all_bodies = true;
+            assert_eq!(
+                scene.body_look(0, &c).unwrap().color,
+                [
+                    inks.part_hue[0].r(),
+                    inks.part_hue[0].g(),
+                    inks.part_hue[0].b()
+                ]
+            );
+            let tint = Color32::from_rgb(9, 19, 29);
+            scene.set_body_colors([(ids[0], tint)].into());
+            assert_eq!(scene.body_color(0, &c), tint, "外観を優先");
+            scene.set_body_colors(Default::default());
+            scene.set_faded([ids[0]].into());
+            assert_ne!(scene.body_color(0, &c), inks.part_hue[0]);
+            scene.set_faded(Default::default());
+            scene.set_glow([ids[0]].into(), Color32::WHITE, 1.);
+            assert_ne!(scene.body_color(0, &c), inks.part_hue[0]);
+            scene.set_glow(Default::default(), Color32::WHITE, 0.);
+            assert_eq!(
+                scene
+                    .render_scene(&c)
+                    .objects
+                    .iter()
+                    .map(|o| o.look.clone())
+                    .collect::<Vec<_>>(),
+                exported,
+                "写実へ持ち込まない"
+            );
+            scene.effects.all_bodies = false;
+            scene.set_part_hues(Default::default());
+            assert_eq!(
+                (0..10).map(|i| scene.body_color(i, &c)).collect::<Vec<_>>(),
+                off
+            );
+        }
+        assert_eq!(scene.generation, generation);
+        assert_eq!(scene.bodies[0].mesh.positions.as_ptr(), points);
+        assert!(std::sync::Arc::ptr_eq(&scene.bodies[0].bvh, &tree));
+    }
 }

@@ -22,6 +22,49 @@ impl Workspace {
         self.mouse3d_settings(ui);
     }
 
+    /// 録画・解説向けの操作の表示。単位の無い値だけなので文書の長さの単位に依存しない。
+    pub(crate) fn keycast_settings(&mut self, ui: &mut egui::Ui) {
+        use crate::keycast::KeycastPlace;
+        let words = self.win.words();
+        let s = &mut self.win.layout.keycast;
+        ui.checkbox(&mut s.enabled, words.t("settings-keycast-enabled"));
+        if !s.enabled {
+            return;
+        }
+        ui.horizontal_wrapped(|ui| {
+            ui.label(words.t("settings-keycast-contents"));
+            ui.checkbox(&mut s.keys, words.t("settings-keycast-keys"));
+            ui.checkbox(&mut s.mouse, words.t("settings-keycast-mouse"));
+            ui.checkbox(&mut s.mouse3d, words.t("settings-keycast-mouse3d"));
+        });
+        ui.checkbox(&mut s.names, words.t("settings-keycast-names"));
+        ui.horizontal_wrapped(|ui| {
+            ui.label(words.t("settings-keycast-place"));
+            ui.radio_value(
+                &mut s.place,
+                KeycastPlace::LeftBottom,
+                words.t("settings-keycast-left"),
+            );
+            ui.radio_value(
+                &mut s.place,
+                KeycastPlace::CenterBottom,
+                words.t("settings-keycast-center"),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(words.t("settings-keycast-scale"));
+            ui.add(egui::Slider::new(&mut s.scale, 0.75..=2.0).suffix(" ×"));
+        });
+        ui.horizontal(|ui| {
+            ui.label(words.t("settings-keycast-hold"));
+            ui.add(
+                egui::Slider::new(&mut s.hold_secs, 0.5..=5.0)
+                    .suffix(words.t("settings-keycast-seconds")),
+            );
+        });
+        ui.weak(words.t("settings-keycast-private"));
+    }
+
     /// 設定の「3D の表示」の節。
     pub(crate) fn view3d_settings(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
@@ -70,14 +113,12 @@ impl Workspace {
 
     /// 設定の「読み込み」の節。
     pub(crate) fn import_settings(&mut self, ui: &mut egui::Ui) {
+        let words = self.win.words();
         ui.checkbox(
             &mut self.win.layout.ask_step_up,
-            "STEP を読み込んだら、立てるかを聞く",
+            words.t("settings-import-upright"),
         )
-        .on_hover_text(
-            "他の CAD(Y が上)で作った形は寝た向きで入るので、読み込んだすぐ後に\n\
-             「立てますか」と 1 回聞く。機能の欄の「Y が上の形を立てる」でもいつでも変えられる",
-        );
+        .on_hover_text(words.t("settings-import-upright-tip"));
     }
 
     /// 設定の「画面の配置」の節。

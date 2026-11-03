@@ -88,6 +88,18 @@ const char* jc_last_error(void);
 
 /* 輪郭(閉じたループの集まり)を平面の上の面にし、法線方向へ from から to まで押し出す。
  * loop_lens[i] 個ずつの区間が segments に並ぶ。外周と穴の区別は SMLib が入れ子から決める。 */
+typedef struct {
+    int32_t kind; /* 0: line, 1: interpolating points, 2: arc, 3: body edge */
+    uint32_t count;
+    const double* points;
+    const JcBrep* brep;
+    uint32_t f0, f1;
+    double center[3], axis[3], sweep;
+} JcBoundary;
+int jc_planar_sheet(const JcPlane*, const JcSegment*, const uint32_t*, size_t, JcBrep**);
+int jc_patch_sheet(const JcBoundary*, size_t, int32_t, JcBrep**);
+int jc_is_sheet(const JcBrep*, int32_t*);
+
 int jc_extrude(const JcPlane* plane, const JcSegment* segments, const uint32_t* loop_lens,
                size_t loop_count, double from, double to, JcBrep** out);
 
@@ -166,6 +178,8 @@ typedef struct JcStepFace {
 } JcStepFace;
 /* 面を辺の曲線で切り抜いて縫い、閉じた立体にする。失敗した面の添字を *failed に書く(面でなければ -1)。 */
 int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32_t* failed, JcBrep** out);
+int jc_iges_face(const JcStepFace* face, int32_t uv, double tolerance, JcBrep** out);
+int jc_iges_stitch(const JcBrep* const* faces, size_t count, double tolerance, int32_t mode, JcBrep** out);
 
 int jc_face_count(const JcBrep* brep, size_t* out);
 /* 面を out[0..cap] に書く。cap は jc_face_count 以上にすること。
@@ -181,6 +195,7 @@ int jc_set_face_tags(JcBrep* brep, const int64_t* tags, size_t count);
 int jc_edges(const JcBrep* brep, JcEdge** out, size_t* count);
 void jc_free_buffer(void* p);
 /* 面 face(jc_faces の添字)から点 p までの距離。 */
+int jc_face_normal(const JcBrep* brep, size_t face, const double p[3], double out[3]);
 int jc_face_distance(const JcBrep* brep, size_t face, const double p[3], double* out);
 /* 円の辺の一覧。*out は jc_free_buffer で消す。 */
 int jc_arc_edges(const JcBrep* brep, JcArcEdge** out, size_t* count);

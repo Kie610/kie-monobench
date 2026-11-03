@@ -8,9 +8,11 @@
 | --- | --- |
 | 変えた crate のテストと clippy(作業中はこれ) | `cargo xtask verify` |
 | crate を名指しで検査する | `cargo xtask verify kmb-ui kmb-cam-commands` |
-| 変えた crate に依存する側も含める(プッシュの前。PC での取り込みの検査もこれ) | `cargo xtask verify --dependents` |
+| 変えた crate に依存する側も、組み立てと入口の層の手前まで含める(プッシュの前。下の「担当分と全体」) | `cargo xtask verify --dependents-lower` |
+| 変えた crate に依存する側を全部含める(PR の CI が流す。PC での取り込みの検査もこれ) | `cargo xtask verify --dependents` |
 | 全体を検査する(クラウドで手渡す前。前後に下の `cloud-target-cache.sh`) | `cargo xtask verify --all` |
 | 全体を、truck のカーネルでも検査する(公開の準備の時。週に 1 回は `--all` が自動で足す) | `cargo xtask verify --all --truck` |
+| 並列の作業場が共通に使う部分(組み立てと入口の層より下の全部)を、テストを流さずに先に組む(下の「並列の作業場で共通部分を組み直さない」) | `cargo xtask warm` |
 | 何が対象になるかを見るだけ | `cargo xtask affected [--dependents]` |
 | 組み立てずに点検だけを流す(数秒。下の「点検」) | `cargo xtask checks` |
 | 機能の断片から一覧の表を作り(`target/docs/`)、地図.md の crate の一覧を書き直す | `cargo xtask docs` |
@@ -22,8 +24,17 @@
 | 配る exe に入る他者の部品の許諾文の一覧を作る(13 節) | `cargo xtask licenses` |
 
 - 「変えた」は `origin/main` との分かれ目からの差で、まだコミットしていないファイルと git に入れていないファイルも含む。比べる相手は `--base <ref>` で変えられる。
-- 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた時は、全体を検査する。`docs/` など crate の外のファイルはテストしない(何を飛ばしたかは表示する)。ただし下の点検はいつも流し、テストの段は「未実行」と出す(通過ではない)。
-- `--all`・`--dependents` は cargo-nextest が無ければ失敗にする(件数が残らないため。nextest なしで流すなら `JC_VERIFY_NEXTEST=off`)。
+- 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた時は、全体を検査する。`--dependents-lower` では、下位の全 crate を検査する。`docs/` など crate の外のファイルはテストしない(何を飛ばしたかは表示する)。ただし下の点検はいつも流し、テストの段は「未実行」と出す(通過ではない)。
+- `--all`・`--dependents`・`--dependents-lower` は cargo-nextest が無ければ失敗にする(件数が残らないため。nextest なしで流すなら `JC_VERIFY_NEXTEST=off`)。
+- 担当分と全体: 機能の crate はどれも組み立て(kmb-bundle)に依存されるので、`--dependents` は組み立て・session・画面・アプリまで届く。
+  画面の GPU・両方のカーネル・WASM を全部組むと、target は 15〜22 GB になる。
+  プッシュの前の手元の検査は `--dependents-lower` にする。
+  変更ファイルから自動で選ぶ時は、組み立て・session・画面・アプリの層を選ばない。
+  これらの層のファイルを直接変えた時も選ばず、依存を辿る時もそこを通って先へ進まない。
+  契約テストの利用側を後から足す時も、同じ層の範囲を守る。
+  crate の名前を明示した時は、その crate 自身を検査する。
+  上の層と全体は PR の CI(14 節)が Linux と Windows で `--dependents` を流して確かめる。
+  選んだ下位の crate の依存を組み立てる処理は、検査対象の選択と区別する。
 - 最後に段ごとの「通過/失敗」とかかった秒数を出す。失敗があれば終了コードが 1 になる。
 - clippy は警告を誤りとして扱う(`-D warnings`)。テストだけなら `--no-clippy`。
 - 普段の検査(手渡しの前・PC での取り込みを含む)は SMLib のカーネルだけで流し、`--truck` は付けない。truck の回は、公開の準備で truck のカーネルも配る前と、週に 1 回だけ流す(使うのは SMLib だけで、truck は戻すための控え)。
@@ -31,6 +42,10 @@
   - truck の回で落ちたら、1 件ずつ truck の弱さか JC の退行かを確かめる(SMLib の回では通るか、truck の回で前に通っていたか、落ちた所の形)。退行なら直す。truck の弱さなら、試験の初めに `if k.is_truck() { kmb_contract::skip!("truck は…") }` と何が作れないかを書き、`xtask/skips.toml` の `[runtime]` に試験の名前と「truck の回(…)」を足す。新しい形の操作の試験を足す時も、truck で作れなければ同じに書く。
   - truck に頼っている所: SMLib の組み立てでも、STEP の読み込みは truck に任せている(`kmb-bundle` の `kernel_of`、`SmlibKernel::with_step_import`)。この読み込みの試験(`kmb-kernel-truck` 自身の試験と、`kmb-kernel-smlib`・`kmb-ui`・`kmb-samples` の STEP を読む試験)は SMLib の回にも入っているので、普段の検査で確かめ続ける。truck で形を作る処理(押し出し・ブーリアンなど)だけが普段の検査から外れる。
 - `--truck` の 2 回目(truck の回)は、カーネルの違いで結果が変わり得る形の計算の試験だけを流す: `kmb-solid` の全部と、`kmb-samples` の穴の見分けの試験(`hole_tests::`)。どこを流すかは `xtask/src/main.rs` の `TRUCK_TESTS`。形を作った後の処理(加工・画面の操作・MCP・見本の加工)の試験はどちらのカーネルでも同じ中身になるので、速い方の SMLib の回だけで流す(同じ試験が truck では 3.5〜15 倍遅い。6 節)。形の計算の試験を新しい crate やモジュールに足した時は、`TRUCK_TESTS` にも足す。
+- 広い操作の試験: truck の回が有効な時は、通常の試験・clippy が終わった後、`kmb-samples` と `kmb-ui` の `wide_` で始まる無視した試験だけを、独立した段で SMLib で 1 回流す。狭い crate の名指しでも `--truck` があれば両方を流す。`--all` が週の期限で truck を足した時も同じ。CI は PR ごと・毎晩に `--truck` を付けるため、広い試験もそのたびに流れる。
+  - 普段の truck の無い回には入れない。`--dependents-lower` はこの段の組み立て・実行をせず、「未実行」と理由を出す。通常の選択・実行ファイルの一覧・truck の対象は広げない。
+  - 結果は「広い操作の試験」として、関数の通過・失敗・実行中の飛ばしと、操作ごとの実行・型付きの拒否・未実行を分ける。ログとケースの JSONL は `target/verify/wide/`。通常の実 JUnit は退避して byte ごとに戻し、広い段の実 JUnit を同フォルダへ別に残す。未実行を合格へ足さない。
+  - 落ちたらケースの文書・選び・引数・理由を確認し、試験の入力条件と製品の故障を分ける。変更を返した操作は、計算の誤りがあっても取り消しと文書・形の復帰を確かめる。製品の故障を後から飛ばしへ移さず、操作の名前と再現手順を残して別の修正へ回す。
 - 道具は `xtask/`(ワークスペースの 1 crate)で、`.cargo/config.toml` の別名 `xtask` から動く。
 
 ### 点検(組み立てずに毎回流す)
@@ -45,7 +60,7 @@
 - 骨格の資料(`xtask/src/agents.rs`): 直下の AGENTS.md と .claude/rules/ の分野の決まり。コードの印(`…`)に書いたパス・crate・型や関数の名前・xtask の命令と、「policy.md「節」」の節が無ければ落とす(名前を変えた PR が資料を直し忘れるのを防ぐ)。大きさの上限(AGENTS.md 12 KB、分野の決まり 1 つ 4 KB)、分野の決まりの `paths:` が無いか当たらない、CLAUDE.md が `@AGENTS.md` を読まない、も落とす。層の表は生成区画で、`cargo xtask docs` が `layers.rs` から作る(古いと落ちる)。決まりの行に付けた「(点検: 名前)」は `agents.rs` の `CHECKS` の名前で、その点検の所に印の字が無ければ落とす。点検の無い決まりと決まりの無い点検は落とさず数を出し、`cargo xtask docs` が一覧を出す。比べる前に CRLF を LF に直す。
 - 変えたら直す合図(`agents.rs` の `change_hints`): 分かれ目から層の表か docs/入出力.md の役割・文書の版・終了の番号・MCP の道具の節が変わったのに、AGENTS.md の本文(層の表の外)が変わっていなければ「合図:」を出す。落とさない。
 - 画面の再計算(`xtask/src/layers/code.rs` の `screen_recomputes`): 画面とアプリの層で `recompute_watched`・`take_cache`・`hold_shapes` を呼ばない(再計算は kmb-session の Headless を通す)。
-- コアの公開の項目(`xtask/src/api.rs`): crate を名指ししない時、kmb-core の公開の項目(`pub` の頭、`pub enum` の値、`pub trait` の項目。字面で読む)を分かれ目と比べ、変わっていれば契約テスト(kmb-contract)を使う crate を全部足して流す。項目は「ファイル: 項目」で数えるので、ファイルを分けただけでも変わったと見なす。`CORE_API_VERSION` は公開まで上げない(PR ごとに上げていた版は誰も読まず、衝突の元だった)。
+- コアの公開の項目(`xtask/src/api.rs`): crate を名指ししない時、kmb-core の公開の項目(`pub` の頭、`pub enum` の値、`pub trait` の項目。字面で読む)を分かれ目と比べ、変わっていれば契約テスト(kmb-contract)を使う crate を足して流す。`--dependents-lower` では下位の層に限り、ほかの指定では全部足す。項目は「ファイル: 項目」で数えるので、ファイルを分けただけでも変わったと見なす。`CORE_API_VERSION` は公開まで上げない(PR ごとに上げていた版は誰も読まず、衝突の元だった)。
 - 組み立ての名前の一意(kmb-bundle の試験 `tests/ids.rs`): 操作の ID・役割の印・設定の ID が重ならず、`then`・`before`・段の帯の操作が実際にある操作を指す。見本の文書 3 つで、何も選ばない時と機能を 1 つずつ選んだ時の操作を集める。
 
 整形(毎回、どの crate を選んでも全体): `cargo fmt --all --check`(rustfmt は `rust-toolchain.toml` の版)。崩れたファイルの名前を出して落とす。直すのは `cargo fmt --all`。CI(14 節)は組み立ての前にも Linux で流し、整形の崩れた PR を早く落とす。
@@ -78,6 +93,23 @@
 - `restore` は `target/debug` が無い時だけ戻す。Rust の版が違えば戻さない。戻した後に空きが 10 GB 残らなければ戻さず(戻す大きさを書いていない古い組は、固めた大きさの 4 倍と見る)、揃えた依存(`crates/kmb-workspace-hack/Cargo.toml`)が置いた時と違えば incremental を戻さない(使われないので。8 節)。戻した target は cargo が中身を確かめて使うので、古い版の物でも結果は変わらない(違う所だけ作り直す)。取り出したばかりのソースは時刻が新しいので、自前の crate は毎回作り直す(incremental が残っているので速い)。そこで自前の crate の成果物(テストと実行ファイル、lib の `.rlib`・`.rmeta`、`target/debug` 直下の実行ファイル)は `save` で置かず、`restore` でも戻さない(型は `cargo metadata` の crate の名前から作る)。2026-10-23 は戻す量が 18 → 8.9 GB、戻した後の空きが 12.7 → 20.8 GB になった(8 節)。
 - zstd が無ければ apt で入れる。`/mnt/project-files` の無い所(PC)では何もしない。
 
+### 並列の作業場で共通部分を組み直さない
+
+担当分だけを確かめる並列の作業場(`--dependents-lower`)は、それぞれ空の target から、外の crate・SMLib の C++・下の層の自前の crate を毎回組み直していた。クラウド 4 コアで、押し出し(`kmb-cad-extrude`)は 375 秒のうち組み立て 285 秒、加工の戦略(`kmb-strategy-pocket2d`)は 236 秒のうち 172 秒(2026-10-29 に測った)。そこで共通部分を先に組んでおき、作業はそこから始める。
+
+| 場面 | コマンド |
+| --- | --- |
+| 共通部分を組む(組み立てと入口の層より下の全部のテストの組み立てと clippy。テストは流さない。組んだ後、自前のテストの実行ファイルと incremental を消す) | `cargo xtask warm` |
+| 共有フォルダのある作業場: 上の後に、依存だけの写しを置く(依存が変わった後に、置いた時と違うと出たら置き直す) | `scripts/cloud-target-cache.sh save-deps` |
+| 共有フォルダのある作業場: 写しを戻す(`verify` と `warm` が組み立ての前に自分で流す) | `scripts/cloud-target-cache.sh restore-deps` |
+
+- 依存だけの写しは、下の層を全部組んだ target から、自前の crate の成果物(上の `save` と同じ型)と incremental を除いた物。固めて 614 MB、戻して 2.4 GB(戻す 11 秒)。置き場所は全体の写しと同じ所の `deps-linux-<UTC の時刻>/` と `deps-linux.txt` で、全体の写しとは別に 1 組だけ持つ。書く錠は `saving-deps/`、読む印は全体の写しと同じ `readers/` で、`save-deps` は依存だけの組を読んでいる印だけを待つ。
+- `restore-deps` は `target/debug` があっても戻す。今の target に無い物だけを足し、同じ名前の物は今ある方を残す(名前の指紋が同じなら中身も同じ)。戻した組の名前を `target/debug/.deps-restored` に書き、同じ組は 2 度戻さない。Rust の版が違う時・欠片が足りない時・空きが「戻す大きさ + 10 GB」に足りない時は戻さない。`Cargo.lock` か揃えた依存が置いた時と違えば、そう言って戻す(合う物は使われ、合わない物だけ作り直す)。`verify` から呼ばせないなら `JC_DEPS_CACHE=off`。
+- 戻した後に残る時間は、自前の crate の作り直し(取り出したソースは時刻が新しいので、毎回作り直す)と xtask の組み立て。押し出しは 375 → 148 秒(組み立て 285 → 83 秒)、加工の戦略は 236 → 103 秒(172 → 62 秒)になった。写しには担当分が使わない依存も入るので、target は 0.5〜1.6 GB 大きくなる。別のパスの作業場へ戻しても、外の crate は作り直されない。ただし揃えた依存から外した crate(2 節)は選んだ crate によって機能が変わるので、狭い選び方では 15 個ほど作り直すことがある(戦略 1 つで、戻した後の組み立て 74 秒)。
+- 共有フォルダの無いクラウドの作業場で、準備の台本の後の状態を取っておいて次の作業に使い回す所では、準備の台本の最後で `cargo xtask warm` を流す。パスとソースの時刻も残るので、触っていない自前の crate も作り直さない。`warm` は空から 698 秒で、片付けの後の target は 3.0 GB。その後の押し出しの `--dependents-lower` は 70 秒(組み立て 25 秒)だった。
+- 画面・session・アプリを触る作業は、上の層の依存がこの写しに入っていないので、上の全体の写し(`restore`)を使うか、CI に任せる。
+- 採らなかった案: 共有のコンパイルの取っておき(保存先に結果を置いて取ってくる道具)。外の保存先と鍵が要るうえ、マクロの crate・ビルドスクリプト・incremental の効く自前の crate は取っておけず、写しより効き目が小さい。
+
 ### テストの流し方(cargo-nextest)
 
 [cargo-nextest](https://nexte.st/)(MIT または Apache-2.0。開発の道具で、製品には入らない)があれば、xtask はテストを nextest で流す。nextest はテストを 1 本ずつ別のプロセスにし、crate(テストの実行ファイル)をまたいで CPU の数だけ並べる。前の `cargo test` は実行ファイル(約 60 本)を 1 本ずつ順に流し、しかも SMLib を呼ぶテストは錠(`kmb-kernel-smlib` の `ffi.rs` の `SMLIB`)で同じプロセスの中では 1 本ずつになっていた。
@@ -100,6 +132,12 @@
 Cargo は、選んだ crate の組み合わせごとに依存先の機能(features)を決め直す。そのため `cargo test -p kmb-cam-commands` のように一部だけを選ぶと、全体のビルドと機能の組み合わせが変わり、wasmtime や egui などの依存先を最初から作り直していた(測った例: `-p kmb-cam-commands` で 2 分 46 秒、`-p kmb-ui` で 6 分 15 秒)。
 
 `crates/kmb-workspace-hack` は中身のない crate で、全部の crate がこれに依存し、依存先の機能を全体と同じにそろえる。ただし見本のプラグイン(`plugins/post-example`)が組む crate(kmb-post・kmb-toolpath と、その依存の kmb-cam-tool・kmb-core・kmb-expr・kmb-format・kmb-look)は、`.config/hakari.toml` の `final-excludes` で外す。揃えた依存は egui などの画面の部品を抱えるので、外さないとプラグインが WASM でもそれを組む(kmb-plugin-host の試験が、プラグインの Cargo.lock に揃えた依存と画面の部品が無いことを確かめる)。この 7 crate だけを `-p` で選ぶと、依存先の作り直しが起きることがある。入れた後は、どの crate を選んでも依存先の作り直しは 0 件だった(`kmb-cam-commands`・`kmb-ui`・`kmb-expr`・`kmb-sketch` などで確認)。
+
+画面(egui・egui-wgpu・wgpu・naga など)と WASM(wasmtime の下の wasmparser・pulley-interpreter など)の依存は、`.config/hakari.toml` の `final-excludes` の `third-party` で揃えた依存から外す。揃えた依存に入れると、画面にも WASM にも関係の無い crate を 1 つ検査するだけでも、これらを全部組み立てていた(空の target から `cargo test -p kmb-strategy-pocket2d --no-run` で、外す前は 189 crate・370 秒・1.7 GB、外した後は 85 crate・92 秒・0.73 GB。2026-10-29 にクラウドで測った)。小さいディスクの作業場で担当の crate だけを確かめるため(1 節の `--dependents-lower`)。
+
+- 外した依存を使うのは、画面の crate(層 ui・app)と kmb-plugin-host から上だけ。WASM の依存は、どの crate を選んでも機能の組み合わせが変わらない。画面の依存は、根の `Cargo.toml` の `egui`・`egui-wgpu` に、アプリ(eframe)が足すのと同じ機能を書いてそろえる。書かないと `-p kmb-ui` などで組んだ時に wgpu・naga の機能がアプリと違い、同じ target に別の組ができる。
+- 確かめ方: 選び方ごとに `cargo tree <選び方> -e features,normal,build,dev -i <依存> --prefix none` の `<依存> feature` の行を比べる(`--workspace`・`-p kmb-ui-view3d`・`-p kmb-ui`・`-p kmb-app` で同じ)。eframe の版を上げた時も比べ、違えば根の `Cargo.toml` の機能を足す。
+- 文字の形の crate(skrifa・read-fonts・font-types)は kmb-text も使うので外さない。
 
 - 作るのは [cargo-hakari](https://docs.rs/cargo-hakari)(MIT または Apache-2.0。開発の道具で、製品には入らない)。設定は `.config/hakari.toml`。
 - 入れた直後の 1 回だけ、全体のビルドで依存先を作り直す(3 節の変更と合わせ、クラウドで約 14 分)。
@@ -252,6 +290,14 @@ Claude デスクトップ(MSIX)の中のセッション(Remote Control など)�
    - 失うもの: (a) 取り込みが触らない crate の Windows での再試験(コードも依存も変わっていないので、結果は前回と同じになるはず)、(b) truck のカーネルでの Windows の試験(truck は Rust だけで書かれ、Windows と Linux で同じコードが動く)。SMLib(既定のカーネル、C++)での Windows の試験と clippy は、取り込みが触る範囲で今まで通り行う。
    - 根の `Cargo.toml`・`Cargo.lock`・`.cargo/` を変えた取り込みは、自動で全体を検査する(1 節)。
    - truck の回は公開の準備の時だけ流す(1 節)。
+
+### 広い操作を手で確かめる
+
+通常の検査と広い 2 本をまとめて流す 1 行は `cargo xtask verify kmb-samples kmb-ui xtask --truck`。広い段だけを調べる時は、`cargo test -p kmb-samples -- --ignored wide_` と `cargo test -p kmb-ui -- --ignored wide_` をそれぞれ流す。
+
+クラウドでの開発ビルドの実測は、操作の 1 関数が 95.4 秒、画面の 1 関数が 936.2 秒(組み立てを除く)。操作は 181 件のうち変更と取り消し 57・読み取り 13・種類付きの拒否 21・理由付き未実行 90、画面は 505 経路のうちクリックと復帰 409・ファイル窓の入口確認とキャンセル 29・未実行 67。これらの内部件数を、関数の合格件数と混ぜない。通常の回はこの長い本体を流さず、検査道具の軽い試験だけを足す。
+
+`target/verify/wide/cases/actions.jsonl` と `toolbar.jsonl` に文書・操作・選び・引数と理由が残る。対象は有限の見本文書と選びで発見した操作と、全作業空間の通常のタブ・一覧・選択の操作具。計算済みの研究結果、既存ジョイントの駆動、リンク元の変更、スケッチ専用の帯は含まない。長い本計算・入力の窓・足りない必須引数・無効な操作には未実行の理由を残す。位置を求める手順とベクトル引数が宣言された操作は、選んだ平面の実際の網の上の点を渡す。
 
 ### 今の対策のほか
 
@@ -422,11 +468,14 @@ G-code(`kmb gcode`)とシミュレーションの報告(`kmb sim`)を変えず�
 - 組み立て済みの物は毎晩の main の回で残し、PR の回が使う(PR の中で残した物はほかの PR から使えない)。SMLib の C++ の結果は `SMLIB_CACHE_DIR`(作業場の外)に置き、別に残す(6 節)。
 - 落ちた時は、その回の `target/verify/` のログを「verify-<OS>」の名前で取れる。
 
-## 15. タグで配る物を組み立てる(GitHub の CI)
+## 15. 配る物を組み立ててリリースに載せる(GitHub の CI)
 
-- `.github/workflows/release.yml` が、`v` で始まるタグを押した時(と手で流した時)に、Linux と Windows で `cargo xtask release --tag <タグ> -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。
-- タグはワークスペースの版(`Cargo.toml` の `[workspace.package] version`)に `v` を付けた物にする。合わなければ組み立てる前に止まる(`--tag`)。
-- できた物は OS ごとに「kie-monobench-<タグ>-<OS>.zip」(中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`)にまとめて成果物に置く。両方の OS が済んだら、全部の zip の SHA256 を 1 つの `SHA256SUMS`(`sha256sum -c SHA256SUMS` で確かめられる形)にして「kie-monobench-<タグ>-SHA256SUMS」の成果物に置く。GitHub のリリースは作らない。
+- `.github/workflows/release.yml` が、Linux と Windows で `cargo xtask release -p kmb-app -p kmb-cli -p kmb-mcp` を流す。画面・CLI・MCP の 3 つの exe を作り、3 つともこの PC のパスが残っていないかを数える(12 節)。回は次の 2 通り。
+- **正式な版**: 「リリース」を手で流し、「版」に版の番号(例 `0.3.0`)を入れる。先に `Cargo.toml` の `[workspace.package] version` を上げる PR を取り込んでおく。main から流した時だけ、版がワークスペースの版と合い、同じタグがまだ無ければ、main の先頭に注釈付きのタグ `v<版>` を付けて組み立てる(`--tag` でもう一度突き合わせる)。PC から `v<版>` のタグを押しても同じ回になる。
+- **ナイトリー**: 毎晩の main の検査(14 節)が通った後、前のナイトリー(タグ `nightly`)から main が進んでいれば、検査したコミットを組み立てる。プレリリース「nightly」を消して作り直し、タグ `nightly` だけを付け替える(タグは増えない)。題は「kieMonoBench ナイトリー <日付>」、本文は前のナイトリーから入った PR の題の一覧。GitHub の「最新」は正式な版のまま。「版」を空にして手で流すと、進んでいなくても今の main で出す。
+- できた物は OS ごとに「kie-monobench-<版>-<OS>-<arch>」(Windows は `windows-x64.zip`、Linux は `linux-x86_64.tar.gz`。中は同じ名前のフォルダ 1 つに 3 つの exe・`THIRD-PARTY-LICENSES.txt`・`LICENSE-MIT`・`LICENSE-APACHE`・`README.md`・`README.en.md`)にまとめる。ナイトリーの <版> は `nightly-<日本時間の日付>`。両方の OS が済んだら、全部の SHA256 を 1 つの `SHA256SUMS.txt`(`sha256sum -c SHA256SUMS.txt` で確かめられる形)にする。成果物にも置く。
+- 正式な版は、同じ回で GitHub のリリースを下書きで作り(題は「kieMonoBench <版>」、本文は `.github/release-notes.md` のひな型に版を埋めた物)、2 つの配る物と `SHA256SUMS.txt` を載せる。下書きを落とし直してハッシュを確かめてから、新しくできること・直したことの節を埋めて手で公開する。
+- GitHub の道具(`GITHUB_TOKEN`)で押したタグはほかの回を起こさないので、タグ付けから載せるまでを 1 回で行う。
 - 検査は取り込みの前の PR の回と毎晩の main の回(14 節)が済ませているので、ここでは流さない。組み立て済みの物と SMLib の C++ の結果は毎晩の main の回が残した物を使う。
 
 ## 16. PR を GitHub で取り込む

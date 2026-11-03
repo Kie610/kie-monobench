@@ -44,6 +44,30 @@ impl Extension for InspectCommands {
             .or(bodies.last());
         Some(match body {
             None => Err("ボディがありません".into()),
+            Some((f, h))
+                if cx.kernel.body_kind(*h).ok() == Some(kmb_core::kernel::BodyKind::Sheet) =>
+            {
+                (|| {
+                    let (min, max) = cx.kernel.bounds(*h).map_err(|e| e.to_string())?;
+                    let area: f64 = cx
+                        .kernel
+                        .faces(*h)
+                        .map_err(|e| e.to_string())?
+                        .iter()
+                        .map(|f| f.area)
+                        .sum();
+                    let name = cx
+                        .data
+                        .feature(*f)
+                        .map_or(String::new(), |e| e.name.clone());
+                    Ok(Outcome::Message(format!(
+                        "{name}: 面のボディ(体積なし)、面積 {area:.3} mm²、外形 {:.3} × {:.3} × {:.3} mm",
+                        max[0] - min[0],
+                        max[1] - min[1],
+                        max[2] - min[2]
+                    )))
+                })()
+            }
             Some((f, h)) => cx
                 .kernel
                 .mass(*h)

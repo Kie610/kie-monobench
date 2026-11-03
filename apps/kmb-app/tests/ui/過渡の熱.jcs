@@ -1,0 +1,65 @@
+# 人の手順で熱の時間の欄を入れ、式・単位・範囲を確かめて解く。
+# 既存の再生の帯で初めと終わりを比べ、全時刻で共通の凡例を使う。
+#! sample part
+#! size 1920x1080
+
+click ~作業空間:
+click "解析"
+click "熱"
+expect "終わりの時刻(s)" missing
+shot 定常の欄
+
+click "面を選ぶ"
+pick f8:end
+type "熱(W、面全体)" "10 * 2"
+type "要素の大きさ" 4
+select "時間" "時間で変わる"
+type "終わりの時刻(s)" "30 * 2"
+type "コマの数" "2 * 5"
+type "初めの温度(℃)" "15 + 5"
+type ~"    入れ始め(s)" "2 * 5"
+type ~"    入れ終わり(s)" "3 * 10"
+expect "▶  実行" enabled
+
+# 秒の数を受ける欄で長さは受けず、時刻とコマ数の範囲も確かめる。
+type "終わりの時刻(s)" "1 mm"
+expect "▶  実行" disabled
+type "終わりの時刻(s)" -1
+expect "▶  実行" disabled
+type "終わりの時刻(s)" "30 * 2"
+type "コマの数" 1
+expect "▶  実行" disabled
+type "コマの数" "2 * 5"
+type ~"    入れ終わり(s)" 61
+expect "▶  実行" disabled
+type ~"    入れ終わり(s)" "3 * 10"
+expect "▶  実行" enabled
+shot 過渡の欄
+
+click ~OK
+key Return
+click "▶  実行"
+expect "編集パネルを隠す" exists
+until "編集パネルを隠す" missing 300s
+key Return
+expect "済み" exists
+expect ~"(11 コマ)" exists
+expect "最高の温度(℃)" exists
+expect "色の範囲を今の時刻で決める" exists
+shot 終わりの温度
+
+click "最初のコマ"
+expect ~"時刻のコマ 1/11" exists
+shot 初めの温度
+click "次のコマ"
+expect ~"時刻のコマ 2/11" exists
+click "再生"
+until ~"時刻のコマ 11/11" exists 20s
+expect "再生" exists
+shot 再生した後
+
+click "結果の数値"
+expect ~"使った刻みの数:" exists
+expect ~"最小の刻み:" exists
+expect ~"比熱" exists
+shot 過渡の数値
