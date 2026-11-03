@@ -21,6 +21,8 @@ pub(crate) struct DocState {
     /// 文書の変更もここを通す
     pub(crate) work: kmb_session::Headless,
     pub(crate) selected: Option<FeatureId>,
+    /// ブラウザで選んだ部品。作業先の部品とは別に持ち、文書には保存しない。
+    pub(crate) selected_component: Option<u64>,
     /// 編集中のパラメータの式・名前(確定前)
     pub(crate) expr_edits: HashMap<ParamId, FieldEdit>,
     pub(crate) param_batch: crate::design::params_ui::BatchDraft,
@@ -228,6 +230,7 @@ impl DocState {
         DocState {
             work,
             selected: None,
+            selected_component: None,
             expr_edits: HashMap::new(),
             param_batch: Default::default(),
             name_edits: HashMap::new(),

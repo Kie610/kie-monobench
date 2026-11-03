@@ -454,7 +454,11 @@ impl Workspace {
             None,
             Some(shown),
             Some(active),
+            self.cur.selected_component == Some(id),
         );
+        if !eye && !radio && r.clicked() {
+            self.select_component_row(id);
+        }
         // 3D のビューで選んでいる・指している面のボディが中にあれば印(閉じていても分かる)
         if all.iter().any(|b| self.browser.marked.contains(b)) {
             crate::browser_ui::mark_row(ui, r.rect);
