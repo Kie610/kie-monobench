@@ -70,7 +70,7 @@ impl Workspace {
         m.body.clone()
     }
 
-    /// 測定中は操作の可否の判定でカーネルを待たず、文書を変える操作を一時的に無効にする。
+    /// 測定中は操作の可否の判定でカーネルを待たず、モジュールの操作を一時的に無効にする。
     pub(crate) fn measure_frozen_actions(&self) -> Option<Vec<kmb_core::Action>> {
         let task = self
             .cur
