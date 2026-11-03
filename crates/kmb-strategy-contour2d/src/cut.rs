@@ -14,6 +14,8 @@ pub(super) struct Notes {
     pub(super) open_lines: bool,
     pub(super) on_unused: bool,
     pub(super) entry_far: bool,
+    pub(super) unreachable: usize,
+    pub(super) fitting_diameter: Option<f64>,
 }
 
 impl Notes {
@@ -27,6 +29,12 @@ impl Notes {
         }
         if self.too_small {
             w.push("工具が入らない輪郭があるので、そこは削りません".into());
+        }
+        if self.unreachable > 0 {
+            w.push(format!(
+                "工具が届かない所が {} か所あります。入る工具径の目安は {:.2} mm 以下です。小さい工具で取残し加工をしてください",
+                self.unreachable, (self.fitting_diameter.unwrap_or(0.0) * 100.0).floor() / 100.0
+            ));
         }
         if self.no_depth {
             w.push("削る深さがない輪郭があるので、そこは削りません".into());
@@ -122,6 +130,18 @@ impl Cut<'_> {
         if rough.is_empty() {
             n.too_small = true;
             return false;
+        }
+        if !on {
+            // 仕上げ代ではなく、指定された削り残しの壁への到達を確かめる。
+            for wall in shift(self.leave) {
+                if let Some(check) = clearance::check(&wall, tool_out, p.r()) {
+                    n.unreachable += check.regions;
+                    n.fitting_diameter = Some(
+                        n.fitting_diameter
+                            .map_or(check.diameter, |d| d.min(check.diameter)),
+                    );
+                }
+            }
         }
         let free_inside = !tool_out;
         // 工具の中心が入ってよい側(線の上をなぞる時は、どちらも削る所ではないので使わない)

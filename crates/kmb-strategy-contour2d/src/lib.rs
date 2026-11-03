@@ -35,6 +35,7 @@ use kmb_cam_setup::{
 /// タブの付く経路の出力(加工の操作が読むので kmb-cam-setup に置く)。
 pub use kmb_cam_setup::{TAB_PATHS, TabPath, TabPaths, TabSettings};
 
+mod clearance;
 mod cut;
 
 use cut::{Cut, Notes};

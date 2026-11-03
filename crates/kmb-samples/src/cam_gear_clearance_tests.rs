@@ -67,3 +67,39 @@ fn a_three_mm_tool_reports_unreachable_tooth_gaps_of_a_module_one_gear() {
         "歯の間の底へ届かない工具を知らせる必要がある: {warnings:?}"
     );
 }
+
+#[test]
+fn a_half_mm_tool_reaches_the_same_tooth_gaps_without_a_clearance_warning() {
+    let warnings = gear_contour_warnings(0.5);
+    eprintln!("径 0.5 mm の輪郭加工の注意: {warnings:?}");
+    assert!(
+        !warnings.iter().any(|w| w.contains("工具が届かない")),
+        "{warnings:?}"
+    );
+}
+
+#[test]
+fn the_displayed_fitting_diameter_can_be_used_without_the_clearance_warning() {
+    let warnings = gear_contour_warnings(3.0);
+    let notice = warnings
+        .iter()
+        .find(|w| w.contains("工具が届かない"))
+        .unwrap();
+    assert!(notice.contains("20 か所"), "{notice}");
+    let diameter: f64 = notice
+        .split("目安は ")
+        .nth(1)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!(diameter > 0.0 && diameter < 3.0, "{diameter}");
+    let retry = gear_contour_warnings(diameter);
+    eprintln!("表示した径 {diameter} mm で再計算した注意: {retry:?}");
+    assert!(
+        !retry.iter().any(|w| w.contains("工具が届かない")),
+        "{retry:?}"
+    );
+}
