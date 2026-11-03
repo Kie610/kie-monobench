@@ -218,6 +218,9 @@ drawing.delete	kmb-drawing
 drawing.detail_view	kmb-drawing
 drawing.dimension	kmb-drawing
 drawing.dimension_set	kmb-drawing
+drawing.export_dxf	kmb-drawing
+drawing.export_pdf	kmb-drawing
+drawing.export_svg	kmb-drawing
 drawing.import_dimensions	kmb-drawing
 drawing.move_view	kmb-drawing
 drawing.note	kmb-drawing
@@ -226,7 +229,9 @@ drawing.picture	kmb-drawing
 drawing.projected_view	kmb-drawing
 drawing.renumber_balloons	kmb-drawing
 drawing.section_view	kmb-drawing
+drawing.set_paper	kmb-drawing
 drawing.set_style	kmb-drawing
+drawing.set_title	kmb-drawing
 drawing.set_view	kmb-drawing
 fea.modal@1	kmb-fea
 fea.static@1	kmb-fea
