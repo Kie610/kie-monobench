@@ -1011,7 +1011,7 @@ pub fn register(reg: &mut Registry) {
             .field(Field::expr("x", "中心 x").length())
             .field(Field::expr("y", "中心 y").length())
             .field(Field::opt_expr("phase", "回す角").angle())
-            .template(serde_json::to_value(Cam::default()).expect("カムはJSONにできる"))
+            .create_defaults(serde_json::to_value(Cam::default()).expect("カムはJSONにできる"))
             .companion(FOLLOWER_BODY, serde_json::json!({"cam":{"$new":0}})),
         |d| {
             let cam: Cam = serde_json::from_value(d.clone())
@@ -1130,6 +1130,7 @@ impl kmb_core::Extension for CamCommands {
     fn actions(&self, _cx: &kmb_core::Context<'_>) -> Vec<kmb_core::Action> {
         vec![
             kmb_core::Action::new(CAM_ADD, "カム", "cad")
+                .replaces(CAM)
                 .args(command_args())
                 .menu("作成")
                 .icon("mechanism")
