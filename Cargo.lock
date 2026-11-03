@@ -2334,6 +2334,7 @@ version = "0.2.0"
 dependencies = [
  "kmb-bundle",
  "kmb-cad",
+ "kmb-contract",
  "kmb-core",
  "kmb-interchange",
  "kmb-look",
