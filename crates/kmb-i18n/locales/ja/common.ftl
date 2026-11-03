@@ -12,3 +12,6 @@ common-named-parameter-duplicate-dimension = 寸法の名前「{ $name }」は�
 common-named-parameter-expression = { $expr } を計算できません: { $reason }
 common-named-parameter-length = 長さの欄に角度を書いています
 common-named-parameter-angle = 角度の欄に長さを書いています
+
+common-open-dwg = DWG は読めません。元のソフトで DXF か STEP に書き出してから開いてください
+common-open-dwg-version = 版の印: { $version }

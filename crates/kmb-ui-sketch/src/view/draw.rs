@@ -495,6 +495,15 @@ pub(super) fn draw(
             selected_color,
         );
     }
+    // 案内の札は描きかけの数値の札と場所を分ける。描く順は最後に保つ。
+    let prompt_box = response
+        .hover_pos()
+        .zip(prompt(editor).filter(|_| editor.drag.is_none() && editor.placing.is_none()))
+        .map(|(p, text)| {
+            let g = painter.layout_no_wrap(text.to_string(), kmb_ui::theme::prop(11.5), l.pal.ink2);
+            let r = Rect::from_min_size(p + Vec2::new(16.0, 20.0), g.size() + Vec2::new(10.0, 4.0));
+            (g, r)
+        });
     preview::previews(
         ui,
         editor,
@@ -507,6 +516,7 @@ pub(super) fn draw(
         &hover,
         hud_on,
         selected_color,
+        prompt_box.as_ref().map(|(_, r)| *r),
     );
 
     // 延長・破断: カーソルの下の曲線で、延びる所・切り離す区間を前もって示す
@@ -711,13 +721,8 @@ pub(super) fn draw(
             l.pal.ink2,
         );
     }
-    // カーソルの脇: 次にすることの短い案内(左上の帯の長い案内と同じ中身を短く)
-    if let (Some(p), Some(text)) = (
-        response.hover_pos(),
-        prompt(editor).filter(|_| editor.drag.is_none() && editor.placing.is_none()),
-    ) {
-        let g = painter.layout_no_wrap(text.to_string(), kmb_ui::theme::prop(11.5), l.pal.ink2);
-        let r = Rect::from_min_size(p + Vec2::new(16.0, 20.0), g.size() + Vec2::new(10.0, 4.0));
+    // カーソルの脇: 次にすることの短い案内。
+    if let Some((g, r)) = prompt_box {
         painter.rect_filled(
             r,
             kmb_ui::theme::corner(3.0),

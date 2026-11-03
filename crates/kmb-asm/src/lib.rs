@@ -1382,4 +1382,7 @@ pub fn module() -> kmb_core::Module {
 mod tests;
 
 #[cfg(test)]
+mod snap_tests;
+
+#[cfg(test)]
 mod numeric_placement_tests;

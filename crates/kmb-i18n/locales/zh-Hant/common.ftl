@@ -8,3 +8,6 @@
 # common-named-parameter-expression = Cannot evaluate { $expr }: { $reason }
 # common-named-parameter-length = An angle was entered in a length field.
 # common-named-parameter-angle = A length was entered in an angle field.
+
+# common-open-dwg = DWG files cannot be read. Export the file as DXF or STEP in the original application, then open the exported file.
+# common-open-dwg-version = Version marker: { $version }

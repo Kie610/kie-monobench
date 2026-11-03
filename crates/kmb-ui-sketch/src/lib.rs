@@ -922,6 +922,7 @@ impl FeatureEditor for SketchEditor {
             ui.colored_label(ui.visuals().error_fg_color, why);
             return None;
         };
+        self.editor.reconcile_line_points(&sketch);
         self.show_diagnosis(
             host,
             entry.id,
@@ -1782,4 +1783,9 @@ mod space_view_tests;
 mod tests;
 
 #[cfg(test)]
+mod cursor_readout_tests;
+#[cfg(test)]
 mod plane_frame_tests;
+
+#[cfg(test)]
+mod undo_line_tests;

@@ -10,6 +10,11 @@ use kmb_core::{
 };
 use serde::Serialize;
 
+mod cylinder;
+
+#[cfg(test)]
+mod cylinder_tests;
+
 /// 重なっているボディの組 1 つ(「一致した面を含める」なら、面で接するだけの組も)。
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Clash {
@@ -86,8 +91,8 @@ fn clip(mut poly: Vec<P2>, t: &[P2; 3]) -> Vec<P2> {
     poly
 }
 
-/// 2 つのボディが面で接する所: 向かい合う平らな面が同じ平面にある組の、重なった所の三角形と面積。
-/// 曲がった面(穴と同じ径の軸など)は見ない。稜線は付けない(三角形の切れ目が面の中に線で出るため)。
+/// 2 つのボディが面で接する所: 向かい合う同じ平面か、同軸・同径の円筒の重なった範囲。
+/// 稜線は付けない(三角形の切れ目が面の中に線で出るため)。
 fn contact(
     kernel: &dyn Kernel,
     a: ShapeHandle,
@@ -110,15 +115,15 @@ fn contact(
             }
         }
     }
-    let mut mark = TableMark::default();
-    let mut area = 0.0;
-    if pairs.is_empty() {
-        return Ok((mark, area));
+    let curves = cylinder::pairs(kernel, a, b, &fa, &fb)?;
+    if pairs.is_empty() && curves.is_empty() {
+        return Ok((TableMark::default(), 0.0));
     }
     let (ma, mb) = (
         kernel.mesh(a, MESH_TOLERANCE)?,
         kernel.mesh(b, MESH_TOLERANCE)?,
     );
+    let (mut mark, mut area) = cylinder::contact(&curves, &ma, &mb);
     // 面の名前の三角形を、平面の上の左回りの 2D にする
     let flat = |m: &Mesh, face: &str, plane: &Plane| -> Vec<[P2; 3]> {
         let Some(f) = m.face_names.iter().position(|n| n == face) else {
@@ -173,7 +178,7 @@ pub fn interferences(cx: &Context<'_>) -> (Vec<Clash>, Vec<Unchecked>) {
     interferences_with(cx, false)
 }
 
-/// [`interferences`] に、`coincident` なら平らな面で接するだけの組(体積 0)も加える。
+/// [`interferences`] に、`coincident` なら面で接するだけの組(体積 0)も加える。
 pub fn interferences_with(cx: &Context<'_>, coincident: bool) -> (Vec<Clash>, Vec<Unchecked>) {
     let bodies = cx.visible_bodies();
     let ids: Vec<FeatureId> = bodies.iter().map(|b| b.0).collect();
@@ -296,7 +301,7 @@ pub fn interference_table(
     if !coincident {
         note += "面で接するだけの組は数えません(「一致した面を含める」で出します)。";
     } else {
-        note += "面の一致は平らな面どうしだけを見ます。";
+        note += "面の一致は平らな面と、同軸・同径の円筒の面を見ます。";
     }
     // 調べられなかった組は、干渉が無いと読まれないよう理由と一緒に「調べていない」と書く
     for f in failed {
@@ -314,7 +319,7 @@ pub fn interference_table(
         options: vec![TableOption {
             id: "coincident".into(),
             label: "一致した面を含める".into(),
-            hint: "平らな面どうしで接するだけの組も、体積 0 の行として出す".into(),
+            hint: "平らな面や同軸・同径の円筒で接するだけの組も、体積 0 の行として出す".into(),
             on: coincident,
         }],
         marks: clashes.iter().map(|c| c.mark.clone()).collect(),

@@ -127,5 +127,7 @@ view-mark-leftover = { $count ->
 
 view-candidates = Overlapping items (front to back)
 
+view-part-hues = Color by Component
+view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 view-keycast-drag = Drag
 view-keycast-mouse3d-button = 3D mouse button { $number }
