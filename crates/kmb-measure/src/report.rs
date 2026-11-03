@@ -426,9 +426,29 @@ impl BodyFacts {
         shape: kmb_core::ShapeHandle,
         material: Option<(String, f64)>,
     ) -> Result<Self, kmb_core::KernelError> {
+        Ok(Self::of_cancellable(kernel, shape, material, || false)?
+            .expect("中止しない測定は値を返す"))
+    }
+
+    /// カーネルの呼び出しの区切りで中止を調べる。実行中の1呼び出しを強制終了はしない。
+    pub fn of_cancellable(
+        kernel: &dyn kmb_core::Kernel,
+        shape: kmb_core::ShapeHandle,
+        material: Option<(String, f64)>,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<Option<Self>, kmb_core::KernelError> {
+        if cancelled() {
+            return Ok(None);
+        }
         let sheet = kernel.body_kind(shape)? == kmb_core::kernel::BodyKind::Sheet;
+        if cancelled() {
+            return Ok(None);
+        }
         let props = if sheet {
             let (min, max) = kernel.bounds(shape)?;
+            if cancelled() {
+                return Ok(None);
+            }
             MassProps {
                 volume: 0.0,
                 area: kernel.faces(shape)?.iter().map(|f| f.area).sum(),
@@ -439,11 +459,11 @@ impl BodyFacts {
         } else {
             kernel.mass(shape)?
         };
-        Ok(Self {
+        Ok((!cancelled()).then_some(Self {
             props,
             sheet,
             material,
-        })
+        }))
     }
 
     /// 行(体積・表面積・外形・重心、材料があれば材料と質量)。
