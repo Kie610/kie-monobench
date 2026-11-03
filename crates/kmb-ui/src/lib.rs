@@ -30,6 +30,7 @@ pub mod layout;
 mod live_ui;
 mod menus_ui;
 mod mouse3d;
+mod named_parameter_text;
 mod outer_ui;
 mod plain_error;
 pub mod ribbon;
@@ -39,6 +40,7 @@ pub mod theme;
 pub mod themes;
 mod titlebar_ui;
 mod window_state;
+pub use named_parameter_text::named_parameter_error;
 use window_state::Tone;
 mod workspace;
 
@@ -83,6 +85,9 @@ pub use live_ui::LiveState;
 pub use tabs_ui::KernelFactory;
 pub use versions_ui::paint_fit;
 pub use view3d::Pick;
+
+#[cfg(test)]
+mod named_parameter_tests;
 
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;

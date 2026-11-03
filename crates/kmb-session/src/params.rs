@@ -13,6 +13,12 @@ use kmb_core::{
 };
 use std::collections::{BTreeSet, HashSet};
 
+mod named;
+pub(crate) use named::complete_named_parameter_change;
+pub use named::{
+    NamedParamError, NamedParameter, parse_named_parameter, validate_named_parameter_change,
+};
+
 /// 機能の値 1 つ(記述子の式の欄)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeatureValue {
@@ -168,41 +174,57 @@ pub fn set_feature_value(
     let f = data
         .feature(feature)
         .ok_or_else(|| format!("機能 {feature} がありません"))?;
-    let now = feature_values(data, registry, report)
-        .into_iter()
-        .find(|v| v.feature == feature && v.key == key)
-        .ok_or_else(|| {
-            format!(
-                "{} に値「{key}」がありません(パラメータの表の機能の値だけを直せます)",
-                f.name
-            )
-        })?;
     let d = registry
         .descriptor(&f.type_id)
         .ok_or_else(|| format!("{} は欄で直せません", f.name))?;
     let field = d
         .field_at(key)
         .ok_or_else(|| format!("{} に「{key}」の欄がありません", f.name))?;
-    let expr = match &field.unit {
-        Some(u) => typed_expr(Some(u), expr, data.properties.units),
-        None => with_unit_of_value(expr, &now.status, data.properties.units),
-    };
-    let refs = kmb_core::expr_inputs(&expr).map_err(|e| format!("式 `{expr}` の誤り: {e}"))?;
-    // 知らない名前は、機能を止めてしまうので入れる前に断る
-    for r in refs {
-        if let kmb_core::InputRef::Param { name } = r
-            && data.param_by_name(&name).is_none()
-            && !report.model_params.iter().any(|p| p.name == name)
-        {
-            return Err(format!(
-                "式 `{expr}` の {name} というパラメータはありません"
-            ));
-        }
+    if !matches!(field.kind, FieldKind::Expr { .. }) || !field.applies(&f.data) {
+        return Err(format!("{} の「{key}」は数の欄ではありません", f.name));
     }
+    let current = field
+        .get(&f.data)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let status = match kmb_core::eval_str(current, &|n| report.param_values().get(n).copied()) {
+        Ok(value) => ParamStatus::Ok { value },
+        Err(e) => ParamStatus::Error {
+            message: e.to_string(),
+        },
+    };
+    let named = parse_named_parameter(
+        data,
+        report,
+        expr,
+        field.unit.as_ref(),
+        data.properties.units,
+    )
+    .map_err(|e| e.to_string())?;
+    let expr = if named.is_some() {
+        expr.trim().to_string()
+    } else {
+        let expr = match &field.unit {
+            Some(u) => typed_expr(Some(u), expr, data.properties.units),
+            None => with_unit_of_value(expr, &status, data.properties.units),
+        };
+        let refs = kmb_core::expr_inputs(&expr).map_err(|e| format!("式 `{expr}` の誤り: {e}"))?;
+        for r in refs {
+            if let InputRef::Param { name } = r
+                && data.param_by_name(&name).is_none()
+                && !report.model_params.iter().any(|p| p.name == name)
+            {
+                return Err(format!(
+                    "式 `{expr}` の {name} というパラメータはありません"
+                ));
+            }
+        }
+        expr
+    };
     let mut new = f.data.clone();
     field.set(&mut new, Some(serde_json::Value::String(expr.clone())));
     Ok(Transaction::new(
-        format!("{}の{}を {expr} に変更", f.name, now.label),
+        format!("{}の{}を {expr} に変更", f.name, field.label),
         vec![Op::SetFeatureData {
             id: feature,
             data: new,

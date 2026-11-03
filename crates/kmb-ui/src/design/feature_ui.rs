@@ -392,7 +392,18 @@ fn value_ui(
                 let range = range_slider(ws, entry, f);
                 let check = |t: &str| {
                     let s = range.as_ref()?;
-                    out_of_range(ws, s, data, &typed_expr(ws, f, &cur, t))
+                    let expression = kmb_session::params::parse_named_parameter(
+                        ws.cur.work.doc().data(),
+                        ws.cur.work.report(),
+                        t,
+                        f.unit.as_ref(),
+                        ws.length_unit(),
+                    )
+                    .ok()
+                    .flatten()
+                    .map(|p| p.expr)
+                    .unwrap_or_else(|| typed_expr(ws, f, &cur, t));
+                    out_of_range(ws, s, data, &expression)
                         .map(|why| format!("{} は{why}なので入れられません", t.trim()))
                 };
                 let beside = if f.step.is_some() { STEP_WIDTH } else { 0.0 };
