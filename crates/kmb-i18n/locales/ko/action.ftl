@@ -3,5 +3,7 @@
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
 
+# action-view-part-hues = Color by Component
+# action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 # action-cad-text-on-face = Text on Face
 # action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.

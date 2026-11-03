@@ -49,9 +49,12 @@ impl Headless {
 
     /// 今の文書で使える操作(`selected` を選んでいるとした時)。
     pub fn actions(&self, selected: Option<FeatureId>) -> Vec<Action> {
-        self.modules
-            .extensions
-            .actions(&self.context(selected, None, &Json::Null))
+        let mut actions =
+            self.modules
+                .extensions
+                .actions(&self.context(selected, None, &Json::Null));
+        actions.extend(crate::doc_view::actions());
+        actions
     }
 
     /// 操作 `id` が引数 `key` を受け取るか([`Action::args`] の宣言。宣言に無い鍵を渡すと誤り)。
@@ -177,6 +180,9 @@ impl Headless {
         file: Option<&Path>,
         args: &Json,
     ) -> Result<Handled, kmb_core::Problem> {
+        if crate::doc_view::is_action(id) {
+            return self.run_view(id, picks, args);
+        }
         let cx = self.context_with(picks, file, args);
         // 使えない操作はここで断る(画面のボタンを押せなくするだけでは、CLI・MCP から走ってしまう)
         if let Some(why) = self
