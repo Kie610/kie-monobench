@@ -3,7 +3,7 @@
 use crate::*;
 use egui_kittest::Harness;
 use kmb_core::{
-    EvalCtx, EvalError, Feature, InputRef, Kernel, KernelError, MassProps, Mesh, Modules, Outputs,
+    EvalCtx, EvalError, Feature, InputRef, Kernel, KernelError, MassProps, Mesh, Outputs,
     ShapeHandle, Value as Output,
 };
 use serde_json::{Value, json};
@@ -33,6 +33,7 @@ struct Gate {
     released: Mutex<bool>,
     wake: Condvar,
     mass_one: AtomicUsize,
+    main_queries: Mutex<Vec<&'static str>>,
 }
 impl Gate {
     fn release(&self) {
@@ -50,11 +51,22 @@ struct ReadingKernel {
     gate: Arc<Gate>,
     ui_thread: std::thread::ThreadId,
 }
+impl ReadingKernel {
+    fn note(&self, name: &'static str) {
+        if std::thread::current().id() == self.ui_thread
+            && self.gate.started.load(Ordering::SeqCst)
+            && !*self.gate.released.lock().unwrap()
+        {
+            self.gate.main_queries.lock().unwrap().push(name);
+        }
+    }
+}
 impl Kernel for ReadingKernel {
     fn name(&self) -> &str {
         "measurement fixture"
     }
     fn body_kind(&self, h: ShapeHandle) -> Result<kmb_core::kernel::BodyKind, KernelError> {
+        self.note("body_kind");
         if h.0 == 1
             && std::thread::current().id() != self.ui_thread
             && self.gate.armed.swap(false, Ordering::SeqCst)
@@ -74,6 +86,7 @@ impl Kernel for ReadingKernel {
         Ok(kmb_core::kernel::BodyKind::Solid)
     }
     fn mass(&self, h: ShapeHandle) -> Result<MassProps, KernelError> {
+        self.note("mass");
         if h.0 == 1 && std::thread::current().id() != self.ui_thread {
             self.gate.mass_one.fetch_add(1, Ordering::SeqCst);
         }
@@ -90,6 +103,17 @@ impl Kernel for ReadingKernel {
     fn bounds(&self, h: ShapeHandle) -> Result<([f64; 3], [f64; 3]), KernelError> {
         let p = self.mass(h)?;
         Ok((p.min, p.max))
+    }
+    fn faces(&self, h: ShapeHandle) -> Result<Vec<kmb_core::kernel::FaceInfo>, KernelError> {
+        self.note("faces");
+        Ok(vec![kmb_core::kernel::FaceInfo {
+            name: format!("body{}", h.0),
+            area: 6.0,
+            planar: Some(kmb_core::kernel::PlanarFace {
+                point: [(h.0 - 1) as f64 * 4.0, 0.0, h.0 as f64],
+                normal: [0.0, 0.0, 1.0],
+            }),
+        }])
     }
     fn mesh(&self, h: ShapeHandle, _: f64) -> Result<Mesh, KernelError> {
         let x = (h.0 - 1) as f32 * 4.0;
@@ -134,18 +158,16 @@ fn call(h: &mut Harness<'static, Workspace>, dir: &Path, tool: &str, args: Value
 fn exercise(mode: &str) {
     let gate = Arc::new(Gate::default());
     let _release = Release(gate.clone());
-    let mut reg = kmb_core::Registry::new();
-    reg.register_described(kmb_cad::solid(BODY, "測る体"), |d| {
-        Ok(Box::new(Body(d["shape"].as_u64().unwrap())))
+    let mut modules = crate::tests::reg();
+    Arc::get_mut(&mut modules.registry)
+        .expect("作った直後の表")
+        .register_described(kmb_cad::solid(BODY, "測る体"), |d| {
+            Ok(Box::new(Body(d["shape"].as_u64().unwrap())))
+        });
+    modules.kernel = Arc::new(ReadingKernel {
+        gate: gate.clone(),
+        ui_thread: std::thread::current().id(),
     });
-    let modules = Modules::new(
-        reg,
-        ReadingKernel {
-            gate: gate.clone(),
-            ui_thread: std::thread::current().id(),
-        },
-    )
-    .with_extension(kmb_cad::InspectCommands);
     let mut b = kmb_samples::sample::DocBuilder::new();
     b.feature(BODY, "一つ目", json!({"shape":1}));
     b.feature(BODY, "二つ目", json!({"shape":2}));
@@ -203,6 +225,11 @@ fn exercise(mode: &str) {
         }
         _ => panic!("知らない試験の流れ"),
     }
+    assert!(
+        gate.main_queries.lock().unwrap().is_empty(),
+        "背景の測定中に画面がカーネルへ問い合わせています: {:?}",
+        gate.main_queries.lock().unwrap()
+    );
     gate.release();
     let began = Instant::now();
     while h.state().cur.work.is_recomputing() {
