@@ -66,6 +66,8 @@ pub(crate) struct DocState {
     pub(crate) playing: Option<f64>,
     /// 解析の結果のコマを再生している間の、始めた時刻(秒)とその時のコマ。止めていれば `None`
     pub(crate) frames_playing: Option<(f64, usize)>,
+    /// 揺れの再生時計。角度0は静止した最大の形で、止めても角度は保つ。
+    pub(crate) phase_playback: Option<result_ui::PhasePlayback>,
     /// 3D のビューで部品を引いてジョイントを動かしている途中(`joint_drag_ui`)
     pub(crate) joint_drag: Option<joint_drag_ui::JointDrag>,
     /// 回転・スライダを引いている間と、離して形を作り直し終わるまで、3D のビューのボディを動かして
@@ -250,6 +252,7 @@ impl DocState {
             autosave: None,
             playing: None,
             frames_playing: None,
+            phase_playback: None,
             joint_drag: None,
             drag_pose: None,
             moved: None,

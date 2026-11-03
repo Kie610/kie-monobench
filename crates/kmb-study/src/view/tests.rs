@@ -557,3 +557,93 @@ fn streamlines_go_around_the_body() {
     let s = draw(&r, &look, 1);
     assert!(!s.more_legends.is_empty() || s.label.starts_with("流線"));
 }
+
+/// 確かめること: 表面と四面体の変位・印へ同じ係数を掛け、色と誇張倍率は保つ。
+#[test]
+fn the_phase_moves_surfaces_tets_and_marks_in_both_directions() {
+    for geom in [
+        plate(vec![0.0; 3]).parts.remove(0).geom,
+        Geometry::Tets(cylinder()),
+    ] {
+        let n = geom.len();
+        let r = SimResult {
+            kind: "modal".into(),
+            parts: vec![Part {
+                name: "形".into(),
+                geom,
+            }],
+            quantities: vec![Quantity::vector("揺れ", "相対", 0, Role::Deform)],
+            frames: vec![Frame {
+                label: "1".into(),
+                time: None,
+                values: vec![Values::exact(
+                    (0..n).flat_map(|_| [0.0, 0.0, 0.5]).collect(),
+                )],
+            }],
+            marks: vec![crate::result::Mark {
+                name: "印".into(),
+                part: 0,
+                lines: vec![[0, 1]],
+            }],
+            ..SimResult::default()
+        };
+        let draw_at = |phase| {
+            draw(
+                &r,
+                &Look {
+                    phase,
+                    ..Look::default()
+                },
+                7,
+            )
+        };
+        let positive = draw_at(1.0);
+        let zero = draw_at(0.0);
+        let negative = draw_at(-1.0);
+        assert_eq!(draw(&r, &Look::default(), 7), positive);
+        assert_eq!(positive.mesh.triangles, zero.mesh.triangles);
+        assert_eq!(positive.legend, zero.legend);
+        assert_eq!(positive.label, negative.label);
+        assert_eq!(positive.face_colors, negative.face_colors);
+        let shift = positive.mesh.positions[0][2] - zero.mesh.positions[0][2];
+        assert!(shift > 0.0);
+        // 印を含む全部の点が同じだけ動く。
+        for ((p, z), m) in positive
+            .mesh
+            .positions
+            .iter()
+            .zip(&zero.mesh.positions)
+            .zip(&negative.mesh.positions)
+        {
+            assert!((p[2] - z[2] - shift).abs() < 1e-4);
+            assert!((z[2] - m[2] - shift).abs() < 1e-4);
+            assert_eq!([p[0], p[1]], [z[0], z[1]]);
+        }
+    }
+}
+
+#[test]
+fn the_phase_recomputes_surface_normals_on_each_side_of_the_rest_shape() {
+    let mut r = plate(vec![0.0; 3]);
+    r.quantities = vec![Quantity::vector("揺れ", "相対", 0, Role::Deform)];
+    r.frames[0].values = vec![Values::exact(vec![
+        0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,
+    ])];
+    let at = |phase| {
+        draw(
+            &r,
+            &Look {
+                phase,
+                ..Look::default()
+            },
+            0,
+        )
+    };
+    let positive = at(1.0);
+    let zero = at(0.0);
+    let negative = at(-1.0);
+    assert_eq!(zero.mesh.normals[0], [0.0, 0.0, 1.0]);
+    assert!(positive.mesh.normals[0][0] < 0.0 && negative.mesh.normals[0][0] > 0.0);
+    assert!((positive.mesh.normals[0][0] + negative.mesh.normals[0][0]).abs() < 1e-6);
+    assert!((positive.mesh.normals[0][2] - negative.mesh.normals[0][2]).abs() < 1e-6);
+}
