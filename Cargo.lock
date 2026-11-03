@@ -2485,6 +2485,7 @@ dependencies = [
 name = "kmb-cad-gear"
 version = "0.2.0"
 dependencies = [
+ "kmb-cad",
  "kmb-core",
  "kmb-interchange",
  "kmb-sketch",

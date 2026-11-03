@@ -1,5 +1,5 @@
 //! 確かめること: 機能のデータの読み書き(知らない鍵は誤り、省いた欄は既定)、式の欄の並び、
-//! 作れない種類の誤り。
+//! 作れない種類の誤り、歯車のボディのデータ。
 
 use super::*;
 use serde_json::json;
@@ -38,4 +38,14 @@ fn kinds_without_a_shape_yet_say_so() {
             assert!(e.contains("まだ作れません") && e.contains(k.label()), "{e}");
         }
     }
+}
+
+#[test]
+fn the_body_reads_its_gear_and_takes_the_default_width() {
+    let b: GearBody = serde_json::from_value(json!({"gear": 3})).unwrap();
+    assert_eq!(b, GearBody::new(FeatureId(3)));
+    assert_eq!(b.width, "10 mm");
+    assert!(serde_json::from_value::<GearBody>(json!({"gear": 3, "side": "normal"})).is_err());
+    let v = serde_json::to_value(&b).unwrap();
+    assert_eq!(v, json!({"gear": 3, "width": "10 mm"}));
 }

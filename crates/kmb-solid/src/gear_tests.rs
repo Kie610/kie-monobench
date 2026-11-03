@@ -1,9 +1,8 @@
-//! 歯車の輪郭(kmb-cad-gear)を押し出す試験。確かめること: 体積が輪郭の面積 × 厚さ、押し出した面の
-//! 名前が歯の番号と歯面から決まること、パラメータの歯数を変えると作り直すこと。
+//! 歯車の輪郭とボディ(kmb-cad-gear)の試験。確かめること: ボディの体積が輪郭の面積 × 歯の幅、面の
+//! 名前が歯の番号と歯面から決まること、諸元に歯の幅が入ること、パラメータの歯数を変えると作り直すこと。
 
 use super::tests::{TestKernel, assert_ok, close, final_mass, registry};
-use super::*;
-use kmb_core::{FeatureStatus, Profile, visible_bodies};
+use kmb_core::{FeatureStatus, Payload, Profile, visible_bodies};
 use kmb_samples::sample::DocBuilder;
 
 fn area(p: &Profile) -> f64 {
@@ -29,13 +28,11 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
         },
     );
     let e = b.feature(
-        EXTRUDE,
+        kmb_cad_gear::GEAR_BODY,
         "歯車のボディ",
-        Extrude {
-            profile: Some(g),
-            distance: "5 mm".into(),
-            operation: Operation::New,
-            ..Default::default()
+        kmb_cad_gear::GearBody {
+            width: "5 mm".into(),
+            ..kmb_cad_gear::GearBody::new(g)
         },
     );
     let mut doc = b.finish("歯車");
@@ -60,6 +57,12 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
         a * 5.0
     );
     let report = doc.recompute(&reg, &*k);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
+        unreachable!()
+    };
+    let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+    assert_eq!((spec.teeth, spec.face_width), (14, Some(5.0)));
+    assert!((spec.pitch_radius - 10.5).abs() < 1e-12);
     let bodies = visible_bodies(doc.data(), &reg, &report);
     let names = k.face_names(bodies[0].1).unwrap();
     for part in ["t0:tip", "t13:root", "t5:r0", "t5:l0", "bore"] {

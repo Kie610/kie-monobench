@@ -1,7 +1,7 @@
 //! 歯車の輪郭(`cad.gear@1`)。平面の上に歯車の閉じた輪郭(`profile`)と線(`curves`)、参照の円
 //! (`reference`。ピッチ円・基礎円・歯先円・歯底円。加工はなぞらない)、諸元(`gear`、
 //! [`kmb_interchange::GearSpec`])を出す。輪郭はそのまま押し出し・2D 輪郭の加工・ポケット・レーザーに
-//! 使える。厚さを付けた立体は歯車のボディの機能が輪郭を読んで作る。
+//! 使える。厚さを付けた立体は歯車のボディ(`cad.gear_body@1`、[`body`])が輪郭を読んで作る。
 //!
 //! 置き方は文字と同じ: 平面(原点の平面・作業平面・平らな面)の座標 `x`・`y` か、スケッチの点
 //! `anchor` からのずれに中心を置き、`phase` で 1 枚目の歯の向きを回す。
@@ -11,8 +11,11 @@
 //! より内の線・歯先の丸み)、`t<i>:tip`(歯先)、`t<i>:root`(i 枚目と次の歯の間の歯底)、`bore`(軸の
 //! 穴)。歯数を減らして消えた歯の面を指していた後ろの機能は、参照切れで止まる(別の歯へ付け替えない)。
 
+pub mod body;
 pub mod kinds;
 pub mod tooth;
+
+pub use body::{GEAR_BODY, GearBody};
 
 use kmb_core::{
     Curves, Dim, EvalCtx, EvalError, Feature, FeatureId, InputRef, Outputs, Payload, Profile,
@@ -390,9 +393,12 @@ pub fn register(reg: &mut Registry) {
     );
 }
 
-/// この crate の名乗り(歯車の輪郭の種類)。組み立て(kmb-bundle)が 1 回だけ並べる。
+/// この crate の名乗り(歯車の輪郭とボディの種類)。組み立て(kmb-bundle)が 1 回だけ並べる。
 pub fn module() -> kmb_core::Module {
-    kmb_core::Module::new("kmb-cad-gear", register)
+    kmb_core::Module::new("kmb-cad-gear", |reg| {
+        register(reg);
+        body::register(reg);
+    })
 }
 
 #[cfg(test)]

@@ -47,6 +47,7 @@ pub(crate) fn registry() -> Registry {
     kmb_sketch::register(&mut r);
     kmb_text::register(&mut r);
     kmb_cad_gear::register(&mut r);
+    kmb_cad_gear::body::register(&mut r);
     register(&mut r);
     r
 }

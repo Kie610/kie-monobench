@@ -1,6 +1,6 @@
 [package]
 name = "kmb-cad-gear"
-description = "歯車の輪郭(モジュールと歯数から歯の形を二円弧で作り、平面やスケッチの点に置く)と、歯の曲線の純関数"
+description = "歯車の輪郭(モジュールと歯数から歯の形を二円弧で作り、平面やスケッチの点に置く)と歯車のボディ(輪郭を歯の幅だけ押し出す)、歯の曲線の純関数"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,7 @@ layer = "cad"
 [dependencies]
 kmb-core.workspace = true
 kmb-interchange.workspace = true
+kmb-cad.workspace = true
 kmb-sketch.workspace = true
 kmb-sketch-solver.workspace = true
 serde.workspace = true
