@@ -98,12 +98,14 @@ mod actions;
 mod active;
 mod background;
 mod open;
+mod pack;
 mod params;
 mod status;
 mod view;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
 pub use open::OpenedDocument;
+pub use pack::{OpenedDesign, PackOptions, PackSkipped, Packed, load_design};
 
 /// 開いている文書。CLI・MCP は変更のたびにその場で再計算する。画面は裏で再計算する
 /// ([`Headless::in_background`])。
@@ -193,7 +195,7 @@ impl Headless {
                 > 0
     }
 
-    /// ファイルを開く。DXF は保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
+    /// ファイルを開く。DXF とzipは保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
         let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
         Ok(Self::with_document(modules, opened.document, opened.path))

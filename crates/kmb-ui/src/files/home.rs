@@ -4,6 +4,8 @@ use crate::*;
 
 /// 開始画面(ホーム)とモデル管理の状態。
 pub(crate) struct HomeState {
+    /// まとめて渡す物の選択(この窓で共有する)。
+    pub(crate) pack_options: kmb_session::PackOptions,
     /// 開始画面を出しているか
     pub(crate) start: bool,
     /// 自動保存の写しから戻せる文書

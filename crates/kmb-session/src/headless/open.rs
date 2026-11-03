@@ -19,7 +19,7 @@ pub struct OpenedDocument {
 
 impl Headless {
     /// ファイルから新しい文書を作る。DXF は、その挿入操作と同じ宣言・確かめ・変更を通し、
-    /// `blank`(新しい文書の既定の属性を持つ空文書)へ読み込む。文書の形式なら従来通り読む。
+    /// `blank`(新しい文書の既定の属性を持つ空文書)へ読み込む。文書とzipは読み手の保存先と名前で開く。
     /// 読み取りが失敗しても今の文書と形を変えないので、呼ぶ側は成功した後でタブを作れる。
     pub fn prepare_open(
         modules: Modules,
@@ -31,10 +31,11 @@ impl Headless {
             .and_then(|x| x.to_str())
             .is_some_and(|x| x.eq_ignore_ascii_case("dxf"));
         if !dxf {
+            let opened = super::load_design(path)?;
             return Ok(OpenedDocument {
-                document: crate::load(path)?,
-                path: Some(path.to_path_buf()),
-                label: None,
+                document: opened.document,
+                path: opened.path,
+                label: opened.label,
                 saved: None,
             });
         }

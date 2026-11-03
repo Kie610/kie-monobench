@@ -35,8 +35,8 @@ pub mod run_args;
 pub mod startup;
 pub mod tidy;
 pub use headless::{
-    After, BodyMass, Handled, Headless, OpenedDocument, Picks, Polled, Ran, Recomputed, Settled,
-    SheetFacts,
+    After, BodyMass, Handled, Headless, OpenedDesign, OpenedDocument, PackOptions, PackSkipped,
+    Packed, Picks, Polled, Ran, Recomputed, Settled, SheetFacts, load_design,
 };
 
 use kmb_core::Document;

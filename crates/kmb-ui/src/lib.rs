@@ -362,6 +362,7 @@ impl Workspace {
                 context_others: (egui::Pos2::ZERO, Vec::new()),
             },
             home: home::HomeState {
+                pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
                 projects: Default::default(),

@@ -309,6 +309,53 @@ impl Workspace {
         self.open_in_tab(p);
     }
 
+    /// 保存先の無い文書の表示名(書庫から開いた文書など)。
+    pub fn with_document_label(mut self, label: Option<String>) -> Self {
+        self.cur.doc_label = label;
+        self
+    }
+
+    /// 文書と、選んだ加工のファイルをまとめて書く。
+    pub(crate) fn pack_design(&mut self) {
+        self.wait();
+        let name = std::path::PathBuf::from(self.document_name()).with_extension("zip");
+        let Some(mut path) = self.win.dialogs.save_file(
+            &self.win.t("menu-file-pack"),
+            "zip",
+            &["zip"],
+            &name.to_string_lossy(),
+        ) else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("zip");
+        }
+        let result = self
+            .cur
+            .work
+            .pack(self.home.pack_options, None)
+            .and_then(|packed| {
+                kmb_session::write_output(&path, &packed.contents)?;
+                let omitted = packed
+                    .skipped
+                    .iter()
+                    .map(|i| format!("{}: {}", i.name, i.reason))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Ok(format!(
+                    "{} ({}): {}\n{}",
+                    self.win.t("menu-file-pack"),
+                    packed.included.len(),
+                    path.display(),
+                    omitted
+                ))
+            });
+        match result {
+            Ok(text) => self.win.message = Some(text),
+            Err(e) => self.win.fail(e.to_string()),
+        }
+    }
+
     /// 文書の名前(画面と確認に出す)。
     pub fn document_name(&self) -> String {
         match (
@@ -808,6 +855,30 @@ impl Workspace {
                 ui.close();
             }
             ui.separator();
+            egui::containers::menu::SubMenuButton::new(self.win.t("menu-file-pack"))
+                .config(
+                    egui::containers::menu::MenuConfig::new()
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                )
+                .ui(ui, |ui| {
+                    ui.label(self.win.t("menu-file-pack-tip"));
+                    ui.checkbox(
+                        &mut self.home.pack_options.gcode,
+                        self.win.t("menu-file-pack-gcode"),
+                    );
+                    ui.checkbox(
+                        &mut self.home.pack_options.sheet,
+                        self.win.t("menu-file-pack-sheet"),
+                    );
+                    ui.checkbox(
+                        &mut self.home.pack_options.models,
+                        self.win.t("menu-file-pack-models"),
+                    );
+                    if ui.button(self.win.t("menu-file-pack-write")).clicked() {
+                        self.pack_design();
+                        ui.close();
+                    }
+                });
             // ファイルを読み書きする操作(STEP の読み込み、STL・STEP の書き出しなど)
             let imports: Vec<_> = self
                 .actions()
