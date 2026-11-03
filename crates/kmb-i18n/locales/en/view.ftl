@@ -129,3 +129,7 @@ view-candidates = Overlapping items (front to back)
 
 view-keycast-drag = Drag
 view-keycast-mouse3d-button = 3D mouse button { $number }
+
+measure-job-running = Calculating body properties…
+measure-job-cancel = Cancel calculation
+measure-job-failed = The measurement could not finish. Select the geometry again.

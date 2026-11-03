@@ -629,6 +629,7 @@ impl Workspace {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         self.poll_job();
+        self.measure_tick(ui.ctx());
         self.poll_task();
         self.follow_editing_for_hidden();
         // 画面の部品を名前で操作する差し込み口(コマンド欄・AI の接続・バッチの e2e が使う)。

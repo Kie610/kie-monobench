@@ -114,3 +114,7 @@ view-candidates = 重なっているもの(手前から)
 
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+
+measure-job-running = 体積などを計算中…
+measure-job-cancel = 計算を中止
+measure-job-failed = 測定の仕事を続けられません。選び直してください
