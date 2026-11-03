@@ -15,3 +15,8 @@ common-param-batch-pending = { $count } 件の未適用
 common-param-batch-errors = 式を直してから適用してください
 
 common-param-expression-label = { $name } の式
+common-recovery-discard-all = 全部捨てる
+common-recovery-count = 自動保存の写し: { $count } 個
+common-recovery-confirm = { $count } 個の写しを捨てます。元に戻せません
+common-recovery-remains = 削除後も写しのファイルが残っています。使用中のアプリやフォルダの権限を確認してください
+common-recovery-discard-error = 写し「{ $name }」を捨てられません: { $reason }

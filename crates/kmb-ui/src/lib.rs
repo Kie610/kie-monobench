@@ -365,6 +365,7 @@ impl Workspace {
                 pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
+                discard_recoveries: None,
                 projects: Default::default(),
                 recent: kmb_session::Recent::default(),
                 recent_missing: Default::default(),

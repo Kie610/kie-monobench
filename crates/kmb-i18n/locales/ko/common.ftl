@@ -11,3 +11,8 @@
 # common-param-batch-errors = Fix the expressions before applying
 
 # common-param-expression-label = Expression for { $name }
+# common-recovery-discard-all = Discard all
+# common-recovery-count = Autosaved copies: { $count }
+# common-recovery-confirm = Discard { $count } copies. This cannot be undone
+# common-recovery-remains = The copy still exists after deletion. Check applications using it and the folder permissions
+# common-recovery-discard-error = Could not discard “{ $name }”: { $reason }
