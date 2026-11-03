@@ -238,3 +238,110 @@ fn mass_progress_measurement() {
         mesh_child(&path, &label);
     }
 }
+
+/// cargo test -p kmb-ui --release --lib mass_progress_background_measurement -- --ignored --nocapture --test-threads=1
+#[test]
+#[ignore = "大きなSTEPを測る間の画面の時間を、他の検査を止めて手で測る"]
+fn mass_progress_background_measurement() {
+    use egui_kittest::{Harness, kittest::Queryable};
+    use std::time::Duration;
+    let step = grid_step(32);
+    let mut b = kmb_samples::sample::DocBuilder::new();
+    let id = b.feature(
+        kmb_cad_import_step::IMPORT_STEP,
+        "1024個の箱",
+        json!({"file":"measure.step","step":step,"upright":true}),
+    );
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = Scratch(std::env::temp_dir().join(format!(
+        "kmb-mass-background-{}-{nonce}",
+        std::process::id()
+    )));
+    std::fs::create_dir_all(&dir.0).unwrap();
+    let mut ws = Workspace::open(b.finish("質量の進み"), None, true, crate::tests::reg())
+        .with_data_dir(dir.0.clone());
+    ws.wait();
+    assert_eq!(ws.cur.work.report().error_count(), 0);
+    ws.layout_mut().ai_live = true;
+    let mesh = ws.cur.scene.mesh(id).unwrap();
+    let top = mesh
+        .triangles
+        .iter()
+        .enumerate()
+        .find(|(_, t)| {
+            let p = t.map(|i| mesh.positions[i as usize].map(f64::from));
+            kmb_core::kernel::cross(
+                kmb_core::kernel::sub(p[1], p[0]),
+                kmb_core::kernel::sub(p[2], p[0]),
+            )[2] > 1e-6
+        })
+        .map(|(i, _)| mesh.face_names[mesh.triangle_faces[i] as usize].clone())
+        .expect("上向きの面");
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1400.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    let request = |dir: &Path, tool: &str, args: Value| {
+        let (dir, tool) = (dir.to_owned(), tool.to_owned());
+        std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args))
+    };
+    let pick = request(&dir.0, "ui_pick", json!({"face":top}));
+    let before = Instant::now();
+    while !pick.is_finished() {
+        h.step();
+        std::thread::sleep(Duration::from_millis(2));
+        assert!(before.elapsed() < Duration::from_secs(30));
+    }
+    assert_eq!(pick.join().unwrap().unwrap()["ok"], true);
+    h.run_steps(4);
+    let data = h.state().document().data().clone();
+    let depth = h.state().document().undo_depth();
+    let key = request(&dir.0, "ui_key", json!({"keys":"I"}));
+    let began = Instant::now();
+    let mut frames = Vec::new();
+    let mut progress_frames = 0;
+    while !key.is_finished()
+        || !h
+            .state()
+            .cur
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.report.rows.iter().any(|(k, _)| k == "ボディの体積"))
+    {
+        let frame = Instant::now();
+        h.step();
+        frames.push(frame.elapsed().as_secs_f64() * 1000.0);
+        progress_frames += usize::from(h.query_by_label("体積などを計算中…").is_some());
+        std::thread::sleep(Duration::from_millis(2));
+        assert!(
+            began.elapsed() < Duration::from_secs(30),
+            "測定の結果の時間切れ"
+        );
+    }
+    assert_eq!(key.join().unwrap().unwrap()["ok"], true);
+    assert!(progress_frames > 0, "計算中の表示");
+    assert_eq!(h.state().document().data(), &data);
+    assert_eq!(h.state().document().undo_depth(), depth);
+    let volume = &h
+        .state()
+        .cur
+        .measure
+        .as_ref()
+        .unwrap()
+        .report
+        .rows
+        .iter()
+        .find(|(k, _)| k == "ボディの体積")
+        .unwrap()
+        .1;
+    assert!(volume.starts_with("196608"), "{volume}");
+    frames.sort_by(f64::total_cmp);
+    let n = frames.len();
+    println!(
+        "KMB_MASS_BACKGROUND {}",
+        json!({"case":"step-grid-1024","profile":if cfg!(debug_assertions){"debug"}else{"release"},"frames":n,"progress_frames":progress_frames,"frame_max_ms":frames[n-1],"frame_p95_ms":frames[(n-1)*95/100],"frame_median_ms":frames[n/2],"until_result_ms":began.elapsed().as_secs_f64()*1000.0,"data_unchanged":true,"undo_unchanged":true})
+    );
+}
