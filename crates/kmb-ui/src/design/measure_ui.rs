@@ -417,8 +417,8 @@ impl Workspace {
                         if waiting {
                             ui.horizontal_wrapped(|ui| {
                                 ui.spinner();
-                                ui.label(words.t("measure-job-running"));
-                                if ui.button(words.t("measure-job-cancel")).clicked() {
+                                ui.label(words.t("view-measure-job-running"));
+                                if ui.button(words.t("view-measure-job-cancel")).clicked() {
                                     clear = true;
                                 }
                             });

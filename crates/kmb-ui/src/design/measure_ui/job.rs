@@ -77,7 +77,7 @@ impl Workspace {
             .measure_job
             .as_ref()
             .filter(|_| self.cur.work.is_recomputing())?;
-        let reason = self.win.t("measure-job-running");
+        let reason = self.win.t("view-measure-job-running");
         Some(
             task.actions
                 .iter()
@@ -151,7 +151,7 @@ impl Workspace {
                         let message = match e {
                             ReadError::Kernel(e) => e.to_string(),
                             ReadError::Panicked => {
-                                crate::window_state::Words::of(ctx).t("measure-job-failed")
+                                crate::window_state::Words::of(ctx).t("view-measure-job-failed")
                             }
                         };
                         self.win.fail(Problem::new(ProblemKind::Compute, message));
