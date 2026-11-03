@@ -344,7 +344,9 @@ impl Workspace {
     /// 今使えるかどうかつきの、モジュールの操作。
     /// 今の言語の名前と説明にして返す(`WinState::localize_action`)。
     pub fn actions(&self) -> Vec<Action> {
-        let mut v = self.win.extensions.actions(&self.context());
+        let mut v = self
+            .measure_frozen_actions()
+            .unwrap_or_else(|| self.win.extensions.actions(&self.context()));
         v.iter_mut().for_each(|a| self.win.localize_action(a));
         v
     }
@@ -359,10 +361,11 @@ impl Workspace {
 
     /// 機能 `id` を選んだとした時の操作(右クリックのメニュー用)。
     pub(crate) fn actions_for(&self, id: FeatureId) -> Vec<Action> {
-        let mut v = self
-            .win
-            .extensions
-            .actions(&self.context_with(Some(id), None));
+        let mut v = self.measure_frozen_actions().unwrap_or_else(|| {
+            self.win
+                .extensions
+                .actions(&self.context_with(Some(id), None))
+        });
         v.iter_mut().for_each(|a| self.win.localize_action(a));
         v
     }

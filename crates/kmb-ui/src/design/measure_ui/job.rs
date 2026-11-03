@@ -28,6 +28,7 @@ pub(crate) struct BodyReadTask {
     control: Arc<JobControl>,
     receiver: Receiver<Result<Option<measure::BodyFacts>, ReadError>>,
     read_only: bool,
+    actions: Vec<kmb_core::Action>,
 }
 impl Drop for BodyReadTask {
     fn drop(&mut self) {
@@ -67,6 +68,26 @@ impl Workspace {
             m.body_done = false;
         }
         m.body.clone()
+    }
+
+    /// 測定中は操作の可否の判定でカーネルを待たず、文書を変える操作を一時的に無効にする。
+    pub(crate) fn measure_frozen_actions(&self) -> Option<Vec<kmb_core::Action>> {
+        let task = self
+            .cur
+            .measure_job
+            .as_ref()
+            .filter(|_| self.cur.work.is_recomputing())?;
+        let reason = self.win.t("measure-job-running");
+        Some(
+            task.actions
+                .iter()
+                .cloned()
+                .map(|mut a| {
+                    a.disabled = Some(reason.clone());
+                    a
+                })
+                .collect(),
+        )
     }
 
     /// 文書の変更で始める計算には、読み取り専用の扱いを持ち越さない。
@@ -188,12 +209,14 @@ impl Workspace {
             },
         );
         let after = self.scene_after(Some(read));
+        let actions = self.win.extensions.actions(&self.context());
         let task = BodyReadTask {
             key,
             source: self.cur.work.doc().data().clone(),
             control,
             receiver,
             read_only: true,
+            actions,
         };
         let wake = self
             .win
