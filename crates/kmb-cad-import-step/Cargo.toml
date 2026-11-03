@@ -1,6 +1,6 @@
 [package]
 name = "kmb-cad-import-step"
-description = "形の読み込み: STEP・STL・3MF"
+description = "形の読み込み: STEP・IGES・STL・3MF"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

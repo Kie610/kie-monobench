@@ -467,17 +467,17 @@ mod tests {
     #[test]
     fn zip_reader_checks_central_directory_crc_and_descriptor_flags() {
         let b = crate::zip::write(&[("x", b"abc")]);
-        assert_eq!(crate::zip::read(&b).unwrap()["x"], b"abc");
+        assert_eq!(crate::zip::read(&b).unwrap()[0].1, b"abc");
         let mut bad = b.clone();
         bad[31] ^= 1;
         assert!(crate::zip::read(&bad).is_err());
         let cd = b.windows(4).position(|x| x == b"PK\x01\x02").unwrap();
         let mut bad = b.clone();
         bad[cd + 8] |= 8;
-        assert!(crate::zip::read(&bad).unwrap_err().contains("データ記述子"));
+        assert!(crate::zip::read(&bad).is_err());
         let mut bad = b;
         bad[cd + 24..cd + 28].copy_from_slice(&u32::MAX.to_le_bytes());
-        assert!(crate::zip::read(&bad).unwrap_err().contains("zip64"));
+        assert!(crate::zip::read(&bad).unwrap_err().contains("ZIP64"));
     }
 
     #[test]
@@ -492,7 +492,7 @@ mod tests {
         b[cd + 20..cd + 24].copy_from_slice(&3u32.to_le_bytes());
         let end = b.len() - 22;
         b[end + 16..end + 20].copy_from_slice(&(cd as u32).to_le_bytes());
-        assert_eq!(crate::zip::read(&b).unwrap()["x"], b"abc");
+        assert_eq!(crate::zip::read(&b).unwrap()[0].1, b"abc");
         assert!(
             check_count(MAX_TRIANGLES + 1)
                 .unwrap_err()

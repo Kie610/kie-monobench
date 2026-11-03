@@ -304,6 +304,9 @@
        "label": "STL・3MF を読み込む…"
       },
       {
+       "label": "IGES を読み込む…"
+      },
+      {
        "label": "DXF を挿入…"
       },
       {

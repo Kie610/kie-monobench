@@ -19,5 +19,9 @@ serde_json.workspace = true
 log.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
+[dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
+kmb-contract.workspace = true
+
 [lints]
 workspace = true

@@ -1,5 +1,5 @@
 //! 四面体の網の結果の塗り方: 表面を色の帯で塗り、断面で切った所を塗る。辺の中点で曲げた
-//! 2 次の三角形を小三角形に分け、陰の法線を面ごとに滑らかにする。
+//! 2 次の三角形の中の座標で細分化し、陰の法線を面ごとに滑らかにする。
 
 use super::*;
 
@@ -21,9 +21,13 @@ impl Src<'_> {
 
     /// 補間した値から、塗る値。
     fn value(&self, x: &[f64; 6]) -> f32 {
+        self.value64(x) as f32
+    }
+
+    fn value64(&self, x: &[f64; 6]) -> f64 {
         match self {
-            Src::Plain(..) => x[0] as f32,
-            Src::Tensor(_, d) => d.of(x) as f32,
+            Src::Plain(..) => x[0],
+            Src::Tensor(_, d) => d.of(x),
         }
     }
 }
@@ -54,22 +58,6 @@ impl Vtx {
     fn at(&self) -> [f64; 3] {
         [0, 1, 2].map(|k| self.p[k] + self.d[k])
     }
-}
-
-/// 多角形の `p[axis] <= at` の側を残す。
-fn keep_below(poly: &[Vtx], axis: usize, at: f64) -> Vec<Vtx> {
-    let mut out = Vec::with_capacity(poly.len() + 2);
-    for k in 0..poly.len() {
-        let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
-        let (da, db) = (a.p[axis] - at, b.p[axis] - at);
-        if da <= 0.0 {
-            out.push(a);
-        }
-        if (da <= 0.0) != (db <= 0.0) {
-            out.push(Vtx::lerp(a, b, da / (da - db)));
-        }
-    }
-    out
 }
 
 /// 多角形を扇に分けて、段の座標 `band`(無ければ灰色)で塗って足す。
@@ -125,9 +113,268 @@ fn paint_tri(b: &mut Builder, v: [Vtx; 3], band: &impl Fn(&Vtx) -> f64, s: &Scal
     b.banded_n(v.map(|x| x.at()), v.map(|x| x.n), t, s);
 }
 
-/// 表面の 6 節点の三角形を辺の中点で 4 つに分ける時の、各小三角形の節点(三角形の中の番号)。
-/// [`Tets::surface_tris`] と同じ分け方。
-const SURFACE_SUBS: [[usize; 3]; 4] = [[0, 3, 5], [3, 1, 4], [5, 4, 2], [3, 4, 5]];
+/// 6 節点の同じ形関数で、位置・変位・成分・陰の法線を求める。
+fn quadratic(v: &[Vtx; 6], [r, s]: [f64; 2]) -> Vtx {
+    let l = 1.0 - r - s;
+    let w = [
+        l * (2.0 * l - 1.0),
+        r * (2.0 * r - 1.0),
+        s * (2.0 * s - 1.0),
+        4.0 * l * r,
+        4.0 * r * s,
+        4.0 * s * l,
+    ];
+    let sum = |f: &dyn Fn(&Vtx) -> f64| (0..6).map(|i| w[i] * f(&v[i])).sum();
+    Vtx {
+        p: std::array::from_fn(|k| sum(&|x| x.p[k])),
+        d: std::array::from_fn(|k| sum(&|x| x.d[k])),
+        s: std::array::from_fn(|k| sum(&|x| x.s[k])),
+        c: std::array::from_fn(|k| sum(&|x| x.c[k])),
+        n: std::array::from_fn(|k| sum(&|x| x.n[k])),
+    }
+}
+
+fn mix_rs(a: [f64; 2], b: [f64; 2], f: f64) -> [f64; 2] {
+    [0, 1].map(|k| a[k] + (b[k] - a[k]) * f)
+}
+
+/// 切る点も元の面の座標で求める。位置や成分を、分けた三角形の頂点から補間しない。
+fn clip_surface(
+    poly: &[[f64; 2]],
+    value: &impl Fn([f64; 2]) -> f64,
+    level: f64,
+    above: bool,
+) -> Vec<[f64; 2]> {
+    let tagged: Vec<_> = poly.iter().map(|q| (*q, value(*q))).collect();
+    clip_tagged(&tagged, Some(value), level, above)
+        .into_iter()
+        .map(|v| v.0)
+        .collect()
+}
+
+/// 小片の段の境は直線で分け、その段の値を保つ。位置と陰は切った面の座標から求める。
+fn clip_tagged(
+    poly: &[([f64; 2], f64)],
+    value: Option<&dyn Fn([f64; 2]) -> f64>,
+    level: f64,
+    above: bool,
+) -> Vec<([f64; 2], f64)> {
+    let inside = |v: f64| if above { v >= level } else { v <= level };
+    let mut out = Vec::with_capacity(poly.len() + 2);
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        let ia = inside(a.1);
+        if ia {
+            out.push(a);
+        }
+        if ia != inside(b.1) {
+            let f = match value {
+                Some(value) => {
+                    let (mut lo, mut hi) = (0.0, 1.0);
+                    for _ in 0..36 {
+                        let mid = (lo + hi) * 0.5;
+                        if inside(value(mix_rs(a.0, b.0, mid))) == ia {
+                            lo = mid;
+                        } else {
+                            hi = mid;
+                        }
+                    }
+                    (lo + hi) * 0.5
+                }
+                None => (level - a.1) / (b.1 - a.1),
+            };
+            out.push((mix_rs(a.0, b.0, f), level));
+        }
+    }
+    out
+}
+
+fn cross_rs(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+}
+
+struct Surface<'a> {
+    nodes: [Vtx; 6],
+    paint: Option<(Src<'a>, &'a Scale)>,
+    plane: Option<(usize, f64)>,
+    gray: u32,
+}
+
+impl Surface<'_> {
+    fn at(&self, rs: [f64; 2]) -> Vtx {
+        quadratic(&self.nodes, rs)
+    }
+
+    fn band(&self, rs: [f64; 2]) -> f64 {
+        self.paint.map_or(f64::NAN, |(v, s)| {
+            let value = v.value64(&self.at(rs).s);
+            let value = s.cap.map_or(value, |c| value.min(c as f64));
+            // 境を探す間に f32 へ丸めると、等値の台ができて隣の帯が重なる。
+            ((value - s.lo as f64) / s.span as f64).clamp(0.0, 1.0) * s.levels as f64
+        })
+    }
+
+    fn polygon(&self, b: &mut Builder, rs: &[[f64; 2]], face: u32) {
+        if rs.len() < 3 {
+            return;
+        }
+        let a = self.at(rs[0]);
+        for i in 1..rs.len() - 1 {
+            let v = [a, self.at(rs[i]), self.at(rs[i + 1])];
+            b.tri_n(v.map(|x| x.at()), v.map(|x| x.n), face);
+        }
+    }
+
+    fn leaf(&self, b: &mut Builder, rs: [[f64; 2]; 3]) {
+        let poly = match self.plane {
+            Some((axis, at)) => clip_surface(&rs, &|q| self.at(q).p[axis], at, false),
+            None => rs.to_vec(),
+        };
+        let Some((_, s)) = self.paint else {
+            self.polygon(b, &poly, self.gray);
+            return;
+        };
+        if poly.is_empty() {
+            return;
+        }
+        let t: Vec<f64> = poly.iter().map(|q| self.band(*q)).collect();
+        if t.iter().any(|v| !v.is_finite()) {
+            self.polygon(b, &poly, self.gray);
+            return;
+        }
+        let band = |t: f64| (t.floor().max(0.0) as usize).min(s.levels - 1);
+        let first = band(t.iter().copied().fold(f64::INFINITY, f64::min));
+        let last = band(t.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+        let tagged: Vec<_> = poly.iter().copied().zip(t).collect();
+        let pieces = |exact: bool| {
+            (first..=last)
+                .map(|k| {
+                    let value = |q| self.band(q);
+                    let value = exact.then_some(&value as &dyn Fn([f64; 2]) -> f64);
+                    let mut part = tagged.clone();
+                    if k > first {
+                        part = clip_tagged(&part, value, k as f64, true);
+                    }
+                    if k < last {
+                        part = clip_tagged(&part, value, (k + 1) as f64, false);
+                    }
+                    part.into_iter().map(|v| v.0).collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut parts = pieces(true);
+        // 曲がった量が小片の中で折り返す時は、根の選び方で帯の多角形が重なり得る。
+        // 面積と凸性を保てない小片だけ直線の境へ戻し、穴や重なりを作らない。
+        let area = |p: &[[f64; 2]]| -> f64 {
+            (1..p.len().saturating_sub(1))
+                .map(|i| cross_rs(p[0], p[i], p[i + 1]).abs() * 0.5)
+                .sum()
+        };
+        let convex = |p: &[[f64; 2]]| {
+            (0..p.len())
+                .all(|i| cross_rs(p[i], p[(i + 1) % p.len()], p[(i + 2) % p.len()]) >= -1e-12)
+        };
+        let expected = area(&poly);
+        let actual: f64 = parts.iter().map(|p| area(p)).sum();
+        if (actual - expected).abs() > 1e-10 * expected.max(1e-10)
+            || parts.iter().any(|p| !convex(p))
+        {
+            parts = pieces(false);
+        }
+        for (k, part) in (first..=last).zip(parts) {
+            self.polygon(b, &part, s.face(k));
+        }
+    }
+
+    /// 元の面の座標だけを 4 分し、試す点の値を毎回 6 節点から求める。
+    fn draw(
+        &self,
+        b: &mut Builder,
+        rs: [[f64; 2]; 3],
+        depth: u32,
+        curved: bool,
+        limit: usize,
+    ) -> bool {
+        if depth > 0 {
+            let m = [
+                mix_rs(rs[0], rs[1], 0.5),
+                mix_rs(rs[1], rs[2], 0.5),
+                mix_rs(rs[2], rs[0], 0.5),
+            ];
+            let c = mix_rs(m[0], rs[2], 1.0 / 3.0);
+            let t = rs.map(|q| self.band(q));
+            let off = [
+                self.band(m[0]) - (t[0] + t[1]) * 0.5,
+                self.band(m[1]) - (t[1] + t[2]) * 0.5,
+                self.band(m[2]) - (t[2] + t[0]) * 0.5,
+                self.band(c) - (t[0] + t[1] + t[2]) / 3.0,
+            ];
+            if curved || off.iter().any(|d| d.abs() > SPLIT_TOL) {
+                for sub in [
+                    [rs[0], m[0], m[2]],
+                    [m[0], rs[1], m[1]],
+                    [m[2], m[1], rs[2]],
+                    [m[0], m[1], m[2]],
+                ] {
+                    if !self.draw(b, sub, depth - 1, false, limit) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        }
+        self.leaf(b, rs);
+        b.mesh.triangles.len() <= limit
+    }
+}
+
+/// 追加の細分化で描く表面の上限。元の面だけで超える時は穴を空けず、全体を描いて知らせる。
+const SURFACE_LIMIT: usize = 2_000_000;
+
+fn draw_surfaces(b: &mut Builder, surfaces: &[Surface<'_>], limit: usize) -> u32 {
+    let (points, triangles) = (b.mesh.positions.len(), b.mesh.triangles.len());
+    for depth in (0..=SPLIT).rev() {
+        let mut complete = true;
+        for surface in surfaces {
+            // 曲がった幾何では、少なくとも辺の中点を通して形と陰を残す。
+            let curved = [[0, 1, 3], [1, 2, 4], [2, 0, 5]].iter().any(|[a, z, m]| {
+                let p = Vtx::lerp(surface.nodes[*a], surface.nodes[*z], 0.5).at();
+                let q = surface.nodes[*m].at();
+                (0..3).any(|k| (p[k] - q[k]).abs() > 1e-10)
+            });
+            let ok = surface.draw(
+                b,
+                [NODE_RS[0], NODE_RS[1], NODE_RS[2]],
+                depth.max(u32::from(curved)),
+                curved,
+                if depth == 0 { usize::MAX } else { limit },
+            );
+            if !ok {
+                complete = false;
+                break;
+            }
+        }
+        if complete {
+            if b.mesh.triangles.len() > limit {
+                log::warn!(
+                    "解析の表面は元の面だけで三角形の上限を超えます: {} / {limit}",
+                    b.mesh.triangles.len()
+                );
+            }
+            return depth;
+        }
+        // 全部の面を同じ上限で描き直す。中断した面以降を欠いた網は使わない。
+        b.mesh.positions.truncate(points);
+        b.mesh.normals.truncate(points);
+        b.mesh.triangles.truncate(triangles);
+        b.mesh.triangle_faces.truncate(triangles);
+        log::warn!(
+            "解析の表面の三角形が上限 {limit} を超えるので、分ける深さを {} に下げます",
+            depth - 1
+        );
+    }
+    unreachable!()
+}
 
 /// 6 節点の三角形の節点の (r, s)(角 a・b・c、辺の中点 ab・bc・ca)。
 const NODE_RS: [[f64; 2]; 6] = [
@@ -221,7 +468,7 @@ fn surface_normals(t: &Tets, at: impl Fn(u32) -> [f64; 3]) -> Vec<[[f64; 3]; 6]>
     out
 }
 
-/// 2 次の四面体の網: 表面を辺の中点で分けて塗り、断面があれば `p[axis] > at` の側を取り除いて
+/// 2 次の四面体の網: 表面を 2 次の形関数で塗り、断面があれば `p[axis] > at` の側を取り除いて
 /// 切り口を塗る(要素を 8 つの 1 次の四面体に分けて平面で切る)。
 pub(super) fn tets_mesh(
     b: &mut Builder,
@@ -253,22 +500,25 @@ pub(super) fn tets_mesh(
     };
     // 辺や頂点にちょうど乗らないよう、平面をわずかにずらす
     let plane = cut.map(|(axis, at, ..)| (axis, at + 1.37e-6 * size));
-    let surface_band = |x: &Vtx| paint.map_or(f64::NAN, |(v, s)| s.t(v.value(&x.s)));
     let normals = surface_normals(t, |i| vtx(i).at());
-    for (f, n6) in t.faces.iter().zip(&normals) {
-        let mut v6 = f.map(vtx);
-        for (v, n) in v6.iter_mut().zip(n6) {
-            v.n = *n;
-        }
-        for sub in SURFACE_SUBS {
-            let poly = sub.map(|k| v6[k]);
-            let poly = match plane {
-                Some((axis, at)) => keep_below(&poly, axis, at),
-                None => poly.to_vec(),
-            };
-            paint_polygon(b, &poly, surface_band, paint.map(|p| p.1), gray);
-        }
-    }
+    let surfaces: Vec<Surface<'_>> = t
+        .faces
+        .iter()
+        .zip(&normals)
+        .map(|(f, n6)| {
+            let mut nodes = f.map(vtx);
+            for (v, n) in nodes.iter_mut().zip(n6) {
+                v.n = *n;
+            }
+            Surface {
+                nodes,
+                paint,
+                plane,
+                gray,
+            }
+        })
+        .collect();
+    draw_surfaces(b, &surfaces, SURFACE_LIMIT);
     let Some((axis, at)) = plane else { return };
     let cut_band = |x: &Vtx| cut.map_or(f64::NAN, |(_, _, v, s)| s.t(v.value(&x.c)));
     for e in 0..t.tets.len() {
@@ -345,3 +595,6 @@ pub(super) fn deform_factor(r: &SimResult, q: usize, points: &[[f32; 3]]) -> f64
         0.0
     }
 }
+
+#[cfg(test)]
+mod tests;

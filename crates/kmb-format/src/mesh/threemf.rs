@@ -389,7 +389,7 @@ impl Package {
 
 /// build の物ごとに、入れ子の部品の変換を掛けて 1 つの網にまとめる。
 pub fn read_3mf(bytes: &[u8]) -> Result<Vec<Object>, String> {
-    let files = crate::zip::read(bytes)?;
+    let files: BTreeMap<_, _> = crate::zip::read(bytes)?.into_iter().collect();
     let model_path = if let Some(rels) = files.get("_rels/.rels") {
         let root = xml(rels)?;
         let r = root

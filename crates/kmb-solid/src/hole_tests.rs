@@ -313,11 +313,28 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
     use kmb_samples::sample::{DocBuilder, SketchBuilder};
     use kmb_sketch::SketchPlane;
     use std::sync::Arc;
-    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let kernel = TestKernel::new();
+    if kernel.is_truck() {
+        kmb_contract::skip!("truck は円筒の面を選ぶための円の辺を列挙しない");
+    }
+    let k: Arc<dyn Kernel> = match kernel {
+        TestKernel::Smlib(k) => Arc::new(k),
+        TestKernel::Truck(k) => Arc::new(k),
+    };
     let reg = registry();
     let actions = Extensions(vec![Arc::new(kmb_cad_hole::thread::ThreadCommands)]);
-    for name in ["M24", "M30", "1/4-20 UNC", "#10-32 UNF", "G1/4", "Rp1/4"] {
+    for (name, diameter) in [
+        ("M24", None),
+        ("M30", None),
+        ("1/4-20 UNC", None),
+        ("#10-32 UNF", None),
+        ("G1/4", None),
+        ("Rp1/4", None),
+        ("M10", Some(9.7)),
+        ("M8", Some(7.9)),
+    ] {
         let size = kmb_cad_hole::thread::parse_size(name).unwrap();
+        let diameter = diameter.unwrap_or(size.major);
         let mut b = DocBuilder::new();
         let mut circle = SketchBuilder::new(SketchPlane::Xy);
         let center = circle.fixed_point(0.0, 0.0);
@@ -328,7 +345,7 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
                 size.major / 2.0 + 4.0,
             );
         }
-        circle.circle(center, &format!("{} mm", size.major), size.major / 2.0);
+        circle.circle(center, &format!("{diameter} mm"), diameter / 2.0);
         let sketch = b.feature(kmb_sketch::SKETCH, "円", circle.build());
         let cylinder = b.feature(
             EXTRUDE,
@@ -350,13 +367,16 @@ fn expanded_thread_attributes_use_the_shared_action_without_changing_the_shape()
             .into_iter()
             .find(|edge| {
                 kmb_cad_hole::thread::cylinder_of(k.as_ref(), body, &edge.faces[1]).is_ok_and(|c| {
-                    c.internal == name.starts_with("Rp") && (c.diameter - size.major).abs() < 1e-4
+                    c.internal == name.starts_with("Rp") && (c.diameter - diameter).abs() < 1e-4
                 })
             })
             .unwrap()
             .faces[1]
             .clone();
-        let args = serde_json::json!({"feature":cylinder.0,"face":face,"size":name});
+        let mut args = serde_json::json!({"feature":cylinder.0,"face":face});
+        if diameter == size.major {
+            args["size"] = serde_json::json!(name);
+        }
         let cx = Context {
             args: &args,
             ..Context::new(doc.data(), &report, &reg, &k)
@@ -480,9 +500,6 @@ fn legacy_thread_countersink_keeps_the_omitted_diameter() {
         let (actual_diameter, angle) = info.countersink.unwrap();
         assert!((actual_diameter - countersink).abs() < 1e-9, "{name}");
         assert!((angle - 90f64.to_radians()).abs() < 1e-9, "{name}");
-        eprintln!(
-            "{name}: omitted volume {actual}, explicit volume {expected}, diameter {actual_diameter}, angle {angle}"
-        );
         assert!(
             (actual - expected).abs() < 0.01,
             "{name}: {actual} vs {expected}"
@@ -534,4 +551,179 @@ fn expanded_thread_hole_actions_create_the_new_recess_defaults() {
     let removed = 100.0 * 80.0 * 60.0 - k.mass(bodies[0].1).unwrap().volume;
     let expected = cyl(7.0, 40.0) + cyl(13.0, 17.0) - cyl(7.0, 17.0);
     assert!((removed - expected).abs() < 0.01, "{removed} vs {expected}");
+}
+
+fn thread_length_document(
+    length: Option<&str>,
+    depth: Option<&str>,
+    tip: Tip,
+) -> kmb_core::Document {
+    plate_with_hole(
+        &[[15.0, 10.0]],
+        |target, sketch, points| Hole {
+            points,
+            tap: Tap::Tapped,
+            size: Some("M4".into()),
+            depth: depth.map(str::to_string),
+            thread_depth: length.map(str::to_string),
+            tip,
+            ..Hole::new(target, sketch)
+        },
+        false,
+    )
+}
+
+fn thread_length_result(
+    doc: &mut kmb_core::Document,
+    k: &TestKernel,
+) -> (f64, kmb_interchange::HoleInfo, kmb_interchange::ThreadMarks) {
+    use kmb_core::Payload;
+    let reg = registry();
+    let report = doc.recompute(&reg, &**k);
+    assert_ok(&report);
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &report.features.last().unwrap().status
+    else {
+        panic!("穴が必要です")
+    };
+    let info =
+        kmb_interchange::HoleInfo::from_value(&outputs[kmb_interchange::HOLE_OUTPUT]).unwrap();
+    let marks =
+        kmb_interchange::ThreadMarks::from_value(&outputs[kmb_interchange::THREAD_MARKS_OUTPUT])
+            .unwrap();
+    let body = visible_bodies(doc.data(), &reg, &report)[0].1;
+    (k.volume(body).unwrap(), info, marks)
+}
+
+#[test]
+fn a_tapped_thread_length_is_saved_and_reported_without_changing_the_hole() {
+    let k = TestKernel::new();
+    let mut old = thread_length_document(None, Some("8 mm"), Tip::Flat);
+    let (volume, old_info, old_marks) = thread_length_result(&mut old, &k);
+    assert_eq!(old_info.thread_depth, None);
+    assert_eq!(old_marks.marks[0].length, 8.0);
+    let mut doc = thread_length_document(Some("5 mm"), Some("8 mm"), Tip::Flat);
+    let (after, info, marks) = thread_length_result(&mut doc, &k);
+    assert!((volume - after).abs() < 1e-8);
+    assert_eq!(info.thread_depth, Some(5.0));
+    assert_eq!(marks.marks[0].length, 5.0);
+    let saved = doc.to_json();
+    let mut restored = kmb_core::Document::from_json(&saved).unwrap();
+    let (reopened, restored_info, restored_marks) = thread_length_result(&mut restored, &k);
+    assert!((reopened - after).abs() < 1e-8);
+    assert_eq!(info, restored_info);
+    assert_eq!(marks, restored_marks);
+}
+
+#[test]
+fn tapped_thread_length_rejects_nonpositive_values_and_the_drill_point_allowance() {
+    let k = TestKernel::new();
+    let reg = registry();
+    for length in ["0 mm", "-1 mm", "8.1 mm"] {
+        let mut doc = thread_length_document(Some(length), Some("8 mm"), Tip::Angled);
+        let r = doc.recompute(&reg, &*k);
+        let kmb_core::FeatureStatus::Error { message } = &r.features.last().unwrap().status else {
+            panic!("{r:?}")
+        };
+        assert!(message.contains("ねじ部の長さ"), "{message}");
+        assert!(
+            message.contains(if length == "8.1 mm" {
+                "穴の深さ以下"
+            } else {
+                "0 より大きく"
+            }),
+            "{message}"
+        );
+    }
+    let mut equal = thread_length_document(Some("8 mm"), Some("8 mm"), Tip::Flat);
+    assert_eq!(
+        thread_length_result(&mut equal, &k).1.thread_depth,
+        Some(8.0)
+    );
+    // 貫通では外形の箱から穴の位置の材料の厚さを断定しない。
+    let mut through = thread_length_document(Some("100 mm"), None, Tip::Flat);
+    assert_eq!(
+        thread_length_result(&mut through, &k).1.thread_depth,
+        Some(100.0)
+    );
+}
+
+#[test]
+fn tapped_thread_length_follows_parameter_changes_and_renaming() {
+    let k = TestKernel::new();
+    let reg = registry();
+    let mut doc = thread_length_document(Some("tap_length"), Some("8 mm"), Tip::Flat);
+    let param = doc.alloc_param_id();
+    doc.apply(kmb_core::Transaction::new(
+        "長さ",
+        vec![kmb_core::Op::AddParam {
+            index: None,
+            param: kmb_core::Param::new(param, "tap_length", "4 mm"),
+        }],
+    ))
+    .unwrap();
+    let (volume, info, _) = thread_length_result(&mut doc, &k);
+    assert_eq!(info.thread_depth, Some(4.0));
+    doc.apply(kmb_core::Transaction::new(
+        "長さを変更",
+        vec![kmb_core::Op::SetParamExpr {
+            id: param,
+            expr: "6 mm".into(),
+        }],
+    ))
+    .unwrap();
+    let (changed, info, _) = thread_length_result(&mut doc, &k);
+    assert!((volume - changed).abs() < 1e-8);
+    assert_eq!(info.thread_depth, Some(6.0));
+    doc.rename_param(&reg, param, "thread_length").unwrap();
+    assert_eq!(
+        doc.data().features.last().unwrap().data["thread_depth"],
+        "thread_length"
+    );
+    assert_eq!(thread_length_result(&mut doc, &k).1.thread_depth, Some(6.0));
+}
+
+#[test]
+fn the_hole_action_accepts_a_unitful_thread_length() {
+    use kmb_core::{Context, Extensions, Kernel, Outcome};
+    use std::sync::Arc;
+    let k: Arc<dyn Kernel> = Arc::new(kmb_kernel_smlib::SmlibKernel::new());
+    let mut doc = thread_length_document(None, Some("8 mm"), Tip::Flat);
+    let reg = registry();
+    let report = doc.recompute(&reg, k.as_ref());
+    assert_ok(&report);
+    let body = doc
+        .data()
+        .features
+        .iter()
+        .find(|f| f.type_id == EXTRUDE)
+        .unwrap()
+        .id;
+    let actions = Extensions(vec![Arc::new(kmb_cad_hole::HoleCommands)]);
+    let args = serde_json::json!({
+        "feature":body, "face":format!("f{}:end",body.0), "point":[5.0,5.0,10.0],
+        "tap":"tapped", "size":"M4", "depth":"8 mm", "thread_depth":"0.2 in",
+    });
+    let cx = Context {
+        args: &args,
+        ..Context::new(doc.data(), &report, &reg, &k)
+    };
+    let Outcome::Change { label, edits } = actions.run(kmb_cad_hole::HOLE_ON_FACE, &cx).unwrap()
+    else {
+        panic!("穴を作る変更が必要です")
+    };
+    doc.apply_edits(&label, edits).unwrap();
+    assert_eq!(
+        doc.data().features.last().unwrap().data["thread_depth"],
+        "5.08 mm"
+    );
+    let r = doc.recompute(&reg, k.as_ref());
+    assert_ok(&r);
+    let kmb_core::FeatureStatus::Ok { outputs, .. } = &r.features.last().unwrap().status else {
+        panic!("穴が必要です")
+    };
+    let info = <kmb_interchange::HoleInfo as kmb_core::Payload>::from_value(
+        &outputs[kmb_interchange::HOLE_OUTPUT],
+    )
+    .unwrap();
+    assert_eq!(info.thread_depth, Some(5.08));
 }

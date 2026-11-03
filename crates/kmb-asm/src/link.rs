@@ -299,6 +299,7 @@ fn stem(path: &Path) -> String {
 
 /// リンクで挿入する: リンクの機能と、ボディごとのボディの機能を足し、ファイルの名前の部品にまとめる。
 fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
+    let (mut placement, placed) = crate::position::placement_data(cx)?;
     let path = cx.file.ok_or("ファイルを選んでいません")?;
     let (doc, abs) = read_source(path, cx)?;
     let bodies = copy_bodies(&doc, cx)?;
@@ -340,6 +341,23 @@ fn insert(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
             .map(|(i, (_, b))| (i + 1, b.clone()))
             .collect(),
     });
+    if placed {
+        // リンクとボディの Insert に続く AddBodies が、新しい部品の番号を割り当てる。
+        let component = cx
+            .data
+            .next_id
+            .checked_add(bodies.len() as u64 + 1)
+            .ok_or("部品の番号を割り当てられません")?;
+        let refs: Vec<serde_json::Value> = (1..=bodies.len()).map(|i| json!({"$new": i})).collect();
+        placement["moving"] = json!({"kind": "component", "id": component});
+        placement["bodies"] = json!(refs);
+        placement["center_bodies"] = json!(refs);
+        edits.push(Edit::Insert {
+            type_id: crate::position::POSITION.into(),
+            name: "位置".into(),
+            data: placement,
+        });
+    }
     Ok(Outcome::Change {
         label: format!("「{name}」をリンクで挿入"),
         edits,
@@ -551,6 +569,7 @@ impl kmb_core::Extension for LinkCommands {
         let pinned = link.as_ref().is_some_and(|(_, l)| l.pinned);
         vec![
             Action::new(LINK_INSERT, "リンクで挿入…", "cad")
+                .args(crate::position::placement_args(false))
                 .role(kmb_interchange::role::action::INSERT_LINK)
                 .menu("挿入")
                 .icon("link")

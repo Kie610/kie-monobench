@@ -81,6 +81,7 @@ mod source;
 mod space;
 mod sweep;
 mod warm;
+mod wide;
 mod words;
 
 use jobs::{Done, run_counting_compiles, spawn, step, wait_all};
@@ -183,6 +184,8 @@ const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     ("kmb-cad-surface", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
+    // 干渉の円筒の一致は、円の辺・面積・面の網を使う
+    ("kmb-asm", Some("inspect::cylinder_tests::")),
 ];
 
 /// truck の回で流す試験のうち、選んだ crate にあるもの。
@@ -581,16 +584,15 @@ fn verify_lock(ws: &Workspace) -> Result<fs::File, String> {
     }
 }
 
-/// nextest で検査する。組み立ては 1 回だけにし、できたテストの実行ファイルを SMLib の回と
-/// truck の回で使い回す(cargo を呼ばないので、同時に動かす clippy と錠を取り合わない)。
-fn verify_nextest(
-    o: &Options,
+/// 選択した試験だけを組み立て、後の段へ渡す metadata を独立したフォルダへ置く。
+fn build_nextest(
     sel: &Option<BTreeSet<String>>,
     ws: &Workspace,
-) -> Result<Vec<Done>, String> {
+    dir: &Path,
+    stage: &str,
+) -> Result<(Done, PathBuf, PathBuf), String> {
     let pk = package_args(sel);
-    let dir = ws.target_dir.join("verify");
-    fs::create_dir_all(&dir).map_err(|e| format!("{} を作れません: {e}", dir.display()))?;
+    fs::create_dir_all(dir).map_err(|e| format!("{} を作れません: {e}", dir.display()))?;
     let meta = dir.join("cargo-metadata.json");
     let bins = dir.join("binaries.json");
     fs::write(&meta, &ws.metadata).map_err(|e| e.to_string())?;
@@ -604,7 +606,7 @@ fn verify_nextest(
         "--message-format",
         "json",
     ]);
-    println!("\n== 組み立て: {list:?}");
+    println!("\n== {stage}: {list:?}");
     let out = fs::File::create(&bins).map_err(|e| e.to_string())?;
     let since = SystemTime::now();
     let target = ws.target_dir.clone();
@@ -624,8 +626,22 @@ fn verify_nextest(
         ok = ok2;
         compiled += again;
     }
-    let mut built = Done::new("組み立て", ok, t.elapsed().as_secs_f64());
+    let mut built = Done::new(stage, ok, t.elapsed().as_secs_f64());
     built.detail = Some(format!("コンパイル {compiled} 個"));
+    Ok((built, meta, bins))
+}
+
+/// nextest の通常の試験。できた実行ファイルを SMLib と truck の回で使う。
+/// テスト実行中は cargo を呼ばず、同時に動く clippy と target の錠を取り合わない。
+fn verify_nextest(
+    o: &Options,
+    sel: &Option<BTreeSet<String>>,
+    ws: &Workspace,
+) -> Result<Vec<Done>, String> {
+    let pk = package_args(sel);
+    let dir = ws.target_dir.join("verify");
+    let (built, meta, bins) = build_nextest(sel, ws, &dir, "組み立て")?;
+    let ok = built.ok;
     let mut results = vec![built];
     if !ok {
         return Ok(results);
@@ -1298,7 +1314,8 @@ fn run() -> Result<ExitCode, String> {
             if testing {
                 restore_shared_deps(&ws);
             }
-            if testing && !nextest_off() && !nextest_available() {
+            let wide_plan = wide::plan(&o);
+            if (testing || wide_plan == wide::Plan::Run) && !nextest_off() && !nextest_available() {
                 install_on_linux("scripts/install-nextest.sh");
             }
             if !testing {
@@ -1323,6 +1340,17 @@ fn run() -> Result<ExitCode, String> {
                 free_before_build(&ws);
                 results.extend(verify_cargo_test(&o, &sel, &ws));
             }
+            // 通常の試験と cargo の列が終わってから、別の選択・metadata で広い段を流す。
+            let wide_not_run = match wide_plan {
+                wide::Plan::Run => {
+                    results.extend(wide::verify(&ws)?);
+                    None
+                }
+                wide::Plan::NotRun(reason) => {
+                    println!("\n== 広い操作の試験: 未実行({reason})");
+                    Some(reason)
+                }
+            };
             remember_hack(&ws, &results);
             results.extend(runtime_skips(&ws));
             let lock_changed = changed
@@ -1353,7 +1381,7 @@ fn run() -> Result<ExitCode, String> {
             }
             let total = t.elapsed().as_secs_f64();
             println!("合わせて {total:.1} 秒");
-            history::record(&ws.target_dir, rest, &results, total);
+            history::record(&ws.target_dir, rest, &results, total, wide_not_run);
             sweep_if_low(&ws, &results, started, o.all);
             Ok(if results.iter().all(|d| d.ok) {
                 ExitCode::SUCCESS

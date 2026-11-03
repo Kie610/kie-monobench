@@ -14,7 +14,9 @@ use kmb_core::{Field, Registry};
 use serde::{Deserialize, Serialize};
 
 pub mod mesh;
+mod iges;
 mod names;
+pub use iges::{IMPORT_IGES, IMPORT_IGES_FILE, ImportIges, ImportIgesCommands};
 pub use names::{import_name, product_names, written_by_jc};
 
 pub const IMPORT_STEP: &str = "solid.import_step@1";
@@ -52,10 +54,10 @@ pub fn decode_text(bytes: &[u8]) -> String {
     }
     let (s, _, bad) = encoding_rs::SHIFT_JIS.decode(bytes);
     if !bad {
-        log::info!("STEP を Shift_JIS として読む");
+        log::info!("読み込んだ文字を Shift_JIS として解釈します");
         return s.into_owned();
     }
-    log::info!("STEP の字が UTF-8 でも Shift_JIS でもないので、ISO 8859-1 として読む");
+    log::info!("読み込んだ文字が UTF-8 でも Shift_JIS でもないので、ISO 8859-1 として解釈します");
     bytes.iter().map(|&b| char::from(b)).collect()
 }
 
@@ -154,6 +156,7 @@ impl Feature for ImportStep {
 /// 機能の種類を登録する。
 pub fn register(reg: &mut Registry) {
     mesh::register(reg);
+    iges::register(reg);
     reg.register_described(
         solid(IMPORT_STEP, "STEP の読み込み")
             .icon("step")
@@ -223,6 +226,7 @@ pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-import-step", register)
         .with_extension(ImportStepCommands)
         .with_extension(mesh::ImportMeshCommands)
+        .with_extension(ImportIgesCommands)
 }
 
 #[cfg(test)]

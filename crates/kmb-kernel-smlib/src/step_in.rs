@@ -275,7 +275,7 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    fn at(&self, a: f64, b: f64, c: f64) -> P3 {
+    pub(crate) fn at(&self, a: f64, b: f64, c: f64) -> P3 {
         k::add(
             self.o,
             k::add(
@@ -285,7 +285,7 @@ impl Frame {
         )
     }
 
-    fn local(&self, p: P3) -> P3 {
+    pub(crate) fn local(&self, p: P3) -> P3 {
         let d = k::sub(p, self.o);
         [k::dot(d, self.x), k::dot(d, self.y), k::dot(d, self.z)]
     }
@@ -825,7 +825,7 @@ fn insert(c: &Nurbs, t: f64) -> Nurbs {
 }
 
 /// 曲線の `t0..t1` の部分(t0 < t1)。両端のノットを次数の数だけ差してから、その間の制御点を取る。
-fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
+pub(crate) fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
     let p = c.degree;
     let mut c = c.clone();
     let same = |a: f64, b: f64| (a - b).abs() < 1e-12;
@@ -852,7 +852,7 @@ fn sub(c: &Nurbs, t0: f64, t1: f64) -> Nurbs {
 }
 
 /// 曲線の上で点 `q` に一番近い値。
-fn param_of(c: &Nurbs, q: P3) -> f64 {
+pub(crate) fn param_of(c: &Nurbs, q: P3) -> f64 {
     let (t0, t1) = (c.knots[c.degree], c.knots[c.knots.len() - c.degree - 1]);
     let n = 64 * c.pts.len().max(4);
     let d2 = |t: f64| {
@@ -884,7 +884,7 @@ fn param_of(c: &Nurbs, q: P3) -> f64 {
 }
 
 /// 円(楕円)の `phi0` から `delta`(正なら左回り)の弧を、90 度以下の有理 2 次の区間で表す。
-fn arc(f: &Frame, ra: f64, rb: f64, phi0: f64, delta: f64) -> Nurbs {
+pub(crate) fn arc(f: &Frame, ra: f64, rb: f64, phi0: f64, delta: f64) -> Nurbs {
     let spans = ((delta.abs() / FRAC_PI_2) - 1e-9).ceil().max(1.0) as usize;
     let d = delta / spans as f64;
     let w = (d / 2.0).cos();
