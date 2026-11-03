@@ -7,6 +7,8 @@
 # action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 # action-cad-sketch-dxf-layers = List DXF layers
 # action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design
+# action-cad-sketch-project-axis = Project Datum Axis
+# action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
 # action-cad-text-on-face = Text on Face
 # action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.
 # action-cad-sketch-export-svg = Save as SVG…

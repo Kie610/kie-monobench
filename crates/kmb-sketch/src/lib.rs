@@ -16,6 +16,8 @@ mod chain;
 mod clip;
 mod commands;
 mod curve;
+#[cfg(test)]
+mod datum_projection_tests;
 mod dimension;
 mod display;
 mod draw;
@@ -84,7 +86,8 @@ pub use pattern_expr::{DirectionExpressions, PatternExpressions};
 pub use profile::{curves_of, entity_segments, faces_of, open_ends_of, profile_of};
 pub use reference::{
     ITEMS_TYPE, ItemShape, RefItem, RefShape, SketchItem, SketchItems, body_edge_refs, body_refs,
-    origin_ref, refresh_projections, refresh_projections_with_values, sketch_items, sketch_refs,
+    datum_axis_ref, origin_ref, refresh_projections, refresh_projections_with_values, sketch_items,
+    sketch_refs,
 };
 pub use section::{SECTION_TOL, section, section_pieces, section_refs, section_segments};
 pub use silhouette::{BODY_MESH_TOL, face_under, samples as reference_samples, silhouette_refs};
@@ -239,6 +242,19 @@ impl Feature for Sketch {
                 out.push(i);
             }
         }
+        for feature in self
+            .projections
+            .iter()
+            .filter_map(|p| p.source.datum_axis())
+        {
+            let input = InputRef::Output {
+                feature,
+                slot: kmb_interchange::DATUM_OUTPUT.into(),
+            };
+            if !out.contains(&input) {
+                out.push(input);
+            }
+        }
         let offset = self.offset.as_deref();
         let values = self
             .constraints
@@ -325,8 +341,29 @@ impl Feature for Sketch {
                     refs.extend(sketch_refs(&items, f, &plane));
                 }
             }
+            for pr in &sketch.projections {
+                if let Some(f) = pr.source.datum_axis() {
+                    let axis = kmb_interchange::DatumAxis::from_value(
+                        ctx.output(f, kmb_interchange::DATUM_OUTPUT)?,
+                    )
+                    .ok_or_else(|| {
+                        EvalError::InvalidData(format!(
+                            "投影元 {} は作業軸ではありません。作業軸を選び直してください",
+                            f.0
+                        ))
+                    })?;
+                    refs.push(datum_axis_ref(axis, f, &plane).map_err(EvalError::InvalidData)?);
+                }
+            }
             let lost = refresh_projections_with_values(&mut sketch, &refs, &values)
                 .map_err(EvalError::InvalidData)?;
+            if sketch
+                .projections
+                .iter()
+                .any(|p| p.source.datum_axis().is_some() && lost.contains(&p.entity))
+            {
+                return Err(EvalError::InvalidData("作業軸の投影が線から点、または点から線に変わりました。投影を選び直してください".into()));
+            }
             if !lost.is_empty() {
                 let ids: Vec<String> = lost.iter().map(ToString::to_string).collect();
                 warnings.push(format!(
