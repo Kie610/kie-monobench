@@ -1858,11 +1858,11 @@ mod space_view_tests;
 mod tests;
 
 #[cfg(test)]
-mod freedom_ui_tests;
-#[cfg(test)]
 mod cursor_readout_tests;
 #[cfg(test)]
 mod datum_axis_ui_tests;
+#[cfg(test)]
+mod freedom_ui_tests;
 #[cfg(test)]
 mod plane_frame_tests;
 
