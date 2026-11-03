@@ -1,7 +1,8 @@
 //! 歯車の輪郭(`cad.gear@1`)。平面の上に歯車の閉じた輪郭(`profile`)と線(`curves`)、参照の円
 //! (`reference`。ピッチ円・基礎円・歯先円・歯底円。加工はなぞらない)、諸元(`gear`、
 //! [`kmb_interchange::GearSpec`])を出す。輪郭はそのまま押し出し・2D 輪郭の加工・ポケット・レーザーに
-//! 使える。厚さを付けた立体は歯車のボディ(`cad.gear_body@1`、[`body`])が輪郭を読んで作る。
+//! 使える。ベルト車とロープ車の `profile` は加工用でなく軸断面で、ボディは軸のまわりに回して作る。
+//! 厚さを付けた立体は歯車のボディ(`cad.gear_body@1`、[`body`])が輪郭を読んで作る。
 //!
 //! 置き方は文字と同じ: 平面(原点の平面・作業平面・平らな面)の座標 `x`・`y` か、スケッチの点
 //! `anchor` からのずれに中心を置き、`phase` で 1 枚目の歯の向きを回す。
@@ -18,6 +19,7 @@ pub mod tooth;
 
 pub use body::{GEAR_BODY, GearBody};
 pub use commands::{GEAR_ADD, GEAR_OUTLINE_ADD, GearCommands};
+pub use kinds::pulley::VSection;
 
 use kmb_cad::plane::PlaneRef;
 use kmb_cad::{Exprs, angle, count, expr_refs, length, output, rename};
@@ -64,6 +66,27 @@ pub struct Gear {
     /// 軸の穴の径(空か 0 なら穴なし)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bore: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulley_diameter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pulley_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crown_height: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove_count: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove_angle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove_top_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove_depth: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rope_diameter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flange_height: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub v_section: VSection,
+
     /// 中心。平面の座標(`anchor` があれば、その点からのずれ)
     #[serde(default = "zero")]
     pub x: String,
@@ -112,6 +135,16 @@ impl Default for Gear {
             tip_round: None,
             root_round: None,
             bore: None,
+            pulley_diameter: None,
+            pulley_width: None,
+            crown_height: None,
+            groove_count: None,
+            groove_angle: None,
+            groove_top_width: None,
+            groove_depth: None,
+            rope_diameter: None,
+            flange_height: None,
+            v_section: VSection::default(),
             x: zero(),
             y: zero(),
             phase: None,
@@ -137,6 +170,15 @@ impl Exprs for Gear {
                 &mut self.root_round,
                 &mut self.bore,
                 &mut self.phase,
+                &mut self.pulley_diameter,
+                &mut self.pulley_width,
+                &mut self.crown_height,
+                &mut self.groove_count,
+                &mut self.groove_angle,
+                &mut self.groove_top_width,
+                &mut self.groove_depth,
+                &mut self.rope_diameter,
+                &mut self.flange_height,
             ]
             .into_iter()
             .flatten(),
@@ -171,6 +213,59 @@ fn ratio(
 
 impl Gear {
     fn params(&self, ctx: &EvalCtx<'_>) -> Result<kinds::Params, EvalError> {
+        let len = |src: &Option<String>, what: &str, default: f64| {
+            given(src).map_or(Ok(default), |s| length(ctx, s, what))
+        };
+        let optional_len =
+            |src: &Option<String>, what: &str| given(src).map(|s| length(ctx, s, what)).transpose();
+        let diameter = if self.kind.is_pulley() {
+            len(&self.pulley_diameter, "ピッチ円の径", 100.0)?
+        } else {
+            100.0
+        };
+        let width = if self.kind.is_pulley() {
+            len(&self.pulley_width, "幅", 30.0)?
+        } else {
+            30.0
+        };
+        let bore = if self.kind.is_pulley() {
+            len(&self.bore, "軸の穴の径", 0.0)?
+        } else {
+            0.0
+        };
+        let pulley = if matches!(self.kind, GearKind::FlatPulley | GearKind::VPulley) {
+            Some(kinds::pulley::Pulley {
+                diameter,
+                width,
+                bore,
+                crown: len(&self.crown_height, "中高の高さ", 0.0)?,
+                grooves: given(&self.groove_count)
+                    .map_or(Ok(1), |s| count(ctx, s))
+                    .and_then(|n| {
+                        u32::try_from(n)
+                            .map_err(|_| EvalError::InvalidData("溝の数が大きすぎます".into()))
+                    })?,
+                section: self.v_section,
+                angle: given(&self.groove_angle)
+                    .map(|s| angle(ctx, s, "溝の角"))
+                    .transpose()?,
+                top_width: optional_len(&self.groove_top_width, "溝の上の幅")?,
+                depth: optional_len(&self.groove_depth, "溝の深さ")?,
+            })
+        } else {
+            None
+        };
+        let sheave = if self.kind == GearKind::RopeSheave {
+            Some(kinds::sheave::Sheave {
+                diameter,
+                width,
+                bore,
+                rope: len(&self.rope_diameter, "ロープの径", 10.0)?,
+                flange: len(&self.flange_height, "縁の高さ", 3.0)?,
+            })
+        } else {
+            None
+        };
         Ok(kinds::Params {
             module: length(ctx, &self.module, "モジュール")?,
             teeth: count(ctx, &self.teeth)? as u32,
@@ -178,6 +273,8 @@ impl Gear {
             profile_shift: ratio(ctx, &self.profile_shift, "転位係数", 0.0)?,
             tip_round: ratio(ctx, &self.tip_round, "歯先の丸み", 0.0)?,
             root_round: ratio(ctx, &self.root_round, "歯底の丸み", kinds::ROOT_ROUND)?,
+            pulley,
+            sheave,
         })
     }
 
@@ -268,11 +365,25 @@ impl Feature for Gear {
             )));
         }
         let place = |e: &ProfileEdge| tooth::translate(&tooth::rotate(e, phase), center);
+        let profile_plane = if shape.axial {
+            let (sin, cos) = phase.sin_cos();
+            Plane {
+                origin: plane.to_world(center),
+                x_axis: [0, 1, 2].map(|i| plane.x_axis[i] * cos + plane.y_axis[i] * sin),
+                y_axis: plane.normal(),
+            }
+        } else {
+            plane
+        };
         let outer = ProfileLoop {
-            edges: shape.edges.iter().map(place).collect(),
+            edges: if shape.axial {
+                shape.edges.clone()
+            } else {
+                shape.edges.iter().map(place).collect()
+            },
         };
         let mut holes = Vec::new();
-        if bore > 0.0 {
+        if !shape.axial && bore > 0.0 {
             holes.push(ProfileLoop {
                 edges: vec![ProfileEdge {
                     name: "bore".into(),
@@ -284,12 +395,21 @@ impl Feature for Gear {
                 }],
             });
         }
-        let segments: Vec<Segment> = outer
-            .edges
-            .iter()
-            .chain(holes.iter().flat_map(|h| &h.edges))
-            .map(|e| e.segment.clone())
-            .collect();
+        let segments: Vec<Segment> = if shape.axial {
+            let radius = shape
+                .reference
+                .iter()
+                .find(|(n, _, _)| *n == "tip")
+                .map_or(0.0, |(_, _, r)| *r);
+            vec![Segment::Circle { center, radius }]
+        } else {
+            outer
+                .edges
+                .iter()
+                .chain(holes.iter().flat_map(|h| &h.edges))
+                .map(|e| e.segment.clone())
+                .collect()
+        };
         let reference: Vec<Segment> = shape
             .reference
             .iter()
@@ -306,11 +426,19 @@ impl Feature for Gear {
         let spec = GearSpec {
             kind: self.kind,
             form: kmb_interchange::gear::ToothForm::Involute,
-            module: params.module,
+            module: if shape.axial { 0.0 } else { params.module },
             normal_module: false,
-            pressure_angle: params.pressure_angle,
-            teeth: params.teeth,
-            profile_shift: params.profile_shift,
+            pressure_angle: if shape.axial {
+                0.0
+            } else {
+                params.pressure_angle
+            },
+            teeth: if shape.axial { 0 } else { params.teeth },
+            profile_shift: if shape.axial {
+                0.0
+            } else {
+                params.profile_shift
+            },
             pitch_radius,
             axis: GearAxis {
                 origin: plane.to_world(center),
@@ -326,7 +454,7 @@ impl Feature for Gear {
             starts: 1,
         };
         let profile = Profile {
-            plane,
+            plane: profile_plane,
             regions: vec![Region { outer, holes }],
         };
         let mut out: Outputs = [
@@ -343,7 +471,14 @@ impl Feature for Gear {
             (GEAR_OUTPUT.to_string(), spec.to_value()),
         ]
         .into();
-        kmb_core::add_warnings(&mut out, shape.warnings);
+        let mut warnings = shape.warnings;
+        if shape.axial {
+            warnings.push(
+                "ベルト車とロープ車の profile は軸断面です。加工の 2D 輪郭には使わないでください"
+                    .into(),
+            );
+        }
+        kmb_core::add_warnings(&mut out, warnings);
         Ok(out)
     }
 
@@ -368,12 +503,22 @@ pub fn register(reg: &mut Registry) {
                         f.hide_choice(k.key())
                     }),
             )
-            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数"))
-            .field(Field::expr("teeth", "歯数").unitless().step(1.0, 3.0))
-            .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg"))
-            .field(Field::opt_expr("profile_shift", "転位係数").unitless().help("空なら 0。正で歯が厚く、歯先円と歯底円が外へ広がる"))
-            .field(Field::opt_expr("tip_round", "歯先の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0"))
-            .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38"))
+            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数").only("kind","external","external"))
+            .field(Field::expr("teeth", "歯数").unitless().step(1.0, 3.0).only("kind","external","external"))
+            .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg").only("kind","external","external"))
+            .field(Field::opt_expr("profile_shift", "転位係数").unitless().help("空なら 0。正で歯が厚く、歯先円と歯底円が外へ広がる").only("kind","external","external"))
+            .field(Field::opt_expr("tip_round", "歯先の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0").only("kind","external","external"))
+            .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38").only("kind","external","external"))
+            .field(Field::opt_expr("pulley_diameter","ピッチ円の径").length().help("空なら 100 mm").only("kind","flat_pulley|v_pulley|rope_sheave","external"))
+            .field(Field::opt_expr("pulley_width","幅").length().help("空なら 30 mm。ベルト車とロープ車の軸方向の幅").only("kind","flat_pulley|v_pulley|rope_sheave","external"))
+            .field(Field::opt_expr("crown_height","中高の高さ").length().help("空なら 0 mm").only("kind","flat_pulley","external"))
+            .field(Field::opt_expr("groove_count","溝の数").unitless().step(1.0,1.0).help("空なら 1").only("kind","v_pulley","external"))
+            .field(Field::choice("v_section","溝の型",&[("A","A"),("B","B")]).only("kind","v_pulley","external"))
+            .field(Field::opt_expr("groove_angle","溝の角").angle().help("空なら型とピッチ円の径から選ぶ").only("kind","v_pulley","external"))
+            .field(Field::opt_expr("groove_top_width","溝の上の幅").length().help("空なら型のピッチの位置の幅から求める").only("kind","v_pulley","external"))
+            .field(Field::opt_expr("groove_depth","溝の深さ").length().help("溝の上端から底まで。空なら型の寸法から求める").only("kind","v_pulley","external"))
+            .field(Field::opt_expr("rope_diameter","ロープの径").length().help("空なら 10 mm").only("kind","rope_sheave","external"))
+            .field(Field::opt_expr("flange_height","縁の高さ").length().help("空なら 3 mm。ロープの中心からの高さ").only("kind","rope_sheave","external"))
             .field(Field::opt_expr("bore", "軸の穴の径").length().help("空か 0 なら穴なし"))
             .field(
                 Field::opt_output("anchor", "中心の点のスケッチ", "points")

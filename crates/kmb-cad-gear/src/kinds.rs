@@ -1,6 +1,8 @@
 //! 種類ごとの歯の形。種類の並びはここの 1 か所だけで、種類を足す時は `match` に 1 行と
 //! `kinds/` に 1 ファイルを足す。形を作れない種類は「まだ作れない」誤りにする(黙って別の形にしない)。
 
+pub mod pulley;
+pub mod sheave;
 mod spur;
 
 use crate::tooth::P2;
@@ -18,6 +20,8 @@ pub struct Params {
     pub tip_round: f64,
     /// 歯底の丸みの半径の係数
     pub root_round: f64,
+    pub pulley: Option<pulley::Pulley>,
+    pub sheave: Option<sheave::Sheave>,
 }
 
 impl Default for Params {
@@ -29,6 +33,8 @@ impl Default for Params {
             profile_shift: 0.0,
             tip_round: 0.0,
             root_round: ROOT_ROUND,
+            pulley: None,
+            sheave: None,
         }
     }
 }
@@ -43,21 +49,25 @@ pub struct Outline {
     pub edges: Vec<ProfileEdge>,
     pub reference: Vec<(&'static str, P2, f64)>,
     pub warnings: Vec<String>,
+    /// 軸を含む断面。ボディは押し出しでなく軸のまわりに回す。
+    pub axial: bool,
 }
 
 /// 種類 `kind` の形。
 pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
     match kind {
         GearKind::External => spur::outline(p),
-        other => Err(format!(
-            "「{}」の形はまだ作れません(今作れるのは「{}」です)",
-            other.label(),
-            GearKind::External.label()
-        )),
+        GearKind::FlatPulley => pulley::outline(p, false),
+        GearKind::VPulley => pulley::outline(p, true),
+        GearKind::RopeSheave => sheave::outline(p),
+        other => Err(format!("「{}」の形はまだ作れません", other.label())),
     }
 }
 
 /// 種類 `kind` の形を作れるか(画面の種類の一覧で、作れない種類を灰色にする)。
 pub fn available(kind: GearKind) -> bool {
-    matches!(kind, GearKind::External)
+    matches!(
+        kind,
+        GearKind::External | GearKind::FlatPulley | GearKind::VPulley | GearKind::RopeSheave
+    )
 }

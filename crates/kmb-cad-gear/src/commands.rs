@@ -42,6 +42,16 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::integer("teeth", "歯数(3 以上)").default(20),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::length("pulley_diameter", "ピッチ円の径(ベルト車とロープ車)"),
+        Arg::length("pulley_width", "ベルト車とロープ車の幅"),
+        Arg::length("crown_height", "平ベルト車の中高の高さ"),
+        Arg::integer("groove_count", "V 溝の数"),
+        Arg::choice("v_section", "V 溝の型", &[("A", "A"), ("B", "B")]).default("A"),
+        Arg::angle("groove_angle", "V 溝の角"),
+        Arg::length("groove_top_width", "V 溝の上の幅"),
+        Arg::length("groove_depth", "V 溝の深さ(上端から底まで)"),
+        Arg::length("rope_diameter", "ロープの径"),
+        Arg::length("flange_height", "ロープ車の縁の高さ"),
     ]);
     if body {
         v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
@@ -138,6 +148,91 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     }
     if let Some(b) = cx.arg_f64("bore")?.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
+    }
+    let pulley_keys = [
+        "pulley_diameter",
+        "pulley_width",
+        "crown_height",
+        "groove_count",
+        "groove_angle",
+        "groove_top_width",
+        "groove_depth",
+        "rope_diameter",
+        "flange_height",
+    ];
+    if kind.is_pulley() {
+        let keys = match kind {
+            GearKind::FlatPulley => &["pulley_diameter", "pulley_width", "crown_height"][..],
+            GearKind::VPulley => &[
+                "pulley_diameter",
+                "pulley_width",
+                "groove_count",
+                "groove_angle",
+                "groove_top_width",
+                "groove_depth",
+            ][..],
+            _ => &[
+                "pulley_diameter",
+                "pulley_width",
+                "rope_diameter",
+                "flange_height",
+            ][..],
+        };
+        for key in pulley_keys {
+            if cx.arg(key).is_some() && !keys.contains(&key) {
+                return Err(format!("{key} はこの種類では使いません").into());
+            }
+        }
+        if kind != GearKind::VPulley && cx.arg_str("v_section").unwrap_or("A") != "A" {
+            return Err("溝の型は V ベルト車で指定してください".into());
+        }
+        for key in keys {
+            if *key == "groove_count" {
+                if let Some(raw) = cx.arg(key) {
+                    let value = raw.as_u64().ok_or("溝の数は 1 以上の整数にしてください")?;
+                    if value == 0 || value > u32::MAX as u64 {
+                        return Err("溝の数は 1 以上の整数にしてください".into());
+                    }
+                    gear[*key] = json!(value.to_string());
+                }
+            } else if let Some(value) = cx.arg_f64(key)? {
+                let nonnegative = matches!(*key, "crown_height" | "flange_height");
+                if !value.is_finite()
+                    || if nonnegative {
+                        value < 0.0
+                    } else {
+                        value <= 0.0
+                    }
+                {
+                    return Err(format!(
+                        "{key} は{}にしてください",
+                        if nonnegative {
+                            "0 以上"
+                        } else {
+                            "0 より大きい数"
+                        }
+                    )
+                    .into());
+                }
+                gear[*key] = json!(format!(
+                    "{value} {}",
+                    if *key == "groove_angle" { "deg" } else { "mm" }
+                ));
+            }
+        }
+        if kind == GearKind::VPulley {
+            gear["v_section"] = json!(cx.arg_str("v_section").unwrap_or("A"));
+        }
+        if let Some(bore) = cx.arg_f64("bore")? {
+            if bore < 0.0 {
+                return Err("軸の穴の径は 0 以上にしてください".into());
+            }
+            gear["bore"] = json!(format!("{bore} mm"));
+        }
+    } else if pulley_keys.iter().any(|key| cx.arg(key).is_some())
+        || cx.arg_str("v_section").unwrap_or("A") != "A"
+    {
+        return Err("ベルト車とロープ車の寸法は対応する種類で指定してください".into());
     }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {
