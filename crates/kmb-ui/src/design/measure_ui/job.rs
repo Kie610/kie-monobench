@@ -2,7 +2,8 @@
 
 use super::*;
 use kmb_core::{
-    DocumentData, JobControl, JobProgress, KernelError, Problem, ProblemKind, ShapeHandle,
+    DocumentData, FeatureId, JobControl, JobProgress, KernelError, Problem, ProblemKind,
+    ShapeHandle,
 };
 use std::sync::{
     Arc,
