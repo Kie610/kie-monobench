@@ -198,6 +198,7 @@ fn exercise(mode: &str) {
             );
         }
         "replace" => {
+            call(&mut h, &dir.0, "ui_click", json!({"target":"選択をクリア"}));
             call(&mut h, &dir.0, "ui_pick", json!({"face":"body2"}));
         }
         _ => panic!("知らない試験の流れ"),

@@ -415,7 +415,7 @@ impl Workspace {
                     .show(ui, |ui| {
                         ui.set_width(w - 20.0);
                         if waiting {
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 ui.spinner();
                                 ui.label(words.t("measure-job-running"));
                                 if ui.button(words.t("measure-job-cancel")).clicked() {

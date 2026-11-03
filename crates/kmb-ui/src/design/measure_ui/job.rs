@@ -71,6 +71,11 @@ impl Workspace {
 
     /// 文書の変更で始める計算には、読み取り専用の扱いを持ち越さない。
     pub(crate) fn measure_document_changed(&mut self) {
+        if let Some(m) = &mut self.cur.measure {
+            m.body_key = None;
+            m.body = None;
+            m.body_done = false;
+        }
         if let Some(task) = &mut self.cur.measure_job {
             task.read_only = false;
             task.control.cancel();
@@ -96,6 +101,15 @@ impl Workspace {
 
     /// 派生データを受け取り、次の読み取りがあれば、文書の計算の空いた所で始める。
     pub(crate) fn measure_tick(&mut self, ctx: &egui::Context) {
+        if self.win.background
+            && self.cur.measure.as_ref().is_some_and(|m| {
+                m.body_key.is_none()
+                    && m.generation == self.cur.scene.generation()
+                    && matches!(m.picks.as_slice(), [Target::Face(_)])
+            })
+        {
+            self.measure_refresh();
+        }
         if self.cur.measure.is_none() {
             self.cancel_measure_read();
         }
