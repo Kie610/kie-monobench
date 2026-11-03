@@ -60,13 +60,13 @@ impl Kernel for ReadingKernel {
             && self.gate.armed.swap(false, Ordering::SeqCst)
         {
             self.gate.started.store(true, Ordering::SeqCst);
-            let (_, timeout) = self
+            let (_lock, timeout) = self
                 .gate
                 .wake
                 .wait_timeout_while(
                     self.gate.released.lock().unwrap(),
                     Duration::from_secs(5),
-                    |done| !done,
+                    |done| !*done,
                 )
                 .unwrap();
             assert!(!timeout.timed_out(), "測定用カーネルの合図の時間切れ");
