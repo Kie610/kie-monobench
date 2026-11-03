@@ -374,6 +374,20 @@ action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤�
 
 action-study-check = 点検
 action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる
+action-drawing-set-paper = 用紙を設定
+action-drawing-set-paper-tip = 図面の用紙の大きさ・向き・とじ代・ペンと画層の色を決める
+
+action-drawing-set-title = 表題欄を設定
+action-drawing-set-title-tip = 表題欄の固定の文字や文書から取る項目と、使う文字の書体を設定する
+
+action-drawing-export-pdf = 図面をPDFに書き出す
+action-drawing-export-pdf-tip = 選んだ用紙か全部の用紙を、実寸のページのPDFに書き出す
+
+action-drawing-export-dxf = 図面をDXFに書き出す
+action-drawing-export-dxf-tip = 選んだ用紙を、線の役ごとの画層と線種を持つDXFに書き出す
+
+action-drawing-export-svg = 図面をSVGに書き出す
+action-drawing-export-svg-tip = 選んだ用紙を、用紙の大きさと線の太さと線種を持つSVGに書き出す
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 action-cad-sketch-dxf-layers = DXF の画層を一覧

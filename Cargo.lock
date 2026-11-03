@@ -2733,6 +2733,7 @@ version = "0.2.0"
 dependencies = [
  "kmb-asm",
  "kmb-core",
+ "kmb-format",
  "kmb-interchange",
  "kmb-sketch",
  "kmb-text",
@@ -3063,6 +3064,8 @@ dependencies = [
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
+ "kmb-io-dxf",
+ "kmb-io-svg",
  "kmb-look",
  "kmb-post",
  "kmb-post-carvera-air",
