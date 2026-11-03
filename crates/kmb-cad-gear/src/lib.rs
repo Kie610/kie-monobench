@@ -422,8 +422,8 @@ pub fn register(reg: &mut Registry) {
                     }),
             )
             .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数"))
-            .field(Field::expr("teeth", "歯数").unitless().step(1.0, 1.0).help("ラックでは長さの指定が「歯数」の時だけ使う"))
             .field(Field::choice("rack_size", "ラックの長さの指定", &[("teeth", "歯数"), ("length", "長さ")]).only("kind", "rack", "external"))
+            .field(Field::expr("teeth", "歯数").unitless().step(1.0, 1.0).help("ラックでは長さの指定が「歯数」の時だけ使う").only("rack_size", "teeth", "teeth"))
             .field(Field::opt_expr("rack_length", "ラックの長さ").length().help("歯を含む全長。円ピッチごとに入るだけの歯を並べる").only("kind", "rack", "external").and_only("rack_size", "length", "teeth"))
             .field(Field::opt_expr("rack_back", "背の厚さ").length().help("歯底から背の面まで。空ならモジュールの 2 倍").only("kind", "rack", "external"))
             .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg"))

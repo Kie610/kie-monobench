@@ -172,3 +172,22 @@ fn finite_inputs_with_overflowing_dimensions_are_refused() {
         assert!(outline(&p).is_err(), "{p:?}");
     }
 }
+
+#[test]
+fn length_mode_keeps_the_same_thousand_tooth_limit_as_count_expressions() {
+    let pitch = std::f64::consts::PI * 0.001;
+    assert_eq!(teeth_for_length(0.001, pitch * 1000.9).unwrap(), 1000);
+    assert!(
+        teeth_for_length(0.001, pitch * 1001.0)
+            .unwrap_err()
+            .contains("1000")
+    );
+    assert!(teeth_for_length(0.001, 1e6).is_err());
+    assert!(
+        outline(&Params {
+            teeth: 1001,
+            ..params()
+        })
+        .is_err()
+    );
+}

@@ -13,7 +13,7 @@ pub fn teeth_for_length(module: f64, length: f64) -> Result<u32, String> {
     }
     let pitch = PI * module;
     let count = length / pitch;
-    if !length.is_finite() || count < 1.0 || count >= u32::MAX as f64 {
+    if !length.is_finite() || !count.is_finite() || count < 1.0 {
         return Err(format!(
             "ラックの長さは円ピッチ {pitch:.3} mm 以上の有限の値にしてください"
         ));
@@ -25,6 +25,9 @@ pub fn teeth_for_length(module: f64, length: f64) -> Result<u32, String> {
     } else {
         count.floor()
     };
+    if count > 1000.0 {
+        return Err("ラックの歯数は 1000 以下にしてください。長さを短くするかモジュールを大きくしてください".into());
+    }
     Ok(count as u32)
 }
 
@@ -55,8 +58,8 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
     if !m.is_finite() || m <= 0.0 {
         return Err("モジュールは有限の 0 より大きい数にしてください".into());
     }
-    if p.teeth == 0 {
-        return Err("ラックの歯数は 1 以上にしてください".into());
+    if !(1..=1000).contains(&p.teeth) {
+        return Err("ラックの歯数は 1 から 1000 までにしてください".into());
     }
     if !p.pressure_angle.is_finite()
         || p.pressure_angle <= 0.0

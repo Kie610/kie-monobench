@@ -134,9 +134,14 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         return Err("歯数は平歯車で 3 以上、ラックで 1 以上にしてください".into());
     }
     let pressure = cx.arg_f64("pressure_angle")?.unwrap_or(20.0);
+    let module_text = if kind == GearKind::Rack {
+        format!("{module} mm")
+    } else {
+        mm(module)
+    };
     let mut gear = json!({
         "plane": serde_json::to_value(&plane).expect("JSON にできる"),
-        "module": mm(module),
+        "module": module_text,
         "teeth": teeth.to_string(),
         "pressure_angle": format!("{pressure} deg"),
         "x": mm(center[0]),
@@ -165,7 +170,7 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
             if back <= 0.0 {
                 return Err("背の厚さは 0 より大きくしてください".into());
             }
-            gear["rack_back"] = json!(mm(back));
+            gear["rack_back"] = json!(format!("{back} mm"));
         }
         if cx.arg_f64("bore")?.unwrap_or(0.0) != 0.0 {
             return Err("ラックに軸の穴は付けられません".into());

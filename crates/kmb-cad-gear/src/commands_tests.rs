@@ -215,3 +215,39 @@ fn rack_actions_accept_one_tooth_and_refuse_incomplete_or_conflicting_data() {
         assert!(run(GEAR_OUTLINE_ADD, args.clone()).is_err(), "{args}");
     }
 }
+
+#[test]
+fn a_racks_module_and_pitch_boundary_keep_the_input_precision() {
+    for module in [0.9999999, 0.0001, 2.7182818] {
+        let length = 12.0 * std::f64::consts::PI * module;
+        let added = inserts(
+            run(
+                GEAR_OUTLINE_ADD,
+                json!({"kind":"rack","module":module,"rack_size":"length","rack_length":length}),
+            )
+            .unwrap(),
+        );
+        let mut doc = Document::new();
+        let reg = registry();
+        let (type_id, data) = added.into_iter().next().unwrap();
+        let id = doc
+            .apply_edits(
+                "ラック",
+                vec![Edit::Insert {
+                    type_id,
+                    name: "ラック".into(),
+                    data,
+                }],
+            )
+            .unwrap()[0];
+        let report = doc.recompute(&reg, &NullKernel);
+        assert_eq!(report.error_count(), 0, "{module}: {report:?}");
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+            panic!("輪郭")
+        };
+        let spec =
+            kmb_interchange::GearSpec::from_value(&outputs[kmb_interchange::GEAR_OUTPUT]).unwrap();
+        assert_eq!(spec.teeth, 12, "{module}");
+        assert_eq!(spec.module, module);
+    }
+}
