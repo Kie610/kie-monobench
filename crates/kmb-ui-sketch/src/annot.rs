@@ -281,19 +281,28 @@ impl Pen<'_> {
         want: Option<f32>,
         at: impl Fn(f32) -> (Pos2, Pos2, Pos2),
     ) -> f32 {
-        if let Some(w) = want {
-            return w.max(GAP + OVERSHOOT + 4.0);
-        }
         let raw = self.text_size(text);
         let size = turned_size(raw, angle);
         let lift = up(angle) * (raw.y / 2.0 + LIFT);
+        self.clear_offset(want, |off| {
+            let (c, a, b) = at(off);
+            (
+                Rect::from_center_size(c + lift, size).expand(2.0),
+                Rect::from_two_pos(a, b).expand(1.0),
+            )
+        })
+    }
+
+    /// 既に置いた札と線を避ける、同じ刻みの距離の候補。
+    fn clear_offset(&self, want: Option<f32>, at: impl Fn(f32) -> (Rect, Rect)) -> f32 {
+        if let Some(w) = want {
+            return w.max(GAP + OVERSHOOT + 4.0);
+        }
         let taken = self.look.taken.borrow();
         (0..6)
             .map(|k| OFFSET + 22.0 * k as f32)
             .find(|off| {
-                let (c, a, b) = at(*off);
-                let label = Rect::from_center_size(c + lift, size).expand(2.0);
-                let line = Rect::from_two_pos(a, b).expand(1.0);
+                let (label, line) = at(*off);
                 !taken
                     .iter()
                     .any(|t| t.intersects(label) || t.intersects(line))
@@ -955,13 +964,25 @@ fn angle_dim(
         (angle, across + LIFT)
     };
     // 置く位置は字の真ん中なので、円弧はそこから字の分だけ内側(札を掴んでも跳ねない)
-    let rad = want
+    let mut rad = want
         .map_or(40.0 * px, |w| {
             let d = (w[0] - x[0]).hypot(w[1] - x[1]);
             let first = d - fit(d).1 as f64 * px;
             d - fit(first).1 as f64 * px
         })
         .max(14.0 * px);
+    if want.is_none() {
+        let at = |off: f32| (40.0 + off - OFFSET) as f64 * px;
+        let off = pen.clear_offset(None, |off| {
+            let radius = at(off);
+            let (angle, reach) = fit(radius);
+            let label =
+                Rect::from_center_size(s(ray(lab, radius)) + out * reach, turned_size(size, angle))
+                    .expand(3.0);
+            (label, Rect::NOTHING)
+        });
+        rad = at(off);
+    }
     // 線分が円弧まで届かない側は、補助の線で延ばす(反対側へ引いた時も)
     for ((p, q), a) in [(l1, start), (l2, start + v)] {
         let d = [a.cos(), a.sin()];
@@ -1015,6 +1036,46 @@ fn foot_on(x: [f64; 2], a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
 mod tests {
     use super::*;
     use std::f32::consts::FRAC_PI_2;
+
+    #[test]
+    fn coincident_angle_labels_use_separate_rectangles() {
+        let ctx = egui::Context::default();
+        let mut rects = Vec::new();
+        ctx.run_ui(egui::RawInput::default(), |ui| {
+            let painter = ui.ctx().layer_painter(egui::LayerId::background());
+            let taken = std::cell::RefCell::new(Vec::new());
+            let look = DimLook {
+                line: Color32::BLACK,
+                text: Color32::BLACK,
+                dashed: false,
+                away: Pos2::ZERO,
+                toward: None,
+                taken: &taken,
+            };
+            let pen = Pen {
+                painter: &painter,
+                look: &look,
+                last: std::cell::Cell::new(None),
+                toward: std::cell::Cell::new(None),
+            };
+            let t = Transform::flat(egui::Pos2::ZERO, egui::pos2(300.0, 300.0), 10.0);
+            for _ in 0..2 {
+                angle_dim(
+                    &pen,
+                    &t,
+                    ([0.0, 0.0], [10.0, 0.0]),
+                    ([0.0, 0.0], [0.0, 10.0]),
+                    "90°".into(),
+                );
+                rects.push(pen.last.get().unwrap());
+            }
+        })
+        .drop_without_applying_deltas();
+        assert!(
+            !rects[0].intersects(rects[1]),
+            "角度の札が重なる: {rects:?}"
+        );
+    }
 
     /// t4: 円弧の端より外に置いた半径の矢印まで、近い方の端から円弧を延ばす範囲。
     #[test]

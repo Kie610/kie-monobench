@@ -1296,7 +1296,7 @@ fn a_centerline_is_construction_and_survives_renumbering_and_saving() {
     let clip = t.copy_entities(&[axis]).unwrap();
     let pasted = u.paste(&clip, [0.0, 0.0]);
     let pasted_line = *pasted.last().unwrap();
-    u.toggle_centerline(pasted_line);
+    assert!(u.is_centerline(pasted_line));
     u.remove_entities(&[early]);
     let moved = u.renumber_after(0, 0);
     let now = moved.get(&pasted_line).copied().unwrap_or(pasted_line);

@@ -366,3 +366,5 @@ action-hrtf-process = Align HRTF formats
 action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
 action-hrtf-compute = Compute HRTF from Head Mesh…
 action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA
+action-cad-sketch-regions = List sketch regions
+action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations

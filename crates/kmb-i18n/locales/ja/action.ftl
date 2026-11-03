@@ -367,3 +367,5 @@ action-hrtf-process = HRTF の形式をそろえる
 action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
 action-hrtf-compute = 頭の網から HRTF を計算…
 action-hrtf-compute-tip = 頭の網の仕事の JSON を境界要素法で解き、全方向の HRIR を SOFA で書き出す
+action-cad-sketch-regions = スケッチの領域を一覧
+action-cad-sketch-regions-tip = スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む
