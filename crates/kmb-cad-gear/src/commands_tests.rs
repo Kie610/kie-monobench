@@ -153,3 +153,59 @@ fn the_added_outline_evaluates_around_the_given_center() {
     assert_eq!(spec.teeth, 12);
     assert!((spec.axis.origin[0] - 30.0).abs() < 1e-9, "{:?}", spec.axis);
 }
+
+#[test]
+fn the_internal_gear_action_requires_a_ring_diameter_and_preserves_it() {
+    let added = inserts(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({"kind":"internal", "module":"2 mm", "teeth":20,"outer_diameter":"60 mm"}),
+        )
+        .unwrap(),
+    );
+    assert_eq!(added[0].1["kind"], "internal");
+    assert_eq!(added[0].1["outer_diameter"], "60 mm");
+    assert!(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({"kind":"internal","module":"2 mm","teeth":20,"outer_diameter":"48 mm"})
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("49.000 mm")
+    );
+    assert!(run(GEAR_OUTLINE_ADD, json!({"outer_diameter":"60 mm"})).is_err());
+}
+
+#[test]
+fn an_internal_action_keeps_module_and_outer_diameter_precision_at_the_limit() {
+    let module = 1.0000001;
+    let minimum = 2.0 * (module * 20.0 / 2.0 + 1.25 * module) + 2.0 * module;
+    let added = inserts(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({"kind":"internal","module":module,"teeth":20,"outer_diameter":minimum}),
+        )
+        .unwrap(),
+    );
+    let mut doc = Document::new();
+    let (type_id, data) = added.into_iter().next().unwrap();
+    doc.apply_edits(
+        "内歯車",
+        vec![Edit::Insert {
+            type_id,
+            name: "内歯車".into(),
+            data,
+        }],
+    )
+    .unwrap();
+    let report = doc.recompute(&registry(), &NullKernel);
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    assert!(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({"kind":"internal","outer_diameter":30.0,"bore":-1.0})
+        )
+        .is_err()
+    );
+}

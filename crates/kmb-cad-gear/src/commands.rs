@@ -42,6 +42,7 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::integer("teeth", "歯数(3 以上)").default(20),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
     ]);
     if body {
         v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
@@ -136,8 +137,26 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     if kind != GearKind::default() {
         gear["kind"] = json!(kind.key());
     }
-    if let Some(b) = cx.arg_f64("bore")?.filter(|b| *b > 0.0) {
+    let bore = cx.arg_f64("bore")?;
+    if kind == GearKind::Internal && bore.is_some_and(|b| b != 0.0) {
+        return Err("内歯車には軸の穴の径を指定できません。輪の外径を指定してください".into());
+    }
+    if let Some(b) = bore.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
+    }
+    if kind == GearKind::Internal {
+        let d = cx
+            .arg_f64("outer_diameter")?
+            .ok_or("内歯車では輪の外径を指定してください")?;
+        let minimum = 2.0 * (module * teeth as f64 / 2.0 + 1.25 * module) + 2.0 * module;
+        if d < minimum {
+            return Err(format!("輪の外径は {minimum:.3} mm 以上にしてください").into());
+        }
+        // 内歯の必須外径とモジュールは、最小外径の境界でも同じ精度で読む。
+        gear["module"] = json!(format!("{module} mm"));
+        gear["outer_diameter"] = json!(format!("{d} mm"));
+    } else if cx.arg("outer_diameter").is_some() {
+        return Err("輪の外径は内歯車で指定してください".into());
     }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {

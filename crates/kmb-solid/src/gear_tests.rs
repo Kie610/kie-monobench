@@ -91,3 +91,84 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
     assert!(names.iter().any(|n| n.contains(":side:t11:tip")));
     assert!(!names.iter().any(|n| n.contains(":side:t13:")), "{names:?}");
 }
+
+#[test]
+fn a_48_tooth_internal_gear_body_has_the_ring_area_times_the_width() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let g = b.feature(
+        kmb_cad_gear::GEAR,
+        "内歯車",
+        kmb_cad_gear::Gear {
+            kind: kmb_interchange::GearKind::Internal,
+            module: "1 mm".into(),
+            teeth: "48".into(),
+            outer_diameter: Some("60 mm".into()),
+            ..Default::default()
+        },
+    );
+    let body = b.feature(
+        kmb_cad_gear::GEAR_BODY,
+        "内歯車のボディ",
+        kmb_cad_gear::GearBody {
+            width: "5 mm".into(),
+            ..kmb_cad_gear::GearBody::new(g)
+        },
+    );
+    let mut doc = b.finish("内歯車");
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(g) else {
+        panic!("輪郭を計算できる: {report:?}")
+    };
+    let profile = Profile::from_value(&outputs["profile"]).unwrap();
+    // 大きな外径の円を 64 分割する近似は、薄い輪の面積では誤差が拡大する。
+    // 体積との比較は区間を十分細かく刻んだ独立した面積で行う。
+    let loop_area = |loop_: &kmb_core::ProfileLoop| {
+        let points: Vec<_> = loop_
+            .edges
+            .iter()
+            .flat_map(|edge| edge.polyline(4096))
+            .collect();
+        kmb_core::kernel::polygon_area(&points)
+    };
+    let area: f64 = profile
+        .regions
+        .iter()
+        .map(|region| loop_area(&region.outer) + region.holes.iter().map(loop_area).sum::<f64>())
+        .sum();
+    let theory = std::f64::consts::PI / 4.0 * (60.0f64.powi(2) - 48.0f64.powi(2));
+    assert!((area - theory).abs() < 0.05 * theory, "{area} vs {theory}");
+    if k.is_truck() && matches!(report.feature(body), Some(FeatureStatus::Error { .. })) {
+        let Some(FeatureStatus::Error { message }) = report.feature(body) else {
+            unreachable!()
+        };
+        assert!(message.contains("対応していない"), "{message}");
+    } else {
+        assert_ok(&report);
+        let mass = final_mass(&mut doc, &k);
+        assert!(
+            close(mass.volume, area * 5.0, 2e-3),
+            "{} vs {}",
+            mass.volume,
+            area * 5.0
+        );
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(body) else {
+            unreachable!()
+        };
+        let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+        assert_eq!(spec.kind, kmb_interchange::GearKind::Internal);
+        assert_eq!(spec.face_width, Some(5.0));
+        let bodies = visible_bodies(doc.data(), &reg, &report);
+        let names = k.face_names(bodies[0].1).unwrap();
+        for part in ["rim", "t0:tip", "t47:root", "t4:r0", "t4:l0"] {
+            let want = format!("f{}:side:{part}", body.0);
+            assert!(
+                names
+                    .iter()
+                    .any(|name| name == &want || name.starts_with(&format!("{want}."))),
+                "{want}"
+            );
+        }
+    }
+}

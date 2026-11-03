@@ -166,12 +166,14 @@ field-cad-gear-bore-help = Empty or 0 for no bore.
 field-cad-gear-kind = Type
 field-cad-gear-module = Module
 field-cad-gear-module-help = Tooth size. Pitch diameter = module × number of teeth.
+field-cad-gear-outer-diameter = Ring Outer Diameter
+field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
 field-cad-gear-phase = Rotation
 field-cad-gear-phase-help = Direction of the first tooth. Empty for 0.
 field-cad-gear-pressure-angle = Pressure Angle
 field-cad-gear-pressure-angle-help = Usually 20 deg.
 field-cad-gear-profile-shift = Profile Shift Coefficient
-field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken the teeth and move the tip and root circles outward.
+field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken external teeth, thin internal teeth, and move the tip and root circles outward.
 field-cad-gear-root-round = Root Fillet
 field-cad-gear-root-round-help = Fillet radius as a ratio of the module. Empty for 0.38.
 field-cad-gear-teeth = Number of Teeth

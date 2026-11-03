@@ -10,6 +10,7 @@
 //! 円弧。歯を外へ向けて見た右と左)、`t<i>:rfillet`・`t<i>:rneck`・`t<i>:rround`(歯底の丸み・基礎円
 //! より内の線・歯先の丸み)、`t<i>:tip`(歯先)、`t<i>:root`(i 枚目と次の歯の間の歯底)、`bore`(軸の
 //! 穴)。歯数を減らして消えた歯の面を指していた後ろの機能は、参照切れで止まる(別の歯へ付け替えない)。
+//! 内歯車は外径の円(`rim`)と、歯の輪郭の穴で作る。内向きの歯の先が `tip`、大径の歯底が `root`。
 
 pub mod body;
 pub mod commands;
@@ -64,6 +65,9 @@ pub struct Gear {
     /// 軸の穴の径(空か 0 なら穴なし)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bore: Option<String>,
+    /// 内歯車の輪の外径(内歯車では必須)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outer_diameter: Option<String>,
     /// 中心。平面の座標(`anchor` があれば、その点からのずれ)
     #[serde(default = "zero")]
     pub x: String,
@@ -112,6 +116,7 @@ impl Default for Gear {
             tip_round: None,
             root_round: None,
             bore: None,
+            outer_diameter: None,
             x: zero(),
             y: zero(),
             phase: None,
@@ -136,6 +141,7 @@ impl Exprs for Gear {
                 &mut self.tip_round,
                 &mut self.root_round,
                 &mut self.bore,
+                &mut self.outer_diameter,
                 &mut self.phase,
             ]
             .into_iter()
@@ -261,17 +267,58 @@ impl Feature for Gear {
                 "軸の穴の径は 0 以上にしてください".into(),
             ));
         }
-        if bore / 2.0 >= root {
+        let internal = self.kind == GearKind::Internal;
+        if internal && bore > 0.0 {
+            return Err(EvalError::InvalidData(
+                "内歯車には軸の穴の径を指定できません。輪の外径を指定してください".into(),
+            ));
+        }
+        if !internal && bore / 2.0 >= root {
             return Err(EvalError::InvalidData(format!(
                 "軸の穴の径 {bore:.3} mm が歯底円の径 {:.3} mm 以上です",
                 2.0 * root
             )));
         }
         let place = |e: &ProfileEdge| tooth::translate(&tooth::rotate(e, phase), center);
-        let outer = ProfileLoop {
+        let outline = ProfileLoop {
             edges: shape.edges.iter().map(place).collect(),
         };
         let mut holes = Vec::new();
+        let outer = if internal {
+            let src = given(&self.outer_diameter).ok_or_else(|| {
+                EvalError::InvalidData("内歯車では輪の外径を指定してください".into())
+            })?;
+            let diameter = length(ctx, src, "輪の外径")?;
+            let minimum = 2.0 * root + 2.0 * params.module;
+            if !diameter.is_finite() || diameter < minimum {
+                return Err(EvalError::InvalidData(format!(
+                    "輪の外径は歯底円の径 + モジュールの 2 倍以上にしてください(最小の外径 {minimum:.3} mm)"
+                )));
+            }
+            holes.push(ProfileLoop {
+                edges: outline
+                    .edges
+                    .into_iter()
+                    .rev()
+                    .map(|mut e| {
+                        e.reversed = !e.reversed;
+                        e
+                    })
+                    .collect(),
+            });
+            ProfileLoop {
+                edges: vec![ProfileEdge {
+                    name: "rim".into(),
+                    segment: Segment::Circle {
+                        center,
+                        radius: diameter / 2.0,
+                    },
+                    reversed: false,
+                }],
+            }
+        } else {
+            outline
+        };
         if bore > 0.0 {
             holes.push(ProfileLoop {
                 edges: vec![ProfileEdge {
@@ -371,10 +418,11 @@ pub fn register(reg: &mut Registry) {
             .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数"))
             .field(Field::expr("teeth", "歯数").unitless().step(1.0, 3.0))
             .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg"))
-            .field(Field::opt_expr("profile_shift", "転位係数").unitless().help("空なら 0。正で歯が厚く、歯先円と歯底円が外へ広がる"))
+            .field(Field::opt_expr("profile_shift", "転位係数").unitless().help("空なら 0。正で外歯は厚く、内歯は薄くなり、歯先円と歯底円が外へ広がる"))
             .field(Field::opt_expr("tip_round", "歯先の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0"))
             .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38"))
-            .field(Field::opt_expr("bore", "軸の穴の径").length().help("空か 0 なら穴なし"))
+            .field(Field::opt_expr("bore", "軸の穴の径").length().only("kind", "external", "external").help("空か 0 なら穴なし"))
+            .field(Field::expr("outer_diameter", "輪の外径").length().only("kind", "internal", "external").help("内歯車で必須。歯底円の径 + モジュールの 2 倍以上"))
             .field(
                 Field::opt_output("anchor", "中心の点のスケッチ", "points")
                     .help("スケッチの単独の点に中心を合わせる。点は拘束で動かせる"),

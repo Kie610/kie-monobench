@@ -2226,3 +2226,6 @@
 # field-solid-import-iges-file = File
 # field-solid-import-iges-stand-up = Convert Y-up to Z-up
 # field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+# field-cad-gear-outer-diameter = Ring Outer Diameter
+# field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
