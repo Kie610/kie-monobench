@@ -352,7 +352,7 @@ action-drawing-move-view-tip = Change the paper position or distance from the pa
 action-drawing-set-view = Edit view
 action-drawing-set-view-tip = Change the scale and visibility of hidden and tangent lines
 action-drawing-delete = Delete drawing
-action-drawing-delete-tip = Delete a sheet or view; delete child views first
+action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
 action-drawing-picture = Export drawing lines
 action-drawing-picture-tip = Export the sheet geometry and problems as JSON
 action-cad-surface-patch = Surface patch
@@ -370,3 +370,35 @@ action-hrtf-compute = Compute HRTF from Head Mesh…
 action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA
 action-cad-sketch-regions = List sketch regions
 action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
+action-drawing-dimension = Dimension
+action-drawing-dimension-tip = Place a dimension that refers to view edges and shows the model value
+
+action-drawing-dimension-set = Place dimensions
+action-drawing-dimension-set-tip = Place baseline, chain, or ordinate dimensions once from selected points
+
+action-drawing-import-dimensions = Import model dimensions
+action-drawing-import-dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
+
+action-drawing-note = Annotation
+action-drawing-note-tip = Place text with an optional leader on the sheet
+
+action-drawing-center-mark = Center mark
+action-drawing-center-mark-tip = Mark the center of a circle or arc
+
+action-drawing-center-line = Centerline
+action-drawing-center-line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
+
+action-drawing-balloon = Balloon
+action-drawing-balloon-tip = Place a balloon linked to a parts table row at a chosen position
+
+action-drawing-renumber-balloons = Renumber balloons
+action-drawing-renumber-balloons-tip = Match balloon numbers to the current order of parts table rows
+
+action-drawing-align-balloons = Align balloons
+action-drawing-align-balloons-tip = Align selected balloons horizontally or vertically with the first balloon
+
+action-drawing-parts-table = Parts table
+action-drawing-parts-table-tip = Place selected parts table columns on the sheet as lines and text
+
+action-drawing-set-style = Dimension style
+action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
