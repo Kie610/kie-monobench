@@ -106,3 +106,15 @@ fn a_count_expression_rounded_to_an_integer_keeps_every_hole() {
     let profile = kmb_core::Profile::from_value(&outputs["profile"]).unwrap();
     assert_eq!(profile.regions[0].holes.len(), 3);
 }
+
+#[test]
+fn keyway_size_fields_are_available_with_the_boolean_enabled() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let descriptor = reg.descriptor(GEAR).unwrap();
+    let data = json!({"keyway": true});
+    for key in ["key_width", "key_depth"] {
+        let field = descriptor.fields.iter().find(|f| f.key == key).unwrap();
+        assert!(field.applies(&data));
+    }
+}

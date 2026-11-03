@@ -421,8 +421,8 @@ pub fn register(reg: &mut Registry) {
             .field(Field::opt_expr("lightening_circle", "穴を並べる円の径").length())
             .field(Field::opt_expr("boss_diameter", "ボスの外径").length().help("空か 0 ならボスなし"))
             .field(Field::bool("keyway", "キー溝"))
-            .field(Field::opt_expr("key_width", "キー溝の幅").length().help("空なら軸の穴の径で表から選ぶ").only("keyway", "true", "false"))
-            .field(Field::opt_expr("key_depth", "キー溝の深さ").length().help("空なら軸の穴の径で表から選ぶ").only("keyway", "true", "false"))
+            .field(Field::opt_expr("key_width", "キー溝の幅").length().help("空なら軸の穴の径で表から選ぶ"))
+            .field(Field::opt_expr("key_depth", "キー溝の深さ").length().help("空なら軸の穴の径で表から選ぶ"))
             .field(
                 Field::opt_output("anchor", "中心の点のスケッチ", "points")
                     .help("スケッチの単独の点に中心を合わせる。点は拘束で動かせる"),
