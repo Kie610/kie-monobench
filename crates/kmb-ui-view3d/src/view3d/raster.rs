@@ -16,7 +16,7 @@ pub fn render(
     size: [usize; 2],
     ppp: f32,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
 ) -> egui::ColorImage {
@@ -54,7 +54,7 @@ pub fn render_guided(
     size: [usize; 2],
     ppp: f32,
     picked: &[Pick],
-    hover: Option<&Pick>,
+    hover: Option<&Hover>,
     colors: &Colors,
     shading: Shading,
     guides: Guides,
@@ -183,7 +183,7 @@ pub fn render_guided(
             let mut from_face = false;
             let base = if picked.iter().any(|p| is(Some(p))) {
                 colors.picked
-            } else if is(hover) {
+            } else if hover.is_some_and(|h| h.matches_face(b.feature, name)) {
                 colors.hover
             } else if shading.faces() {
                 match b.colors.get(*face as usize).copied().flatten() {
@@ -300,7 +300,7 @@ pub fn render_guided(
     }
     // 稜線は全部のボディの面を塗った後に描く(後のボディの面に隠れた辺も点線にできる)
     for (bi, b) in scene.bodies.iter().enumerate().filter(|_| shading.edges()) {
-        let line = line_color(scene.body_color(bi, colors), colors.dark);
+        let line = hover_edge_color(hover, b.feature, scene.body_color(bi, colors), colors);
         // 稜線は少し手前に寄せて、隠れていない部分だけ描く(線だけの表示では全部描く)。
         // 陰影と隠れ線では、隠れた部分を薄い点線で描く
         let see_through = !shading.faces();

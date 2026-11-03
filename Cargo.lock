@@ -487,6 +487,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "byteorder"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
 name = "byteorder-lite"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1961,6 +1967,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hdf5-pure"
+version = "0.47.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18a2ed6aa54b01776adf71049f7f776284c22d6febe772155ac040105ffbd126"
+dependencies = [
+ "byteorder",
+ "flate2",
+]
+
+[[package]]
 name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2286,6 +2302,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-acoustics"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-app"
 version = "0.2.0"
 dependencies = [
@@ -2316,7 +2342,9 @@ dependencies = [
 name = "kmb-asm"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-cad",
+ "kmb-contract",
  "kmb-core",
  "kmb-interchange",
  "kmb-look",
@@ -2330,6 +2358,7 @@ dependencies = [
 name = "kmb-bundle"
 version = "0.2.0"
 dependencies = [
+ "kmb-acoustics",
  "kmb-asm",
  "kmb-cad",
  "kmb-cad-boolean",
@@ -2351,6 +2380,7 @@ dependencies = [
  "kmb-drawing",
  "kmb-fea",
  "kmb-flow",
+ "kmb-hrtf",
  "kmb-interchange",
  "kmb-io-dxf",
  "kmb-io-render",
@@ -2382,6 +2412,7 @@ dependencies = [
  "kmb-strategy-waterline",
  "kmb-study",
  "kmb-text",
+ "kmb-wave",
  "kmb-workspace-hack",
  "log",
  "serde_json",
@@ -2700,9 +2731,11 @@ dependencies = [
 name = "kmb-drawing"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
+ "kmb-sketch",
  "kmb-text",
  "kmb-view-lines",
  "kmb-workspace-hack",
@@ -2762,6 +2795,22 @@ dependencies = [
  "kmb-cam-tool",
  "kmb-toolpath",
  "kmb-workspace-hack",
+]
+
+[[package]]
+name = "kmb-hrtf"
+version = "0.2.0"
+dependencies = [
+ "hdf5-pure",
+ "kmb-core",
+ "kmb-fea",
+ "kmb-study",
+ "kmb-wave",
+ "kmb-workspace-hack",
+ "log",
+ "serde",
+ "serde_json",
+ "sofar",
 ]
 
 [[package]]
@@ -2836,6 +2885,7 @@ dependencies = [
 name = "kmb-io-stl"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
@@ -2997,6 +3047,7 @@ dependencies = [
 name = "kmb-samples"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-bundle",
  "kmb-cad",
  "kmb-cad-edge",
@@ -3063,6 +3114,7 @@ dependencies = [
  "kmb-bundle",
  "kmb-core",
  "kmb-format",
+ "kmb-i18n",
  "kmb-image",
  "kmb-interchange",
  "kmb-look",
@@ -3446,6 +3498,7 @@ dependencies = [
  "kmb-strategy-pocket2d",
  "kmb-text",
  "kmb-ui-mouse3d",
+ "kmb-ui-sketch",
  "kmb-ui-view3d",
  "kmb-workspace-hack",
  "log",
@@ -3555,6 +3608,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-wave"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-fea",
+ "kmb-study",
+ "kmb-workspace-hack",
+ "log",
+ "num-complex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-workspace-hack"
 version = "0.1.0"
 dependencies = [
@@ -3565,6 +3632,8 @@ dependencies = [
  "bytemuck",
  "cc",
  "chrono",
+ "crc32fast",
+ "flate2",
  "fnv",
  "font-types",
  "getrandom 0.4.3",
@@ -3603,6 +3672,7 @@ dependencies = [
  "uuid",
  "wayland-sys",
  "windows-sys 0.61.2",
+ "winnow 1.0.4",
  "zerocopy",
 ]
 
@@ -3966,6 +4036,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -5528,6 +5599,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "sofar"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ba07a7507e4ff68a059effe66c2a4efffbb45092d4a6885ae1b989a41ef94cb"
+dependencies = [
+ "arrayvec",
+ "bitflags 2.13.2",
+ "log",
+ "miniz_oxide 0.9.1",
+ "thiserror 2.0.21",
+ "winnow 1.0.4",
 ]
 
 [[package]]

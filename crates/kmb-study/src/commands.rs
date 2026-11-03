@@ -3,19 +3,23 @@
 //! 機能)ならどれにも効く(強度と熱の kmb-fea、流れの kmb-flow)。
 
 use crate::result::{Geometry, Role, SimResult, fmt};
-use crate::run::{PLAN, Plan, Runner, Status, clock, prepared};
+use crate::run::{Done, PLAN, Plan, Runner, Status, clock, prepared};
 use crate::view::{self, Look};
 use kmb_core::{
-    Action, Context, Extension, FeatureId, FeatureStatus, FrameBar, Outcome, Overlay, OverlayShape,
-    Payload, Place, RunState, RunTone, StepMark, Value,
+    Action, Arg, Context, Extension, FeatureId, FeatureStatus, FieldUnit, FrameBar, Outcome,
+    Overlay, OverlayShape, Payload, Place, RunState, RunTone, StepMark, Value,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+#[cfg(test)]
+mod phase_tests;
 
 pub const RUN: &str = "study.run";
 pub const CANCEL: &str = "study.cancel";
 pub const VIEW_QUANTITY: &str = "study.view.quantity.";
 pub const VIEW_FRAME: &str = "study.view.frame.";
+const VIEW_PHASE: &str = "study.view.phase.";
 pub const VIEW_SURFACE: &str = "study.view.surface";
 pub const VIEW_SECTION: &str = "study.view.section";
 pub const VIEW_STREAM: &str = "study.view.streamlines";
@@ -26,7 +30,7 @@ pub const VIEW_HIDE: &str = "study.view.hide";
 pub const VIEW_NUMBERS: &str = "study.view.numbers";
 
 /// 研究ごとの見せ方(結果が来た時に、結果の勧める見せ方で埋める)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 struct Show {
     /// 埋めた結果の番号(違う結果が来たら埋め直す)
     from: u64,
@@ -40,6 +44,43 @@ struct Show {
     no_deform: bool,
     hidden: bool,
     frame: usize,
+    phase: Option<f64>,
+}
+
+/// 揺れを再生する操作の宛先。結果の更新は別の宛先になる。
+#[derive(Debug, PartialEq)]
+struct PhaseSeek {
+    study: u64,
+    key: u64,
+    stamp: u64,
+    frame: usize,
+}
+
+impl PhaseSeek {
+    fn parse(id: &str) -> Option<Self> {
+        let mut parts = id.strip_prefix(VIEW_PHASE)?.split('.');
+        let seek = Self {
+            study: parts.next()?.parse().ok()?,
+            key: parts.next()?.parse().ok()?,
+            stamp: parts.next()?.parse().ok()?,
+            frame: parts.next()?.parse().ok()?,
+        };
+        parts.next().is_none().then_some(seek)
+    }
+}
+
+fn has_phase(r: &SimResult) -> bool {
+    r.kind == "modal"
+        && !r.frames.is_empty()
+        && r.frames.iter().all(|f| f.time.is_none())
+        && r.quantities
+            .iter()
+            .any(|q| q.role == Role::Deform && q.comps == 3)
+}
+
+struct PhaseDrawn {
+    key: u64,
+    mesh: Option<view::PhaseMesh>,
 }
 
 /// 研究の実行と結果の見せ方。
@@ -49,6 +90,8 @@ pub struct StudyCommands {
     show: Mutex<HashMap<(u64, u64), Show>>,
     /// 描いた形の使い回し(鍵と形)
     drawn: Mutex<Option<(u64, Option<Arc<OverlayShape>>)>>,
+    /// 位相以外の見せ方が同じ時だけ使う、1コマ分の控え。
+    phase_drawn: Mutex<Option<PhaseDrawn>>,
 }
 
 fn is_study(cx: &Context<'_>, type_id: &str) -> bool {
@@ -125,11 +168,17 @@ impl StudyCommands {
         (cx.doc, id.0)
     }
 
+    /// 完了した仕事の鍵・結果・古さを同じ読み取りから得る。
+    fn finished(&self, cx: &Context<'_>, id: FeatureId) -> Option<(Done, bool)> {
+        let done = self.runner.done(Self::at(cx, id))?;
+        let stale = plan(cx, id).is_none_or(|p| p.key != done.key);
+        Some((done, stale))
+    }
+
     /// いちばん新しい結果と、それが古いか。
     pub fn result(&self, cx: &Context<'_>, id: FeatureId) -> Option<(Arc<SimResult>, bool)> {
-        let d = self.runner.done(Self::at(cx, id))?;
-        let stale = plan(cx, id).is_none_or(|p| p.key != d.key);
-        Some((d.result, stale))
+        self.finished(cx, id)
+            .map(|(done, stale)| (done.result, stale))
     }
 
     fn show_of(&self, cx: &Context<'_>, id: FeatureId, r: &SimResult) -> Show {
@@ -158,6 +207,7 @@ impl StudyCommands {
                 .unwrap_or(0);
             *s = Show {
                 from: stamp,
+                phase: None,
                 surface: (!on_grid && !r.quantities.is_empty()).then_some(q),
                 section: on_grid || r.start.section,
                 section_q: if on_grid { q } else { first_grid },
@@ -224,15 +274,21 @@ impl StudyCommands {
             streamlines: s.streamlines,
             smooth: !s.banded,
             deform: !s.no_deform,
+            phase: s.phase.unwrap_or(1.0),
             legend_all: !s.frame_only,
             stale,
         }
     }
 
     fn shape(&self, cx: &Context<'_>, id: FeatureId) -> Option<Arc<OverlayShape>> {
-        let (r, stale) = self.result(cx, id)?;
+        let (done, stale) = self.finished(cx, id)?;
+        let job_key = done.key;
+        let r = done.result;
         let s = self.show_of(cx, id, &r);
         if s.hidden {
+            if let Ok(mut cache) = self.phase_drawn.lock() {
+                *cache = None;
+            }
             return None;
         }
         let look = self.look(cx, id, &r, stale);
@@ -244,10 +300,12 @@ impl StudyCommands {
                 .filter(|(b, _)| !r.bodies.contains(&b.0))
                 .collect()
         };
-        let key = {
+        let draw_key = |look: &Look| {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             r.stamp().hash(&mut h);
+            // 点数や変位が同じでも、位置などの条件が違う仕事の網は使い回さない。
+            job_key.hash(&mut h);
             key_of(Self::at(cx, id)).hash(&mut h);
             format!("{look:?}").hash(&mut h);
             if !others.is_empty() {
@@ -256,13 +314,34 @@ impl StudyCommands {
             }
             h.finish()
         };
+        let key = draw_key(&look);
         if let Ok(d) = self.drawn.lock()
             && let Some((k, s)) = d.as_ref()
             && *k == key
         {
             return s.clone();
         }
-        let mut shape = view::draw(&r, &look, key);
+        let mut base = look.clone();
+        base.phase = 1.0;
+        let mut phase_shape = None;
+        if let Ok(mut cache) = self.phase_drawn.lock() {
+            if has_phase(&r) {
+                let cache_key = draw_key(&base);
+                if cache.as_ref().is_none_or(|c| c.key != cache_key) {
+                    *cache = Some(PhaseDrawn {
+                        key: cache_key,
+                        mesh: view::PhaseMesh::new(&r, &base),
+                    });
+                }
+                phase_shape = cache
+                    .as_ref()
+                    .and_then(|c| c.mesh.as_ref())
+                    .and_then(|m| m.draw(look.phase, key));
+            } else {
+                *cache = None;
+            }
+        }
+        let mut shape = phase_shape.unwrap_or_else(|| view::draw(&r, &look, key));
         for (_, h) in others {
             if let Ok(m) = cx.kernel.mesh(h, 0.2) {
                 add_backdrop(&mut shape, &m);
@@ -351,6 +430,18 @@ fn toggle(id: &str, on: bool, label_on: &str, label_off: &str, hint: &str) -> Ac
 }
 
 impl Extension for StudyCommands {
+    fn unlisted(&self, id: &str) -> Option<Vec<Arg>> {
+        PhaseSeek::parse(id)?;
+        Some(vec![
+            Arg::number(
+                "phase",
+                "揺れの変位に掛ける係数(-1〜1、1で最大)",
+                FieldUnit::Unitless,
+            )
+            .default(1.0),
+        ])
+    }
+
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let sel = selected(cx);
         let mut out = Vec::new();
@@ -514,6 +605,32 @@ impl Extension for StudyCommands {
         let Some(fid) = selected(cx) else {
             return Some(Err("解析の研究を選んでから使う".into()));
         };
+        if id.starts_with(VIEW_PHASE) {
+            return Some((|| {
+                let seek = PhaseSeek::parse(id).ok_or("揺れの再生先が正しくありません")?;
+                let done = self
+                    .runner
+                    .done(Self::at(cx, fid))
+                    .ok_or("まだ結果がありません")?;
+                let r = &done.result;
+                if seek.study != fid.0 || seek.key != done.key || seek.stamp != r.stamp() {
+                    return Err("結果が変わりました。再生をやり直してください".into());
+                }
+                if !has_phase(r) || seek.frame >= r.frames.len() {
+                    return Err("この結果のコマは揺れを再生できません".into());
+                }
+                let phase = cx.arg("phase").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                if !phase.is_finite() || !(-1.0..=1.0).contains(&phase) {
+                    return Err("揺れの係数は-1から1の有限な数で指定します".into());
+                }
+                self.show_of(cx, fid, r);
+                self.set_show(cx, fid, |s| {
+                    s.frame = seek.frame;
+                    s.phase = Some(phase);
+                });
+                Ok(Outcome::Message(String::new()))
+            })());
+        }
         Some(match id {
             RUN => {
                 let wait = cx.arg("wait").and_then(|v| v.as_bool()) == Some(true);
@@ -581,7 +698,10 @@ impl Extension for StudyCommands {
                         s.hidden = false;
                     });
                 } else if let Some(f) = tail(VIEW_FRAME) {
-                    self.set_show(cx, fid, |s| s.frame = f.min(last));
+                    self.set_show(cx, fid, |s| {
+                        s.frame = f.min(last);
+                        s.phase = None;
+                    });
                 } else {
                     let first_surface = r.quantities.iter().position(|q| {
                         r.parts
@@ -621,11 +741,13 @@ impl Extension for StudyCommands {
 
     fn frames(&self, cx: &Context<'_>) -> Option<FrameBar> {
         let id = selected(cx)?;
-        let (r, _) = self.result(cx, id)?;
-        if r.frames.len() < 2 {
+        let done = self.runner.done(Self::at(cx, id))?;
+        let r = &done.result;
+        let phase = has_phase(r);
+        if r.frames.is_empty() || (r.frames.len() < 2 && !phase) {
             return None;
         }
-        let s = self.show_of(cx, id, &r);
+        let s = self.show_of(cx, id, r);
         if s.hidden {
             return None;
         }
@@ -634,9 +756,13 @@ impl Extension for StudyCommands {
             labels: r.frames.iter().map(|f| f.label.clone()).collect(),
             at: s.frame.min(r.frames.len() - 1),
             total: r.frames.last().map(|f| f.label.clone()).unwrap_or_default(),
-            playable,
-            fps: 12.0,
-            seek: VIEW_FRAME.into(),
+            playable: playable || phase,
+            fps: if phase { 30.0 } else { 12.0 },
+            seek: if phase {
+                format!("{VIEW_PHASE}{}.{}.{}.", id.0, done.key, r.stamp())
+            } else {
+                VIEW_FRAME.into()
+            },
         })
     }
 

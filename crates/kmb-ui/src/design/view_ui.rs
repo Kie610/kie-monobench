@@ -19,10 +19,10 @@ mod pick;
 pub(crate) struct ViewMenu {
     /// 右クリックの時の修飾キー(メニューの種類を決める)
     pub(crate) kind: MenuKind,
-    /// 長押しで出す、重なった面の候補(位置、候補)
-    pub(crate) candidates: Option<(egui::Pos2, Vec<view3d::Pick>)>,
-    /// 右クリックした所に重なっている面(「ほかを選ぶ」の一覧。手前から)
-    pub(crate) context_others: (egui::Pos2, Vec<view3d::Pick>),
+    /// 長押しで出す、重なった物の候補(位置、候補)
+    pub(crate) candidates: Option<(egui::Pos2, Vec<Hit>)>,
+    /// 右クリックした所に重なっている物(「ほかを選ぶ」の一覧。手前から)
+    pub(crate) context_others: (egui::Pos2, Vec<Hit>),
 }
 
 impl Workspace {
@@ -163,6 +163,10 @@ impl Workspace {
             self.highlighted_faces()
         };
         let controls = view3d::Controls {
+            body_hover: self.active_pick_field().is_some_and(|(_, field)| {
+                matches!(field.kind, kmb_core::FieldKind::Pick { accept, .. }
+                    if accept.as_slice() == [RefKind::Body])
+            }),
             middle_orbits: self.win.layout.middle_drag == crate::MiddleDrag::Orbit,
             left: self.win.left_drag,
             // 部品を引いている間は、カーソルの下の面を色付けしない(下の別の部品が動くように見える)
@@ -232,7 +236,9 @@ impl Workspace {
         }
         let shape = overlay.shape.as_ref().map(|s| s.label.clone());
         if !measuring {
-            let hover = ev.hover.and_then(|p| self.hover_hit(rect, p));
+            let hover = self
+                .hover_position_for_drawing(ev.hover)
+                .and_then(|p| self.hover_hit(rect, p));
             self.cur.hover_kind = hover.as_ref().map(Hit::kind);
             self.cur.hover_feature = hover.as_ref().map(Hit::feature);
             self.draw_edges(ui, rect, hover.as_ref());

@@ -97,6 +97,8 @@ impl Headless {
         Headless {
             doc,
             path,
+            view: Default::default(),
+            view_directory: None,
             modules,
             report: RecomputeReport::default(),
             keep: vec![],

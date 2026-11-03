@@ -7,6 +7,22 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+a_shaft_with_clearance_is_neither_overlap_nor_coincident = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_oversized_shaft_has_the_annular_overlap_volume = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
+an_exact_shaft_reports_the_cylindrical_face_as_coincident = "truck の回(同じ円筒で接するブーリアン)"
+a_half_inserted_shaft_marks_only_the_inserted_length = "truck の回(同じ円筒で接するブーリアン)"
+an_equal_diameter_shaft_offset_by_half_a_millimeter_is_overlap = "truck の回(横にずらした同径の軸と穴のブーリアンで単純な輪を作れない)"
+an_antiparallel_equal_diameter_shaft_is_coincident = "truck の回(反平行の同じ円筒で接するブーリアン)"
+circular_end_edges_do_not_make_a_waisted_side_cylindrical = "truck の回(ロフトに対応していない)"
+expanded_thread_attributes_use_the_shared_action_without_changing_the_shape = "truck の回(円筒の面を選ぶための円の辺を列挙しない)"
+modeled_threads_keep_large_fine_long_and_print_clearance_shafts_closed = "truck の回(らせんの掃引に対応していない)"
+modeled_thread_run_out_and_recomputed_dimensions_keep_a_closed_body = "truck の回(らせんの掃引に対応していない)"
+modeled_threads_cross_a_chamfered_tip_without_cutting_the_shaft_away = "truck の回(らせんの掃引に対応していない)"
+modeled_threads_reject_oversize_shafts_and_excessive_lengths = "truck の回(円筒を調べる円の辺を返さない)"
+modeled_tapped_holes_cut_internal_crests_and_explain_blind_depth_limits = "truck の回(らせんの掃引に対応していない)"
+uneven_curved_chamfers_explain_the_supported_alternative = "truck の回(円筒どうしの曲がった交線を列挙できない)"
+circular_dimensions_and_stored_japanese_glyphs_reopen_together = "truck の回(円の辺を名前付きで列挙できず、円の寸法の参照を作れない)"
+cylinder_centerline_follows_named_end_circles_in_a_side_view = "truck の回(円の辺を名前付きで列挙できず、円筒の中心線の参照を作れない)"
 cylinder_named_ends_are_arcs = "truck の回(円の辺の名前付き列挙がなく、網の折れ線へ戻す)"
 expanded_thread_tapped_holes_use_all_families_and_survive_reopening = "truck の回(曲面の網による近似で M14 ねじ穴の体積が 0.183 mm³ ずれる)"
 legacy_thread_counterbore_keeps_the_omitted_diameter_and_depth = "truck の回(曲面の網による近似で M14 ザグリの除去体積が 0.613 mm³ ずれる)"
