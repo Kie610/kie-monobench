@@ -13,8 +13,8 @@ use kmb_core::{EvalCtx, EvalError, Feature, InputRef, Outputs, Value};
 use kmb_core::{Field, Registry};
 use serde::{Deserialize, Serialize};
 
-pub mod mesh;
 mod iges;
+pub mod mesh;
 mod names;
 pub use iges::{IMPORT_IGES, IMPORT_IGES_FILE, ImportIges, ImportIgesCommands};
 pub use names::{import_name, product_names, written_by_jc};
