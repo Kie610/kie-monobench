@@ -115,7 +115,8 @@ fn a_cam_and_its_follower_make_separate_bodies_and_a_one_degree_motion_table() {
         },
     );
     let mut doc = b.finish("カムと従節");
-    let reg = registry();
+    let mut reg = registry();
+    kmb_cad_gear::mech::register(&mut reg);
     let report = doc.recompute(&reg, &*k);
     assert_ok(&report);
     let bodies = visible_bodies(doc.data(), &reg, &report);
