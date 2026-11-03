@@ -2253,3 +2253,8 @@ field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
 field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
 field-cam-setup-stock-cost-currency = Cost: Currency
 field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
+
+field-solid-thicken-body = Body
+field-solid-thicken-body-help = Select a sheet body without thickness
+field-solid-thicken-thickness = Thickness
+field-solid-thicken-side = Side

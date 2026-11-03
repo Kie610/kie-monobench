@@ -63,3 +63,5 @@ feature-cam-spiral3d = 渦巻き(3D)
 feature-cam-spiral3d-tip = 中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる
 feature-cam-radial3d = 放射状(3D)
 feature-cam-radial3d-tip = 中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる
+feature-solid-thicken = 厚みを付ける
+feature-solid-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする

@@ -2253,3 +2253,8 @@ field-cam-setup-stock-cost-electricity-price = 費用: 電気の単価
 field-cam-setup-stock-cost-electricity-price-help = 1 kWh あたりの値段。空なら電気代を含めない。0 以上
 field-cam-setup-stock-cost-currency = 費用: 通貨
 field-cam-setup-stock-cost-currency-help = 値段に添える記号や名前。為替の換算はしない
+
+field-solid-thicken-body = ボディ
+field-solid-thicken-body-help = 厚みの無い面のボディを選ぶ
+field-solid-thicken-thickness = 厚み
+field-solid-thicken-side = 向き
