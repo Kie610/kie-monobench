@@ -345,6 +345,7 @@ impl Workspace {
     /// 今の言語の名前と説明にして返す(`WinState::localize_action`)。
     pub fn actions(&self) -> Vec<Action> {
         let mut v = self.win.extensions.actions(&self.context());
+        v.extend(kmb_session::doc_view::actions());
         v.iter_mut().for_each(|a| self.win.localize_action(a));
         v
     }
@@ -491,11 +492,17 @@ impl Workspace {
         } else {
             None
         };
-        // STEP の読み込みなら、読み込んだ後に立てるかを聞く(U12)
-        let import = self
-            .actions()
-            .iter()
-            .any(|a| a.id == id && a.role == Some(kmb_interchange::role::action::IMPORT_STEP));
+        // 読み込みの役割を持つ操作は、上向きの軸を変えるかを読み込んだ後に聞く。
+        let import = self.actions().iter().any(|a| {
+            a.id == id
+                && matches!(
+                    a.role,
+                    Some(
+                        kmb_interchange::role::action::IMPORT_STEP
+                            | kmb_interchange::role::action::IMPORT_IGES
+                    )
+                )
+        });
         let before = self.settings_values();
         let args = args.unwrap_or(serde_json::Value::Null);
         let r = self.run_through(id, self.cur.selected, file.as_deref(), &args);
@@ -550,6 +557,10 @@ impl Workspace {
         file: Option<&std::path::Path>,
         args: &serde_json::Value,
     ) -> Result<Ran, String> {
+        if kmb_session::doc_view::is_action(id) {
+            let view = self.doc_view();
+            self.cur.work.sync_doc_view(view);
+        }
         // 作る前の履歴の長さ(作っている途中をキャンセルした時に戻る所)
         let before = self.cur.work.doc().undo_labels().len();
         let doc = self.tab_uid();
@@ -571,6 +582,10 @@ impl Workspace {
             .work
             .run_with(id, &picks, file, args)
             .map_err(|p| p.to_string())?;
+        if kmb_session::doc_view::is_action(id) {
+            self.refresh_body_colors();
+            self.cur.view_saved = self.doc_view();
+        }
         Ok(Ran { handled, before })
     }
 

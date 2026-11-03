@@ -1,3 +1,5 @@
+mod annotations;
+
 use crate::{geometry::*, *};
 use kmb_core::kernel::{EdgeInfo, Mesh, P3, Seam, dot, sub};
 use kmb_core::{Context, FeatureId, Problem, ProblemKind};
@@ -25,6 +27,93 @@ struct Picture {
     bodies: Vec<Body>,
     items: Vec<Item>,
     lines: Vec<ViewLine>,
+}
+
+/// 名前付きの参照をボディの元の番号へ揃える。形を変えた後の同じボディも同じ鍵で引く。
+fn reference_views(
+    cx: &Context<'_>,
+    pictures: &BTreeMap<String, Result<Picture, Problem>>,
+) -> BTreeMap<String, crate::dimension::ViewGeometry> {
+    let aliases = cx
+        .data
+        .features
+        .iter()
+        .map(|e| (e.id, kmb_core::body_root(cx.data, cx.registry, e.id)))
+        .collect::<BTreeMap<_, _>>();
+    pictures
+        .iter()
+        .filter_map(|(id, p)| {
+            let p = p.as_ref().ok()?;
+            let mut edges = BTreeMap::new();
+            for b in p.bodies.iter().filter(|b| b.named) {
+                for (key, edge) in &b.edges {
+                    let key = EdgeKey {
+                        body: aliases.get(&key.body).copied().unwrap_or(key.body),
+                        ..key.clone()
+                    };
+                    if p.lines.iter().any(|line|matches!(&line.key,LineKey::Edge {key:line_key} if line_key.faces==key.faces && line_key.index==key.index && aliases.get(&line_key.body).copied().unwrap_or(line_key.body)==key.body)) {
+                    edges.insert(key, edge.clone());
+                }
+                }
+            }
+            let bodies = p
+                .bodies
+                .iter()
+                .map(|b| aliases.get(&b.id).copied().unwrap_or(b.id))
+                .collect();
+            Some((
+                id.clone(),
+                crate::dimension::ViewGeometry {
+                    frame: p.view,
+                    at: p.at,
+                    scale: p.scale,
+                    edges,
+                    aliases: aliases.clone(),
+                    bodies,
+                    lines: p.lines.clone(),
+                },
+            ))
+        })
+        .collect()
+}
+
+pub(super) fn view_references(
+    cx: &Context<'_>,
+    sheet: &Sheet,
+) -> BTreeMap<String, crate::dimension::ViewGeometry> {
+    let mut pictures = BTreeMap::new();
+    let mut problems = Vec::new();
+    for view in &sheet.views {
+        calculate(cx, sheet, view, &mut pictures, &mut problems);
+    }
+    reference_views(cx, &pictures)
+}
+
+pub(super) fn validate_annotation(
+    cx: &Context<'_>,
+    sheet: &Sheet,
+    note: &Annotation,
+    views: &BTreeMap<String, crate::dimension::ViewGeometry>,
+) -> Result<(), String> {
+    let style = style_of(&sheet.dim_style)?;
+    let (rows, sources) = if matches!(
+        note.kind,
+        AnnotationKind::Balloon { .. } | AnnotationKind::PartsTable { .. }
+    ) {
+        kmb_asm::inspect::bom_rows_with_sources(cx)
+    } else {
+        (vec![], BTreeMap::new())
+    };
+    annotations::one(
+        note,
+        &style,
+        cx.data.properties.units,
+        sheet.paper.size(),
+        views,
+        &rows,
+        &sources,
+    )
+    .map(|_| ())
 }
 
 /// 用紙の定義だけを保存し、線は最新の再計算結果から作る。
@@ -122,6 +211,7 @@ pub fn sheet_picture_with_lines(
             }
         }
     }
+    let annotation_items = annotations::draw(cx, sheet, &pictures, &mut problems);
     let mut items = vec![];
     let mut tables = BTreeMap::new();
     for v in &sheet.views {
@@ -138,6 +228,7 @@ pub fn sheet_picture_with_lines(
             }),
         }
     }
+    items.extend(annotation_items);
     Ok((
         SheetPicture {
             sheet: sheet.id.clone(),

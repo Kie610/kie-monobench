@@ -127,5 +127,12 @@ view-mark-leftover = { $count ->
 
 view-candidates = Overlapping items (front to back)
 
+view-part-hues = Color by Component
+view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 view-keycast-drag = Drag
 view-keycast-mouse3d-button = 3D mouse button { $number }
+view-candidate-edge = Edge ({ $faces })
+view-candidate-vertex = Vertex ({ $position })
+
+view-others = Select other… (or hold)
+view-others-help = Select from overlapping faces, edges and vertices at this point. You can also hold the left mouse button to open the list.

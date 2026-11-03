@@ -128,7 +128,7 @@ action-cad-sketch-auto-constrain-tip = 選んでいるスケッチの、今の�
 action-cad-sketch-export-dxf = DXF として保存…
 action-cad-sketch-export-dxf-tip = 選んでいるスケッチの線(補助線を除く)を DXF に書き出す
 action-cad-sketch-export-svg = SVG として保存…
-action-cad-sketch-export-svg-tip = 選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(LightBurn などのレーザー加工機のソフトで同じ大きさで開ける。つながる線は閉じた輪郭にまとめる)
+action-cad-sketch-export-svg-tip = 選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(つながる線は閉じた輪郭にまとめる)
 action-cad-sketch-find = スケッチの要素を探す
 action-cad-sketch-find-tip = 選んでいるスケッチの点・線・円などを、種類・補助線・拘束の決まり具合・長さ・半径・範囲で絞って表にする
 action-cad-sketch-insert-dxf = DXF を挿入…
@@ -199,7 +199,7 @@ action-cam-add-pocket-tip = 3D のビューで底の面を選んでから押す(
 action-cam-add-project3d = 投影(3D)
 action-cam-add-project3d-tip = スケッチの線を真上から部品の面へ落としてなぞる。残し量を負にすると面より下を彫る。スケッチを選ぶとその線、選ばなければ最後のスケッチ(ボールエンドミルがあればそれを使う)
 action-cam-add-radial3d = 放射状(3D)
-action-cam-add-radial3d-tip = 部品の中心から放射の線を外へ・内へとなぞって仕上げる(ボールエンドミルがあればそれを使う)
+action-cam-add-radial3d-tip = 部品の中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる(ボールエンドミルがあればそれを使う)
 action-cam-add-ramp3d = ランプ(3D)
 action-cam-add-ramp3d-tip = 縦の壁や急な斜面を、1 周 0.5 mm ずつ斜めに下りながら途切れずに仕上げる(ボールエンドミルがあればそれを使う)
 action-cam-add-raster3d = 走査線(3D)
@@ -213,7 +213,7 @@ action-cam-add-setup-tip = 最後のボディを加工するセットアップ�
 action-cam-add-slot = スロット
 action-cam-add-slot-tip = スケッチの線を溝の中心にして、決めた幅と深さの溝を削る。スケッチを選ぶとその線、選ばなければ最後のスケッチ
 action-cam-add-spiral3d = 渦巻き(3D)
-action-cam-add-spiral3d-tip = 部品の中心のまわりの渦巻きを外から内へなぞって仕上げる(ボールエンドミルがあればそれを使う)
+action-cam-add-spiral3d-tip = 中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる(ボールエンドミルがあればそれを使う)
 action-cam-add-thread = ねじ切り
 action-cam-add-thread-tip = ねじ切りミルで、選んだ穴かボスの壁にねじを切る。工具ライブラリにねじ切りミルが要る
 action-cam-add-trace = トレース
@@ -353,14 +353,61 @@ action-drawing-move-view-tip = 用紙の上の位置か親からの距離を変�
 action-drawing-set-view = ビューを編集
 action-drawing-set-view-tip = ビューの尺度と隠れ線や接線の表示を変える
 action-drawing-delete = 図面を削除
-action-drawing-delete-tip = 用紙かビューを削除する。子のビューがある時は先に子を削除する
+action-drawing-delete-tip = 用紙・ビュー・注記を削除する。子のビューがある時は先に子を削除する
 action-drawing-picture = 図面の線を書き出す
 action-drawing-picture-tip = 用紙の線と問題を JSON に書き出す
 action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+
+action-view-part-hues = 部品ごとに色を変える
+action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
+action-cad-sketch-dxf-layers = DXF の画層を一覧
+action-cad-sketch-dxf-layers-tip = DXF の画層の名前と形の数を読む。設計は変えない
+action-cad-sketch-project-axis = 作業軸を投影
+action-cad-sketch-project-axis-tip = 作業軸をスケッチへ投影し、軸を動かすと線や点も付いてくる
 action-hrtf-process = HRTF の形式をそろえる
 action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
 action-hrtf-compute = 頭の網から HRTF を計算…
 action-hrtf-compute-tip = 頭の網の仕事の JSON を境界要素法で解き、全方向の HRIR を SOFA で書き出す
+action-cad-sketch-regions = スケッチの領域を一覧
+action-cad-sketch-regions-tip = スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む
+action-drawing-dimension = 寸法
+action-drawing-dimension-tip = ビューの辺を参照し、形の値を表示する寸法を置く
+
+action-drawing-dimension-set = 寸法をまとめて置く
+action-drawing-dimension-set-tip = 選んだ点の列から並列・直列・座標の寸法を一回だけ置く
+
+action-drawing-import-dimensions = モデルの寸法を取り込む
+action-drawing-import-dimensions-tip = 選んだスケッチの寸法を、ビューの見える辺を参照する寸法として一回だけ取り込む
+
+action-drawing-note = 注記
+action-drawing-note-tip = 用紙に文字か引出線付きの文字を置く
+
+action-drawing-center-mark = 中心の印
+action-drawing-center-mark-tip = 円や円弧の中心に十字の印を付ける
+
+action-drawing-center-line = 中心線
+action-drawing-center-line-tip = 平行な二本の辺の中間か、円筒の両端の円から中心線を引く
+
+action-drawing-balloon = 番号札
+action-drawing-balloon-tip = 部品表の行に対応する番号札を利用者が決めた位置に置く
+
+action-drawing-renumber-balloons = 番号札を振り直す
+action-drawing-renumber-balloons-tip = 番号札の番号を現在の部品表の行の順に合わせる
+
+action-drawing-align-balloons = 番号札をそろえる
+action-drawing-align-balloons-tip = 選んだ番号札を最初の札と同じ縦か横の位置にそろえる
+
+action-drawing-parts-table = 部品表
+action-drawing-parts-table-tip = 選んだ列の部品表を線と文字にして用紙に置く
+
+action-drawing-set-style = 寸法の様式
+action-drawing-set-style-tip = 文字・矢印・補助線・桁・単位・公差の様式を用紙ごとに決める
+action-cad-thicken = 厚みを付ける
+action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
+action-cad-import-iges = IGES を読み込む…
+action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す
+action-params-apply-batch = 式をまとめて適用
+action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する

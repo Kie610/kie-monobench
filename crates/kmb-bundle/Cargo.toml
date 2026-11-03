@@ -10,6 +10,7 @@ rust-version.workspace = true
 layer = "assembly"
 
 [dependencies]
+kmb-session.workspace = true
 kmb-drawing.workspace = true
 kmb-core.workspace = true
 kmb-interchange.workspace = true
@@ -32,6 +33,7 @@ kmb-cad-modify.workspace = true
 kmb-asm.workspace = true
 kmb-fea.workspace = true
 kmb-flow.workspace = true
+kmb-acoustics.workspace = true
 kmb-wave.workspace = true
 kmb-hrtf.workspace = true
 kmb-study.workspace = true

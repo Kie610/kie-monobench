@@ -381,6 +381,7 @@ mod tests {
             clearance_z: 20.0,
             wcs: 1,
             material: String::new(),
+            cost: Default::default(),
             flip: Default::default(),
             flip_center: [0.0; 3],
             tolerance: MESH_TOLERANCE,

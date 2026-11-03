@@ -81,9 +81,18 @@ impl Reader<'_> {
 
 /// ASCII とバイナリの両方を読む。バイナリのグループコードは R13 以降の2バイトと R12 の1バイトに対応する。
 pub fn from_dxf_bytes(bytes: &[u8]) -> Result<Imported, String> {
+    from_dxf_bytes_with_layers(bytes, None).map(|read| read.imported)
+}
+
+/// ASCII とバイナリで同じ画層の選びを使う。
+pub fn from_dxf_bytes_with_layers(
+    bytes: &[u8],
+    selected: Option<&[String]>,
+) -> Result<crate::DxfRead, String> {
     if !bytes.starts_with(b"AutoCAD Binary DXF") {
-        return crate::from_dxf(
+        return crate::from_dxf_with_layers(
             std::str::from_utf8(bytes).map_err(|_| "DXF の文字を UTF-8 として読めません")?,
+            selected,
         );
     }
     let data = bytes
@@ -121,5 +130,5 @@ pub fn from_dxf_bytes(bytes: &[u8]) -> Result<Imported, String> {
         .iter()
         .map(|(code, value)| (*code, value.trim()))
         .collect();
-    crate::dxf::from_pairs(&pairs)
+    crate::dxf::from_pairs(&pairs, selected)
 }

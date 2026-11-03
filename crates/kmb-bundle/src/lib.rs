@@ -45,6 +45,7 @@ pub fn all() -> Vec<Module> {
     let (cam, strategies) = kmb_cam_setup::split(strategy_modules());
     let machines = machines();
     let mut v = vec![
+        kmb_session::module(),
         // STEP の読み込みは設計の「挿入」の先頭(SVG の挿入より前。Kie 2026-10-21 の画板)。
         // 挿入の操作はスケッチのモジュールの中へ並べ直すので、スケッチより前に置く
         kmb_cad_import_step::module(),
@@ -74,6 +75,7 @@ pub fn all() -> Vec<Module> {
         kmb_io_render::module(),
         kmb_fea::module(),
         kmb_flow::module(),
+        kmb_acoustics::module(),
         kmb_wave::module(),
         kmb_hrtf::module(),
         kmb_study::module(),
