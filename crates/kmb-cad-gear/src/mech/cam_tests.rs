@@ -115,8 +115,11 @@ fn all_follower_tips_start_on_the_base_circle() {
 }
 #[test]
 fn the_biarc_cam_and_the_follower_are_closed_and_have_positive_areas() {
-    for tip in [FollowerTip::Knife, FollowerTip::Roller, FollowerTip::Flat] {
-        let p = input(Follower::Translating, tip);
+    for (follower_kind, tip) in [Follower::Translating, Follower::Oscillating]
+        .into_iter()
+        .flat_map(|f| [FollowerTip::Knife, FollowerTip::Roller, FollowerTip::Flat].map(|t| (f, t)))
+    {
+        let p = input(follower_kind, tip);
         let (cam, follower, _) = outlines(&p).unwrap();
         for ring in [&cam, &follower] {
             assert!(ring.signed_area() > 0.0);
