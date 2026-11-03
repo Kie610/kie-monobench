@@ -123,12 +123,20 @@ fn a_48_tooth_internal_gear_body_has_the_ring_area_times_the_width() {
     };
     let profile = Profile::from_value(&outputs["profile"]).unwrap();
     // 大きな外径の円を 64 分割する近似は、薄い輪の面積では誤差が拡大する。
-    // 体積との比較は区間を十分細かく刻んだ独立した面積で行う。
+    // 体積との比較では外径の円を細かく刻み、短い歯面の区間の点は増やし過ぎない。
     let loop_area = |loop_: &kmb_core::ProfileLoop| {
         let points: Vec<_> = loop_
             .edges
             .iter()
-            .flat_map(|edge| edge.polyline(4096))
+            .flat_map(|edge| {
+                edge.polyline(
+                    if matches!(edge.segment, kmb_core::Segment::Circle { .. }) {
+                        4096
+                    } else {
+                        128
+                    },
+                )
+            })
             .collect();
         kmb_core::kernel::polygon_area(&points)
     };
@@ -143,7 +151,17 @@ fn a_48_tooth_internal_gear_body_has_the_ring_area_times_the_width() {
         let Some(FeatureStatus::Error { message }) = report.feature(body) else {
             unreachable!()
         };
-        assert!(message.contains("対応していない"), "{message}");
+        assert!(
+            message.contains("このカーネルは") && message.contains("対応していません"),
+            "{message}"
+        );
+        assert!(
+            matches!(
+                k.extrude(&profile, 0.0, 5.0, "internal-unsupported"),
+                Err(kmb_core::KernelError::Unsupported(_))
+            ),
+            "未対応の型を確かめる"
+        );
     } else {
         assert_ok(&report);
         let mass = final_mass(&mut doc, &k);
