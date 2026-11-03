@@ -11,9 +11,125 @@ use kmb_core::{FrameBar, RunState, RunTone, Series, ShapeInk, StepMark};
 /// 凡例 1 つ(見出しと、上が高い値の色と文字)。
 pub(crate) type Legend = (String, Vec<(ShapeInk, String)>);
 
+/// 操作の宛先とコマに属する揺れの時計。文書の保存や取り消しには入れない。
+#[derive(Debug, Clone)]
+pub(crate) struct PhasePlayback {
+    target: String,
+    frame: usize,
+    angle: f64,
+    last: f64,
+    pub(super) playing: bool,
+}
+
+impl PhasePlayback {
+    fn new(bar: &FrameBar, frame: usize, now: f64) -> Self {
+        Self {
+            target: bar.seek.clone(),
+            frame,
+            angle: 0.0,
+            last: now,
+            playing: false,
+        }
+    }
+
+    fn matches(&self, bar: &FrameBar) -> bool {
+        self.target == bar.seek && self.frame == bar.at
+    }
+
+    fn tick(&mut self, now: f64) -> f64 {
+        if self.playing {
+            // 表示用の周期は2秒。結果の物理的な周波数とは結び付けない。
+            self.angle = (self.angle + (now - self.last).max(0.0) * std::f64::consts::PI)
+                .rem_euclid(std::f64::consts::TAU);
+        }
+        self.last = now;
+        self.angle.cos()
+    }
+}
+
 impl Workspace {
+    /// 宣言済みの変位係数を受ける操作なら、時刻を送らず同じコマを揺らせる。
+    fn phase_bar(&self, bar: &FrameBar) -> bool {
+        let id = format!("{}{}", bar.seek, bar.at);
+        let args = self
+            .win
+            .extensions
+            .action(&id, &self.context())
+            .map(|a| a.args)
+            .or_else(|| self.win.extensions.0.iter().find_map(|e| e.unlisted(&id)));
+        args.is_some_and(|args| {
+            args.iter().any(|a| {
+                a.key == "phase"
+                    && a.kind == kmb_core::ArgKind::Number
+                    && a.unit == Some(kmb_core::FieldUnit::Unitless)
+                    && a.default.as_ref().and_then(|v| v.as_f64()) == Some(1.0)
+            })
+        })
+    }
+
+    /// 結果のコマを操作の宣言とセッションの口を通して動かす。空の知らせは出さない。
+    fn run_frame_seek(&mut self, bar: &FrameBar, frame: usize, phase: Option<f64>) -> bool {
+        let args = phase.map_or(serde_json::Value::Null, |p| serde_json::json!({"phase": p}));
+        let r = self.run_through(
+            &format!("{}{frame}", bar.seek),
+            self.cur.selected,
+            None,
+            &args,
+        );
+        match r {
+            Ok(ran)
+                if matches!(&ran.handled, kmb_session::Handled::Other(o)
+                if matches!(o.as_ref(), kmb_core::Outcome::Message(m) if m.is_empty())) =>
+            {
+                true
+            }
+            Ok(ran) => {
+                self.take_ran(ran, None);
+                true
+            }
+            Err(e) => {
+                self.win.fail(e);
+                false
+            }
+        }
+    }
+
     /// 結果のコマを再生している間、時刻に合わせてコマを進める(ビューを描く前に呼ぶ)。
     pub(crate) fn frames_tick(&mut self, ctx: &egui::Context) {
+        let Some(bar) = self.frame_bar() else {
+            self.cur.frames_playing = None;
+            self.cur.phase_playback = None;
+            return;
+        };
+        if self.phase_bar(&bar) {
+            self.cur.frames_playing = None;
+            let now = ctx.input(|i| i.time);
+            let reset = self
+                .cur
+                .phase_playback
+                .as_ref()
+                .is_none_or(|p| !p.matches(&bar));
+            if reset {
+                self.cur.phase_playback = Some(PhasePlayback::new(&bar, bar.at, now));
+            }
+            let clock = self.cur.phase_playback.as_mut().expect("時計を用意した");
+            let phase = clock.tick(now);
+            let playing = clock.playing;
+            if (reset || playing) && !self.run_frame_seek(&bar, bar.at, Some(phase)) {
+                self.cur.phase_playback = None;
+                return;
+            }
+            if playing {
+                // 予測するコマの時間が差し引かれても正の描き直し間隔を残す。
+                let predicted = ctx.input(|i| i.predicted_dt);
+                let frame = std::time::Duration::try_from_secs_f32(predicted).unwrap_or_default();
+                ctx.request_repaint_after(
+                    frame.saturating_add(std::time::Duration::from_secs_f64(1.0 / 30.0)),
+                );
+            }
+            return;
+        }
+        self.cur.phase_playback = None;
         let Some((t0, f0)) = self.cur.frames_playing else {
             return;
         };
@@ -53,7 +169,15 @@ impl Workspace {
         );
         let mut seek: Option<usize> = None;
         let mut toggle = false;
-        let playing = self.cur.frames_playing.is_some();
+        let phase = self.phase_bar(&bar);
+        let playing = if phase {
+            self.cur
+                .phase_playback
+                .as_ref()
+                .is_some_and(|p| p.matches(&bar) && p.playing)
+        } else {
+            self.cur.frames_playing.is_some()
+        };
         ui.scope_builder(egui::UiBuilder::new().max_rect(br), |ui| {
             egui::Frame::new()
                 .fill(l.pal.panel)
@@ -64,7 +188,11 @@ impl Workspace {
                     ui.set_width(w - 12.0);
                     ui.spacing_mut().item_spacing = egui::vec2(2.0, 2.0);
                     ui.horizontal(|ui| {
-                        let what = if bar.playable { "時刻" } else { "コマ" };
+                        let what = if bar.playable && !phase {
+                            "時刻"
+                        } else {
+                            "コマ"
+                        };
                         let buttons: [(&str, String, Option<usize>); 5] = [
                             ("first", "最初のコマ".into(), Some(0)),
                             ("back", "前のコマ".into(), Some(bar.at.saturating_sub(1))),
@@ -91,7 +219,7 @@ impl Workspace {
                         }
                         ui.add_space(8.0);
                         let now = bar.labels.get(bar.at).cloned().unwrap_or_default();
-                        let text = if bar.playable {
+                        let text = if bar.playable && !phase {
                             format!("{now} / {}", bar.total)
                         } else {
                             now
@@ -115,7 +243,16 @@ impl Workspace {
                     }
                 });
         });
-        if toggle {
+        if toggle && phase {
+            let now = ui.input(|i| i.time);
+            let clock = self
+                .cur
+                .phase_playback
+                .get_or_insert_with(|| PhasePlayback::new(&bar, bar.at, now));
+            clock.tick(now);
+            clock.playing = !clock.playing;
+            ui.ctx().request_repaint();
+        } else if toggle {
             self.cur.frames_playing = match self.cur.frames_playing {
                 Some(_) => None,
                 None => {
@@ -131,7 +268,10 @@ impl Workspace {
         }
         if let Some(f) = seek {
             self.cur.frames_playing = None;
-            if f != bar.at {
+            if phase {
+                self.cur.phase_playback = Some(PhasePlayback::new(&bar, f, ui.input(|i| i.time)));
+                self.run_frame_seek(&bar, f, Some(1.0));
+            } else if f != bar.at {
                 self.run_quiet(&format!("{}{f}", bar.seek));
             }
         }
@@ -403,9 +543,10 @@ pub(crate) fn run_header(ui: &mut egui::Ui, st: &RunState, look: &theme::Look) -
                     out = Some(st.run.clone());
                 }
                 if let Some(s) = st.series.as_ref().filter(|s| s.points.len() > 1) {
+                    // 周波数ごとの結果(等比の横軸)は、解き終えたら開いて見せる
                     egui::CollapsingHeader::new(&s.name)
                         .id_salt("run_series")
-                        .default_open(false)
+                        .default_open(log_axis(&s.points))
                         .show(ui, |ui| series_plot(ui, s, look));
                 }
             }
@@ -446,7 +587,8 @@ fn series_plot(ui: &mut egui::Ui, s: &Series, look: &theme::Look) {
             .color(l.pal.ink2),
     );
     let w = ui.available_width();
-    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, 70.0), Sense::hover());
+    let h = if log_axis(&s.points) { 100.0 } else { 70.0 };
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), Sense::hover());
     let p = ui.painter_at(rect);
     p.rect(
         rect,
@@ -465,43 +607,174 @@ fn series_plot(ui: &mut egui::Ui, s: &Series, look: &theme::Look) {
         y0 = y0.min(*y);
         y1 = y1.max(*y);
     }
-    // 始めの大きな揺れで潰れないよう、後ろ 3/4 の範囲で縦を決める
-    let tail = &s.points[s.points.len() / 4..];
-    let (ty0, ty1) = tail
-        .iter()
-        .filter(|p| p[1].is_finite())
-        .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p[1]), a.1.max(p[1])));
-    if ty1 > ty0 {
-        let m = 0.25 * (ty1 - ty0).max(1e-9);
-        y0 = y0.max(ty0 - 2.0 * m);
-        y1 = y1.min(ty1 + 2.0 * m);
+    let log = log_axis(&s.points);
+    let top = y1;
+    if log {
+        // 周波数ごとの値は全部を見せ、上下に少し余白を置く
+        let m = 0.1 * (y1 - y0).max(1.0);
+        y0 -= m;
+        y1 += m;
+    } else {
+        // 始めの大きな揺れで潰れないよう、後ろ 3/4 の範囲で縦を決める
+        let tail = &s.points[s.points.len() / 4..];
+        let (ty0, ty1) = tail
+            .iter()
+            .filter(|p| p[1].is_finite())
+            .fold((f64::MAX, f64::MIN), |a, p| (a.0.min(p[1]), a.1.max(p[1])));
+        if ty1 > ty0 {
+            let m = 0.25 * (ty1 - ty0).max(1e-9);
+            y0 = y0.max(ty0 - 2.0 * m);
+            y1 = y1.min(ty1 + 2.0 * m);
+        }
     }
     if x1 <= x0 || y1 <= y0 {
         return;
     }
-    let inner = rect.shrink2(egui::vec2(6.0, 8.0));
+    // 対数の横軸は上に縦の最大、下に横軸の両端の値を書くので、線を内へ寄せる
+    let inner = if log {
+        Rect::from_min_max(
+            rect.min + egui::vec2(10.0, 16.0),
+            rect.max - egui::vec2(10.0, 14.0),
+        )
+    } else {
+        rect.shrink2(egui::vec2(6.0, 8.0))
+    };
+    let fx = |x: f64| if log { x.ln() } else { x };
     let at = |x: f64, y: f64| {
         egui::pos2(
-            inner.left() + ((x - x0) / (x1 - x0)) as f32 * inner.width(),
+            inner.left() + ((fx(x) - fx(x0)) / (fx(x1) - fx(x0))) as f32 * inner.width(),
             inner.bottom() - (((y - y0) / (y1 - y0)).clamp(-0.05, 1.05)) as f32 * inner.height(),
         )
     };
+    if log {
+        // 1・2・5 の目盛りの縦の線と、両端の横軸の値・縦の範囲
+        for t in log_ticks(x0, x1) {
+            let x = at(t, y0).x;
+            p.line_segment(
+                [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                Stroke::new(1.0, l.pal.edge),
+            );
+        }
+        let small = |pos: egui::Pos2, align: egui::Align2, text: String| {
+            p.text(pos, align, text, theme::prop(10.0), l.pal.ink3);
+        };
+        small(
+            rect.left_bottom() + egui::vec2(4.0, -2.0),
+            egui::Align2::LEFT_BOTTOM,
+            short(x0),
+        );
+        small(
+            rect.right_bottom() + egui::vec2(-4.0, -2.0),
+            egui::Align2::RIGHT_BOTTOM,
+            short(x1),
+        );
+        small(
+            rect.left_top() + egui::vec2(4.0, 3.0),
+            egui::Align2::LEFT_TOP,
+            format!("最大 {top:.1}"),
+        );
+    }
     let pts: Vec<egui::Pos2> = s
         .points
         .iter()
         .filter(|p| p[1].is_finite())
         .map(|p| at(p[0], p[1]))
         .collect();
-    p.add(egui::Shape::line(pts, Stroke::new(1.5, l.pal.sim)));
-    let last = s.points[s.points.len() - 1];
-    p.text(
-        rect.right_top() + egui::vec2(-4.0, 3.0),
-        egui::Align2::RIGHT_TOP,
-        format!("{:.3}", last[1]),
-        theme::prop(10.5),
-        l.pal.ink2,
-    );
+    p.add(egui::Shape::line(pts.clone(), Stroke::new(1.5, l.pal.sim)));
+    if log {
+        for q in &pts {
+            p.circle_filled(*q, 2.0, l.pal.sim);
+        }
+    }
+    if !log {
+        let last = s.points[s.points.len() - 1];
+        p.text(
+            rect.right_top() + egui::vec2(-4.0, 3.0),
+            egui::Align2::RIGHT_TOP,
+            format!("{:.3}", last[1]),
+            theme::prop(10.5),
+            l.pal.ink2,
+        );
+    } else if let Some(hover) = r.hover_pos() {
+        // ポインタに一番近い点の値
+        if let Some((q, v)) = s
+            .points
+            .iter()
+            .filter(|v| v[1].is_finite())
+            .map(|v| (at(v[0], v[1]), v))
+            .min_by(|a, b| (a.0.x - hover.x).abs().total_cmp(&(b.0.x - hover.x).abs()))
+        {
+            p.circle_stroke(q, 4.0, Stroke::new(1.5, l.pal.ink));
+            p.text(
+                rect.right_top() + egui::vec2(-4.0, 3.0),
+                egui::Align2::RIGHT_TOP,
+                format!("{} {:.1}", short(v[0]), v[1]),
+                theme::prop(10.5),
+                l.pal.ink,
+            );
+        }
+    }
     if !s.note.is_empty() {
         r.on_hover_text(format!("{}(横軸: {})", s.note, s.x_name));
+    }
+}
+
+#[cfg(test)]
+mod phase_tests;
+/// 横軸が等比の並び(周波数を 1 オクターブに何点かで並べた物)か。対数の目盛りで描く。
+fn log_axis(points: &[[f64; 2]]) -> bool {
+    if points.len() < 3 || !points.iter().all(|p| p[0] > 0.0) {
+        return false;
+    }
+    let r0 = points[1][0] / points[0][0];
+    r0 > 1.0 + 1e-6
+        && points
+            .windows(2)
+            .all(|w| ((w[1][0] / w[0][0]) / r0 - 1.0).abs() < 0.02)
+}
+
+/// `x0`〜`x1` に入る 1・2・5 の目盛り。
+fn log_ticks(x0: f64, x1: f64) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut d = 10f64.powf(x0.log10().floor());
+    while d <= x1 {
+        for m in [1.0, 2.0, 5.0] {
+            let t = m * d;
+            if t >= x0 && t <= x1 {
+                out.push(t);
+            }
+        }
+        d *= 10.0;
+    }
+    out
+}
+
+/// 目盛りの短い書き方(250、1.6k)。
+fn short(x: f64) -> String {
+    if x >= 1000.0 {
+        format!("{}k", (x / 100.0).round() / 10.0)
+    } else {
+        format!("{x:.0}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1 オクターブに何点かの周波数の並びだけを対数の目盛りにする(時刻や回数は今の線形のまま)。
+    #[test]
+    fn only_geometric_x_gets_a_log_axis() {
+        let f: Vec<[f64; 2]> = (0..13)
+            .map(|i| [250.0 * 2f64.powf(i as f64 / 3.0), 80.0])
+            .collect();
+        assert!(log_axis(&f));
+        let t: Vec<[f64; 2]> = (0..10).map(|i| [i as f64 * 0.1, 1.0]).collect();
+        assert!(!log_axis(&t));
+        let n: Vec<[f64; 2]> = (1..10).map(|i| [i as f64, 1.0]).collect();
+        assert!(!log_axis(&n));
+        assert!(!log_axis(&f[..2]));
+        assert_eq!(log_ticks(250.0, 4000.0), vec![500.0, 1000.0, 2000.0]);
+        assert_eq!((short(250.0), short(1587.4)), ("250".into(), "1.6k".into()));
     }
 }

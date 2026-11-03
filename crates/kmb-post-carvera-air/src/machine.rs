@@ -25,6 +25,7 @@ pub fn profile() -> MachineProfile {
         tool_numbers: (1, 99),
         rapid_feed: 3000.0,
         acceleration: 150.0,
+        power_w: 0.0,
         junction_deviation: 0.05,
         max_rate: [3000.0, 3000.0, 2000.0],
         measure_after_tool_change: true,

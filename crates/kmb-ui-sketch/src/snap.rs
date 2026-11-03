@@ -88,6 +88,7 @@ fn kind_of(source: &ProjectionSource) -> Kind {
         | ProjectionSource::Section { .. }
         | ProjectionSource::Silhouette { .. } => Kind::Edge,
         ProjectionSource::Sketch { .. } => Kind::SketchPoint,
+        ProjectionSource::DatumAxis { .. } => Kind::Edge,
     }
 }
 
@@ -102,6 +103,17 @@ pub(crate) fn augment(
     sol: &Solution,
     refs: &[RefItem],
     wants: Wants,
+) -> Augmented {
+    augment_with_crossings(sketch, sol, refs, wants, None)
+}
+
+/// 作り置いた交点があれば使い、仮の点の並びは作り直す時も同じにする。
+pub(crate) fn augment_with_crossings(
+    sketch: &Sketch,
+    sol: &Solution,
+    refs: &[RefItem],
+    wants: Wants,
+    crossings: Option<&[crate::infer::Crossing]>,
 ) -> Augmented {
     let mut s = sketch.clone();
     s.adopt_solution(sol);
@@ -129,7 +141,10 @@ pub(crate) fn augment(
     // 点(原点・角・中心)を先に足し、辺の端はそれを使い回す
     if wants.points || wants.edges {
         for (r, near) in refs.iter().zip(&near_real) {
-            if matches!(r.shape, RefShape::Point(_)) && !near && !projected(sketch, r) {
+            if matches!(r.shape, RefShape::Point(_))
+                && (!near || r.source.datum_axis().is_some())
+                && !projected(sketch, r)
+            {
                 let id = s.add_projection(r);
                 virtuals.insert(id, kind_of(&r.source));
             }
@@ -182,7 +197,15 @@ pub(crate) fn augment(
         }
     }
     if wants.crossings {
-        for (p, on) in crate::infer::crossings(sketch, &sol) {
+        let calculated;
+        let crossings = match crossings {
+            Some(crossings) => crossings,
+            None => {
+                calculated = crate::infer::crossings(sketch, &sol);
+                &calculated
+            }
+        };
+        for (p, on) in crossings {
             let taken = s.entities.iter().any(|e| match e {
                 Entity::Point { x, y, .. } => (x - p.0[0]).hypot(y - p.0[1]) < SAME,
                 _ => false,

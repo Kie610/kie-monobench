@@ -251,6 +251,8 @@ fn machine_fields(choices: &[(&str, &str)]) -> Vec<Field> {
         Field::number("min_rpm", "主軸の最低回転数(rpm)").plain("rpm"),
         Field::number("max_rpm", "主軸の最高回転数(rpm)").plain("rpm"),
         Field::number("rapid_feed", "早送り(mm/min)").plain("mm/min").help(speed),
+        Field::number("power_w", "加工中の消費電力(W)").plain("W")
+            .help("段取り表の電気代に使う。0 は不明。新しいセットアップに値を写して持つ"),
         Field::number("acceleration", "加速度(mm/s²)").plain("mm/s²")
             .help("加工時間の目安に使う。0 なら加減速を見込まない"),
         Field::number("junction_deviation", "角の回りやすさ(mm)").plain("mm")
@@ -287,6 +289,7 @@ fn machine_value(m: &MachineProfile) -> serde_json::Value {
         "max_rpm": m.max_rpm,
         "rapid_feed": m.rapid_feed,
         "acceleration": m.acceleration,
+        "power_w": m.power_w,
         "junction_deviation": m.junction_deviation,
         "max_rate_x": m.max_rate[0],
         "max_rate_y": m.max_rate[1],
@@ -354,6 +357,7 @@ fn machine_with(m: &MachineProfile, v: &serde_json::Value) -> Result<MachineProf
         ));
     }
     out.acceleration = num("acceleration", m.acceleration)?;
+    out.power_w = num("power_w", m.power_w)?;
     out.junction_deviation = num("junction_deviation", m.junction_deviation)?;
     out.measure_after_tool_change = flag("measure_after_tool_change", m.measure_after_tool_change)?;
     out.air = flag("air", m.air)?;
@@ -601,7 +605,7 @@ fn rest_tool_for(cx: &Context<'_>, rest: &[ToolKind], id: FeatureId) -> Option<u
     let now = lib.tools.iter().find(|t| t.number == p.tool)?;
     lib.tools
         .iter()
-        .filter(|t| rest.contains(&t.kind) && t.tip_radius() < now.tip_radius() - 1e-6)
+        .filter(|t| kmb_cam_setup::can_follow_tool(t, now, rest))
         .max_by(|a, b| a.tip_radius().total_cmp(&b.tip_radius()))
         .map(|t| t.number)
 }
@@ -753,6 +757,7 @@ fn add_rest_pocket(
     cx: &Context<'_>,
     rest: &[ToolKind],
     id: FeatureId,
+    strategies: &[Strategy],
 ) -> Result<Outcome, kmb_core::Problem> {
     let tool = rest_tool_for(cx, rest, id).ok_or("今の工具より先の細い工具がありません")?;
     let f = cx.data.feature(id).ok_or("機能がありません")?;
@@ -763,7 +768,7 @@ fn add_rest_pocket(
         .ok_or("工具がありません")?;
     let mut d = f.data.clone();
     // 「工具の順番に足す」と同じく、前の工具の切削条件の上書き・仕上げ・入る位置は写さない
-    crate::tool_order::make_rest(&mut d, prev as u32, tool);
+    crate::tool_order::make_rest(strategies, &f.type_id, f.id, &mut d, prev as u32, tool)?;
     Ok(Outcome::insert(
         "残り削りを追加",
         &f.type_id,
@@ -852,8 +857,21 @@ impl CamCommands {
     fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
         Ok(Outcome::File {
-            suffix: format!("{}-段取り.md", file_part(&s.name)),
-            contents: crate::setup_sheet(&s, &self.machine_for(&s.info)).into_bytes(),
+            suffix: format!(
+                "{}-段取り.{}",
+                file_part(&s.name),
+                if cx.arg_str("format") == Some("html") {
+                    "html"
+                } else {
+                    "md"
+                }
+            ),
+            contents: if cx.arg_str("format") == Some("html") {
+                crate::setup_sheet_html(&s, &self.machine_for(&s.info))
+            } else {
+                crate::setup_sheet(&s, &self.machine_for(&s.info))
+            }
+            .into_bytes(),
             info: json!({"setup": setup.0}),
         })
     }
@@ -1367,6 +1385,7 @@ impl Extension for CamCommands {
                 })
                 .disabled_if(need),
             Action::new(SETUP_SHEET, "加工指示書を書き出す", "cam")
+                .args(vec![kmb_core::Arg::choice("format", "加工指示書の形式", &[("md", "Markdown"), ("html", "HTML")]).default("md")])
                 .role(kmb_interchange::role::action::SETUP_SHEET)
                 .menu("出力")
                 .icon("sheet")
@@ -1507,7 +1526,7 @@ impl Extension for CamCommands {
                         .data
                         .feature(s)
                         .map_or(&[][..], |f| self.rest_of(&f.type_id));
-                    add_rest_pocket(cx, rest, s)
+                    add_rest_pocket(cx, rest, s, &self.strategies)
                 }),
             EXPORT_GCODE => need_setup().and_then(|s| self.gcode(cx, s)),
             SETUP_SHEET => need_setup().and_then(|s| self.sheet(cx, s)),
@@ -1974,4 +1993,26 @@ fn sim_args() -> Vec<kmb_core::Arg> {
             "荒削りの格子の大きさ(0 は細かい格子と同じ、または 0.01〜2 mm)。省くと設定の値",
         ),
     ]
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::*;
+    #[test]
+    fn power_is_editable_and_old_machine_settings_keep_it_unknown() {
+        let m = kmb_post::machines::generic_grbl();
+        assert_eq!(m.power_w, 0.0);
+        assert_eq!(machine_with(&m, &json!({})).unwrap().power_w, 0.0);
+        let changed = machine_with(&m, &json!({"power_w":100.0})).unwrap();
+        assert_eq!(machine_value(&changed)["power_w"], 100.0);
+        assert!(machine_with(&m, &json!({"power_w":-1.0})).is_err());
+        let mut legacy = serde_json::to_value(changed).unwrap();
+        legacy.as_object_mut().unwrap().remove("power_w");
+        assert_eq!(
+            serde_json::from_value::<MachineProfile>(legacy)
+                .unwrap()
+                .power_w,
+            0.0
+        );
+    }
 }

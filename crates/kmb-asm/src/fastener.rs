@@ -44,6 +44,9 @@ const NAME_TYPE: &str = "asm.fastener_name@1";
 /// 上(座金なら厚さ、ナットなら高さの上)までの距離。上に重ねた規格部品が読む。
 const TOP: &str = "top";
 const TOP_TYPE: &str = "asm.fastener_top@1";
+/// 最初のボディの定義から、各穴の置き場所への行列。出現のボディが読む。
+const PLACEMENT: &str = "placement:";
+const PLACEMENT_TYPE: &str = "asm.fastener_placement@1";
 
 /// 規格部品の種類。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -395,6 +398,9 @@ pub struct Fastener {
     /// 部品表の材料(ボディに材料を付けていない時)
     #[serde(default = "default_material")]
     pub material: String,
+    /// 形を 1 回作り、穴ごとに出現を置く。無い文書は穴ごとの面の名前を保つ。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub instances: bool,
 }
 
 fn default_length() -> String {
@@ -634,6 +640,33 @@ impl Builder<'_> {
     }
 }
 
+/// 90° の皿の径に合わせた、皿小ねじの頭の上の高さ。
+fn flat_seat(f: &Fastener, p: &Place) -> f64 {
+    match (f.kind, thread(&f.size), screw(&f.size), p.diameter) {
+        (Kind::FlatHead, Some((m, _)), Some(s), Some(dia)) if dia > m.clearance[2] + FIT_TOL => {
+            s.flat[0] / 2.0 - dia / 2.0
+        }
+        _ => 0.0,
+    }
+}
+
+/// 穴の口に置く向きと位置。形を作る所と、出現を置く所で共有する。
+fn placement(f: &Fastener, p: &Place, offset: f64) -> k::Matrix4 {
+    let mut n = k::normalize(p.normal);
+    if f.flip {
+        n = k::scale(n, -1.0);
+    }
+    let (u, v) = frame(n);
+    let seat = if f.instances { flat_seat(f, p) } else { 0.0 };
+    let c = k::add(p.center, k::scale(n, offset + seat));
+    [
+        [u[0], v[0], n[0], c[0]],
+        [u[1], v[1], n[1], c[1]],
+        [u[2], v[2], n[2], c[2]],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+}
+
 /// 規格部品 1 つの形。高さ 0 が穴の口の面で、正の向きが面の外。
 fn build(
     kernel: &dyn kmb_core::Kernel,
@@ -641,20 +674,16 @@ fn build(
     f: &Fastener,
     len: f64,
     p: &Place,
-    offset: f64,
+    pose: &k::Matrix4,
 ) -> Result<ShapeHandle, EvalError> {
-    let mut n = k::normalize(p.normal);
-    if f.flip {
-        n = k::scale(n, -1.0);
-    }
-    let (u, v) = frame(n);
+    let column = |i| [pose[0][i], pose[1][i], pose[2][i]];
     let bld = Builder {
         kernel,
         tag,
-        c: k::add(p.center, k::scale(n, offset)),
-        n,
-        u,
-        v,
+        c: column(3),
+        n: column(2),
+        u: column(0),
+        v: column(1),
     };
     let unknown = || EvalError::InvalidData(format!("呼び `{}` は表にありません", f.size));
     match f.kind {
@@ -731,10 +760,7 @@ fn build(
                         // 頭の半径 だけ下)。細い穴の口では頭の上を面にそろえる
                         let [dk, _, m] = sc.flat;
                         let rk = dk / 2.0;
-                        let z = match p.diameter {
-                            Some(dia) if dia > s.clearance[2] + 0.2 => rk - dia / 2.0,
-                            _ => 0.0,
-                        };
+                        let z = if f.instances { 0.0 } else { flat_seat(f, p) };
                         let body = bld.revolve(
                             "screw",
                             &[
@@ -794,15 +820,29 @@ fn height(f: &Fastener) -> f64 {
     }
 }
 
+const FIT_TOL: f64 = 0.2;
+
+fn countersink_fits(s: &Screw, dia: f64) -> bool {
+    dia >= s.flat[0] - FIT_TOL && dia <= s.csk + 1.0
+}
+
+/// 口が皿なら、軸の径と混ぜず、皿小ねじの頭の寸法で照合する。
+pub(crate) fn fits_mouth(kind: Kind, size: &str, mouth: &HoleMouth) -> Option<bool> {
+    if kind == Kind::FlatHead && mouth.hole && mouth.countersink {
+        screw(size).map(|s| countersink_fits(s, mouth.diameter))
+    } else {
+        fits(kind, size, mouth.diameter, mouth.hole)
+    }
+}
+
 /// 直径 `dia` の穴の口(穴の縁なら `hole`、軸の縁なら偽)に、種類 `kind` の呼び `size` が合うか。
 /// ねじは穴なら下穴の径から粗い通し穴の径まで、軸なら呼び径。軸受は穴なら外径、軸なら内径。
 /// 呼びが表に無ければ `None`(調べない)。
 pub fn fits(kind: Kind, size: &str, dia: f64, hole: bool) -> Option<bool> {
-    const TOL: f64 = 0.2;
     if kind == Kind::Bearing {
         let b = bearing(size)?;
         let want = if hole { b.od } else { b.d };
-        return Some((dia - want).abs() <= TOL);
+        return Some((dia - want).abs() <= FIT_TOL);
     }
     let (m, fine) = thread(size)?;
     if kind.is_screw() && screw(size).is_none() {
@@ -812,13 +852,13 @@ pub fn fits(kind: Kind, size: &str, dia: f64, hole: bool) -> Option<bool> {
     let tap = fine.map_or(m.tap, |p| m.d - p);
     // 皿小ねじは皿の穴の口(頭の径から、皿の径より少し大きいまで)にも合う
     let csk = match (kind, screw(size)) {
-        (Kind::FlatHead, Some(s)) => dia >= s.flat[0] - TOL && dia <= s.csk + 1.0,
+        (Kind::FlatHead, Some(s)) => countersink_fits(s, dia),
         _ => false,
     };
     Some(if hole {
-        csk || (dia >= tap - TOL && dia <= m.clearance[2] + TOL)
+        csk || (dia >= tap - FIT_TOL && dia <= m.clearance[2] + FIT_TOL)
     } else {
-        (dia - m.d).abs() <= TOL
+        (dia - m.d).abs() <= FIT_TOL
     })
 }
 
@@ -924,6 +964,7 @@ impl Feature for Fastener {
         }
         let t = tag(ctx);
         let top = height(self);
+        let mut prototype: Option<(ShapeHandle, k::Matrix4)> = None;
         for (i, p) in self.places.iter().enumerate() {
             // 下に重なる部品の上の端(下の部品を消すと、ほかの参照と同じく理由つきで止まる)
             let base = match p.on {
@@ -933,14 +974,29 @@ impl Feature for Fastener {
                     _ => 0.0,
                 },
             };
-            let h = build(
-                ctx.kernel(),
-                format!("{t}p{i}"),
-                self,
-                len,
-                p,
-                base + offset,
-            )?;
+            let pose = placement(self, p, base + offset);
+            let relative = prototype.map_or(k::IDENTITY, |(_, from)| {
+                k::mat_mul(&pose, &k::rigid_inverse(&from))
+            });
+            let h = match (self.instances, prototype) {
+                (true, Some((source, _))) => ctx
+                    .kernel()
+                    .instance(source, &relative)
+                    .map_err(kernel_err)?,
+                _ => build(ctx.kernel(), format!("{t}p{i}"), self, len, p, &pose)?,
+            };
+            if self.instances {
+                if prototype.is_none() {
+                    prototype = Some((h, pose));
+                }
+                out.insert(
+                    format!("{PLACEMENT}{i}"),
+                    Value::Custom {
+                        type_key: PLACEMENT_TYPE.into(),
+                        data: json!(relative),
+                    },
+                );
+            }
             out.insert(format!("{PART}{i}"), Value::Shape(h));
             out.insert(
                 format!("{TOP}{i}"),
@@ -991,26 +1047,62 @@ impl Feature for Fastener {
 pub struct FastenerBody {
     pub fastener: FeatureId,
     pub index: usize,
+    /// 出現の元になる最初のボディ。無い時は、穴ごとの形をそのまま読む。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prototype: Option<FeatureId>,
 }
 
 impl Feature for FastenerBody {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        Ok(vec![
-            InputRef::Output {
-                feature: self.fastener,
-                slot: format!("{PART}{}", self.index),
-            },
-            InputRef::Output {
-                feature: self.fastener,
-                slot: format!("{FIT}{}", self.index),
-            },
-        ])
+        let mut inputs = vec![InputRef::Output {
+            feature: self.fastener,
+            slot: format!("{FIT}{}", self.index),
+        }];
+        if let Some(source) = self.prototype {
+            inputs.push(kmb_cad::output(source, "body"));
+            inputs.push(kmb_cad::output(
+                self.fastener,
+                &format!("{PLACEMENT}{}", self.index),
+            ));
+        } else {
+            inputs.insert(
+                0,
+                kmb_cad::output(self.fastener, &format!("{PART}{}", self.index)),
+            );
+        }
+        Ok(inputs)
+    }
+
+    fn instance_of(&self) -> Option<InputRef> {
+        self.prototype.map(|source| kmb_cad::output(source, "body"))
     }
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
-        let v = ctx
-            .output(self.fastener, &format!("{PART}{}", self.index))?
-            .clone();
+        let v = if let Some(source) = self.prototype {
+            let shape = match ctx.output(source, "body")? {
+                Value::Shape(h) => *h,
+                _ => {
+                    return Err(EvalError::InvalidData(
+                        "規格部品の元のボディがありません".into(),
+                    ));
+                }
+            };
+            let matrix = match ctx.output(self.fastener, &format!("{PLACEMENT}{}", self.index))? {
+                Value::Custom { type_key, data } if type_key == PLACEMENT_TYPE => {
+                    serde_json::from_value::<k::Matrix4>(data.clone())
+                        .map_err(|e| EvalError::InvalidData(e.to_string()))?
+                }
+                _ => {
+                    return Err(EvalError::InvalidData(
+                        "規格部品の置き方がありません".into(),
+                    ));
+                }
+            };
+            Value::Shape(ctx.kernel().instance(shape, &matrix).map_err(kernel_err)?)
+        } else {
+            ctx.output(self.fastener, &format!("{PART}{}", self.index))?
+                .clone()
+        };
         let mut out: Outputs = [("body".to_string(), v)].into();
         // この穴の呼びと径が合わなければ、この穴のボディにも注意を付ける
         if let Ok(Value::Custom { data, .. }) =
@@ -1305,7 +1397,19 @@ pub fn new_fastener(kind: Kind, mouths: &[HoleMouth]) -> Fastener {
     let len = length_for(mouths.iter().map(depth).fold(0.0, f64::max));
     Fastener {
         kind,
-        size: size_for(kind, first.diameter, first.hole),
+        size: if kind == Kind::FlatHead && first.hole && first.countersink {
+            SCREWS
+                .iter()
+                .min_by(|a, b| {
+                    (a.csk - first.diameter)
+                        .abs()
+                        .total_cmp(&(b.csk - first.diameter).abs())
+                })
+                .map_or("M3", |s| s.name)
+                .into()
+        } else {
+            size_for(kind, first.diameter, first.hole)
+        },
         length: format!("{} mm", mm(len)),
         places: mouths
             .iter()
@@ -1321,6 +1425,7 @@ pub fn new_fastener(kind: Kind, mouths: &[HoleMouth]) -> Fastener {
         // 軸受は穴の中へ、ほかは面の外へ(形の作り方の向きで決まるので反転はしない)
         flip: false,
         material: default_material(),
+        instances: false,
     }
 }
 
@@ -1361,4 +1466,47 @@ pub fn stack_on(data: &kmb_core::DocumentData, kind: Kind, m: &HoleMouth) -> Opt
                 .collect::<Vec<_>>()
         })
         .last()
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+
+    #[test]
+    fn a_shared_fastener_rotates_its_axis_and_keeps_each_stack_height() {
+        let mouths = [HoleMouth {
+            center: [5.0, 6.0, 7.0],
+            normal: [0.0, 0.0, 1.0],
+            diameter: 3.4,
+            hole: true,
+            depth: 8.0,
+            through: 8.0,
+            countersink: false,
+        }];
+        let mut f = new_fastener(Kind::SocketHead, &mouths);
+        f.instances = true;
+        let source = &f.places[0];
+        let target = Place {
+            center: [-3.0, 4.0, 8.0],
+            normal: [1.0, 0.0, 0.0],
+            ..source.clone()
+        };
+        for flip in [false, true] {
+            f.flip = flip;
+            let a = placement(&f, source, 1.0);
+            let b = placement(&f, &target, 2.0);
+            let relative = k::mat_mul(&b, &k::rigid_inverse(&a));
+            assert!(k::is_rigid(&relative));
+            let sign = if flip { -1.0 } else { 1.0 };
+            let expected = [-3.0 + sign * 2.0, 4.0, 8.0];
+            let at = k::transform_point(&relative, [5.0, 6.0, 7.0 + sign]);
+            for i in 0..3 {
+                assert!((at[i] - expected[i]).abs() < 1e-10);
+            }
+            let tip = k::transform_point(&relative, [5.0, 6.0, 7.0 + sign * 2.0]);
+            for i in 0..3 {
+                assert!((tip[i] - (expected[i] + if i == 0 { sign } else { 0.0 })).abs() < 1e-10);
+            }
+        }
+    }
 }

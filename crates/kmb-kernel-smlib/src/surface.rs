@@ -407,6 +407,116 @@ fn put(
     Ok(h)
 }
 
+/// 元の面と縁の内側の点で、表・裏・側面を幾何から対応付ける。
+pub(super) fn thicken(
+    kernel: &SmlibKernel,
+    sheet: ShapeHandle,
+    thickness: f64,
+    side: k::ThickenSide,
+    tag: &str,
+) -> Result<ShapeHandle, KernelError> {
+    if !thickness.is_finite() || thickness <= 0. {
+        return Err(error("厚みは 0 より大きい有限の値にしてください"));
+    }
+    let _g = ffi::lock();
+    let mut store = kernel.lock();
+    let source = store.get(sheet)?;
+    if !source.brep.is_sheet().map_err(failed("ボディの種類"))? {
+        return Err(error(
+            "ソリッドには厚みを付けられません。中を抜くならシェルを使ってください",
+        ));
+    }
+    let (back, front, offset, flags) = match side {
+        k::ThickenSide::Front => (0., thickness, thickness, 4),
+        k::ThickenSide::Back => (-thickness, 0., -thickness, 4),
+        k::ThickenSide::Both => (-thickness / 2., thickness / 2., thickness, 12),
+    };
+    let result = source
+        .brep
+        .shell_with(&[], offset, flags)
+        .map_err(failed("厚みを付ける"))?;
+    let count = result
+        .faces(ffi::FACE_INNER_POINT)
+        .map_err(failed("面の列挙"))?
+        .len();
+    let mut names = vec![None; count];
+    let tolerance = (thickness * 1e-6).max(1e-5);
+    let mut assign = |point: P3, name: String| -> Result<(), KernelError> {
+        let mut matches = Vec::new();
+        for (index, assigned) in names.iter().enumerate() {
+            if assigned.is_none()
+                && result
+                    .face_distance(index, point)
+                    .map_err(failed("面までの距離"))?
+                    <= tolerance
+            {
+                matches.push(index);
+            }
+        }
+        if matches.len() != 1 {
+            return Err(error(format!(
+                "厚みの面 {name} の対応を一意に決められません。厚みを小さくするか、面を張り直してください"
+            )));
+        }
+        names[matches[0]] = Some(name);
+        Ok(())
+    };
+    for (index, face) in source
+        .brep
+        .faces(ffi::FACE_INNER_POINT)
+        .map_err(failed("元の面"))?
+        .iter()
+        .enumerate()
+    {
+        let normal = source
+            .brep
+            .face_normal(index, face.point)
+            .map_err(failed("面の向き"))?;
+        for (label, amount) in [("front", front), ("back", back)] {
+            assign(
+                k::add(face.point, k::scale(normal, amount)),
+                format!("{tag}:{label}:{}", source.names[index]),
+            )?;
+        }
+    }
+    for (index, edge) in source
+        .brep
+        .all_edges()
+        .map_err(failed("縁の列挙"))?
+        .iter()
+        .enumerate()
+    {
+        let Some(rim) = source.rims.get(index).and_then(Option::as_ref) else {
+            continue;
+        };
+        let Some((_, name)) = rim.split_once(":rim:") else {
+            return Err(error("縁の名前を読み取れません。面を張り直してください"));
+        };
+        // 曲線は中継層がパラメータの中点を含む偶数区間で評価する。
+        // 弦上の補間は曲面から外れるので、評価済みの中点を使う。
+        let point = if edge.points.len() == 2 {
+            k::scale(k::add(edge.points[0], edge.points[1]), 0.5)
+        } else {
+            edge.points[edge.points.len() / 2]
+        };
+        let normal = source
+            .brep
+            .face_normal(edge.faces[0], point)
+            .map_err(failed("縁の向き"))?;
+        assign(
+            k::add(point, k::scale(normal, (front + back) / 2.)),
+            format!("{tag}:side:{name}"),
+        )?;
+    }
+    let names = names
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            error("厚みの面に対応しない面が残りました。厚みを小さくするか、面を張り直してください")
+        })?;
+    store.put(result, names)
+}
+
 pub(super) fn sheet_edges(shape: &Shape) -> Result<Vec<EdgeInfo>, KernelError> {
     let edges = shape.brep.all_edges().map_err(failed("縁の列挙"))?;
     Ok(edges
@@ -902,5 +1012,162 @@ mod tests {
                 .abs()
                 < 1e-6
         );
+    }
+    // 確かめること: 面を変えずに、正負のオフセットを閉じた立体にする中継層の働き。
+    #[test]
+    fn sheet_offset_solid_closes_both_signed_offsets_without_changing_the_source() {
+        let kernel = SmlibKernel::new();
+        let sheet = kernel.planar_sheet(&rectangle(), "sheet").unwrap();
+        let mut successes = 0;
+        {
+            let _g = ffi::lock();
+            let store = kernel.store.lock().unwrap();
+            let source = store.get(sheet).unwrap();
+            for offset in [2.0, -2.0] {
+                match source.brep.shell_with(&[], offset, 4) {
+                    Ok(result) => {
+                        let mass = result.mass(VOLUME_ACCURACY).unwrap();
+                        let bounds = result.bounds().unwrap();
+                        println!(
+                            "offset={offset} volume={} bounds={bounds:?} sheet={}",
+                            mass.volume,
+                            result.is_sheet().unwrap()
+                        );
+                        assert!((mass.volume - 200.0).abs() < 1e-5, "{}", mass.volume);
+                        assert!(!result.is_sheet().unwrap());
+                        assert_eq!(result.faces(1).unwrap().len(), 6);
+                        successes += 1;
+                    }
+                    Err(why) => println!("offset={offset} failed={why}"),
+                }
+            }
+        }
+        assert_eq!(successes, 2, "正負の両方を閉じた立体にする");
+        assert_eq!(kernel.body_kind(sheet).unwrap(), BodyKind::Sheet);
+    }
+    #[test]
+    fn thickening_sides_keep_semantic_names_and_source_sheet() {
+        let kernel = SmlibKernel::new();
+        let source = kernel.planar_sheet(&rectangle(), "sheet").unwrap();
+        let mut previous = None;
+        for (side, low, high) in [
+            (k::ThickenSide::Front, 0., 2.),
+            (k::ThickenSide::Back, -2., 0.),
+            (k::ThickenSide::Both, -1., 1.),
+        ] {
+            let shape = kernel.thicken(source, 2., side, "thick").unwrap();
+            assert!((kernel.volume(shape).unwrap() - 200.).abs() < 1e-4);
+            let bounds = kernel.bounds(shape).unwrap();
+            assert!(
+                (bounds.0[2] - low).abs() < 1e-4 && (bounds.1[2] - high).abs() < 1e-4,
+                "{bounds:?}"
+            );
+            let faces = kernel.faces(shape).unwrap();
+            assert_eq!(faces.len(), 6);
+            let front = faces
+                .iter()
+                .find(|f| f.name.starts_with("thick:front:"))
+                .unwrap();
+            let back = faces
+                .iter()
+                .find(|f| f.name.starts_with("thick:back:"))
+                .unwrap();
+            assert!((front.planar.as_ref().unwrap().point[2] - high).abs() < 1e-4);
+            assert!((back.planar.as_ref().unwrap().point[2] - low).abs() < 1e-4);
+            let mut names = kernel.face_names(shape).unwrap();
+            names.sort();
+            if let Some(old) = &previous {
+                assert_eq!(old, &names);
+            }
+            previous = Some(names);
+        }
+        assert_eq!(kernel.body_kind(source).unwrap(), BodyKind::Sheet);
+        let original = kernel.bounds(source).unwrap();
+        assert!(original.0[2].abs() < 1e-4 && original.1[2].abs() < 1e-4);
+        for t in [0., -1., f64::NAN] {
+            assert!(
+                kernel
+                    .thicken(source, t, k::ThickenSide::Front, "invalid")
+                    .is_err()
+            );
+        }
+    }
+    #[test]
+    fn analytic_curved_sheets_match_shell_sector_volumes_and_reject_excessive_inward_thickness() {
+        let kernel = SmlibKernel::new();
+        for kind in [1, 3] {
+            let sheet = {
+                let _guard = ffi::lock();
+                let brep = ffi::test_curved_sheet(kind, 20.).unwrap();
+                let count = brep.faces(0).unwrap().len();
+                assert_eq!(count, 1);
+                let rims = brep
+                    .all_edges()
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| Some(format!("analytic:rim:e{i}")))
+                    .collect();
+                let mut store = kernel.lock();
+                let handle = store.put(brep, vec!["analytic".into()]).unwrap();
+                store.shapes.get_mut(&handle.0).unwrap().rims = rims;
+                handle
+            };
+            for side in [
+                k::ThickenSide::Front,
+                k::ThickenSide::Back,
+                k::ThickenSide::Both,
+            ] {
+                let (inner, outer): (f64, f64) = match side {
+                    k::ThickenSide::Front => (20., 22.),
+                    k::ThickenSide::Back => (18., 20.),
+                    k::ThickenSide::Both => (19., 21.),
+                };
+                let expected = if kind == 1 {
+                    1.2 / 2. * (outer.powi(2) - inner.powi(2)) * 10.
+                } else {
+                    1.2 * (0.4_f64.sin() - (-0.4_f64).sin()) / 3. * (outer.powi(3) - inner.powi(3))
+                };
+                let thick = kernel.thicken(sheet, 2., side, "result").unwrap();
+                let volume = kernel.volume(thick).unwrap();
+                assert!(
+                    (volume - expected).abs() <= expected * 2e-4,
+                    "kind={kind}, side={side:?}, volume={volume}, expected={expected}"
+                );
+                assert_eq!(kernel.body_kind(thick).unwrap(), BodyKind::Solid);
+            }
+            let error = kernel
+                .thicken(sheet, 25., k::ThickenSide::Back, "bad")
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("半径") || error.contains("閉じ") || error.contains("対応"),
+                "{error}"
+            );
+        }
+    }
+    #[test]
+    fn a_spatial_surface_patch_becomes_a_named_solid_on_each_side() {
+        let kernel = SmlibKernel::new();
+        let sheet = kernel.patch_sheet(&saddle(4), "patch").unwrap();
+        let mut expected_names = None;
+        for side in [
+            k::ThickenSide::Front,
+            k::ThickenSide::Back,
+            k::ThickenSide::Both,
+        ] {
+            let thick = kernel.thicken(sheet, 2., side, "thick").unwrap();
+            assert_eq!(kernel.body_kind(thick).unwrap(), BodyKind::Solid);
+            let volume = kernel.volume(thick).unwrap();
+            assert!((190. ..220.).contains(&volume), "{side:?}: {volume}");
+            let mut names = kernel.face_names(thick).unwrap();
+            names.sort();
+            assert_eq!(names.len(), 6);
+            if let Some(previous) = &expected_names {
+                assert_eq!(previous, &names);
+            }
+            expected_names = Some(names);
+        }
+        assert_eq!(kernel.body_kind(sheet).unwrap(), BodyKind::Sheet);
     }
 }

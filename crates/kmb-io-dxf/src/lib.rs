@@ -9,10 +9,10 @@ mod commands;
 mod dxf;
 mod r2000;
 
-pub use binary::from_dxf_bytes;
+pub use binary::{from_dxf_bytes, from_dxf_bytes_with_layers};
 pub use clean::{Cleaned, clean};
-pub use commands::{DxfCommands, EXPORT_DXF, INSERT_DXF};
-pub use dxf::{DxfOptions, from_dxf, to_dxf};
+pub use commands::{DxfCommands, EXPORT_DXF, INSERT_DXF, LIST_DXF_LAYERS};
+pub use dxf::{DxfLayer, DxfOptions, DxfRead, dxf_layers, from_dxf, from_dxf_with_layers, to_dxf};
 
 /// この crate の名乗り(DXF の挿入と保存の操作)。組み立て(kmb-bundle)が 1 回だけ並べる。
 pub fn module() -> kmb_core::Module {
