@@ -262,6 +262,9 @@ io.export_stl_each	kmb-io-stl
 io.export_view_dxf	kmb-io-view
 io.export_view_dxf_hidden	kmb-io-view
 io.export_view_svg	kmb-io-view
+mech.cam	kmb-cad-gear
+mech.cam@1	kmb-cad-gear
+mech.cam_follower@1	kmb-cad-gear
 params.apply_batch	kmb-session
 render.animation_video	kmb-io-render
 render.appearance	kmb-io-render
