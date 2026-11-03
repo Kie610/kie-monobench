@@ -297,6 +297,30 @@ impl Imported {
     }
 }
 
+/// 行の式と単位の書き方を確かめる。参照する行の存在は、変更を作る側で確かめる。
+pub(crate) fn checked_row(data: &DocumentData, row: &Row) -> Result<Option<ParamUnit>, String> {
+    let expr = row.expr.trim();
+    if expr.is_empty() {
+        return Err("式が空です".into());
+    }
+    let unit = match row.unit.trim() {
+        "" => None,
+        value => Some(
+            serde_json::from_value::<ParamUnit>(serde_json::json!(value))
+                .map_err(|_| format!("単位 {value} を読めません"))?,
+        ),
+    };
+    let text = unit.or_else(|| data.param_by_name(row.row.trim()).map(|p| p.unit))
+        == Some(ParamUnit::Text);
+    let checked = if text {
+        kmb_core::Template::parse(expr).map(|_| ())
+    } else {
+        kmb_core::parse_expr(expr).map(|_| ())
+    };
+    checked.map_err(|e| format!("式 `{expr}` の誤り: {e}"))?;
+    Ok(unit)
+}
+
 /// 読んだ行 `rows` を文書に入れる変更(1 回の取り消し)。変える物が無ければ変更は `None`。
 /// パラメータを足す時に番号を割り当てるので `&mut Document` を受け取る。
 pub fn import(
@@ -316,33 +340,14 @@ pub fn import(
         if name.is_empty() {
             continue;
         }
-        if expr.is_empty() {
-            out.skipped.push(format!("{name}: 式が空です"));
-            continue;
-        }
-        let unit = match r.unit.trim() {
-            "" => None,
-            u => match serde_json::from_value::<ParamUnit>(serde_json::json!(u)) {
-                Ok(u) => Some(u),
-                Err(_) => {
-                    out.skipped.push(format!("{name}: 単位 {u} を読めません"));
-                    continue;
-                }
-            },
-        };
         let data = doc.data();
-        // 文字のパラメータ(単位 `text`)の値は差し込みの文字、ほかは数の式
-        let text =
-            unit.or_else(|| data.param_by_name(name).map(|p| p.unit)) == Some(ParamUnit::Text);
-        let checked = if text {
-            kmb_core::Template::parse(expr).map(|_| ())
-        } else {
-            kmb_core::parse_expr(expr).map(|_| ())
+        let unit = match checked_row(data, r) {
+            Ok(unit) => unit,
+            Err(why) => {
+                out.skipped.push(format!("{name}: {why}"));
+                continue;
+            }
         };
-        if let Err(e) = checked {
-            out.skipped.push(format!("{name}: 式 `{expr}` の誤り: {e}"));
-            continue;
-        }
         let kind = r.kind.trim();
         let is_user = kind == "param"
             || (kind.is_empty()

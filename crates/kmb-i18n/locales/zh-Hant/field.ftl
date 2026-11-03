@@ -104,12 +104,18 @@
 # field-asm-link-pinned = Pin This Version
 # field-asm-link-pinned-help = Does not notify or update when the source file changes. Unpin to enable notifications again.
 # field-asm-occurrence-of = Original Body
+# field-asm-position-rx = X Rotation
+# field-asm-position-rx-help = Angle about world X at the center of the component bounds (X → Y → Z order).
+# field-asm-position-ry = Y Rotation
+# field-asm-position-ry-help = Angle about world Y at the center of the component bounds (X → Y → Z order).
+# field-asm-position-rz = Z Rotation
+# field-asm-position-rz-help = Angle about world Z at the center of the component bounds (X → Y → Z order).
 # field-asm-position-x = X Distance
-# field-asm-position-x-help = Distance from the position before dragging.
+# field-asm-position-x-help = Distance along world X after rotation.
 # field-asm-position-y = Y Distance
-# field-asm-position-y-help = Distance from the position before dragging.
+# field-asm-position-y-help = Distance along world Y after rotation.
 # field-asm-position-z = Z Distance
-# field-asm-position-z-help = Distance from the position before dragging.
+# field-asm-position-z-help = Distance along world Z after rotation.
 # field-cad-canvas-angle = Angle
 # field-cad-canvas-file = File
 # field-cad-canvas-flip-h = Flip Horizontally
@@ -402,7 +408,7 @@
 # field-cam-contour2d-rest-diameter = Rest Machining: Previous Tool Diameter
 # field-cam-contour2d-rest-diameter-help = For example 6.35 mm. Enter this when the previous tool is not in the tool library. A previous tool number takes precedence.
 # field-cam-contour2d-rest-tool = Rest Machining: Previous Tool Number
-# field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Tabs, finishing, lateral roughing and lead-in/out arcs are unavailable.
+# field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Low sections crossing tabs are skipped, and the tool retracts to travel between sections. Finishing, lateral roughing and lead-in/out arcs are unavailable.
 # field-cam-contour2d-retract = Retract Mode
 # field-cam-contour2d-retract-help = Minimum Retract rises above the highest material along the move by the clearance allowance, never below stock top + 1 mm. Reduces vertical travel across cleared areas.
 # field-cam-contour2d-rough-passes = Roughing Passes
@@ -1992,6 +1998,8 @@
 # field-solid-hole-countersink-diameter-help = Blank uses the thread table, or twice the hole diameter when unavailable.
 # field-solid-hole-depth = Depth
 # field-solid-hole-depth-help = Blank makes a through hole.
+# field-solid-hole-thread-depth = Thread length
+# field-solid-hole-thread-depth-help = Blank uses the full hole depth, excluding the conical drill point.
 # field-solid-hole-diameter = Diameter
 # field-solid-hole-extent = Extent
 # field-solid-hole-extent-help = To Object starts picking a planar face or vertex to stop the hole. An inclined face produces an inclined bottom.
@@ -2002,7 +2010,7 @@
 # field-solid-hole-size-help = Select a nominal size or enter M6x0.75, 1/4-20 UNC, G1/4 or Rp1/4. Clearance holes only accept the listed metric coarse-pitch sizes.
 # field-solid-hole-sketch = Point Sketch
 # field-solid-hole-tap = Thread Type
-# field-solid-hole-tap-help = Does not model thread geometry. Uses the table diameter and stores thread attributes.
+# field-solid-hole-tap-help = Use the thread table to set the diameter. Tapped holes can have cosmetic or modeled threads.
 # field-solid-hole-target = Target
 # field-solid-hole-tip = Tip
 # field-solid-hole-tip-angle = Tip Angle
@@ -2171,7 +2179,42 @@
 # field-solid-thread-face = Cylindrical Face
 # field-solid-thread-hand = Direction
 # field-solid-thread-length = Length
-# field-solid-thread-length-help = Blank uses the full face length.
+# field-solid-thread-length-help = Leave empty for the full face length. Modeled threads use the maximum length that leaves room at the ends, or the full length for a through thread.
 # field-solid-thread-size = Nominal Size
-# field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
+# field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 # field-solid-thread-target = Target
+# field-solid-hole-clearance = Clearance
+# field-solid-hole-clearance-help = Diametral clearance. Leave empty for 0 mm.
+# field-solid-hole-end = Far end
+# field-solid-hole-flip = Start at the opposite end
+# field-solid-hole-form = Thread form
+# field-solid-thread-clearance = Clearance
+# field-solid-thread-clearance-help = Diametral clearance. Leave empty for 0 mm.
+# field-solid-thread-end = Far end
+# field-solid-thread-flip = Start at the opposite end
+# field-solid-thread-form = Thread form
+
+# field-cam-spiral3d-levels = Cut in depth levels from the top
+# field-cam-spiral3d-direction = Cutting direction
+# field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+# field-cam-radial3d-levels = Cut in depth levels from the top
+# field-cam-radial3d-direction = Cutting direction
+# field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+
+# field-cam-setup-stock-cost-material-price = Cost: Stock price
+# field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+# field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+# field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+# field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+# field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+# field-cam-setup-stock-cost-currency = Cost: Currency
+# field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
+
+# field-solid-thicken-body = Body
+# field-solid-thicken-body-help = Select a sheet body without thickness
+# field-solid-thicken-thickness = Thickness
+# field-solid-thicken-side = Side
+
+# field-solid-import-iges-file = File
+# field-solid-import-iges-stand-up = Convert Y-up to Z-up
+# field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.

@@ -35,7 +35,9 @@ fn write(log: Option<&std::ffi::OsStr>, name: &str, why: &str) {
             .append(true)
             .open(path)
         {
-            let _ = writeln!(f, "{name}\t{why}");
+            // nextest は別のプロセスで同時に飛ばすので、1 行を 1 回で書く(`writeln!` は
+            // 名前・タブ・理由を別々に書き、ほかのプロセスの行と混ざる)
+            let _ = f.write_all(format!("{name}\t{why}\n").as_bytes());
         }
     }
 }
@@ -64,6 +66,32 @@ mod tests {
             std::fs::read_to_string(&log).unwrap(),
             "tests::gpu_pick\tGPU が 無い\n"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn skips_written_at_the_same_time_stay_on_their_own_lines() {
+        let dir = std::env::temp_dir().join(format!("kmb-skip-many-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("skips.log");
+        let _ = std::fs::remove_file(&log);
+        std::thread::scope(|s| {
+            for t in 0..8 {
+                let log = &log;
+                s.spawn(move || {
+                    for _ in 0..200 {
+                        super::write(Some(log.as_os_str()), &format!("tests::t{t}"), "理由");
+                    }
+                });
+            }
+        });
+        let text = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(text.lines().count(), 8 * 200);
+        for line in text.lines() {
+            let (name, why) = line.split_once('\t').unwrap();
+            assert!(name.starts_with("tests::t") && name.len() == 9, "{line}");
+            assert_eq!(why, "理由", "{line}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

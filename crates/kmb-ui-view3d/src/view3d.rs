@@ -7,6 +7,8 @@ use kmb_core::{FeatureId, Kernel, Mesh, ShapeHandle};
 use std::collections::HashSet;
 
 mod camera;
+#[cfg(test)]
+mod fit_tests;
 mod hit;
 mod look;
 #[cfg(test)]
@@ -28,6 +30,47 @@ pub use threads::{THREAD_TILT, thread_bands};
 
 /// 選んだ面。
 pub type Pick = kmb_core::FacePick;
+
+/// マウスの下で強調する物。選択する面の参照とは別に、ボディ全体も表せる。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hover {
+    Face(Pick),
+    Body(FeatureId),
+}
+
+impl std::hash::Hash for Hover {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Face(p) => (p.feature, &p.face).hash(state),
+            Self::Body(id) => id.hash(state),
+        }
+    }
+}
+
+impl Hover {
+    pub(crate) fn matches_face(&self, feature: FeatureId, face: &str) -> bool {
+        match self {
+            Self::Face(p) => p.feature == feature && p.face == face,
+            Self::Body(id) => *id == feature,
+        }
+    }
+}
+
+/// ボディ全体のホバーは稜線も同じ役の色にする。面のホバーは稜線を変えない。
+pub(crate) fn hover_edge_color(
+    hover: Option<&Hover>,
+    feature: FeatureId,
+    body: Color32,
+    colors: &Colors,
+) -> Color32 {
+    let tint = if matches!(hover, Some(Hover::Body(id)) if *id == feature) {
+        colors.hover
+    } else {
+        body
+    };
+    line_color(tint, colors.dark)
+}
 
 /// 設定の回し方(拘束オービットかフリーオービット)で回す。
 fn orbit(cam: &mut Camera, controls: Controls, d: Vec2) {
@@ -67,6 +110,36 @@ fn take_nav(ctx: &egui::Context, view: egui::Id, hovered: bool) -> Option<Nav> {
     })
 }
 
+/// 全体表示で収める箱。見えるボディに、部品の代わりに描く形(加工の途中の形・解析の結果の
+/// 断面や受け取りの球)を足す。どちらも無ければ重ねる線(スケッチだけの時)。何も無ければ `None`。
+fn fit_bounds(scene: &Scene, overlay: &kmb_core::Overlay) -> Option<([f32; 3], [f32; 3])> {
+    let mut b = ([f32::MAX; 3], [f32::MIN; 3]);
+    let grow = |b: &mut ([f32; 3], [f32; 3]), p: [f32; 3]| {
+        for (i, v) in p.into_iter().enumerate() {
+            b.0[i] = b.0[i].min(v);
+            b.1[i] = b.1[i].max(v);
+        }
+    };
+    if !scene.is_empty() {
+        let (lo, hi) = scene.bounds();
+        grow(&mut b, lo);
+        grow(&mut b, hi);
+    }
+    if let Some(sh) = &overlay.shape
+        && !sh.mesh.triangles.is_empty()
+    {
+        for p in &sh.mesh.positions {
+            grow(&mut b, *p);
+        }
+    }
+    if b.0[0] > b.1[0] {
+        for p in overlay.lines.iter().flat_map(|(l, _)| l) {
+            grow(&mut b, p.map(|v| v as f32));
+        }
+    }
+    (b.0[0] <= b.1[0]).then_some(b)
+}
+
 /// 3D のビューを描き、視点の操作を受け付ける。選びに関わる出来事は [`ViewEvents`] で返す。
 ///
 /// マウス: 右ドラッグ=回す、ホイール押しドラッグ=動かす(設定で回すと入れ替え、Shift で逆)、
@@ -88,22 +161,10 @@ pub fn view3d(
 ) -> (ViewEvents, egui::Response, Rect) {
     let mut ev = ViewEvents::default();
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
-    if !cam.fitted {
-        if scene.is_empty() {
-            let pts = overlay.lines.iter().flat_map(|(l, _)| l);
-            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-            for p in pts {
-                for i in 0..3 {
-                    lo[i] = lo[i].min(p[i] as f32);
-                    hi[i] = hi[i].max(p[i] as f32);
-                }
-            }
-            if lo[0] <= hi[0] {
-                cam.fit_box(lo, hi, rect);
-            }
-        } else {
-            cam.fit(scene, rect);
-        }
+    if !cam.fitted
+        && let Some((lo, hi)) = fit_bounds(scene, overlay)
+    {
+        cam.fit_box(lo, hi, rect);
     }
     let (mods, pointer) = ui.input(|i| (i.modifiers, i.pointer.clone()));
     // 回す量は押した時の向きからの全部の量で決める(押した所へ戻すと元の向き。10-20 u9)
@@ -224,7 +285,14 @@ pub fn view3d(
     let hover = ev
         .hover
         .filter(|_| !controls.no_face_hover)
-        .and_then(|p| pick_at(scene, cam, rect, p));
+        .and_then(|p| pick_at(scene, cam, rect, p))
+        .map(|p| {
+            if controls.body_hover {
+                Hover::Body(p.feature)
+            } else {
+                Hover::Face(p)
+            }
+        });
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, crate::corner(0.0), colors.background);
@@ -521,7 +589,7 @@ fn paint_scene(
     cam: &Camera,
     scene: &Scene,
     picked: &[Pick],
-    hover: &Option<Pick>,
+    hover: &Option<Hover>,
     overlay: &kmb_core::Overlay,
     ghosts: &[Ghost],
     behind: &Behind,
@@ -596,6 +664,8 @@ fn paint_scene(
                 .for_each(|l| l.as_ref().map(look_key).hash(&mut h));
         });
         scene.faded().hash(&mut h);
+        scene.part_hues().hash(&mut h);
+        colors.inks.part_hue.map(|c| c.to_array()).hash(&mut h);
         scene.lamps.iter().for_each(|l| {
             [l.pos, l.dir, l.power]
                 .map(|v| v.map(f32::to_bits))
@@ -612,10 +682,7 @@ fn paint_scene(
             .iter()
             .map(|p| (p.feature, p.face.clone()))
             .for_each(|k| k.hash(&mut h));
-        hover
-            .as_ref()
-            .map(|p| (p.feature, p.face.clone()))
-            .hash(&mut h);
+        hover.hash(&mut h);
         [
             colors.background,
             colors.background_low,

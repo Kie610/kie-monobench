@@ -75,3 +75,6 @@ mod matrix_tests;
 mod nest_tests;
 #[cfg(test)]
 mod trace_thread_tests;
+
+#[cfg(test)]
+mod wide_actions_tests;

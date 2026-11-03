@@ -523,3 +523,90 @@ fn a_quick_recompute_shows_no_busy_badge() {
     // 走り始めの時刻が無くても、走っていれば出す
     assert_eq!(busy_badge(true, None), (true, None));
 }
+
+/// 確かめること: 持続する知らせの×は小さく、名前があり、文字と重ならない。
+#[test]
+fn persistent_notices_keep_a_small_named_dismiss_button_in_both_themes_and_scales() {
+    for brightness in [layout::Brightness::Dark, layout::Brightness::Light] {
+        for (width, scale) in [(1280.0, 1.0), (1920.0, 1.0), (1280.0, 2.5), (1920.0, 2.5)] {
+            let mut ws =
+                Workspace::new(Document::new(), None, reg()).with_notice(&["保存しました".into()]);
+            ws.win.layout.brightness = brightness;
+            ws.win.layout.appearance.language = "ja".into();
+            ws.win.layout.appearance.text_scale = scale;
+            ws.win.layout.appearance.icon_scale = scale;
+            let mut h = Harness::builder()
+                .with_size(egui::vec2(width, 900.0))
+                .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+            h.run();
+            let close = h.get_by_label("×").rect();
+            let message = h.get_by_label("保存しました").rect();
+            assert!(
+                close.width() <= 32.0 * scale && close.height() <= 32.0 * scale,
+                "{close:?}"
+            );
+            assert!(close.left() >= message.right(), "{message:?} {close:?}");
+            assert!(
+                egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 900.0))
+                    .contains_rect(close)
+            );
+            assert!(
+                close.top() >= 900.0 - 40.0 * scale,
+                "下の帯に出す: {close:?}"
+            );
+        }
+    }
+}
+
+/// 確かめること: 普通・注意・誤りは時間やホバーで消えず、×で表示だけを閉じられる。
+#[test]
+fn persistent_notices_do_not_expire_and_mcp_dismissal_preserves_history() {
+    for lang in ["ja", "en"] {
+        for tone in [Tone::Info, Tone::Warn, Tone::Error] {
+            let mut ws = Workspace::new(Document::new(), None, reg());
+            ws.win.layout.appearance.language = lang.into();
+            let message = "知らせの確認";
+            match tone {
+                Tone::Info => {
+                    ws.take_outcome(kmb_core::Outcome::Message(message.into()), None);
+                }
+                Tone::Warn => ws.win.warn(message),
+                Tone::Error => ws.win.fail(message),
+            }
+            let before = ws.document().to_json();
+            let mut h = Harness::builder()
+                .with_size(egui::vec2(1280.0, 900.0))
+                .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+            h.run();
+            assert_eq!(h.state().win.history_tone.last(), Some(&tone));
+            let history = h.state().message_history().to_vec();
+            let start = h.ctx.input(|i| i.time);
+            h.input_mut().time = Some(start + 600.0);
+            h.step();
+            assert!(h.ctx.input(|i| i.time) >= start + 600.0);
+            assert_eq!(h.state().message(), Some(message), "10分進めても持続する");
+            h.get_by_label("×").hover();
+            h.run();
+            assert_eq!(h.state().message(), Some(message));
+            let crate::live_ui::Answer::AfterScript(batch) = h
+                .state_mut()
+                .live_request("ui_click", &serde_json::json!({"target":"button:×"}))
+                .unwrap()
+            else {
+                panic!("画面の台本で押す");
+            };
+            let started = std::time::Instant::now();
+            loop {
+                h.step();
+                if let Some(result) = h.state_mut().script_result(batch) {
+                    assert!(result.ok, "{}", result.report());
+                    break;
+                }
+                assert!(started.elapsed().as_secs() < 60);
+            }
+            assert!(h.state().message().is_none());
+            assert_eq!(h.state().message_history(), history);
+            assert_eq!(h.state().document().to_json(), before);
+        }
+    }
+}

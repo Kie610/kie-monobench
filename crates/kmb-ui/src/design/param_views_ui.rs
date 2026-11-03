@@ -563,19 +563,16 @@ impl Workspace {
         query: &str,
         order: Option<&[ParamKey]>,
     ) -> Option<(ParamKey, RowAct)> {
-        let feature_name = |id: FeatureId| {
-            self.cur
-                .work
-                .doc()
-                .data()
-                .feature(id)
-                .map_or_else(|| id.to_string(), |f| f.name.clone())
-        };
         let mut rows = params::feature_values(
             self.cur.work.doc().data(),
             &self.win.registry,
             self.cur.work.report(),
         );
+        let feature_names = super::params_ui::feature_labels(
+            self.cur.work.doc().data(),
+            rows.iter().map(|p| p.feature),
+        );
+        let feature_name = |id: FeatureId| feature_names[&id].clone();
         let key_of = |v: &params::FeatureValue| ParamKey::Field {
             feature: v.feature,
             key: v.key.clone(),
@@ -637,22 +634,53 @@ impl Workspace {
                     let mut expr = ui
                         .data(|d| d.get_temp::<FieldEdit>(id))
                         .map_or_else(|| v.expr.clone(), |e| e.text_on(&v.expr));
-                    let c = complete::begin(ui, id.with("edit"));
-                    let r =
-                        ui.add_sized([130.0, h], c.filter(egui::TextEdit::singleline(&mut expr)));
-                    c.end(ui, &r, &mut expr, &[]);
-                    if r.lost_focus() && expr != v.expr {
-                        set = Some((v.feature, v.key.clone(), expr.clone()));
+                    let batching = self.cur.param_batch.enabled;
+                    if batching {
+                        expr = self.cur.param_batch.input(&key, expr);
                     }
-                    ui.data_mut(|d| d.insert_temp(id, FieldEdit::new(&v.expr, expr)));
-                    match &v.status {
-                        ParamStatus::Ok { value } => {
-                            ui.label(self.shown(*value));
+                    let c = complete::begin(ui, id.with("edit"));
+                    let edit = egui::TextEdit::singleline(&mut expr);
+                    let edit = if batching && self.cur.param_batch.errors.contains_key(&key) {
+                        edit.text_color(err)
+                    } else {
+                        edit
+                    };
+                    let r = ui.add_sized([130.0, h], c.filter(edit));
+                    c.end(ui, &r, &mut expr, &[]);
+                    super::params_ui::expression_info(
+                        ui,
+                        &r,
+                        &format!("{} / {}", feature_name(v.feature), v.label),
+                        &v.expr,
+                        &expr,
+                    );
+                    if batching {
+                        self.cur
+                            .param_batch
+                            .remember(&key, &v.expr, expr, r.changed());
+                        super::params_ui::pending_mark(
+                            ui,
+                            &r,
+                            self.cur.param_batch.inputs.contains_key(&key),
+                        );
+                    } else {
+                        if r.lost_focus() && expr != v.expr {
+                            set = Some((v.feature, v.key.clone(), expr.clone()));
                         }
-                        ParamStatus::Text { value } => {
-                            ui.label(value);
+                        ui.data_mut(|d| d.insert_temp(id, FieldEdit::new(&v.expr, expr)));
+                    }
+                    if let Some(why) = self.cur.param_batch.errors.get(&key) {
+                        reason_label(ui, err, why);
+                    } else {
+                        match &v.status {
+                            ParamStatus::Ok { value } => {
+                                ui.label(self.shown(*value));
+                            }
+                            ParamStatus::Text { value } => {
+                                ui.label(value);
+                            }
+                            ParamStatus::Error { message } => reason_label(ui, err, message),
                         }
-                        ParamStatus::Error { message } => reason_label(ui, err, message),
                     }
                     ui.end_row();
                 }

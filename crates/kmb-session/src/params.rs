@@ -140,7 +140,7 @@ pub fn unit_mismatch(unit: Option<&FieldUnit>, dim: kmb_core::Dim) -> Option<&'s
 /// 単位を宣言していない欄(外のモジュールの欄など)で数だけを打った時は、今の値を表に出す時の
 /// 単位(長さは文書の単位 `length`)を付ける。インチの文書で表の「0.5 in」を見て「0.5」と打てば
 /// 0.5 in になる。
-fn with_unit_of_value(new: &str, now: &ParamStatus, length: LengthUnit) -> String {
+pub(crate) fn with_unit_of_value(new: &str, now: &ParamStatus, length: LengthUnit) -> String {
     let new = new.trim();
     match now {
         ParamStatus::Ok { value } if new.parse::<f64>().is_ok() => {
