@@ -3543,6 +3543,7 @@ dependencies = [
  "kmb-interchange",
  "kmb-io-dxf",
  "kmb-samples",
+ "kmb-session",
  "kmb-sketch",
  "kmb-sketch-3d",
  "kmb-ui",
