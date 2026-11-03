@@ -230,12 +230,11 @@ fn mass_progress_measurement() {
             let step = grid_step(side);
             measure_case(&step, &format!("step-grid-{}", side * side));
         }
-        for radius in [100.0] {
-            let step = sphere_step(radius);
-            let label = format!("mesh-sphere-r{radius}");
-            let path = dir.0.join(format!("sphere-{radius}.step"));
-            std::fs::write(&path, &step).unwrap();
-            mesh_child(&path, &label);
-        }
+        let radius = 100.0;
+        let step = sphere_step(radius);
+        let label = format!("mesh-sphere-r{radius}");
+        let path = dir.0.join(format!("sphere-{radius}.step"));
+        std::fs::write(&path, &step).unwrap();
+        mesh_child(&path, &label);
     }
 }
