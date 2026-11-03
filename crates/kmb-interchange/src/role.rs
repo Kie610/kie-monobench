@@ -45,6 +45,8 @@ pub mod action {
     pub const INSERT_SVG: ActionRole = ActionRole("insert_svg");
     /// 選んでいるスケッチを DXF で保存する(スケッチの編集器の右クリックが使う)
     pub const EXPORT_SKETCH_DXF: ActionRole = ActionRole("export_sketch_dxf");
+    /// 選んでいるスケッチを SVG で保存する(スケッチの編集器の右クリックが使う)
+    pub const EXPORT_SKETCH_SVG: ActionRole = ActionRole("export_sketch_svg");
     /// 選んでいるスケッチの点に文字を置く(スケッチの編集器の「文字」が使う。引数 `point` に
     /// 基準にする点の番号)
     pub const TEXT_AT_POINT: ActionRole = ActionRole("text_at_point");
@@ -93,6 +95,7 @@ pub mod action {
         INSERT_DXF,
         INSERT_SVG,
         EXPORT_SKETCH_DXF,
+        EXPORT_SKETCH_SVG,
         TEXT_AT_POINT,
         AUTO_EXPLODE,
         ANIMATION_VIEW,

@@ -7,3 +7,5 @@
 # action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 # action-cad-text-on-face = Text on Face
 # action-cad-text-on-face-tip = Place text at the center of a selected planar face using a Gothic font on this PC. If none is available, use single-line text and show a notice. Extrude the outlines to engrave or emboss.
+# action-cad-sketch-export-svg = Save as SVG…
+# action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit; join connected lines into closed outlines
