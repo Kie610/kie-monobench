@@ -316,10 +316,26 @@ fn mass_progress_background_measurement() {
         frames.push(frame.elapsed().as_secs_f64() * 1000.0);
         progress_frames += usize::from(h.query_by_label("体積などを計算中…").is_some());
         std::thread::sleep(Duration::from_millis(2));
-        assert!(
-            began.elapsed() < Duration::from_secs(30),
-            "測定の結果の時間切れ"
-        );
+        if began.elapsed() >= Duration::from_secs(30) {
+            let ws = h.state();
+            eprintln!(
+                "MASS_BACKGROUND_DIAGNOSTIC key_finished={} measuring={} document_job={} busy={} body_job={} generation={} data_equal={} picks={:?} report={:?} scene={:?} message={:?} features={:?} max_frame_ms={:?}",
+                key.is_finished(),
+                ws.is_measuring(),
+                ws.cur.work.is_recomputing(),
+                ws.is_busy(),
+                ws.cur.measure_job.is_some(),
+                ws.cur.scene.generation(),
+                ws.document().data() == &data,
+                ws.cur.measure.as_ref().map(|m| &m.picks),
+                ws.cur.measure.as_ref().map(|m| &m.report),
+                ws.cur.scene.key(),
+                ws.win.message,
+                ws.cur.work.report().features,
+                frames.iter().copied().reduce(f64::max)
+            );
+            panic!("測定の結果の時間切れ");
+        }
     }
     assert_eq!(key.join().unwrap().unwrap()["ok"], true);
     assert!(progress_frames > 0, "計算中の表示");
