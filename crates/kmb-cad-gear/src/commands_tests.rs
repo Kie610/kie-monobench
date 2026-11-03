@@ -153,3 +153,65 @@ fn the_added_outline_evaluates_around_the_given_center() {
     assert_eq!(spec.teeth, 12);
     assert!((spec.axis.origin[0] - 30.0).abs() < 1e-9, "{:?}", spec.axis);
 }
+
+#[test]
+fn a_rack_keeps_its_length_start_direction_and_actual_tooth_count() {
+    let length = 12.75 * std::f64::consts::PI * 2.0;
+    let added = inserts(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({
+                "kind":"rack", "module":2.0, "rack_size":"length", "rack_length":length,
+                "rack_back":5.0,"phase":90.0,"point":[10.0,20.0,0.0]
+            }),
+        )
+        .unwrap(),
+    );
+    let mut doc = Document::new();
+    let reg = registry();
+    let (type_id, data) = added.into_iter().next().unwrap();
+    let id = doc
+        .apply_edits(
+            "ラック",
+            vec![Edit::Insert {
+                type_id,
+                name: "ラック".into(),
+                data,
+            }],
+        )
+        .unwrap()[0];
+    let report = doc.recompute(&reg, &NullKernel);
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+        panic!("輪郭")
+    };
+    let spec =
+        kmb_interchange::GearSpec::from_value(&outputs[kmb_interchange::GEAR_OUTPUT]).unwrap();
+    assert_eq!(spec.kind, GearKind::Rack);
+    assert_eq!(spec.teeth, 12);
+    assert_eq!(spec.pitch_radius, 0.0);
+    assert_eq!(spec.axis.origin, [10.0, 20.0, 0.0]);
+    assert_eq!(spec.axis.reference, [1.0, 0.0, 0.0]);
+    assert!((spec.phase - std::f64::consts::FRAC_PI_2).abs() < 1e-12);
+    let reference = kmb_core::Curves::from_value(&outputs[crate::REFERENCE_OUTPUT]).unwrap();
+    assert_eq!(reference.segments.len(), 1);
+    let kmb_core::Segment::Line { a, b } = reference.segments[0] else {
+        panic!("ピッチ線")
+    };
+    assert!((a[0] - 10.0).abs() < 1e-12 && (a[1] - 20.0).abs() < 1e-12);
+    assert!((b[0] - 10.0).abs() < 1e-10 && (b[1] - 20.0 - length).abs() < 1e-10);
+}
+
+#[test]
+fn rack_actions_accept_one_tooth_and_refuse_incomplete_or_conflicting_data() {
+    assert!(run(GEAR_OUTLINE_ADD, json!({"kind":"rack","teeth":1})).is_ok());
+    for args in [
+        json!({"kind":"rack","rack_size":"length"}),
+        json!({"kind":"rack","rack_size":"length","rack_length":1.0}),
+        json!({"kind":"rack","rack_back":0.0}),
+        json!({"kind":"rack","bore":2.0}),
+        json!({"rack_back":2.0}),
+    ] {
+        assert!(run(GEAR_OUTLINE_ADD, args.clone()).is_err(), "{args}");
+    }
+}

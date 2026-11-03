@@ -25,9 +25,11 @@ fn every_expression_field_is_listed_for_renaming() {
         root_round: Some("s".into()),
         bore: Some("s".into()),
         phase: Some("s".into()),
+        rack_length: Some("s".into()),
+        rack_back: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 10);
+    assert_eq!(g.exprs_mut().len(), 12);
 }
 
 #[test]

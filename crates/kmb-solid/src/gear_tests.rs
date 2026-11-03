@@ -91,3 +91,56 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
     assert!(names.iter().any(|n| n.contains(":side:t11:tip")));
     assert!(!names.iter().any(|n| n.contains(":side:t13:")), "{names:?}");
 }
+
+#[test]
+fn an_extruded_rack_has_the_profile_area_times_its_width() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let g = b.feature(
+        kmb_cad_gear::GEAR,
+        "ラック",
+        kmb_cad_gear::Gear {
+            kind: kmb_interchange::GearKind::Rack,
+            module: "2 mm".into(),
+            teeth: "12".into(),
+            rack_back: Some("5 mm".into()),
+            tip_round: Some("0.15".into()),
+            phase: Some("30 deg".into()),
+            x: "7 mm".into(),
+            y: "11 mm".into(),
+            ..Default::default()
+        },
+    );
+    let e = b.feature(
+        kmb_cad_gear::GEAR_BODY,
+        "ラックのボディ",
+        kmb_cad_gear::GearBody {
+            width: "4 mm".into(),
+            ..kmb_cad_gear::GearBody::new(g)
+        },
+    );
+    let mut doc = b.finish("ラック");
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(g) else {
+        panic!("輪郭")
+    };
+    let a = area(&Profile::from_value(&outputs["profile"]).unwrap());
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
+        panic!("ボディ")
+    };
+    let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+    assert_eq!(spec.kind, kmb_interchange::GearKind::Rack);
+    assert_eq!(
+        (spec.teeth, spec.face_width, spec.pitch_radius),
+        (12, Some(4.0), 0.0)
+    );
+    let mass = final_mass(&mut doc, &k);
+    assert!(
+        close(mass.volume, a * 4.0, 2e-3),
+        "{} vs {}",
+        mass.volume,
+        a * 4.0
+    );
+}
