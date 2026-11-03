@@ -59,6 +59,8 @@ feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る
 feature-cam-setup = セットアップ
 feature-cam-setup-tip = 削る部品、ストック、原点、安全高さを決める
 
+feature-solid-import-mesh = 網の読み込み
+feature-solid-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
 feature-asm-position = 位置
 feature-asm-position-tip = 部品の中心で X・Y・Z の順に回してから、世界座標の距離だけ動かす。一緒に動くジョイントの部品も付いて来る
 feature-cam-spiral3d = 渦巻き(3D)

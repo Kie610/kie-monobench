@@ -44,6 +44,52 @@ fn part() -> Harness<'static, Workspace> {
     ))
 }
 
+/// 開く窓で利用者が選んだ網のファイルを返す。他の窓は使わない。
+struct ChosenMesh(std::path::PathBuf);
+impl crate::Dialogs for ChosenMesh {
+    fn open_document(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+    fn save_document(&self, _: &str) -> Option<std::path::PathBuf> {
+        None
+    }
+    fn open_file(&self, _: &str, _: &str, _: &[&str]) -> Option<std::path::PathBuf> {
+        Some(self.0.clone())
+    }
+    fn save_file(&self, _: &str, _: &str, _: &[&str], _: &str) -> Option<std::path::PathBuf> {
+        None
+    }
+    fn unsaved(&self, _: &str) -> crate::Unsaved {
+        crate::Unsaved::Cancel
+    }
+}
+
+#[test]
+fn a_script_imports_a_mesh_from_the_insert_menu_and_undoes_it() {
+    let dir = crate::tests::temp_dir("mesh-script");
+    let path = dir.join("triangle.stl");
+    std::fs::write(&path,b"solid mesh_plane\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid mesh_plane\n").unwrap();
+    let ws = Workspace::new(kmb_core::Document::new(), None, kmb_bundle::modules())
+        .with_dialogs(Box::new(ChosenMesh(path)));
+    let mut h = harness(ws);
+    let r = run(
+        &mut h,
+        "click \"挿入 ▾\"\nclick \"STL・3MF を読み込む…\"\nwait\nexpect \"mesh_plane\" exists",
+    );
+    assert!(r.ok, "{}", r.report());
+    assert_eq!(h.state().report().error_count(), 0);
+    assert_eq!(h.state().visible_bodies().len(), 1);
+    let (_, body) = h.state().visible_bodies()[0];
+    assert_eq!(
+        h.state().cur.work.kernel().body_kind(body).unwrap(),
+        kmb_core::kernel::BodyKind::Mesh
+    );
+    let r = run(&mut h, "key Ctrl+Z\nwait\nexpect \"mesh_plane\" missing");
+    assert!(r.ok, "{}", r.report());
+    assert!(h.state().document().data().features.is_empty());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 /// 作業空間の一覧を人と同じに押して替えると、解析のボタンが出る。
 #[test]
 fn a_script_presses_buttons_by_their_names_like_a_person() {

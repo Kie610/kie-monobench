@@ -387,6 +387,8 @@ action-drawing-export-dxf-tip = Export one sheet as DXF with layers for line rol
 
 action-drawing-export-svg = Export drawing as SVG
 action-drawing-export-svg-tip = Export one sheet as SVG with paper dimensions, line widths, and line types
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 action-cad-sketch-dxf-layers = List DXF layers

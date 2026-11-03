@@ -13,6 +13,7 @@ layer = "cad"
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
 kmb-io-stl.workspace = true
 kmb-look.workspace = true
 kmb-core.workspace = true

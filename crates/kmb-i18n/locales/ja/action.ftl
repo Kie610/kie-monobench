@@ -388,6 +388,8 @@ action-drawing-export-dxf-tip = 選んだ用紙を、線の役ごとの画層と
 
 action-drawing-export-svg = 図面をSVGに書き出す
 action-drawing-export-svg-tip = 選んだ用紙を、用紙の大きさと線の太さと線種を持つSVGに書き出す
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 action-cad-sketch-dxf-layers = DXF の画層を一覧

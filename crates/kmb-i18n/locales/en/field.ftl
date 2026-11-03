@@ -2240,6 +2240,14 @@ field-solid-thread-length-help = Leave empty for the full face length. Modeled t
 field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 field-solid-thread-target = Target
+
+field-solid-import-mesh-file = File
+field-solid-import-mesh-object = Object name
+field-solid-import-mesh-triangles = Triangles
+field-solid-import-mesh-unit = Unit
+field-solid-import-mesh-crease-angle = Crease angle
+field-solid-import-mesh-crease-angle-help = Smooth the shading between adjacent triangles whose angle is at most this value
+field-solid-import-mesh-notes = Notes
 field-solid-hole-clearance = Clearance
 field-solid-hole-clearance-help = Diametral clearance. Leave empty for 0 mm.
 field-solid-hole-end = Far end

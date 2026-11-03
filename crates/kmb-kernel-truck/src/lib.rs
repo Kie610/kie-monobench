@@ -89,8 +89,8 @@ fn check_volume(op: BooleanOp, target: f64, tool: f64, result: f64) -> Result<()
 struct Store {
     next: u64,
     bodies: HashMap<u64, Body>,
-    /// STEP から読み込んだ形(網だけを持つ)
-    imported: HashMap<u64, import::Imported>,
+    /// 読み込んだ網のボディ。問い合わせでは Arc の参照だけを複製する
+    imported: HashMap<u64, Arc<import::Imported>>,
     /// 作った網(形と許容差ごと)。形は作った後に変わらないので、同じ網を加工ごとに作り直さない
     meshes: HashMap<(u64, u64), Mesh>,
     /// 求めた体積と表面積(形ごと)。細かい網を 2 回作るので、同じ形で求め直さない
@@ -125,8 +125,8 @@ impl TruckKernel {
             return Ok(b.clone());
         }
         if s.imported.contains_key(&h.0) {
-            return Err(KernelError::Unsupported(
-                "STEP から読み込んだ形には、足し引き・移動・フィレット・STEP の書き出しはまだ使えません(加工と計測は使えます)"
+            return Err(KernelError::Failed(
+                "網のボディは足し引き・面の編集・フィレット・STEP の書き出しに使えません(三角形の網で、面と辺の形を持たないため)"
                     .into(),
             ));
         }
@@ -144,13 +144,13 @@ impl TruckKernel {
             return Err(KernelError::Failed(why.into()));
         }
         if let Some(im) = self.imported(shape) {
-            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(U12 の立てる。回すと
+            // 読み込んだ形は網なので、点と向きと辺の折れ線を動かす(回すと
             // 動かすだけなので、体積と面積はそのまま)
-            let moved = transform_imported(&im, m, suffix);
+            let moved = transform_imported(&im, m, suffix)?;
             let mut s = self.lock();
             s.next += 1;
             let id = s.next;
-            s.imported.insert(id, moved);
+            s.imported.insert(id, Arc::new(moved));
             return Ok(ShapeHandle(id));
         }
         let body = self.get(shape)?;
@@ -172,8 +172,17 @@ impl TruckKernel {
         Ok(self.put(moved))
     }
 
-    fn imported(&self, h: ShapeHandle) -> Option<import::Imported> {
+    fn imported(&self, h: ShapeHandle) -> Option<Arc<import::Imported>> {
         self.lock().imported.get(&h.0).cloned()
+    }
+
+    fn require_editable(&self, h: ShapeHandle, operation: &str) -> Result<(), KernelError> {
+        if self.imported(h).is_some() {
+            return Err(KernelError::Failed(format!(
+                "網のボディは{operation}に使えません(三角形の網で、面と辺の形を持たないため)"
+            )));
+        }
+        Ok(())
     }
 
     fn put(&self, body: Body) -> ShapeHandle {
@@ -417,7 +426,47 @@ fn to_matrix(m: &k::Matrix4) -> tm::Matrix4 {
 }
 
 /// 読み込んだ形(網)を `m` で動かす(回転と平行移動だけを前提にする)。
-fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> import::Imported {
+fn transform_imported(
+    im: &import::Imported,
+    m: &k::Matrix4,
+    suffix: &str,
+) -> Result<import::Imported, KernelError> {
+    if let Some(mesh) = &im.raw {
+        let mut mesh = mesh.clone();
+        for p in &mut mesh.positions {
+            *p = k::transform_point(m, p.map(f64::from)).map(|x| x as f32);
+        }
+        // 法線は逆転置で動かす。非一様な尺度でも面に垂直な向きを保つ。
+        let columns: [P3; 3] = std::array::from_fn(|j| std::array::from_fn(|i| m[i][j]));
+        let cofactor = [
+            k::cross(columns[1], columns[2]),
+            k::cross(columns[2], columns[0]),
+            k::cross(columns[0], columns[1]),
+        ];
+        let sign = k::dot(columns[0], cofactor[0]).signum();
+        for n in &mut mesh.normals {
+            *n = k::normalize(std::array::from_fn(|i| {
+                sign * (0..3)
+                    .map(|j| cofactor[j][i] * f64::from(n[j]))
+                    .sum::<f64>()
+            }))
+            .map(|x| x as f32);
+        }
+        if sign < 0.0 {
+            for t in &mut mesh.triangles {
+                t.swap(1, 2);
+            }
+        }
+        for line in &mut mesh.edges {
+            for p in line {
+                *p = k::transform_point(m, p.map(f64::from)).map(|x| x as f32);
+            }
+        }
+        for name in &mut mesh.face_names {
+            name.push_str(suffix);
+        }
+        return raw_imported(mesh);
+    }
     let point = |p: [f64; 3]| k::transform_point(m, p);
     let dir = |v: [f64; 3]| {
         let mut out = [0.0; 3];
@@ -485,7 +534,8 @@ fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> im
             max[i] = max[i].max(q[i]);
         }
     }
-    import::Imported {
+    Ok(import::Imported {
+        raw: None,
         meshes,
         names: im.names.iter().map(|n| format!("{n}{suffix}")).collect(),
         edges,
@@ -493,7 +543,39 @@ fn transform_imported(im: &import::Imported, m: &k::Matrix4, suffix: &str) -> im
         max,
         volume,
         area,
+        open_edges: im.open_edges,
+        centroid: im.centroid.map(|p| k::transform_point(m, p)),
+    })
+}
+
+/// 預かった網の量を 1 回だけ求める。問い合わせでは Arc の参照と控えだけを読む。
+fn raw_imported(mesh: Mesh) -> Result<import::Imported, KernelError> {
+    let g = kmb_format::mesh::Geometry {
+        vertices: mesh.positions.clone(),
+        triangles: mesh.triangles.clone(),
+    };
+    let (open_edges, volume, area, centroid) =
+        kmb_format::mesh::properties(&g).map_err(KernelError::Failed)?;
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for p in &mesh.positions {
+        for i in 0..3 {
+            min[i] = min[i].min(f64::from(p[i]));
+            max[i] = max[i].max(f64::from(p[i]));
+        }
     }
+    Ok(import::Imported {
+        meshes: vec![],
+        names: mesh.face_names.clone(),
+        edges: vec![],
+        min,
+        max,
+        volume,
+        area,
+        open_edges,
+        centroid,
+        raw: Some(mesh),
+    })
 }
 
 /// 面ごとの網を、表示と加工の網に足す。
@@ -568,6 +650,87 @@ fn planar_of(m: &PolygonMesh) -> Option<PlanarFace> {
 impl Kernel for TruckKernel {
     fn name(&self) -> &str {
         "truck"
+    }
+
+    fn body_kind(&self, shape: ShapeHandle) -> Result<k::BodyKind, KernelError> {
+        if self.imported(shape).is_some() {
+            Ok(k::BodyKind::Mesh)
+        } else {
+            self.get(shape)?;
+            Ok(k::BodyKind::Solid)
+        }
+    }
+
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        if (!mesh.normals.is_empty() && mesh.normals.len() != mesh.positions.len())
+            || (!mesh.triangle_faces.is_empty()
+                && mesh.triangle_faces.len() != mesh.triangles.len())
+            || mesh.normals.iter().flatten().any(|x| !x.is_finite())
+            || mesh
+                .edges
+                .iter()
+                .flatten()
+                .flatten()
+                .any(|x| !x.is_finite())
+        {
+            return Err(KernelError::Failed(
+                "網の法線・面番号・表示の辺が不正です".into(),
+            ));
+        }
+        let mut mesh = mesh.clone();
+        mesh.face_names = vec![format!("{tag}:mesh")];
+        mesh.triangle_faces = vec![0; mesh.triangles.len()];
+        let im = raw_imported(mesh)?;
+        let mut s = self.lock();
+        s.next += 1;
+        let id = s.next;
+        s.imported.insert(id, Arc::new(im));
+        Ok(ShapeHandle(id))
+    }
+
+    fn extrude_faces(
+        &self,
+        shape: ShapeHandle,
+        _faces: &[String],
+        _from: f64,
+        _to: f64,
+        _tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "面の縁のままの押し出し")?;
+        self.get(shape)?;
+        Err(KernelError::Unsupported("面の縁のままの押し出し".into()))
+    }
+    fn blend_edges(
+        &self,
+        shape: ShapeHandle,
+        _blends: &[k::EdgeBlend],
+        _tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "辺の丸め")?;
+        self.get(shape)?;
+        Err(KernelError::Unsupported("辺の丸め".into()))
+    }
+    fn shell(
+        &self,
+        shape: ShapeHandle,
+        _open: &[String],
+        _thickness: f64,
+        _tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "シェル")?;
+        self.get(shape)?;
+        Err(KernelError::Unsupported("シェル".into()))
+    }
+    fn offset_faces(
+        &self,
+        shape: ShapeHandle,
+        _faces: &[String],
+        _distance: f64,
+        _tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(shape, "面のオフセット")?;
+        self.get(shape)?;
+        Err(KernelError::Unsupported("面のオフセット".into()))
     }
 
     fn extrude(
@@ -719,6 +882,8 @@ impl Kernel for TruckKernel {
         target: ShapeHandle,
         tool: ShapeHandle,
     ) -> Result<ShapeHandle, KernelError> {
+        self.require_editable(target, "足し引き")?;
+        self.require_editable(tool, "足し引き")?;
         let target = self.get(target)?;
         let tool = self.get(tool)?;
         let body = guard("ブーリアン", || {
@@ -831,6 +996,13 @@ impl Kernel for TruckKernel {
 
     fn faces(&self, shape: ShapeHandle) -> Result<Vec<FaceInfo>, KernelError> {
         if let Some(im) = self.imported(shape) {
+            if let Some(mesh) = &im.raw {
+                return Ok(vec![FaceInfo {
+                    name: mesh.face_names[0].clone(),
+                    planar: None,
+                    area: im.area,
+                }]);
+            }
             return Ok(im
                 .meshes
                 .iter()
@@ -947,12 +1119,18 @@ impl Kernel for TruckKernel {
 
     fn mass(&self, shape: ShapeHandle) -> Result<MassProps, KernelError> {
         if let Some(im) = self.imported(shape) {
+            if im.open_edges > 0 {
+                return Err(KernelError::Failed(format!(
+                    "網が閉じていないので体積を求められません(開いた縁が {} 本あります)。表示・加工・書き出しには使えます",
+                    im.open_edges
+                )));
+            }
             return Ok(MassProps {
                 volume: im.volume,
                 area: im.area,
                 min: im.min,
                 max: im.max,
-                centroid: None,
+                centroid: im.centroid,
             });
         }
         if let Some(m) = self.lock().mass.get(&shape.0) {
@@ -1026,6 +1204,9 @@ impl Kernel for TruckKernel {
 
     fn mesh(&self, shape: ShapeHandle, tolerance: f64) -> Result<Mesh, KernelError> {
         if let Some(im) = self.imported(shape) {
+            if let Some(mesh) = &im.raw {
+                return Ok(mesh.clone());
+            }
             // 読み込んだ時の網(許容差 IMPORT_TOLERANCE)をそのまま返す
             let mut out = Mesh::default();
             push_face_meshes(&mut out, &im.meshes, &im.names);
@@ -1104,7 +1285,7 @@ impl Kernel for TruckKernel {
         let mut s = self.lock();
         s.next += 1;
         let id = s.next;
-        s.imported.insert(id, im);
+        s.imported.insert(id, Arc::new(im));
         Ok(ShapeHandle(id))
     }
 

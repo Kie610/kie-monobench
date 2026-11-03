@@ -1012,6 +1012,116 @@ pub fn instances_place_the_same_shape_and_fold_into_one_step<K: Kernel>(
     assert!(k.mass(a).is_ok());
 }
 
+/// 2 mm の立方体。角の頂点を分けても位置から閉じた網だと分かる契約の入力。
+pub fn mesh_cube() -> kmb_core::Mesh {
+    let p = [
+        [0., 0., 0.],
+        [2., 0., 0.],
+        [2., 2., 0.],
+        [0., 2., 0.],
+        [0., 0., 2.],
+        [2., 0., 2.],
+        [2., 2., 2.],
+        [0., 2., 2.],
+    ];
+    let triangles = vec![
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
+    ];
+    // 三角形ごとに頂点番号を分ける。辺は番号でなく位置で対応させる。
+    let positions = triangles
+        .iter()
+        .flat_map(|t| t.iter().map(|&i| p[i]))
+        .collect::<Vec<_>>();
+    kmb_core::Mesh {
+        normals: vec![[0., 0., 1.]; positions.len()],
+        positions,
+        triangles: (0..12).map(|i| [i * 3, i * 3 + 1, i * 3 + 2]).collect(),
+        triangle_faces: vec![0; 12],
+        face_names: vec!["input".into()],
+        edges: vec![vec![[0., 0., 0.], [2., 0., 0.]]],
+    }
+}
+
+pub fn imported_mesh_keeps_geometry_and_has_closed_volume<K: Kernel>(k: &K, _: &KernelQuirks<K>) {
+    use kmb_core::kernel::{BodyKind, translation};
+    let mesh = mesh_cube();
+    let h = k.import_mesh(&mesh, "net").unwrap();
+    assert_eq!(k.body_kind(h).unwrap(), BodyKind::Mesh);
+    let a = k.mesh(h, 0.001).unwrap();
+    assert_eq!(a, k.mesh(h, 1.0).unwrap());
+    assert_eq!(a.positions, mesh.positions);
+    assert_eq!(a.normals, mesh.normals);
+    assert_eq!(a.edges, mesh.edges);
+    assert_eq!(a.face_names, ["net:mesh"]);
+    let m = k.mass(h).unwrap();
+    assert!((m.volume - 8.).abs() < 1e-9);
+    assert!((m.area - 24.).abs() < 1e-9);
+    assert!(m.centroid.unwrap().iter().all(|x| (*x - 1.).abs() < 1e-12));
+    let faces = k.faces(h).unwrap();
+    assert_eq!(faces.len(), 1);
+    assert!(faces[0].planar.is_none());
+    assert_eq!(faces[0].area, 24.);
+    assert!(k.edges(h).unwrap().is_empty());
+    assert!(k.arc_edges(h).unwrap().is_empty());
+    assert!(k.curve_edges(h).unwrap().is_empty());
+    let moved = k.transform(h, &translation([4., 5., 6.]), ".copy").unwrap();
+    assert_eq!(k.bounds(moved).unwrap(), ([4., 5., 6.], [6., 7., 8.]));
+    assert!(
+        k.mass(moved)
+            .unwrap()
+            .centroid
+            .unwrap()
+            .iter()
+            .zip([5., 6., 7.])
+            .all(|(x, y)| (*x - y).abs() < 1e-12)
+    );
+    assert_eq!(k.mesh(moved, 0.1).unwrap().face_names, ["net:mesh.copy"]);
+    let err = k.boolean(BooleanOp::Union, h, moved).unwrap_err();
+    assert!(matches!(err, KernelError::Failed(_)));
+    assert!(err.to_string().contains("網のボディ"));
+    assert!(matches!(
+        k.shell(h, &[], 0.1, "s"),
+        Err(KernelError::Failed(_))
+    ));
+    assert!(matches!(
+        k.blend_edges(h, &[], "b"),
+        Err(KernelError::Failed(_))
+    ));
+    assert!(matches!(
+        k.offset_faces(h, &["net:mesh".into()], 0.1, "o"),
+        Err(KernelError::Failed(_))
+    ));
+    assert!(matches!(
+        k.extrude_faces(h, &["net:mesh".into()], 0., 1., "e"),
+        Err(KernelError::Failed(_))
+    ));
+    assert!(k.export_step(&[h]).is_err());
+}
+
+pub fn an_open_mesh_refuses_mass_but_keeps_its_display<K: Kernel>(k: &K, _: &KernelQuirks<K>) {
+    let mut mesh = mesh_cube();
+    mesh.triangles.truncate(10);
+    mesh.triangle_faces.truncate(10);
+    let h = k.import_mesh(&mesh, "open").unwrap();
+    let err = k.mass(h).unwrap_err();
+    assert!(matches!(err, KernelError::Failed(_)));
+    assert!(err.to_string().contains("開いた縁が 4 本"), "{err}");
+    assert!(k.volume(h).is_err());
+    assert_eq!(k.mesh(h, 0.1).unwrap().triangles.len(), 10);
+    assert!(k.bounds(h).is_ok());
+}
+
 #[macro_export]
 macro_rules! kernel_contract_tests {
     ($make:ident, $quirks:ident) => {
@@ -1028,6 +1138,8 @@ macro_rules! kernel_contract_tests {
             revolve_rejects_crossing_the_axis,
             transform_mesh_step_and_retain,
             transform_refuses_a_matrix_that_is_not_a_placement,
+            imported_mesh_keeps_geometry_and_has_closed_volume,
+            an_open_mesh_refuses_mass_but_keeps_its_display,
             instances_place_the_same_shape_and_fold_into_one_step,
             straight_edges_between_planes_know_if_they_are_convex,
             edges_know_whether_they_are_corners_or_smooth_seams,

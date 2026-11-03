@@ -3,17 +3,19 @@
 //!
 //! | モジュール | 中身 |
 //! | --- | --- |
-//! | [`zip`] | ファイルを並べた zip を書く(deflate)。書いた zip から名前で取り出す |
+//! | [`zip`] | ファイルを並べた zip を書く(deflate)。中央の目録から内容を確かめて読む |
 //! | [`png`] | 8 ビットの RGB・RGBA の PNG を書く。書いた RGB の PNG を読み戻す |
 //! | [`pdf`] | 用紙の mm 座標の線と偶奇の塗りを、複数ページの PDF に書く |
 //! | [`dxf`] | DXF R12(AC1009)の最小の形(HEADER・TABLES・ENTITIES)を書く |
 //! | [`svg`] | SVG の数の書き方と、文字の置き換え |
 //! | [`base64`] | バイト列と base64 の文字の行き来(絵を JSON に入れる) |
+//! | [`mesh`] | STL・3MF の三角形の網を読み、文書へ埋めるバイト列にする |
 //! | [`step`] | STEP の長さの単位を読む(形の読み手が mm にそろえる倍率)、実体を 1 つずつに分ける |
 
 pub mod base64;
 pub mod dxf;
 pub mod iges;
+pub mod mesh;
 pub mod pdf;
 pub mod png;
 pub mod step;

@@ -2240,6 +2240,14 @@ field-solid-thread-length-help = 空なら面の全長。形を作る時は端�
 field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空ならメートルの呼びを優先。インチ・管用は呼び径(めねじは下穴も)と面の径の差が 0.001 mm 未満の時だけ選ぶ。一覧は面の径に近い順
 field-solid-thread-target = 対象
+
+field-solid-import-mesh-file = ファイル
+field-solid-import-mesh-object = 物の名前
+field-solid-import-mesh-triangles = 三角形の数
+field-solid-import-mesh-unit = 単位
+field-solid-import-mesh-crease-angle = 折れ目の角度
+field-solid-import-mesh-crease-angle-help = 隣り合う三角形の角度がこの値以下なら、なめらかに見せる
+field-solid-import-mesh-notes = 注記
 field-solid-hole-clearance = すき間
 field-solid-hole-clearance-help = 径で指定するすき間。空なら 0 mm
 field-solid-hole-end = 奥の端
