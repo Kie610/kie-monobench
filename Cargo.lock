@@ -3483,6 +3483,7 @@ dependencies = [
  "kmb-cad-boolean",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",
