@@ -66,6 +66,8 @@ cad.extrude	kmb-cad-extrude
 cad.extrude_regions	kmb-cad-extrude
 cad.extrude_to_face	kmb-cad-extrude
 cad.fillet	kmb-cad-edge
+cad.gear@1	kmb-cad-gear
+cad.gear_body@1	kmb-cad-gear
 cad.hole_add	kmb-cad-hole
 cad.hole_on_face	kmb-cad-hole
 cad.hole_to_face	kmb-cad-hole

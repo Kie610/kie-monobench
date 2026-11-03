@@ -19,6 +19,7 @@ kmb-sketch = { path = "crates/kmb-sketch" }
 kmb-sketch-3d = { path = "crates/kmb-sketch-3d" }
 kmb-sketch-solver = { path = "crates/kmb-sketch-solver" }
 kmb-text = { path = "crates/kmb-text" }
+kmb-cad-gear = { path = "crates/kmb-cad-gear" }
 kmb-io-dxf = { path = "crates/kmb-io-dxf" }
 kmb-io-svg = { path = "crates/kmb-io-svg" }
 kmb-format = { path = "crates/kmb-format" }

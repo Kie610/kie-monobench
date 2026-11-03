@@ -18,6 +18,7 @@ kmb-plugin-host.workspace = true
 kmb-sketch.workspace = true
 kmb-sketch-3d.workspace = true
 kmb-text.workspace = true
+kmb-cad-gear.workspace = true
 kmb-io-dxf.workspace = true
 kmb-io-svg.workspace = true
 kmb-cad.workspace = true

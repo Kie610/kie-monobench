@@ -78,6 +78,7 @@ mod face_revolve_tests;
 mod fastener_tests;
 mod fillet_material_tests;
 mod fillet_rows_tests;
+mod gear_tests;
 mod hole_tests;
 mod iges_tests;
 #[cfg(test)]
