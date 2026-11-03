@@ -1007,6 +1007,230 @@ pub fn register(reg: &mut Registry) {
     );
 }
 
+/// カムの配置と作成を画面・CLI・MCPの同じ引数宣言で受ける。
+pub struct CamCommands;
+pub const CAM_ADD: &str = "mech.cam";
+const NEW_CAM: FeatureId = FeatureId(u64::MAX);
+
+fn command_args() -> Vec<kmb_core::Arg> {
+    use kmb_core::Arg;
+    let mut args = kmb_cad::plane::args();
+    args.extend([
+        Arg::vector("point", "中心の世界座標(mm)。省くと平面の原点"),
+        Arg::angle("phase", "回す角").default(0.0),
+        Arg::length("base_radius", "基礎円の半径").default(20.0),
+        Arg::choice(
+            "rotation",
+            "回る向き",
+            &[("ccw", "反時計回り"), ("cw", "時計回り")],
+        )
+        .default("ccw"),
+        Arg::choice(
+            "follower",
+            "従節の種類",
+            &[("translating", "直動"), ("oscillating", "揺動")],
+        )
+        .default("translating"),
+        Arg::choice(
+            "tip",
+            "先の形",
+            &[
+                ("knife", "ナイフ"),
+                ("roller", "ローラー"),
+                ("flat", "平ら"),
+            ],
+        )
+        .default("roller"),
+        Arg::length("roller_radius", "ローラーの半径").default(2.0),
+        Arg::length("offset", "ずれ").default(0.0),
+        Arg::length("arm_length", "揺動の腕の長さ").default(30.0),
+        Arg::length("pivot_x", "揺動の支点 x").default(40.0),
+        Arg::length("pivot_y", "揺動の支点 y").default(0.0),
+        Arg::text("diagram", "変位の線図").default(diagram_default()),
+        Arg::length("width", "カムの厚さ").default(5.0),
+        Arg::length("follower_width", "従節の厚さ").default(5.0),
+    ]);
+    args
+}
+
+/// クリックや宣言した引数で選んだ平面と、中心の世界座標を読む座標系。
+fn command_plane(
+    cx: &kmb_core::Context<'_>,
+) -> Result<(kmb_cad::plane::PlaneRef, kmb_core::Plane), String> {
+    use kmb_cad::plane::PlaneRef;
+    use kmb_core::{Plane, Value};
+    let plane = if cx.arg("plane").is_some() {
+        PlaneRef::from_choice(cx, NEW_CAM, "カムを置く平面")?
+    } else if let (Some(picked), Some(_)) = (cx.picked, cx.picked_plane()) {
+        PlaneRef::Face {
+            feature: Some(picked.feature),
+            face: Some(picked.face.clone()),
+        }
+    } else {
+        PlaneRef::OriginXy
+    };
+    let frame = match &plane {
+        PlaneRef::OriginXy => Plane::XY,
+        PlaneRef::OriginYz => Plane::YZ,
+        PlaneRef::OriginZx => Plane::ZX,
+        PlaneRef::Datum { feature } => cx
+            .output(*feature, kmb_interchange::DATUM_OUTPUT)
+            .and_then(kmb_interchange::DatumPlane::from_value)
+            .map(|p| p.plane)
+            .ok_or_else(|| "選んだ作業平面を読めません".to_string())?,
+        PlaneRef::Face {
+            feature: Some(feature),
+            face: Some(face),
+        } => {
+            let Some(Value::Shape(shape)) = cx.output(*feature, "body") else {
+                return Err("カムを置く面のボディを読めません".into());
+            };
+            let f = cx
+                .kernel
+                .faces(*shape)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .find(|f| &f.name == face)
+                .and_then(|f| f.planar)
+                .ok_or_else(|| "カムを置く面は平らな面にしてください".to_string())?;
+            Plane::from_point_normal(f.point, f.normal)
+        }
+        _ => return Err("カムを置く平面を選んでください".into()),
+    };
+    Ok((plane, frame))
+}
+
+impl kmb_core::Extension for CamCommands {
+    fn actions(&self, _cx: &kmb_core::Context<'_>) -> Vec<kmb_core::Action> {
+        vec![
+            kmb_core::Action::new(CAM_ADD, "カム", "cad")
+                .args(command_args())
+                .menu("作成")
+                .icon("mechanism")
+                .aliases("かむ cam じゅうせつ follower")
+                .hint("平面と中心を選び、変位の線図からカムと従節を別のボディで作る")
+                .at(&[kmb_core::Place::Menu]),
+        ]
+    }
+    fn run(
+        &self,
+        id: &str,
+        cx: &kmb_core::Context<'_>,
+    ) -> Option<Result<kmb_core::Outcome, kmb_core::Problem>> {
+        if id != CAM_ADD {
+            return None;
+        }
+        Some((|| {
+            let (plane, frame) = command_plane(cx)?;
+            let center = if let Some(point) = cx.arg("point") {
+                let point: [f64; 3] = serde_json::from_value(point.clone())
+                    .map_err(|_| "中心は世界座標の3つの数で指定してください")?;
+                frame.to_local(point)
+            } else {
+                [0.0; 2]
+            };
+            let numeric = |key: &str, default: f64| cx.arg_f64(key).map(|v| v.unwrap_or(default));
+            let base = numeric("base_radius", 20.0)?;
+            let width = numeric("width", 5.0)?;
+            let follower_width = numeric("follower_width", 5.0)?;
+            if !base.is_finite()
+                || base <= 0.0
+                || !width.is_finite()
+                || width <= 0.0
+                || !follower_width.is_finite()
+                || follower_width <= 0.0
+            {
+                return Err("基礎円の半径とボディの厚さは有限の0より大きい値にしてください".into());
+            }
+            let follower = if cx.arg_str("follower") == Some("oscillating") {
+                Follower::Oscillating
+            } else {
+                Follower::Translating
+            };
+            let tip = match cx.arg_str("tip").unwrap_or("roller") {
+                "knife" => FollowerTip::Knife,
+                "flat" => FollowerTip::Flat,
+                _ => FollowerTip::Roller,
+            };
+            let data = Cam {
+                plane,
+                x: format!("{} mm", center[0]),
+                y: format!("{} mm", center[1]),
+                phase: Some(format!("{} deg", numeric("phase", 0.0)?)),
+                base_radius: format!("{base} mm"),
+                rotation: if cx.arg_str("rotation") == Some("cw") {
+                    Rotation::Cw
+                } else {
+                    Rotation::Ccw
+                },
+                follower,
+                tip,
+                roller_radius: format!("{} mm", numeric("roller_radius", 2.0)?),
+                offset: format!("{} mm", numeric("offset", 0.0)?),
+                arm_length: format!("{} mm", numeric("arm_length", 30.0)?),
+                pivot_x: format!("{} mm", numeric("pivot_x", 40.0)?),
+                pivot_y: format!("{} mm", numeric("pivot_y", 0.0)?),
+                diagram: cx
+                    .arg_str("diagram")
+                    .map(str::to_string)
+                    .unwrap_or_else(diagram_default),
+                width: format!("{width} mm"),
+                ..Default::default()
+            };
+            terms(&data.diagram)?;
+            let edits = vec![
+                kmb_core::Edit::Insert {
+                    type_id: CAM.into(),
+                    name: format!("カム{}", cx.count_of(CAM) + 1),
+                    data: serde_json::to_value(data).expect("カムはJSONにできる"),
+                },
+                kmb_core::Edit::Insert {
+                    type_id: FOLLOWER_BODY.into(),
+                    name: format!("カムの従節{}", cx.count_of(FOLLOWER_BODY) + 1),
+                    data: serde_json::json!({"cam":{"$new":0},"width":format!("{follower_width} mm")}),
+                },
+            ];
+            Ok(kmb_core::Outcome::Change {
+                label: "カムを追加".into(),
+                edits,
+            })
+        })())
+    }
+    fn handles(&self, id: &str, cx: &kmb_core::Context<'_>) -> Option<Vec<kmb_core::Handle>> {
+        use kmb_core::{Gesture, Handle};
+        if id != CAM_ADD {
+            return None;
+        }
+        let given = cx.arg("plane").is_some();
+        let plane = || Handle {
+            choices: kmb_cad::plane::plane_choices(cx, NEW_CAM),
+            faces: true,
+            ..Handle::new("plane", "カムを置く平面をクリック", Gesture::Choice)
+        };
+        if !given && cx.picked_plane().is_none() {
+            return Some(vec![
+                plane(),
+                Handle::new("point", "カムの中心をクリック", Gesture::Face),
+            ]);
+        }
+        let (_, frame) = command_plane(cx).ok()?;
+        let point = Handle::new(
+            "point",
+            "カムの中心をクリック",
+            Gesture::Point {
+                origin: frame.origin,
+                normal: frame.normal(),
+                snap: 0.5,
+            },
+        );
+        Some(if given {
+            vec![plane(), point]
+        } else {
+            vec![point]
+        })
+    }
+}
+
 #[cfg(test)]
 #[path = "cam_tests.rs"]
 mod tests;

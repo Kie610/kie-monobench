@@ -403,6 +403,7 @@ pub fn module() -> kmb_core::Module {
         mech::register(reg);
     })
     .with_extension(GearCommands)
+    .with_extension(mech::cam::CamCommands)
 }
 
 #[cfg(test)]

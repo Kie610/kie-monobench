@@ -446,3 +446,6 @@ action-cad-import-iges = IGES を読み込む…
 action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す
 action-params-apply-batch = 式をまとめて適用
 action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する
+
+action-mech-cam = カム
+action-mech-cam-tip = 平面と中心を選び、変位の線図からカムと従節を別のボディで作る

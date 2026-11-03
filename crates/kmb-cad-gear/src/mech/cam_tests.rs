@@ -200,3 +200,60 @@ fn the_existing_cam_spec_keeps_all_one_degree_displacements_in_both_directions()
         assert_eq!(CamSpec::from_value(&value).unwrap(), spec);
     }
 }
+
+#[test]
+fn cam_action_uses_one_declared_operation_for_both_bodies_and_planar_placement() {
+    use kmb_core::{Context, Document, Edit, Extensions, Outcome};
+    use std::sync::Arc;
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let mut doc = Document::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(kmb_core::NullKernel);
+    let report = doc.recompute(&reg, &*kernel);
+    let args =
+        serde_json::json!({"plane":"yz","point":[5.0,10.0,20.0],"width":4.0,"follower_width":3.0});
+    let mut cx = Context::new(doc.data(), &report, &reg, &kernel);
+    cx.args = &args;
+    let ext = Extensions(vec![Arc::new(CamCommands)]);
+    let Outcome::Change { edits, .. } = ext.run(CAM_ADD, &cx).unwrap() else {
+        panic!("カムと従節を追加")
+    };
+    assert_eq!(edits.len(), 2);
+    let Edit::Insert { type_id, data, .. } = &edits[0] else {
+        panic!("カム")
+    };
+    assert_eq!(type_id, CAM);
+    let cam: Cam = serde_json::from_value(data.clone()).unwrap();
+    assert_eq!(cam.plane, kmb_cad::plane::PlaneRef::OriginYz);
+    assert_eq!(cam.x, "10 mm");
+    assert_eq!(cam.y, "20 mm");
+    assert_eq!(cam.width, "4 mm");
+    let Edit::Insert { type_id, data, .. } = &edits[1] else {
+        panic!("従節")
+    };
+    assert_eq!(type_id, FOLLOWER_BODY);
+    assert_eq!(data["width"], "3 mm");
+    assert_eq!(data["cam"], serde_json::json!({"$new":0}));
+}
+#[test]
+fn cam_action_refuses_unknown_arguments_and_nonpositive_dimensions() {
+    use kmb_core::{Context, Document, Extensions};
+    use std::sync::Arc;
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let mut doc = Document::new();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(kmb_core::NullKernel);
+    let report = doc.recompute(&reg, &*kernel);
+    let ext = Extensions(vec![Arc::new(CamCommands)]);
+    for args in [
+        serde_json::json!({"bas_radius":20}),
+        serde_json::json!({"base_radius":0}),
+        serde_json::json!({"width":-1}),
+        serde_json::json!({"follower_width":0}),
+        serde_json::json!({"diagram":"上がり 120 deg 10 mm unknown"}),
+    ] {
+        let mut cx = Context::new(doc.data(), &report, &reg, &kernel);
+        cx.args = &args;
+        assert!(ext.run(CAM_ADD, &cx).is_err(), "{args}");
+    }
+}
