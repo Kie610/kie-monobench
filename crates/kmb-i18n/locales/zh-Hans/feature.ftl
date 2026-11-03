@@ -13,3 +13,8 @@
 # feature-solid-thicken-tip = Add thickness to a sheet body to create a closed solid
 # feature-solid-import-iges = IGES import
 # feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.
+
+# feature-mech-cam = Cam
+# feature-mech-cam-tip = Build cam and follower profiles from a displacement diagram and extrude them as separate bodies
+# feature-mech-cam-follower = Cam Follower
+# feature-mech-cam-follower-tip = Extrude a cam follower profile as a separate body

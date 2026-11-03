@@ -83,3 +83,6 @@
 # action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.
 # action-params-apply-batch = Apply expressions together
 # action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid
+
+# action-mech-cam = Cam
+# action-mech-cam-tip = Select a plane and center to create a cam and follower as separate bodies from a displacement diagram

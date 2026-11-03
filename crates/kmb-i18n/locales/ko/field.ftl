@@ -2226,3 +2226,23 @@
 # field-solid-import-iges-file = File
 # field-solid-import-iges-stand-up = Convert Y-up to Z-up
 # field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+# field-mech-cam-plane-kind = Plane
+# field-mech-cam-base-radius = Base Circle Radius
+# field-mech-cam-rotation = Rotation Direction
+# field-mech-cam-follower = Follower Motion
+# field-mech-cam-tip = Follower Tip
+# field-mech-cam-roller-radius = Roller Radius
+# field-mech-cam-offset = Offset
+# field-mech-cam-arm-length = Arm Length
+# field-mech-cam-pivot-x = Pivot X
+# field-mech-cam-pivot-y = Pivot Y
+# field-mech-cam-diagram = Displacement Diagram
+# field-mech-cam-diagram-help = Separate each number and unit with spaces. Translating displacement uses mm and oscillating displacement uses deg. Section angles must total 360 deg
+# field-mech-cam-width = Cam Thickness
+# field-mech-cam-anchor = Sketch for Center Point
+# field-mech-cam-x = Center X
+# field-mech-cam-y = Center Y
+# field-mech-cam-phase = Rotation Angle
+# field-mech-cam-follower-cam = Cam
+# field-mech-cam-follower-width = Follower Thickness
