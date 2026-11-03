@@ -636,5 +636,5 @@ fn drawing_commands_build_edit_export_and_delete_without_changing_the_model() {
     );
 }
 
-mod exports;
 mod annotations;
+mod exports;

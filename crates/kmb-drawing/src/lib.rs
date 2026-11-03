@@ -3,9 +3,9 @@
 mod annotation;
 mod annotation_commands;
 mod commands;
+mod dimension;
 pub mod export;
 mod export_commands;
-mod dimension;
 mod import_dimensions;
 mod lettering;
 pub use annotation::*;
