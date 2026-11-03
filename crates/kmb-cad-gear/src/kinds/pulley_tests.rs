@@ -177,3 +177,18 @@ fn overlapping_grooves_and_invalid_radial_dimensions_are_rejected() {
         .is_err()
     );
 }
+
+#[test]
+fn crowns_that_cannot_preserve_closed_endpoints_are_rejected() {
+    let result = outline(
+        &Params {
+            pulley: Some(Pulley {
+                crown: 1e-30,
+                ..Pulley::default()
+            }),
+            ..Params::default()
+        },
+        false,
+    );
+    assert!(result.is_err());
+}
