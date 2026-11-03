@@ -93,6 +93,7 @@ pub(crate) enum Back {
         modified: bool,
         saved: Box<kmb_core::DocumentData>,
         report: Box<kmb_core::RecomputeReport>,
+        view: kmb_session::doc_view::DocView,
     },
     /// 読み込んだ機能を取り消す(STEP を読み込む時)
     Undo,
@@ -156,6 +157,7 @@ impl Workspace {
         }
         self.win.layout_saved = self.win.layout.clone();
         self.win.data_dir = Some(dir);
+        self.restore_doc_view();
         self
     }
 
@@ -307,6 +309,53 @@ impl Workspace {
         self.open_in_tab(p);
     }
 
+    /// 保存先の無い文書の表示名(書庫から開いた文書など)。
+    pub fn with_document_label(mut self, label: Option<String>) -> Self {
+        self.cur.doc_label = label;
+        self
+    }
+
+    /// 文書と、選んだ加工のファイルをまとめて書く。
+    pub(crate) fn pack_design(&mut self) {
+        self.wait();
+        let name = std::path::PathBuf::from(self.document_name()).with_extension("zip");
+        let Some(mut path) = self.win.dialogs.save_file(
+            &self.win.t("menu-file-pack"),
+            "zip",
+            &["zip"],
+            &name.to_string_lossy(),
+        ) else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("zip");
+        }
+        let result = self
+            .cur
+            .work
+            .pack(self.home.pack_options, None)
+            .and_then(|packed| {
+                kmb_session::write_output(&path, &packed.contents)?;
+                let omitted = packed
+                    .skipped
+                    .iter()
+                    .map(|i| format!("{}: {}", i.name, i.reason))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Ok(format!(
+                    "{} ({}): {}\n{}",
+                    self.win.t("menu-file-pack"),
+                    packed.included.len(),
+                    path.display(),
+                    omitted
+                ))
+            });
+        match result {
+            Ok(text) => self.win.message = Some(text),
+            Err(e) => self.win.fail(e.to_string()),
+        }
+    }
+
     /// 文書の名前(画面と確認に出す)。
     pub fn document_name(&self) -> String {
         match (
@@ -431,6 +480,7 @@ impl Workspace {
         let before = self.cur.work.path().map(std::path::Path::to_path_buf);
         let (modified, saved) = (self.cur.modified, Box::new(self.cur.saved.clone()));
         let report = Box::new(self.cur.work.report().clone());
+        let view = self.doc_view();
         let old = self.replace_document(document, save_path);
         self.cur.doc_label = label;
         if let Some(saved) = baseline {
@@ -443,6 +493,7 @@ impl Workspace {
             modified,
             saved,
             report,
+            view,
         };
         self.watch_opening(path, back);
         self.remember(path);
@@ -479,6 +530,7 @@ impl Workspace {
                 modified,
                 saved,
                 report,
+                view,
             } => {
                 // 走っている計算は開いた文書のもの。結果もキャッシュも前の文書には使わない
                 self.cur.work.put_back(*doc, path, *report);
@@ -496,7 +548,7 @@ impl Workspace {
                 self.cur.scene_fresh = false;
                 self.cur.held.clear();
                 self.recompute();
-                self.restore_doc_view();
+                self.apply_doc_view(view);
                 self.win.message = Some(format!("{} を開くのをやめ、前の文書に戻しました", o.name));
                 // 新しいタブに開いていたなら、空のタブは閉じて前のタブへ戻る(候補 20)
                 if self.tab_count() > 1 && self.is_blank() {
@@ -597,9 +649,44 @@ impl Workspace {
     }
 
     pub fn discard_recovery(&mut self, i: usize) {
-        if i < self.home.recoveries.len() {
-            kmb_session::discard(&self.home.recoveries.remove(i));
+        if let Err(problem) = self.discard_recovery_at(i) {
+            self.win.fail(problem);
         }
+    }
+
+    /// 一つずつ捨てる共通の口。削除の結果を確認してから一覧から外す。
+    pub(crate) fn discard_recovery_at(&mut self, i: usize) -> Result<(), kmb_core::Problem> {
+        let Some(recovery) = self.home.recoveries.get(i).cloned() else {
+            return Ok(());
+        };
+        kmb_session::discard(&recovery);
+        // 削除の口は戻り値を持たないため、ファイルが残っている時も成功としない。
+        let detail = match recovery.file.try_exists() {
+            Ok(false) => {
+                self.home.recoveries.remove(i);
+                log::info!("自動保存の写しを捨てた: {}", recovery.file.display());
+                return Ok(());
+            }
+            Ok(true) => self.win.t("common-recovery-remains"),
+            Err(error) => error.to_string(),
+        };
+        let name = recovery
+            .original
+            .as_ref()
+            .unwrap_or(&recovery.file)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        let problem = kmb_core::Problem::new(
+            kmb_core::ProblemKind::File,
+            self.win.t_with(
+                "common-recovery-discard-error",
+                &[("name", name.into()), ("reason", detail.into())],
+            ),
+        );
+        log::error!("{}: {}", recovery.file.display(), problem);
+        Err(problem)
     }
 
     fn remember(&mut self, path: &Path) {
@@ -803,6 +890,30 @@ impl Workspace {
                 ui.close();
             }
             ui.separator();
+            egui::containers::menu::SubMenuButton::new(self.win.t("menu-file-pack"))
+                .config(
+                    egui::containers::menu::MenuConfig::new()
+                        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+                )
+                .ui(ui, |ui| {
+                    ui.label(self.win.t("menu-file-pack-tip"));
+                    ui.checkbox(
+                        &mut self.home.pack_options.gcode,
+                        self.win.t("menu-file-pack-gcode"),
+                    );
+                    ui.checkbox(
+                        &mut self.home.pack_options.sheet,
+                        self.win.t("menu-file-pack-sheet"),
+                    );
+                    ui.checkbox(
+                        &mut self.home.pack_options.models,
+                        self.win.t("menu-file-pack-models"),
+                    );
+                    if ui.button(self.win.t("menu-file-pack-write")).clicked() {
+                        self.pack_design();
+                        ui.close();
+                    }
+                });
             // ファイルを読み書きする操作(STEP の読み込み、STL・STEP の書き出しなど)
             let imports: Vec<_> = self
                 .actions()

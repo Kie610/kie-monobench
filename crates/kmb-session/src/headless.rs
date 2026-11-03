@@ -98,17 +98,23 @@ mod actions;
 mod active;
 mod background;
 mod open;
+mod pack;
 mod params;
 mod status;
+mod view;
 pub use active::Settled;
 pub use background::{After, Polled, Recomputed};
 pub use open::OpenedDocument;
+pub use pack::{OpenedDesign, PackOptions, PackSkipped, Packed, load_design};
 
 /// 開いている文書。CLI・MCP は変更のたびにその場で再計算する。画面は裏で再計算する
 /// ([`Headless::in_background`])。
 pub struct Headless {
     doc: Document,
     path: Option<PathBuf>,
+    view: crate::doc_view::DocView,
+    /// None は CLI・MCP の自動選択、Some(None) は画面の保存なし。
+    view_directory: Option<Option<PathBuf>>,
     modules: Modules,
     report: RecomputeReport,
     /// 次の計算でも捨てずに残させる形(画面に出している形。計算が失敗しても出し続けるため、M27)
@@ -164,6 +170,8 @@ impl Headless {
         Self {
             doc,
             path,
+            view: Default::default(),
+            view_directory: None,
             modules,
             report: RecomputeReport::default(),
             keep: vec![],
@@ -187,7 +195,7 @@ impl Headless {
                 > 0
     }
 
-    /// ファイルを開く。DXF は保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
+    /// ファイルを開く。DXF とzipは保存先の無い新しい設計、文書の形式は保存済みの設計として読む。
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
         let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
         Ok(Self::with_document(modules, opened.document, opened.path))
@@ -203,6 +211,7 @@ impl Headless {
         self.doc.release_pins(&self.modules.registry);
         self.path = path;
         self.active = Default::default();
+        self.restore_view();
         self.old_names = true;
         self.recompute();
         old
@@ -317,7 +326,7 @@ impl Headless {
             })
             .unwrap_or_default();
         crate::save_with(&p, &self.doc, &snap, "")?;
-        self.path = Some(p.clone());
+        self.set_path(Some(p.clone()));
         Ok(p)
     }
 
@@ -877,6 +886,9 @@ impl Headless {
     /// 保存先を変える(名前を付けて保存した時など)。
     pub fn set_path(&mut self, path: Option<PathBuf>) {
         self.path = path;
+        if let Err(why) = self.save_doc_view(self.view.clone()) {
+            log::warn!("文書の見え方を書けません: {why}");
+        }
     }
 
     /// 前の文書と、その時の計算の結果に戻す(開くのをやめた時)。走っている計算は入れ替える前の
@@ -887,6 +899,7 @@ impl Headless {
         }
         self.doc = doc;
         self.path = path;
+        self.restore_view();
         self.report = report;
         self.recompute();
     }

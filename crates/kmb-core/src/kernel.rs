@@ -403,6 +403,15 @@ pub enum BodyKind {
     Sheet,
 }
 
+/// 面の向きを基準に厚みを付ける側。両側は表裏へ半分ずつ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThickenSide {
+    Front,
+    Back,
+    Both,
+}
+
 /// 面を張る縁の 1 区間(世界座標)。並びの端と端がつながって閉じる。
 #[derive(Debug, Clone, PartialEq)]
 pub enum BoundaryCurve {
@@ -456,6 +465,18 @@ pub trait Kernel: Send + Sync {
     ) -> Result<ShapeHandle, KernelError> {
         let _ = (boundary, tag);
         Err(KernelError::Unsupported("面を張る".into()))
+    }
+
+    /// 面のボディを、正の厚みを持つ閉じた立体にする。
+    fn thicken(
+        &self,
+        sheet: ShapeHandle,
+        thickness: f64,
+        side: ThickenSide,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (sheet, thickness, side, tag);
+        Err(KernelError::Unsupported("厚みを付ける".into()))
     }
 
     /// 輪郭を法線方向に `from` から `to` まで押し出す(`from < to`)。
@@ -636,6 +657,13 @@ pub trait Kernel: Send + Sync {
     fn import_step(&self, step: &str) -> Result<ShapeHandle, KernelError> {
         let _ = step;
         Err(KernelError::Unsupported("STEP の読み込み".into()))
+    }
+
+    /// IGES の面を読み、縫って閉じれば立体、開いていれば面のボディを返す。
+    /// 読めない要素と欠けた面・縫えない面の理由は警告に残す。
+    fn import_iges(&self, iges: &str) -> Result<(ShapeHandle, Vec<String>), KernelError> {
+        let _ = iges;
+        Err(KernelError::Unsupported("IGES の読み込み".into()))
     }
 
     /// 立体をくり抜いて殻にする(シェル)。面 `open`(名前)は取り除いて開ける(空なら閉じた空洞)。

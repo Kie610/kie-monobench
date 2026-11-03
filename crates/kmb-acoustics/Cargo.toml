@@ -1,0 +1,21 @@
+[package]
+name = "kmb-acoustics"
+description = "密閉箱とバスレフ箱の音圧・インピーダンス・振幅の純粋な計算"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "analysis"
+
+[dependencies]
+kmb-core.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

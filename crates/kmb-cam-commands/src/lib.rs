@@ -141,6 +141,7 @@ mod tests {
             clearance_z: 20.0,
             wcs: 1,
             material: String::new(),
+            cost: Default::default(),
             flip,
             flip_center: [5.0, 5.0, 2.5],
             tolerance: kmb_cam_setup::MESH_TOLERANCE,

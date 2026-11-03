@@ -1,5 +1,5 @@
 //! 図の右クリックのメニュー(放射状にはしない)。
-//! 道具の中・何も選んでいない時・選んでいる時で、出す項目を分ける(網羅版 B6〜B8)。
+//! 道具の中・何も選んでいない時・選んでいる時で、出す項目を分ける。
 //! メニューは押された項目([`Ask`])を返すだけで、形を変えるのは view.rs。
 
 use crate::view::{DimValues, Editor, Tool, ViewState};
@@ -63,7 +63,7 @@ pub(crate) enum Ask {
     Extrude,
     /// パラメータの一覧を開く
     Params,
-    /// モジュールの操作を役割で探し、直すのを終えずに実行する(DXF として保存)
+    /// モジュールの操作を役割で探し、直すのを終えずに実行する(DXF・SVG として保存)
     Run(kmb_core::ActionRole),
 }
 
@@ -320,6 +320,14 @@ pub(crate) fn sketch_menu(ui: &mut egui::Ui, cx: &Context, sketch: &Sketch) -> O
             "",
             &mut out,
             Ask::Run(kmb_interchange::role::action::EXPORT_SKETCH_DXF),
+        );
+        item(
+            ui,
+            "svg",
+            "SVG として保存…",
+            "",
+            &mut out,
+            Ask::Run(kmb_interchange::role::action::EXPORT_SKETCH_SVG),
         );
         item(
             ui,

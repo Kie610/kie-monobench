@@ -378,9 +378,16 @@ pub(crate) fn interact(editor: &mut Editor, inp: &Input<'_>) -> Option<Sketch> {
                         Tool::ThreePointRectangle => {
                             s.add_three_point_rectangle(spot(a), spot(b), w).is_some()
                         }
-                        Tool::ThreePointCircle => s
-                            .add_circle_three_points(spot(a), spot(b), spot(c))
-                            .is_some(),
+                        Tool::ThreePointCircle => {
+                            let mut spots = [spot(a), spot(b), spot(c)];
+                            crate::infer::materialize_curve_spots(
+                                &mut s,
+                                &mut spots,
+                                &editor.infer.placed,
+                            );
+                            s.add_circle_three_points(spots[0], spots[1], spots[2])
+                                .is_some()
+                        }
                         _ => s.add_arc_three_points(spot(a), spot(b), spot(c)).is_some(),
                     };
                     out = made.then_some(s);

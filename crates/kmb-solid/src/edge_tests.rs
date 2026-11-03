@@ -1131,3 +1131,79 @@ fn a_chamfer_on_the_pocket_rim_leaves_no_thin_face_at_its_corners() {
         .collect();
     assert!(thin.is_empty(), "細い面が残った: {thin:?}");
 }
+
+/// 確かめること: 円筒どうしの交線に一定幅でない面取りを誤って作らず、
+/// 切れた参照と区別して、使える面取りの種類を知らせる。
+#[test]
+fn uneven_curved_chamfers_explain_the_supported_alternative() {
+    let k = TestKernel::new();
+    if k.is_truck() {
+        kmb_contract::skip!("truck は円筒どうしの曲がった交線を列挙できない");
+    }
+    let reg = registry();
+    let mut b = DocBuilder::new();
+    let mut circle = |plane, x, y, diameter: &str, radius, target: Option<kmb_core::FeatureId>| {
+        let mut s = SketchBuilder::new(plane);
+        let center = s.fixed_point(x, y);
+        s.circle(center, diameter, radius);
+        let sk = b.feature(kmb_sketch::SKETCH, "円", s.build());
+        b.feature(
+            EXTRUDE,
+            "円柱",
+            Extrude {
+                profile: Some(sk),
+                distance: "40 mm".into(),
+                start: Start::Offset,
+                start_offset: Some("-20 mm".into()),
+                operation: if target.is_some() {
+                    Operation::Intersect
+                } else {
+                    Operation::New
+                },
+                target,
+                ..Default::default()
+            },
+        )
+    };
+    let a = circle(SketchPlane::Xy, 0.0, 0.0, "20 mm", 10.0, None);
+    let target = circle(SketchPlane::Zx, 0.0, 1.0, "14 mm", 7.0, Some(a));
+    let mut doc = b.finish("曲線の縁");
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let body = visible_bodies(doc.data(), &reg, &report)[0].1;
+    let before_volume = k.volume(body).unwrap();
+    let curves = k.curve_edges(body).unwrap();
+    assert!(!curves.is_empty(), "円筒の交線が必要です");
+    let edge = &curves[0];
+    for kind in ["two_distances", "distance_angle", "equal"] {
+        for flip in [false, true] {
+            let mut attempt = Document::from_json(&doc.to_json()).unwrap();
+            let id = attempt.alloc_feature_id();
+            attempt.apply(kmb_core::Transaction::new("面取り", vec![Op::InsertFeature {
+                index: None, entry: kmb_core::FeatureEntry {
+                    id, type_id: CHAMFER.into(), name: "面取り".into(),
+                    data: serde_json::json!({"target": target, "kind": kind, "method": "blend", "rows": [{
+                        "edges": [{"kind": "edge", "feature": target, "faces": edge.faces}],
+                        "distance": "0.1 mm", "distance2": "0.105 mm", "angle": "30 deg", "flip": flip,
+                    }]}), suppressed: false, pin_bodies: false,
+                }
+            }])).unwrap();
+            let r = attempt.recompute(&reg, &*k);
+            if kind == "equal" {
+                assert_ok(&r);
+                let result = visible_bodies(attempt.data(), &reg, &r)[0].1;
+                assert!(k.volume(result).unwrap() < before_volume);
+                continue;
+            }
+            let FeatureStatus::Error { message } = &r.features.last().unwrap().status else {
+                panic!("{r:?}")
+            };
+            assert!(
+                message.contains("曲がった辺には"),
+                "{kind} flip={flip}: {message}"
+            );
+            assert!(message.contains("等しい距離"), "{message}");
+            assert!(!message.contains("参照が切れ"), "{message}");
+        }
+    }
+}
