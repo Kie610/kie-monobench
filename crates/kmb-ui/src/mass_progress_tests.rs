@@ -19,6 +19,8 @@ fn grid_step(side:usize)->String {
     let mut doc=b.finish("箱の集まり");let modules=crate::tests::reg();
     let report=doc.recompute(&modules.registry,modules.kernel.as_ref());assert_eq!(report.error_count(),0,"{:?}",report.features);
     let bodies=kmb_core::visible_bodies(doc.data(),&modules.registry,&report);assert_eq!(bodies.len(),1);
+    let expected=8.0*6.0*4.0*(side*side)as f64;
+    assert!((modules.kernel.mass(bodies[0].1).unwrap().volume-expected).abs()<1e-6*expected,"箱の数を体積で確かめる");
     modules.kernel.export_step_named(&[bodies[0].1],&["箱の集まり".into()],"質量の測り").unwrap()
 }
 
@@ -29,6 +31,8 @@ fn sphere_step(radius:f64)->String {
         ProfileEdge{name:"axis".into(),segment:Segment::Line{a:[0.0,radius],b:[0.0,-radius]},reversed:false}
     ]},holes:vec![]}]};
     let shape=modules.kernel.revolve(&profile,[0.0;3],[0.0,0.0,1.0],std::f64::consts::TAU,"mass_fixture").unwrap();
+    let expected=4.0*std::f64::consts::PI*radius.powi(3)/3.0;
+    assert!((modules.kernel.mass(shape).unwrap().volume-expected).abs()<1e-6*expected,"球が閉じていることを体積で確かめる");
     modules.kernel.export_step_named(&[shape],&["球".into()],"質量の測り").unwrap()
 }
 
