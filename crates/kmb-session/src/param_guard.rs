@@ -226,6 +226,15 @@ impl Headless {
         tx: &Transaction,
         fields: bool,
     ) -> Result<(), Problem> {
+        // 名前付きの欄も候補側で展開する。拒否される変更では実文書の番号を消費しない。
+        let mut draft = snapshot(self.doc().data())?;
+        let tx = crate::params::complete_named_parameter_change(
+            &mut draft,
+            &self.modules().registry,
+            self.report(),
+            tx.clone(),
+        )
+        .map_err(|e| input(e.to_string()))?;
         let relevant = fields
             || tx.ops.iter().any(|op| {
                 parameter_target(op, self.doc().data()).is_some()
@@ -234,7 +243,6 @@ impl Headless {
         if !relevant {
             return Ok(());
         }
-        let mut draft = snapshot(self.doc().data())?;
         draft.apply(tx.clone()).map_err(|e| input(e.to_string()))?;
         let targets = tx
             .ops
@@ -319,3 +327,7 @@ impl Headless {
             .collect()
     }
 }
+
+#[cfg(test)]
+#[path = "param_guard_tests.rs"]
+mod tests;

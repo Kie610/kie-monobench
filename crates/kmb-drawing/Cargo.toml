@@ -11,9 +11,10 @@ layer = "cad"
 
 [dependencies]
 kmb-core.workspace = true
+kmb-format.workspace = true
+kmb-text.workspace = true
 kmb-interchange.workspace = true
 kmb-view-lines.workspace = true
-kmb-text.workspace = true
 kmb-sketch.workspace = true
 kmb-asm.workspace = true
 serde.workspace = true

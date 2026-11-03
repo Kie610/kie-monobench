@@ -81,6 +81,16 @@ impl Workspace {
 
     /// 文書を変える(1 回の取り消し単位)。変更は kmb-session の部品で作る(CLI・MCP と同じ)。
     pub(crate) fn apply(&mut self, tx: Transaction) -> bool {
+        if let Err(error) = kmb_session::params::validate_named_parameter_change(
+            self.cur.work.doc().data(),
+            &self.win.registry,
+            self.cur.work.report(),
+            &tx,
+        ) {
+            let why = crate::named_parameter_text::text(&self.win.words(), &error);
+            self.win.fail(why);
+            return false;
+        }
         let r = self.cur.work.apply(tx);
         self.after_change(r)
     }

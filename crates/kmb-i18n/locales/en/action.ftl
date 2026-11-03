@@ -6,9 +6,9 @@
 action-anim-appearance = Appearance
 action-anim-appearance-tip = Add a step that changes the selected part's appearance over the step's length (the design's appearance is unchanged). Pick the appearance again on the step bar
 action-anim-auto-explode-all = Auto Explode: All Levels
-action-anim-auto-explode-all-tip = Move parts away from the assembly center automatically, and parts inside parts away from that part's center. Choose one step or sequential, trail lines and explode scale, then OK
+action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-auto-explode-one = Auto Explode: One Level
-action-anim-auto-explode-one-tip = Move parts away from the assembly center automatically (direct children only; parts inside are not moved). Choose one step (all at once) or sequential (1 second per part), trail lines and explode scale, then OK
+action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-drive = Joint Motion
 action-anim-drive-tip = Add a step that drives a joint from its lower to its upper limit (without limits: 90 deg for revolute, the part's length for slider). Edit the values and length on the step bar
 action-anim-explode = Explode Move
@@ -60,6 +60,8 @@ action-asm-new-contact-set = New Contact Set
 action-asm-new-contact-set-tip = Make the selected bodies (two or more) a contact set. While contact sets are enabled, dragging a joint's part stops just before it digs into a partner in the same set
 action-asm-new-rigid-group = Rigid Group
 action-asm-new-rigid-group-tip = Make the selected components (two or more) one block. Whichever part a joint or drag moves, they all move together
+action-asm-planetary-link = Link Planetary Set
+action-asm-planetary-link-tip = Link the rotations of the sun, carrier and ring (and the planet spin) of a planetary gear set by an equation from the tooth counts. The latest joint in the timeline follows the earlier two. For a differential, give the ring the same tooth count as the sun
 action-asm-snap-joint = Joint
 action-asm-snap-joint-tip = Move part 1 to meet part 2 and join them: face of part 1 → origin → face of part 2 → origin. Type, angle and offset can be changed later
 
@@ -93,6 +95,10 @@ action-cad-extrude-to-face = Up to Face
 action-cad-extrude-to-face-tip = Extrude the selected extrude up to the clicked flat face, vertex or construction plane (an inclined face trims the end of the tool body). It cuts if the extrusion passes through the body, and joins if it does not
 action-cad-fillet = Fillet
 action-cad-fillet-tip = Press, then click an edge or face to apply it and go on to the value fields (a face means all edges around it; Ctrl+click to pick several). If edges or faces are already selected, it applies to them
+action-cad-gear = Gear
+action-cad-gear-tip = Press, then click a plane → the center to make a gear profile and its body. Edit the type, module, number of teeth and other fields, then OK or Enter. Esc cancels
+action-cad-gear-outline = Gear Profile
+action-cad-gear-outline-tip = Place only the gear profile (no body). Use it as is for laser cutting, 2D contour machining or extrude
 action-cad-hole-add = Add Same Hole
 action-cad-hole-add-tip = Add the same hole as the selected one on the same face where you click. Press Enter to finish
 action-cad-hole-on-face = Hole
@@ -359,7 +365,36 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+action-cam-nest-create = Nest on sheets
+action-cam-nest-create-tip = Create a setup that arranges the selected bodies on sheets
+action-cam-nest-add-part = Add nesting part
+action-cam-nest-add-part-tip = Add another body to the sheet layout
+action-cam-nest-remove-part = Remove nesting part
+action-cam-nest-remove-part-tip = Remove the part with the specified index from the layout
+action-cam-nest-set-part = Edit nesting part
+action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper face of a part
 
+action-study-converge = Check accuracy
+action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+action-study-check = Check conditions
+action-study-check-tip = List missing study conditions and explain how to fix them before solving
+action-drawing-set-paper = Sheet settings
+action-drawing-set-paper-tip = Set the drawing sheet size, orientation, binding margin, pens, and layer colors
+
+action-drawing-set-title = Title block settings
+action-drawing-set-title-tip = Set fixed text or document fields in the title block and embed the required font glyphs
+
+action-drawing-export-pdf = Export drawing as PDF
+action-drawing-export-pdf-tip = Export one sheet or all sheets as pages with the actual paper dimensions
+
+action-drawing-export-dxf = Export drawing as DXF
+action-drawing-export-dxf-tip = Export one sheet as DXF with layers for line roles and line types
+
+action-drawing-export-svg = Export drawing as SVG
+action-drawing-export-svg-tip = Export one sheet as SVG with paper dimensions, line widths, and line types
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 action-cad-sketch-dxf-layers = List DXF layers

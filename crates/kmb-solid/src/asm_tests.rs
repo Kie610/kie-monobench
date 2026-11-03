@@ -1123,7 +1123,7 @@ fn interference_lists_a_shape_only_body_as_unchecked_with_the_reason() {
     let (clashes, unchecked) = interferences(&t.cx());
     assert!(clashes.is_empty(), "{clashes:?}");
     assert_eq!(unchecked.len(), 1, "{unchecked:?}");
-    assert!(unchecked[0].reason.contains("STEP"), "{unchecked:?}");
+    assert!(unchecked[0].reason.contains("網のボディ"), "{unchecked:?}");
     let Some(Ok(Outcome::Table { table, .. })) = AsmCommands.run(INTERFERENCE, &t.cx()) else {
         panic!()
     };

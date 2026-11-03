@@ -97,6 +97,8 @@ pub enum Ran {
 mod actions;
 mod active;
 mod background;
+#[cfg(test)]
+mod named_parameter_tests;
 mod open;
 mod pack;
 mod params;
@@ -562,6 +564,13 @@ impl Headless {
     pub fn apply(&mut self, tx: Transaction) -> Result<(), String> {
         self.check_param_transaction(&tx)
             .map_err(|e| e.to_string())?;
+        let tx = crate::params::complete_named_parameter_change(
+            &mut self.doc,
+            &self.modules.registry,
+            &self.report,
+            tx,
+        )
+        .map_err(|e| e.to_string())?;
         let touched: Vec<FeatureId> = tx
             .ops
             .iter()

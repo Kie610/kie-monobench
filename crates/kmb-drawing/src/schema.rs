@@ -25,6 +25,9 @@ impl SectionType for Drawings {
                 return Err("図面の id が空か重複しています".into());
             }
             let size = s.paper.size();
+            if s.paper.colors.values().any(|x| !(1..=255).contains(x)) {
+                return Err("画層の色は1〜255の番号で指定してください".into());
+            }
             if matches!(s.paper.format, PaperFormat::Custom {size} if !size.iter().all(|x|x.is_finite()&&*x>0.))
             {
                 return Err("用紙の大きさは正の有限の数です".into());
@@ -180,12 +183,22 @@ pub struct Paper {
     pub format: PaperFormat,
     #[serde(default)]
     pub portrait: bool,
+    #[serde(default)]
+    pub binding: bool,
+    /// 線の役ごとの DXF の画層の色(1〜255)。無い役は既定の色。
+    #[serde(default)]
+    pub colors: std::collections::BTreeMap<String, i32>,
+    #[serde(flatten)]
+    pub rest: Rest,
 }
 impl Default for Paper {
     fn default() -> Self {
         Self {
             format: PaperFormat::A4,
             portrait: false,
+            binding: false,
+            colors: Default::default(),
+            rest: Rest::new(),
         }
     }
 }

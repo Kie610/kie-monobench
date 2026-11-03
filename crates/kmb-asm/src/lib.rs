@@ -12,7 +12,7 @@
 //! - 規格部品(ねじ・ナット・座金・玉軸受)を穴に挿す(`asm.fastener@1`。[`fastener`])。
 //! - 選んだ面の組から位置を解く拘束(`asm.constraint@1`。[`constraint`])、部品を 1 つの塊にする
 //!   剛性グループ(`asm.rigid_group@1`。[`rigid`])、2 つのジョイントを比でつなぐモーション リンク
-//!   ([`motion_link`])。
+//!   ([`motion_link`])、遊星歯車・差動の 3 つの回転を歯数の 1 次式で結ぶ([`planetary`])。
 //! - モーション スタディ([`motion`])と接触セット([`contact`])。中身は文書の区画に持つ(形は変えない)。
 
 pub mod anim;
@@ -26,6 +26,7 @@ pub mod motion;
 pub mod motion_link;
 pub mod occurrence;
 pub mod part;
+pub mod planetary;
 pub mod position;
 pub mod rigid;
 pub mod snap;
@@ -550,9 +551,20 @@ pub fn joint_table(cx: &Context<'_>) -> kmb_core::Table {
                 .collect();
             let link = match (j.drive_by, j.link_joint) {
                 (joint::DriveBy::Link, Some(from)) => {
-                    let from_name = cx.data.feature(from).map_or("", |f| f.name.as_str());
+                    let from_name =
+                        |f: FeatureId| cx.data.feature(f).map_or("", |f| f.name.as_str());
+                    let second = j.link_joint2.map_or(String::new(), |f2| {
+                        format!(
+                            "、「{}」#{} が {} 動く時に {} を足す",
+                            from_name(f2),
+                            f2.0,
+                            j.link_lead2,
+                            j.link_follow2
+                        )
+                    });
                     format!(
-                        "「{from_name}」#{} が {} 動く時に {}{}",
+                        "「{}」#{} が {} 動く時に {}{second}{}",
+                        from_name(from),
                         from.0,
                         j.link_lead,
                         j.link_follow,
@@ -1037,6 +1049,27 @@ impl Extension for AsmCommands {
                         && kmb_interchange::animation::drive_of(cx.report, f.id).is_some()).count() < 2)
                     .then_some("回転かスライダのジョイントが 2 つ以上いります"),
                 ),
+            Action::new(planetary::PLANETARY_LINK, "遊星の組をつなぐ", "cad")
+                .args([
+                    Arg::feature("sun", "太陽歯車の回転のジョイントの機能の番号(差動は 1 つ目の横の歯車)").required(),
+                    Arg::feature("carrier", "腕(キャリア)の回転のジョイントの機能の番号(差動は箱)").required(),
+                    Arg::feature("ring", "外輪の回転のジョイントの機能の番号(差動は 2 つ目の横の歯車)").required(),
+                    Arg::feature("planet", "遊星の自転(腕に対して回る)の回転のジョイントの機能の番号(省くとつながない)"),
+                    Arg::integer("sun_teeth", "太陽の歯数").required(),
+                    Arg::integer("ring_teeth", "外輪の歯数(省くと太陽と同じ = 差動)"),
+                    Arg::integer("planet_teeth", "遊星の歯数(遊星をつなぐ時)"),
+                ])
+                // 「組立 ▾」の一覧だけに出す(前には出さない)。歯数を画面で打つ欄はまだ無いので、
+                // 歯数はコマンド欄・CLI・MCP で渡す(歯車の諸元から読むのは歯車の土台の後)
+                .menu("組立")
+                .icon("joint")
+                .aliases("ゆうせい 遊星 はぐるま 歯車 ぎや ギヤ ぷらねたり planetary たいよう 太陽 きゃりあ キャリア うで 腕 がいりん 外輪 さどう 差動 differential でふ デフ れんどう 連動")
+                .hint("遊星歯車の太陽・腕・外輪(と遊星の自転)の回転を、歯数から決まる式でつなぐ。タイムラインでいちばん後ろのジョイントが前の 2 つに連動する。差動は外輪の歯数を太陽と同じにする")
+                .disabled_if(
+                    (cx.data.features.iter().filter(|f| f.type_id == JOINT
+                        && kmb_interchange::animation::drive_of(cx.report, f.id).is_some_and(|d| !d.slide)).count() < 3)
+                    .then_some("回転のジョイントが 3 つ以上いります"),
+                ),
             Action::new(contact::NEW_CONTACT_SET, "新しい接触セット", "cad")
                 .args([
                     Arg::list("bodies", "ぶつかり合うボディの機能の番号の並び(省くと選んでいるボディ。2 つ以上)"),
@@ -1115,6 +1148,7 @@ impl Extension for AsmCommands {
                 .disabled_if(none),
             Action::new(anim::AUTO_EXPLODE_ONE, "自動分解: 1 レベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1123,12 +1157,13 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode one level 1れべる いちれべる")
-                .hint("部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .at(&[Place::Toolbar])
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::AUTO_EXPLODE_ALL, "自動分解: すべてのレベル", "anim")
                 .args([
+                    Arg::integer("component", "対象の部品の番号(省くと設計の全体)"),
                     Arg::flag("sequential", "順次(部品ごとに 1 秒)。偽ならワンステップ").default(false),
                     Arg::flag("trail", "トレイルラインを出す").default(true),
                     Arg::number("scale", "分解の目盛(0 より大きい倍率)", kmb_core::FieldUnit::Unitless).default(1.0),
@@ -1137,7 +1172,7 @@ impl Extension for AsmCommands {
                 .menu("変換")
                 .icon("explode")
                 .aliases("じどうぶんかい 自動分解 ぶんかい 分解 分解図 auto explode all levels すべて")
-                .hint("部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
+                .hint("選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK")
                 .role(kmb_interchange::role::action::AUTO_EXPLODE)
                 .disabled_if(few),
             Action::new(anim::VISIBILITY, "表示/非表示", "anim")
@@ -1206,6 +1241,7 @@ impl Extension for AsmCommands {
             anim::EXPLODE => Some(anim::explode_handles(cx)),
             anim::DRIVE => Some(anim::drive_handles(cx)),
             motion_link::MOTION_LINK => Some(motion_link::handles(cx)),
+            planetary::PLANETARY_LINK => Some(planetary::handles(cx)),
             anim::VISIBILITY | anim::APPEARANCE => Some(anim::part_handles(cx)),
             _ => None,
         }
@@ -1237,6 +1273,7 @@ impl Extension for AsmCommands {
             contact::CONTACTS => contact::toggle(cx),
             contact::REACH => contact::reach(cx),
             motion_link::MOTION_LINK => motion_link::run(cx),
+            planetary::PLANETARY_LINK => planetary::run(cx),
             rigid::NEW_RIGID_GROUP => rigid::new_group(cx, &picked_roots(cx)),
             constraint::NEW_CONSTRAINT => constraint::new_constraint(cx),
             anim::VIEW => anim::view(cx),
@@ -1380,6 +1417,9 @@ pub fn module() -> kmb_core::Module {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod auto_explode_tests;
 
 #[cfg(test)]
 mod snap_tests;
