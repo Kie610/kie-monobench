@@ -74,45 +74,58 @@ fn a_named_table_value_is_checked_after_expansion_and_undoes_as_one_change() {
 
 #[test]
 fn multiple_named_fields_use_the_same_ids_and_references_in_the_preview_and_commit() {
-    let (mut h, feature) = numbers();
-    let before = h.doc().data().clone();
-    let history = h.doc().undo_depth();
-    let data = json!({"x":"wide=20","y":"tall=30","angle":"turn=45"});
-    let tx = crate::edit::set_feature_data(h.doc().data(), feature, data);
-    let mut draft = snapshot(h.doc().data()).unwrap();
-    let prepared = crate::params::complete_named_parameter_change(
-        &mut draft,
-        &h.modules().registry,
-        h.report(),
-        tx.clone(),
-    )
-    .unwrap();
-    draft.apply(prepared).unwrap();
-    h.check_table_transaction(&tx, true).unwrap();
-    assert_eq!(h.doc().data(), &before, "候補の検査では番号も変えない");
-    assert_eq!(h.doc().undo_depth(), history);
-    h.apply(tx).unwrap();
-    assert_eq!(
-        h.doc().data(),
-        draft.data(),
-        "候補と確定で番号と参照が一致する"
-    );
-    assert_eq!(h.doc().data().next_id, before.next_id + 3);
-    for (offset, name) in ["wide", "tall", "turn"].into_iter().enumerate() {
+    for consume_ids in [false, true] {
+        let (mut h, feature) = numbers();
+        if consume_ids {
+            let next = h.doc().data().next_id;
+            h.add_param("discarded", "4 mm").unwrap();
+            assert_eq!(h.param_id("discarded").unwrap().0, next);
+            h.undo().unwrap();
+            assert!(h.doc().data().param_by_name("discarded").is_none());
+            let reserved = h.prepare(|doc| (doc.alloc_feature_id(), doc.alloc_param_id()));
+            assert_eq!((reserved.0.0, reserved.1.0), (next + 1, next + 2));
+            assert_eq!(h.doc().data().next_id, next + 3);
+        }
+        let before = h.doc().data().clone();
+        let history = h.doc().undo_depth();
+        let data = json!({"x":"wide=20","y":"tall=30","angle":"turn=45"});
+        let tx = crate::edit::set_feature_data(h.doc().data(), feature, data);
+        let mut draft = snapshot(h.doc().data()).unwrap();
+        assert_eq!(draft.data(), &before, "過去の番号消費と未使用の予約も保つ");
+        let prepared = crate::params::complete_named_parameter_change(
+            &mut draft,
+            &h.modules().registry,
+            h.report(),
+            tx.clone(),
+        )
+        .unwrap();
+        draft.apply(prepared).unwrap();
+        h.check_table_transaction(&tx, true).unwrap();
+        assert_eq!(h.doc().data(), &before, "候補の検査では番号も変えない");
+        assert_eq!(h.doc().undo_depth(), history);
+        h.apply(tx).unwrap();
         assert_eq!(
-            h.doc().data().param_by_name(name).unwrap().id.0,
-            before.next_id + offset as u64
+            h.doc().data(),
+            draft.data(),
+            "候補と確定で番号と参照が一致する"
         );
+        assert_eq!(h.doc().data().next_id, before.next_id + 3);
+        for (offset, name) in ["wide", "tall", "turn"].into_iter().enumerate() {
+            assert_eq!(
+                h.doc().data().param_by_name(name).unwrap().id.0,
+                before.next_id + offset as u64
+            );
+        }
+        assert_eq!(h.doc().undo_depth(), history + 1);
+        h.undo().unwrap();
+        assert_eq!(h.doc().data().params, before.params);
+        assert_eq!(
+            h.doc().data().feature(feature).unwrap().data,
+            before.feature(feature).unwrap().data
+        );
+        h.redo().unwrap();
+        assert_eq!(h.doc().data(), draft.data());
     }
-    assert_eq!(h.doc().undo_depth(), history + 1);
-    h.undo().unwrap();
-    assert_eq!(h.doc().data().params, before.params);
-    assert_eq!(
-        h.doc().data().feature(feature).unwrap().data,
-        before.feature(feature).unwrap().data
-    );
-    h.redo().unwrap();
-    assert_eq!(h.doc().data(), draft.data());
 }
 
 #[test]

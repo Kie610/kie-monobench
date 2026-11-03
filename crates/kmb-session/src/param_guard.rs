@@ -226,6 +226,22 @@ impl Headless {
         tx: &Transaction,
         fields: bool,
     ) -> Result<(), Problem> {
+        let relevant = fields
+            || tx.ops.iter().any(|op| {
+                parameter_target(op, self.doc().data()).is_some()
+                    || matches!(op, Op::SetSection { key, .. } if key == Configurations::KEY)
+            });
+        if !relevant
+            && !crate::params::has_named_parameter_change(
+                self.doc().data(),
+                &self.modules().registry,
+                self.report(),
+                tx,
+            )
+            .map_err(|e| input(e.to_string()))?
+        {
+            return Ok(());
+        }
         // 名前付きの欄も候補側で展開する。拒否される変更では実文書の番号を消費しない。
         let mut draft = snapshot(self.doc().data())?;
         let tx = crate::params::complete_named_parameter_change(
@@ -235,14 +251,6 @@ impl Headless {
             tx.clone(),
         )
         .map_err(|e| input(e.to_string()))?;
-        let relevant = fields
-            || tx.ops.iter().any(|op| {
-                parameter_target(op, self.doc().data()).is_some()
-                    || matches!(op, Op::SetSection { key, .. } if key == Configurations::KEY)
-            });
-        if !relevant {
-            return Ok(());
-        }
         draft.apply(tx.clone()).map_err(|e| input(e.to_string()))?;
         let targets = tx
             .ops

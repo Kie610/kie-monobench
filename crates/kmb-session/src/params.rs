@@ -14,10 +14,10 @@ use kmb_core::{
 use std::collections::{BTreeSet, HashSet};
 
 mod named;
-pub(crate) use named::complete_named_parameter_change;
 pub use named::{
     NamedParamError, NamedParameter, parse_named_parameter, validate_named_parameter_change,
 };
+pub(crate) use named::{complete_named_parameter_change, has_named_parameter_change};
 
 /// 機能の値 1 つ(記述子の式の欄)。
 #[derive(Debug, Clone, PartialEq)]
