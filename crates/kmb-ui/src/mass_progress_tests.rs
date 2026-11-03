@@ -114,11 +114,17 @@ fn measure_case(step: &str, label: &str) -> Value {
     // 計測は別のカーネルと読み込みから始め、上の質量のキャッシュを使わない。
     let mut b = kmb_samples::sample::DocBuilder::new();
     let id = b.feature(
-        "cad.import_step@1",
+        kmb_cad_import_step::IMPORT_STEP,
         "測る部品",
         json!({"file":"measure.step","step":step,"upright":true}),
     );
     let mut ws = Workspace::new(b.finish("質量の測り"), None, crate::tests::reg());
+    assert_eq!(
+        ws.cur.work.report().error_count(),
+        0,
+        "{:?}",
+        ws.cur.work.report().features
+    );
     let mesh = ws.cur.scene.mesh(id).expect("開いた部品の網");
     let mut counts = vec![0usize; mesh.face_names.len()];
     for face in &mesh.triangle_faces {
@@ -155,7 +161,7 @@ fn measure_case(step: &str, label: &str) -> Value {
     let before = Instant::now();
     ws.measure_refresh();
     let refresh_ms = before.elapsed().as_secs_f64() * 1000.0;
-    let record = json!({"case":label,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"step_bytes":step.len(),"faces":faces,"triangles":triangles,"selected_face_triangles":selected_triangles,"mass_cold_ms":cold_ms,"mass_warm_ms":warm_ms,"measure_open_ms":open_ms,"measure_refresh_ms":refresh_ms,"volume_mm3":cold.volume});
+    let record = json!({"kernel":modules.kernel.name(),"case":label,"profile":if cfg!(debug_assertions){"debug"}else{"release"},"step_bytes":step.len(),"faces":faces,"triangles":triangles,"selected_face_triangles":selected_triangles,"mass_cold_ms":cold_ms,"mass_warm_ms":warm_ms,"measure_open_ms":open_ms,"measure_refresh_ms":refresh_ms,"volume_mm3":cold.volume});
     println!("KMB_MASS_PROGRESS {record}");
     record
 }
