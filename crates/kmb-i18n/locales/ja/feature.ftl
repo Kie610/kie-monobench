@@ -59,3 +59,7 @@ feature-solid-surface-patch-tip = 閉じた縁に厚みの無い面を張る
 
 feature-asm-position = 位置
 feature-asm-position-tip = 部品の中心で X・Y・Z の順に回してから、世界座標の距離だけ動かす。一緒に動くジョイントの部品も付いて来る
+feature-cam-spiral3d = 渦巻き(3D)
+feature-cam-spiral3d-tip = 中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる
+feature-cam-radial3d = 放射状(3D)
+feature-cam-radial3d-tip = 中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる

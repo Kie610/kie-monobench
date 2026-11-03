@@ -2237,3 +2237,10 @@ field-solid-thread-clearance-help = 径で指定するすき間。空なら 0 mm
 field-solid-thread-end = 奥の端
 field-solid-thread-flip = 反対の端から始める
 field-solid-thread-form = ねじ山
+
+field-cam-spiral3d-levels = 段に分けて上から削る
+field-cam-spiral3d-direction = 削る向き
+field-cam-spiral3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+field-cam-radial3d-levels = 段に分けて上から削る
+field-cam-radial3d-direction = 削る向き
+field-cam-radial3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
