@@ -363,6 +363,8 @@ action-io-export-obj-tip = 見えているボディを OBJ にする。ボディ
 
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
+action-cad-sketch-dxf-layers = DXF の画層を一覧
+action-cad-sketch-dxf-layers-tip = DXF の画層の名前と形の数を読む。設計は変えない
 action-hrtf-process = HRTF の形式をそろえる
 action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
 action-hrtf-compute = 頭の網から HRTF を計算…
