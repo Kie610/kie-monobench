@@ -106,6 +106,13 @@ fn pulley_profiles_contain_the_axis_and_curves_stay_perpendicular_to_it() {
         assert_eq!(spec.teeth, 0);
         assert_eq!(spec.pitch_radius, 40.0);
         assert_eq!(profile.plane.y_axis, spec.axis.direction);
+        assert_eq!(profile.plane.origin, Plane::YZ.to_world([7.0, 11.0]));
+        assert!((spec.phase - 30f64.to_radians()).abs() < 1e-12);
+        for i in 0..3 {
+            let expected = Plane::YZ.x_axis[i] * 30f64.to_radians().cos()
+                + Plane::YZ.y_axis[i] * 30f64.to_radians().sin();
+            assert!((profile.plane.x_axis[i] - expected).abs() < 1e-12);
+        }
         assert_eq!(curves.plane.normal(), spec.axis.direction);
         assert_eq!(curves.segments.len(), 1);
         assert!(matches!(curves.segments[0], Segment::Circle { .. }));

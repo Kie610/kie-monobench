@@ -95,91 +95,90 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
 #[test]
 fn pulleys_and_rope_sheaves_revolve_their_sections_with_the_outline_width() {
     let k = TestKernel::new();
-    for (kind, side) in [
-        (
-            kmb_interchange::GearKind::FlatPulley,
-            kmb_cad_gear::body::Side::Normal,
-        ),
-        (
-            kmb_interchange::GearKind::VPulley,
-            kmb_cad_gear::body::Side::Reverse,
-        ),
-        (
-            kmb_interchange::GearKind::RopeSheave,
-            kmb_cad_gear::body::Side::Symmetric,
-        ),
+    for kind in [
+        kmb_interchange::GearKind::FlatPulley,
+        kmb_interchange::GearKind::VPulley,
+        kmb_interchange::GearKind::RopeSheave,
     ] {
-        let mut b = DocBuilder::new();
-        let g = b.feature(
-            kmb_cad_gear::GEAR,
-            "車",
-            kmb_cad_gear::Gear {
-                kind,
-                pulley_width: Some("50 mm".into()),
-                groove_count: Some("2".into()),
-                bore: Some("10 mm".into()),
-                ..Default::default()
-            },
-        );
-        let e = b.feature(
-            kmb_cad_gear::GEAR_BODY,
-            "ボディ",
-            kmb_cad_gear::GearBody {
-                width: "5 mm".into(),
-                direction: side,
-                ..kmb_cad_gear::GearBody::new(g)
-            },
-        );
-        let mut doc = b.finish("車");
-        let reg = registry();
-        let report = doc.recompute(&reg, &*k);
-        assert_ok(&report);
-        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(g) else {
-            panic!("断面")
-        };
-        let profile = Profile::from_value(&outputs["profile"]).unwrap();
-        // 各細分の半径を直線とみなし、断面の回転体積 π∫r²dy を積分する。
-        let integral: f64 = profile
-            .regions
-            .iter()
-            .flat_map(|r| &r.outer.edges)
-            .map(|edge| {
-                edge.polyline(256)
-                    .windows(2)
-                    .map(|w| {
-                        let (a, b) = (w[0], w[1]);
-                        (b[1] - a[1]) * (a[0] * a[0] + a[0] * b[0] + b[0] * b[0]) / 3.0
-                    })
-                    .sum::<f64>()
-            })
-            .sum();
-        let want = std::f64::consts::PI * integral;
-        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
-            panic!("ボディ")
-        };
-        let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
-        assert_eq!(spec.face_width, Some(50.0));
-        assert!(
-            kmb_core::warnings_of(outputs)
+        for side in [
+            kmb_cad_gear::body::Side::Normal,
+            kmb_cad_gear::body::Side::Reverse,
+            kmb_cad_gear::body::Side::Symmetric,
+        ] {
+            let mut b = DocBuilder::new();
+            let g = b.feature(
+                kmb_cad_gear::GEAR,
+                "車",
+                kmb_cad_gear::Gear {
+                    kind,
+                    pulley_width: Some("50 mm".into()),
+                    groove_count: Some("2".into()),
+                    bore: Some("10 mm".into()),
+                    ..Default::default()
+                },
+            );
+            let e = b.feature(
+                kmb_cad_gear::GEAR_BODY,
+                "ボディ",
+                kmb_cad_gear::GearBody {
+                    width: "5 mm".into(),
+                    direction: side,
+                    ..kmb_cad_gear::GearBody::new(g)
+                },
+            );
+            let mut doc = b.finish("車");
+            let reg = registry();
+            let report = doc.recompute(&reg, &*k);
+            assert_ok(&report);
+            let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(g) else {
+                panic!("断面")
+            };
+            let profile = Profile::from_value(&outputs["profile"]).unwrap();
+            // 各細分の半径を直線とみなし、断面の回転体積 π∫r²dy を積分する。
+            let integral: f64 = profile
+                .regions
                 .iter()
-                .any(|s| s.contains("輪郭の幅"))
-        );
-        let mass = final_mass(&mut doc, &k);
-        assert!(
-            close(mass.volume, want, 2e-3),
-            "{kind:?}: {} vs {want}",
-            mass.volume
-        );
-        let (lo, hi) = match side {
-            kmb_cad_gear::body::Side::Normal => (0.0, 50.0),
-            kmb_cad_gear::body::Side::Reverse => (-50.0, 0.0),
-            kmb_cad_gear::body::Side::Symmetric => (-25.0, 25.0),
-        };
-        assert!(
-            (mass.min[2] - lo).abs() < 1e-5 && (mass.max[2] - hi).abs() < 1e-5,
-            "{kind:?}: {:?} {:?}",
-            mass.min,
-            mass.max
-        );
+                .flat_map(|r| &r.outer.edges)
+                .map(|edge| {
+                    let mut points = edge.polyline(256);
+                    points.push(edge.to_point());
+                    points
+                        .windows(2)
+                        .map(|w| {
+                            let (a, b) = (w[0], w[1]);
+                            (b[1] - a[1]) * (a[0] * a[0] + a[0] * b[0] + b[0] * b[0]) / 3.0
+                        })
+                        .sum::<f64>()
+                })
+                .sum();
+            let want = std::f64::consts::PI * integral;
+            let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
+                panic!("ボディ")
+            };
+            let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+            assert_eq!(spec.face_width, Some(50.0));
+            assert!(
+                kmb_core::warnings_of(outputs)
+                    .iter()
+                    .any(|s| s.contains("輪郭の幅"))
+            );
+            let mass = final_mass(&mut doc, &k);
+            assert!(
+                close(mass.volume, want, 2e-3),
+                "{kind:?}: {} vs {want}",
+                mass.volume
+            );
+            let (lo, hi) = match side {
+                kmb_cad_gear::body::Side::Normal => (0.0, 50.0),
+                kmb_cad_gear::body::Side::Reverse => (-50.0, 0.0),
+                kmb_cad_gear::body::Side::Symmetric => (-25.0, 25.0),
+            };
+            assert!(
+                (mass.min[2] - lo).abs() < 1e-5 && (mass.max[2] - hi).abs() < 1e-5,
+                "{kind:?}: {:?} {:?}",
+                mass.min,
+                mass.max
+            );
+        }
     }
 }
