@@ -259,3 +259,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod warning_tests;

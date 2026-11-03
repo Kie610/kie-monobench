@@ -196,7 +196,7 @@ pub(crate) fn fixes(own: &[kmb_core::Fix], h: &Health) -> Vec<String> {
 impl Workspace {
     /// 機能の具合(知らせの文は読みやすく直したもの)。
     pub(crate) fn health(&self, id: FeatureId) -> Health {
-        match Health::of(self.cur.work.report().feature(id)) {
+        match Health::with_words(&self.win.words(), self.cur.work.report().feature(id)) {
             Health::Error(m) => Health::Error(self.field_labels(id, self.plain_text(&m))),
             Health::Warning(m) => Health::Warning(self.field_labels(id, self.plain_text(&m))),
             h => h,
@@ -234,7 +234,13 @@ impl Workspace {
             Some(FeatureStatus::Ok { outputs, .. }) => kmb_core::warnings_of(outputs).join("\n"),
             _ => return None,
         };
-        (!raw.is_empty() && raw != self.plain_text(&raw)).then_some(raw)
+        (!raw.is_empty()
+            && raw
+                != match self.health(id) {
+                    Health::Warning(ref text) | Health::Error(ref text) => text.clone(),
+                    _ => self.plain_text(&raw),
+                })
+        .then_some(raw)
     }
 
     /// 状態の印と、読みやすく直した説明(タイムライン・ブラウザ・パネルの説明に使う)。
@@ -258,7 +264,7 @@ impl Workspace {
             .data()
             .features
             .iter()
-            .map(|f| (f.id, Health::of(self.cur.work.report().feature(f.id))))
+            .map(|f| (f.id, self.health(f.id)))
             .filter(|(_, h)| h.is_problem())
             .collect();
         v.sort_by_key(|(_, h)| !h.is_red());

@@ -19,6 +19,30 @@ pub(super) struct Notes {
 }
 
 impl Notes {
+    pub(super) fn messages(&self, out: &mut kmb_core::Outputs) {
+        if self.unreachable == 0 {
+            return;
+        }
+        let diameter = (self.fitting_diameter.unwrap_or(0.0) * 100.0).floor() / 100.0;
+        kmb_core::add_warning_messages(
+            out,
+            vec![kmb_core::WarningMessage {
+                id: "feature-tool-clearance-warning".into(),
+                args: [
+                    (
+                        "count".into(),
+                        kmb_core::WarningArg::Number(self.unreachable as f64),
+                    ),
+                    ("diameter".into(), kmb_core::WarningArg::Number(diameter)),
+                ]
+                .into(),
+                fallback: format!(
+                    "工具が届かない所が {} か所あります。入る工具径の目安は {diameter:.2} mm 以下です。小さい工具で取残し加工をしてください",
+                    self.unreachable
+                ),
+            }],
+        );
+    }
     pub(super) fn report(&self, w: &mut Vec<String>, kind: EntryKind) {
         if self.lead_missing {
             w.push(
@@ -29,12 +53,6 @@ impl Notes {
         }
         if self.too_small {
             w.push("工具が入らない輪郭があるので、そこは削りません".into());
-        }
-        if self.unreachable > 0 {
-            w.push(format!(
-                "工具が届かない所が {} か所あります。入る工具径の目安は {:.2} mm 以下です。小さい工具で取残し加工をしてください",
-                self.unreachable, (self.fitting_diameter.unwrap_or(0.0) * 100.0).floor() / 100.0
-            ));
         }
         if self.no_depth {
             w.push("削る深さがない輪郭があるので、そこは削りません".into());

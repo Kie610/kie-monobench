@@ -870,6 +870,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         source_radius: None,
     };
     let mut out = p.output(tp);
+    notes.messages(&mut out.extra);
     if !paths.paths.is_empty() {
         out.extra
             .insert(TAB_PATHS.into(), kmb_core::Payload::to_value(&paths));

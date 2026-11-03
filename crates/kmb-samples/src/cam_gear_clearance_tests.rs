@@ -9,7 +9,7 @@ use kmb_strategy_contour2d::CONTOUR;
 use serde_json::json;
 
 /// 指定径の工具で、モジュール 1・歯数 20 の歯車の外側を削った時の注意。
-fn gear_contour_warnings(diameter: f64) -> Vec<String> {
+fn gear_contour(diameter: f64) -> (kmb_core::Document, kmb_core::FeatureId, kmb_core::FeatureId) {
     let mut b = DocBuilder::new();
     let gear = b.feature(
         "cad.gear@1",
@@ -37,7 +37,11 @@ fn gear_contour_warnings(diameter: f64) -> Vec<String> {
             "stepdown":"4 mm"
         }),
     );
-    let mut doc = b.finish("歯溝と工具の到達");
+    (b.finish("歯溝と工具の到達"), setup, contour)
+}
+
+fn gear_contour_warnings(diameter: f64) -> Vec<String> {
+    let (mut doc, _, contour) = gear_contour(diameter);
     let registry = kmb_bundle::registry();
     let kernel = kmb_bundle::kernel();
     let report = doc.recompute(&registry, kernel.as_ref());
