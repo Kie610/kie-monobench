@@ -35,7 +35,7 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 }
 
 fn width_default() -> String {
-    "10 mm".into()
+    String::new()
 }
 
 /// 歯車のボディの機能のデータ。例: `{"gear": 3, "width": "8 mm"}`
@@ -44,8 +44,8 @@ fn width_default() -> String {
 pub struct GearBody {
     /// 歯車の輪郭の機能
     pub gear: FeatureId,
-    /// 歯の幅(歯の輪の厚さ)
-    #[serde(default = "width_default")]
+    /// 歯の幅。空欄なら鎖車は鎖幅から決め、ほかの歯車は 10 mm。
+    #[serde(default = "width_default", skip_serializing_if = "String::is_empty")]
     pub width: String,
     /// 腕(ウェブ)の厚さ(空なら歯の幅)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,7 +77,10 @@ impl GearBody {
 
 impl Exprs for GearBody {
     fn exprs_mut(&mut self) -> Vec<&mut String> {
-        let mut v = vec![&mut self.width];
+        let mut v = Vec::new();
+        if !self.width.trim().is_empty() {
+            v.push(&mut self.width);
+        }
         v.extend([&mut self.web, &mut self.boss].into_iter().flatten());
         v
     }
@@ -86,6 +89,9 @@ impl Exprs for GearBody {
 impl Feature for GearBody {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v = vec![output(self.gear, "profile"), output(self.gear, GEAR_OUTPUT)];
+        if self.width.trim().is_empty() {
+            v.push(output(self.gear, crate::DEFAULT_WIDTH_OUTPUT));
+        }
         v.extend(target_inputs(self.operation, self.target)?);
         for i in expr_refs(self)? {
             if !v.contains(&i) {
@@ -106,8 +112,21 @@ impl Feature for GearBody {
             Profile::from_value(ctx.output(self.gear, "profile")?).ok_or_else(not_gear)?;
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
-        let width = length(ctx, &self.width, "歯の幅")?;
-        if width <= 0.0 {
+        let width = if self.width.trim().is_empty() {
+            let kmb_core::Value::Scalar(q) = ctx.output(self.gear, crate::DEFAULT_WIDTH_OUTPUT)?
+            else {
+                return Err(EvalError::InvalidData("歯の幅の既定値がありません".into()));
+            };
+            if q.dim != kmb_core::Dim::LENGTH {
+                return Err(EvalError::InvalidData(
+                    "歯の幅の既定値が長さではありません".into(),
+                ));
+            }
+            q.value
+        } else {
+            length(ctx, &self.width, "歯の幅")?
+        };
+        if !width.is_finite() || width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
@@ -161,7 +180,11 @@ pub fn register(reg: &mut Registry) {
             .hint("歯車の輪郭を歯の幅だけ押し出して歯車の立体にする")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))
-            .field(Field::expr("width", "歯の幅").length())
+            .field(
+                Field::opt_expr("width", "歯の幅")
+                    .length()
+                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm"),
+            )
             .field(
                 Field::opt_expr("web", "腕の厚さ")
                     .length()

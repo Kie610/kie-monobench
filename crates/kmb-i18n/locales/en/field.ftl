@@ -2319,3 +2319,9 @@ field-solid-thicken-side = Side
 field-solid-import-iges-file = File
 field-solid-import-iges-stand-up = Convert Y-up to Z-up
 field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+field-cad-gear-chain = Chain Size
+field-cad-gear-chain-pitch = Chain Pitch
+field-cad-gear-roller-diameter = Roller Diameter
+field-cad-gear-chain-inner-width = Chain Inner Width
+field-cad-gear-body-width-help = Empty uses 0.93 or 0.95 times the chain inner width for sprockets, or 10 mm for other gears.

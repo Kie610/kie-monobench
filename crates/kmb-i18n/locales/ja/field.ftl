@@ -2319,3 +2319,9 @@ field-solid-thicken-side = 向き
 field-solid-import-iges-file = ファイル
 field-solid-import-iges-stand-up = Y が上の形を立てる
 field-solid-import-iges-stand-up-help = Y が上で作られた形を、X 軸のまわりに 90 度回して Z が上に立てる
+
+field-cad-gear-chain = 鎖の呼び
+field-cad-gear-chain-pitch = 鎖のピッチ
+field-cad-gear-roller-diameter = ローラーの径
+field-cad-gear-chain-inner-width = 鎖の内幅
+field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm
