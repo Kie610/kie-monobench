@@ -17,31 +17,51 @@ impl Drop for Scratch {
 }
 
 fn grid_step(side: usize) -> String {
-    let mut b = kmb_samples::sample::DocBuilder::new();
-    let mut s = kmb_samples::sample::SketchBuilder::xy();
-    let origin = s.fixed_point(0.0, 0.0);
-    s.rectangle(origin, "8 mm", "6 mm", [0.0, 0.0, 8.0, 6.0]);
-    let sketch = b.feature("cad.sketch@1", "箱の輪郭", s.build());
-    let body = b.feature(
-        "solid.extrude@1",
-        "箱",
-        json!({"profile":sketch,"distance":"4 mm","direction":"normal","operation":"new"}),
-    );
-    b.feature("solid.linear_pattern@1","箱の配置",json!({"kind":"bodies","bodies":[body],"spacing":"12 mm","count":side.to_string(),"direction2":[0.0,1.0,0.0],"spacing2":"10 mm","count2":side.to_string()}));
-    let mut doc = b.finish("箱の集まり");
     let modules = crate::tests::reg();
-    let report = doc.recompute(&modules.registry, modules.kernel.as_ref());
-    assert_eq!(report.error_count(), 0, "{:?}", report.features);
-    let bodies = kmb_core::visible_bodies(doc.data(), &modules.registry, &report);
-    assert_eq!(bodies.len(), 1);
-    let expected = 8.0 * 6.0 * 4.0 * (side * side) as f64;
-    assert!(
-        (modules.kernel.mass(bodies[0].1).unwrap().volume - expected).abs() < 1e-6 * expected,
-        "箱の数を体積で確かめる"
-    );
+    let mut shapes = Vec::new();
+    let mut names = Vec::new();
+    // 独立した箱を同じSTEPへ書き、結合の中間形状を測定データの準備で保持しない。
+    for y in 0..side {
+        for x in 0..side {
+            let points = [[0.0, 0.0], [8.0, 0.0], [8.0, 6.0], [0.0, 6.0]];
+            let profile = Profile {
+                plane: Plane {
+                    origin: [12.0 * x as f64, 10.0 * y as f64, 0.0],
+                    x_axis: [1.0, 0.0, 0.0],
+                    y_axis: [0.0, 1.0, 0.0],
+                },
+                regions: vec![Region {
+                    outer: ProfileLoop {
+                        edges: (0..4)
+                            .map(|i| ProfileEdge {
+                                name: format!("edge{i}"),
+                                segment: Segment::Line {
+                                    a: points[i],
+                                    b: points[(i + 1) % 4],
+                                },
+                                reversed: false,
+                            })
+                            .collect(),
+                    },
+                    holes: vec![],
+                }],
+            };
+            let shape = modules
+                .kernel
+                .extrude(&profile, 0.0, 4.0, "fixture")
+                .unwrap();
+            assert!(
+                (modules.kernel.mass(shape).unwrap().volume - 192.0).abs() < 1e-6,
+                "箱の体積"
+            );
+            shapes.push(shape);
+            names.push(format!("箱{}", shapes.len()));
+        }
+    }
+    assert_eq!(shapes.len(), side * side);
     modules
         .kernel
-        .export_step_named(&[bodies[0].1], &["箱の集まり".into()], "質量の測り")
+        .export_step_named(&shapes, &names, "質量の測り")
         .unwrap()
 }
 
