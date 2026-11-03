@@ -347,6 +347,7 @@ impl Workspace {
         let mut v = self
             .measure_frozen_actions()
             .unwrap_or_else(|| self.win.extensions.actions(&self.context()));
+        v.extend(kmb_session::doc_view::actions());
         v.iter_mut().for_each(|a| self.win.localize_action(a));
         v
     }
@@ -553,6 +554,10 @@ impl Workspace {
         file: Option<&std::path::Path>,
         args: &serde_json::Value,
     ) -> Result<Ran, String> {
+        if kmb_session::doc_view::is_action(id) {
+            let view = self.doc_view();
+            self.cur.work.sync_doc_view(view);
+        }
         // 作る前の履歴の長さ(作っている途中をキャンセルした時に戻る所)
         let before = self.cur.work.doc().undo_labels().len();
         let doc = self.tab_uid();
@@ -574,6 +579,10 @@ impl Workspace {
             .work
             .run_with(id, &picks, file, args)
             .map_err(|p| p.to_string())?;
+        if kmb_session::doc_view::is_action(id) {
+            self.refresh_body_colors();
+            self.cur.view_saved = self.doc_view();
+        }
         Ok(Ran { handled, before })
     }
 

@@ -362,6 +362,7 @@ impl Workspace {
                 context_others: (egui::Pos2::ZERO, Vec::new()),
             },
             home: home::HomeState {
+                pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
                 projects: Default::default(),
@@ -920,6 +921,8 @@ mod tabs_tests;
 #[cfg(test)]
 mod units_tests;
 
+#[cfg(test)]
+mod component_colors_tests;
 #[cfg(test)]
 mod wide_toolbar_tests;
 

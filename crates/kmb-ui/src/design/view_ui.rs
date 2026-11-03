@@ -163,6 +163,10 @@ impl Workspace {
             self.highlighted_faces()
         };
         let controls = view3d::Controls {
+            body_hover: self.active_pick_field().is_some_and(|(_, field)| {
+                matches!(field.kind, kmb_core::FieldKind::Pick { accept, .. }
+                    if accept.as_slice() == [RefKind::Body])
+            }),
             middle_orbits: self.win.layout.middle_drag == crate::MiddleDrag::Orbit,
             left: self.win.left_drag,
             // 部品を引いている間は、カーソルの下の面を色付けしない(下の別の部品が動くように見える)
@@ -232,7 +236,9 @@ impl Workspace {
         }
         let shape = overlay.shape.as_ref().map(|s| s.label.clone());
         if !measuring {
-            let hover = ev.hover.and_then(|p| self.hover_hit(rect, p));
+            let hover = self
+                .hover_position_for_drawing(ev.hover)
+                .and_then(|p| self.hover_hit(rect, p));
             self.cur.hover_kind = hover.as_ref().map(Hit::kind);
             self.cur.hover_feature = hover.as_ref().map(Hit::feature);
             self.draw_edges(ui, rect, hover.as_ref());

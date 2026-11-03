@@ -32,3 +32,10 @@ menu-help-search = コマンド検索…
 menu-help-search-tip = 名前や読みでコマンドを探して実行する(S でカーソルの所、Ctrl+K で画面の上)
 menu-help-crash = クラッシュ報告…
 menu-help-crash-tip = 落ちた時に PC の中に残した報告を見る(どこへも送らない)
+
+menu-file-pack = まとめて渡す…
+menu-file-pack-tip = 設計・G-code・加工指示書をzipにまとめて渡します
+menu-file-pack-gcode = G-codeを入れる
+menu-file-pack-sheet = 加工指示書を入れる
+menu-file-pack-models = ボディごとのSTEPを入れる
+menu-file-pack-write = zipに書き出す

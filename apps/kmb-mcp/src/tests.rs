@@ -371,6 +371,7 @@ async fn the_server_speaks_mcp() {
         "topology",
         "measure",
         "export",
+        "pack",
         "crash_reports",
     ] {
         assert!(names.contains(&n), "{n} がない: {names:?}");
@@ -2062,4 +2063,31 @@ fn sketch_entities_are_found_by_conditions() {
         .is_err()
     );
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn pack_shares_the_session_and_enforces_the_allowed_output_folder() {
+    assert!(
+        serde_json::from_value::<crate::server::PackArg>(
+            json!({"path":"delivery.zip","shet":false})
+        )
+        .is_err()
+    );
+    let root = temp_root("pack");
+    let mut s = Session::new(root.clone());
+    s.sample(false, false).unwrap();
+    let before = s.document().to_json();
+    let r = s
+        .pack("delivery.zip", kmb_session::PackOptions::default())
+        .unwrap();
+    assert!(r["included"].as_array().unwrap().len() >= 2);
+    assert!(r["skipped"].as_array().unwrap().len() == 2);
+    assert!(
+        s.pack("../outside.zip", kmb_session::PackOptions::default())
+            .is_err()
+    );
+    s.open("delivery.zip").unwrap();
+    assert!(s.status()["file"].is_null());
+    assert_eq!(s.document().to_json(), before);
+    std::fs::remove_dir_all(root).unwrap();
 }
