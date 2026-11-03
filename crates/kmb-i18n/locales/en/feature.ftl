@@ -56,6 +56,8 @@ feature-hrtf-compute-tip = Compute head-related transfer functions (HRTF) in all
 feature-solid-surface-patch = Surface patch
 feature-solid-surface-patch-tip = Create a sheet body spanning a closed boundary
 
+feature-solid-import-mesh = Mesh import
+feature-solid-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 feature-asm-position = Position
 feature-asm-position-tip = Rotate the component about its center in X, Y, Z order, then translate along world axes. Parts connected to follow it move together.
 feature-cam-spiral3d = Spiral (3D)

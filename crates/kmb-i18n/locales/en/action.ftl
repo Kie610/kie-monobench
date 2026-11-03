@@ -362,6 +362,8 @@ action-cad-surface-patch-tip = Select a closed boundary and press Enter to creat
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
 
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 action-cad-sketch-dxf-layers = List DXF layers

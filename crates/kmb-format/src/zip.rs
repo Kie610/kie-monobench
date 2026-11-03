@@ -63,6 +63,10 @@ pub fn read(b: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
         if flags & 1 != 0 || u16_at(at + 34)? != 0 || ![0, 8].contains(&method) {
             return Err("暗号化・分割・未対応の圧縮方法のzipは読めません".into());
         }
+        let local = u32_at(at + 42)?;
+        if [packed, unpacked, local].contains(&(u32::MAX as usize)) {
+            return Err("ZIP64は読めません".into());
+        }
         total = total
             .checked_add(unpacked)
             .filter(|n| *n <= UNPACKED_LIMIT)
@@ -87,7 +91,16 @@ pub fn read(b: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
         if !names.insert(name.clone()) {
             return Err(format!("zipに同じ名前が重なっています: {name}"));
         }
-        let local = u32_at(at + 42)?;
+        if name.is_empty() || name.contains('\0') {
+            return Err(bad());
+        }
+        if flags & 8 == 0
+            && (u32_at(local + 14)? != crc as usize
+                || u32_at(local + 18)? != packed
+                || u32_at(local + 22)? != unpacked)
+        {
+            return Err(bad());
+        }
         if bytes(local, 4) != Some(b"PK\x03\x04")
             || u16_at(local + 6)? != flags
             || u16_at(local + 8)? != method

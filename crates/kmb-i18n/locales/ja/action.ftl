@@ -363,6 +363,8 @@ action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で�
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
 
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 action-cad-sketch-dxf-layers = DXF の画層を一覧
