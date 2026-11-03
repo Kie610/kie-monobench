@@ -362,8 +362,10 @@ impl Workspace {
                 context_others: (egui::Pos2::ZERO, Vec::new()),
             },
             home: home::HomeState {
+                pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
+                discard_recoveries: None,
                 projects: Default::default(),
                 recent: kmb_session::Recent::default(),
                 recent_missing: Default::default(),
@@ -700,7 +702,11 @@ impl Workspace {
                             self.start_action_with(&a, args["args"].clone());
                         }
                         Some(a) => {
-                            self.run_action(&a);
+                            if args["args"].is_object() {
+                                self.run_action_args(&a, args["args"].clone());
+                            } else {
+                                self.run_action(&a);
+                            }
                         }
                         None => {}
                     }
@@ -919,5 +925,7 @@ mod tabs_tests;
 #[cfg(test)]
 mod units_tests;
 
+#[cfg(test)]
+mod component_colors_tests;
 #[cfg(test)]
 mod wide_toolbar_tests;

@@ -79,6 +79,7 @@ mod fastener_tests;
 mod fillet_material_tests;
 mod fillet_rows_tests;
 mod hole_tests;
+mod iges_tests;
 #[cfg(test)]
 mod link_tests;
 mod modify_tests;

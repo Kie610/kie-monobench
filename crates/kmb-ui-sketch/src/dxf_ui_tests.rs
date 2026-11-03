@@ -1,4 +1,4 @@
-//! スケッチの DXF・SVG の挿入と DXF として保存(網羅版 K3)を、人の操作(クリック)で確かめる。
+//! スケッチの DXF・SVG の挿入と保存を、人の操作(クリック)で確かめる。
 
 use crate::tests::*;
 use egui_kittest::Harness;
@@ -194,4 +194,51 @@ fn inserting_without_a_sketch_makes_a_new_one_on_xy() {
         .filter(|e| matches!(e, kmb_sketch::Entity::Circle { .. }))
         .count();
     assert_eq!((lines, circles), (4, 1), "{:?}", s.entities);
+}
+
+fn svg_menu_script(h: &mut Harness<'static, Workspace>, text: &str) {
+    let batch = h.state_mut().run_script(text).unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 15, "台本が終わりません");
+    }
+}
+
+#[test]
+fn right_click_saves_the_sketch_as_svg_without_finishing_the_edit() {
+    let out = temp("右クリック.svg");
+    let _ = std::fs::remove_file(&out);
+    let mut h = sketch_with(Files {
+        open: None,
+        save: Some(out.clone()),
+    });
+    svg_menu_script(&mut h, "click 長方形");
+    click_at(&mut h, [1.19, 16.36]);
+    click_at(&mut h, [11.62, 8.54]);
+    press_key(&mut h, egui::Key::Escape);
+    assert_eq!(lines(&mut h), 4);
+    let before = h.state().document().to_json();
+    let id = editor(h.state_mut()).editor.feature.unwrap();
+    right_click_at(&mut h, [22.04, 0.72]);
+    assert!(
+        h.query_by_label("SVG として保存…").is_some(),
+        "スケッチの右クリックに SVG の保存がありません"
+    );
+    let dxf = h.get_by_label("DXF として保存…").rect();
+    let svg = h.get_by_label("SVG として保存…").rect();
+    assert!(svg.top() >= dxf.bottom(), "DXF の次に SVG を並べる");
+    svg_menu_script(&mut h, "click \"SVG として保存…\"");
+    h.run();
+    let text = std::fs::read_to_string(&out).expect("SVG を書き出した");
+    assert!(text.contains("<svg") && text.contains("mm\""), "{text}");
+    assert_eq!(text.matches("<path ").count(), 1, "{text}");
+    assert_eq!(text.matches(" L").count(), 3, "四角の 3 辺と Z: {text}");
+    assert!(text.contains(" Z\""), "閉じた四角: {text}");
+    assert!(h.state().is_editing(id), "スケッチの編集を続ける");
+    assert_eq!(h.state().document().to_json(), before);
 }

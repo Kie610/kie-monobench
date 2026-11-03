@@ -100,8 +100,8 @@ impl Session {
 
     pub fn open(&mut self, path: &str) -> Reply {
         let p = self.resolve(path)?;
-        let doc = kmb_session::load(&p)?;
-        self.work.replace(doc, Some(p));
+        let opened = kmb_session::load_design(&p)?;
+        self.work.replace(opened.document, opened.path);
         Ok(self.status())
     }
 
@@ -666,6 +666,13 @@ impl Session {
     /// 見えているボディを書き出す。拡張子で形式を決める([`Headless::save_action_for`]。`action` で
     /// 操作を指定もできる)。`each` が真ならボディごとに別のファイルにする(`path` の名前の後ろに
     /// `-<ボディの名前>` を付ける)。
+    pub fn pack(&mut self, path: &str, options: kmb_session::PackOptions) -> Reply {
+        let out = self.resolve(path)?;
+        let packed = self.work.pack(options, Some(&self.roots))?;
+        kmb_session::write_output(&out, &packed.contents)?;
+        Ok(json!({"written":out,"included":packed.included,"skipped":packed.skipped}))
+    }
+
     pub fn export(
         &mut self,
         path: &str,

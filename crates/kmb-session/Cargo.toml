@@ -12,6 +12,7 @@ layer = "session"
 [dependencies]
 kmb-look.workspace = true
 kmb-core.workspace = true
+kmb-i18n.workspace = true
 kmb-interchange.workspace = true
 kmb-measure.workspace = true
 kmb-format.workspace = true

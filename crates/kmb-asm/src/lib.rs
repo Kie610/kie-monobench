@@ -1387,4 +1387,7 @@ mod tests;
 mod auto_explode_tests;
 
 #[cfg(test)]
+mod snap_tests;
+
+#[cfg(test)]
 mod numeric_placement_tests;
