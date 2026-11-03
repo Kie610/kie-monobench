@@ -2365,6 +2365,7 @@ dependencies = [
  "kmb-cad-datum",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",
@@ -2475,6 +2476,19 @@ dependencies = [
  "kmb-cad",
  "kmb-core",
  "kmb-interchange",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-gear"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-sketch",
+ "kmb-sketch-solver",
  "kmb-workspace-hack",
  "serde",
  "serde_json",
@@ -3198,6 +3212,7 @@ dependencies = [
  "kmb-cad-datum",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",

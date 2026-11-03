@@ -52,6 +52,7 @@ pub fn all() -> Vec<Module> {
         kmb_sketch::module(),
         kmb_sketch_3d::module(),
         kmb_text::module(),
+        kmb_cad_gear::module(),
         kmb_io_dxf::module(),
         kmb_io_svg::module(),
         kmb_cad_extrude::module(),
