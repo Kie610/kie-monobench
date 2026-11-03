@@ -5,7 +5,6 @@
 //! 並べて近似する。円弧なので加工のポストは円弧の指令のまま出せ、面の数も少ない。
 
 use kmb_core::{ProfileEdge, Segment};
-use kmb_sketch_solver::curve::biarc;
 
 pub type P2 = [f64; 2];
 
@@ -201,6 +200,56 @@ pub fn ring_of_teeth(half: &HalfTooth, teeth: u32) -> Vec<ProfileEdge> {
         out.extend(tooth.iter().map(|e| rotate(e, step * i as f64)));
     }
     out
+}
+
+/// 点 `p` から向き `t` で出て点 `q` に着く円弧(ほぼまっすぐなら線分)。
+fn arc_leaving(p: P2, t: P2, q: P2) -> Segment {
+    let chord = [q[0] - p[0], q[1] - p[1]];
+    let left = [-t[1], t[0]];
+    let side = left[0] * chord[0] + left[1] * chord[1];
+    let len2 = chord[0] * chord[0] + chord[1] * chord[1];
+    // 弦からの膨らみが弦の長さの 1e-9 未満なら線分にする(半径が大きすぎる円弧を作らない)
+    if side.abs() <= 1e-9 * len2.sqrt() * len2.sqrt().max(1.0) || len2 < 1e-24 {
+        return Segment::Line { a: p, b: q };
+    }
+    let s = len2 / (2.0 * side);
+    let c = [p[0] + left[0] * s, p[1] + left[1] * s];
+    arc("", c, s.abs(), p, q, s > 0.0).segment
+}
+
+/// 両端の点と進む向き(単位ベクトル)から、つなぎ目で向きのそろう 2 つの円弧(両側の接線の長さを
+/// 等しく取る作り方)。作れなければ `None`。
+fn biarc(p0: P2, t0: P2, p1: P2, t1: P2) -> Option<Vec<Segment>> {
+    let v = [p1[0] - p0[0], p1[1] - p0[1]];
+    let vv = v[0] * v[0] + v[1] * v[1];
+    if vv < 1e-24 {
+        return None;
+    }
+    let vt = v[0] * (t0[0] + t1[0]) + v[1] * (t0[1] + t1[1]);
+    let k = 2.0 * (1.0 - (t0[0] * t1[0] + t0[1] * t1[1]));
+    // 接線の長さ d は、2 つの接線の先の点の間が 2d になる式 k d² + 2 vt d − vv = 0 の正の根
+    let d = if k.abs() < 1e-12 {
+        if vt.abs() < 1e-12 {
+            return None;
+        }
+        vv / (2.0 * vt)
+    } else {
+        (-vt + (vt * vt + k * vv).sqrt()) / k
+    };
+    if !(d.is_finite() && d > 0.0) {
+        return None;
+    }
+    let join = [
+        (p0[0] + d * t0[0] + p1[0] - d * t1[0]) / 2.0,
+        (p0[1] + d * t0[1] + p1[1] - d * t1[1]) / 2.0,
+    ];
+    let first = arc_leaving(p0, t0, join);
+    let back = arc_leaving(p1, [-t1[0], -t1[1]], join);
+    let second = match back {
+        Segment::Line { a, b } => Segment::Line { a: b, b: a },
+        other => other,
+    };
+    Some(vec![first, second])
 }
 
 /// 曲線 `f`(引数 → 点と進む向きの単位ベクトル)の `t0`〜`t1` を、隔たり `tol` 以下の二円弧で近似した

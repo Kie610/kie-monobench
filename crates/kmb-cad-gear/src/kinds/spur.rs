@@ -17,7 +17,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
     let z = p.teeth as f64;
     let alpha = p.pressure_angle;
     let x = p.profile_shift;
-    if !(m > 0.0) {
+    if m.is_nan() || m <= 0.0 {
         return Err("モジュールは 0 より大きくしてください".into());
     }
     if p.teeth < 3 {

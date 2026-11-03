@@ -6,11 +6,11 @@
 //! 使わず、空でない時は注意を出す。
 
 use kmb_cad::{
-    Operation, Recipe, finish, keep_target, length, operation_fields, output, target_inputs,
+    Exprs, Operation, Recipe, expr_refs, finish, keep_target, length, operation_fields, output,
+    rename, target_inputs,
 };
 use kmb_core::{
     EvalCtx, EvalError, Feature, FeatureId, InputRef, Outputs, Payload, Profile, Registry,
-    expr_inputs,
 };
 use kmb_interchange::{GEAR_OUTPUT, GearSpec};
 use serde::{Deserialize, Serialize};
@@ -75,21 +75,21 @@ impl GearBody {
     }
 }
 
-fn exprs(g: &mut GearBody) -> Vec<&mut String> {
-    let mut v = vec![&mut g.width];
-    v.extend([&mut g.web, &mut g.boss].into_iter().flatten());
-    v
+impl Exprs for GearBody {
+    fn exprs_mut(&mut self) -> Vec<&mut String> {
+        let mut v = vec![&mut self.width];
+        v.extend([&mut self.web, &mut self.boss].into_iter().flatten());
+        v
+    }
 }
 
 impl Feature for GearBody {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v = vec![output(self.gear, "profile"), output(self.gear, GEAR_OUTPUT)];
         v.extend(target_inputs(self.operation, self.target)?);
-        for e in exprs(&mut self.clone()) {
-            for i in expr_inputs(e)? {
-                if !v.contains(&i) {
-                    v.push(i);
-                }
+        for i in expr_refs(self)? {
+            if !v.contains(&i) {
+                v.push(i);
             }
         }
         Ok(v)
@@ -148,17 +148,7 @@ impl Feature for GearBody {
     }
 
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {
-        let mut c = self.clone();
-        let mut changed = false;
-        for e in exprs(&mut c) {
-            let r = kmb_core::rename_reference(e, old, new)
-                .map_err(|x| EvalError::InvalidData(x.to_string()))?;
-            if r != *e {
-                *e = r;
-                changed = true;
-            }
-        }
-        Ok(changed.then(|| serde_json::to_value(&c).expect("JSON にできる")))
+        rename(self, old, new)
     }
 }
 

@@ -2,6 +2,7 @@
 //! 作れない種類の誤り、歯車のボディのデータ。
 
 use super::*;
+use kmb_cad::Exprs;
 use serde_json::json;
 
 #[test]
@@ -26,7 +27,7 @@ fn every_expression_field_is_listed_for_renaming() {
         phase: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(exprs(&mut g).len(), 10);
+    assert_eq!(g.exprs_mut().len(), 10);
 }
 
 #[test]

@@ -17,12 +17,13 @@ pub mod tooth;
 
 pub use body::{GEAR_BODY, GearBody};
 
+use kmb_cad::plane::PlaneRef;
+use kmb_cad::{Exprs, angle, count, expr_refs, length, output, rename};
 use kmb_core::{
-    Curves, Dim, EvalCtx, EvalError, Feature, FeatureId, InputRef, Outputs, Payload, Profile,
-    ProfileEdge, ProfileLoop, Region, Registry, Segment, expr_inputs,
+    Curves, Dim, EvalCtx, EvalError, Feature, FeatureId, InputRef, Outputs, Payload, Plane,
+    PointId, Points, Profile, ProfileEdge, ProfileLoop, Region, Registry, Segment,
 };
 use kmb_interchange::{GEAR_OUTPUT, GearAxis, GearKind, GearSpec};
-use kmb_sketch::{EntityId, SketchPlane, profile_value, resolve_plane, solution_of};
 use serde::{Deserialize, Serialize};
 
 pub const GEAR: &str = "cad.gear@1";
@@ -40,9 +41,9 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 pub struct Gear {
     #[serde(default, skip_serializing_if = "is_default")]
     pub kind: GearKind,
-    /// 置く平面(`anchor` があれば、そのスケッチの平面を使う)
-    #[serde(default)]
-    pub plane: SketchPlane,
+    /// 置く平面(原点の平面・平らな面・作業平面。`anchor` があれば、そのスケッチの平面を使う)
+    #[serde(default = "plane_default")]
+    pub plane: PlaneRef,
     #[serde(default = "module_default")]
     pub module: String,
     #[serde(default = "teeth_default")]
@@ -74,7 +75,7 @@ pub struct Gear {
     pub anchor: Option<FeatureId>,
     /// 中心の点(省くと、そのスケッチの単独の点のうち最初のもの)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub anchor_point: Option<EntityId>,
+    pub anchor_point: Option<PointId>,
 }
 
 fn module_default() -> String {
@@ -89,6 +90,10 @@ fn pressure_default() -> String {
     "20 deg".into()
 }
 
+fn plane_default() -> PlaneRef {
+    PlaneRef::OriginXy
+}
+
 fn zero() -> String {
     "0 mm".into()
 }
@@ -97,7 +102,7 @@ impl Default for Gear {
     fn default() -> Self {
         Gear {
             kind: GearKind::default(),
-            plane: SketchPlane::default(),
+            plane: plane_default(),
             module: module_default(),
             teeth: teeth_default(),
             pressure_angle: pressure_default(),
@@ -114,97 +119,78 @@ impl Default for Gear {
     }
 }
 
-fn exprs(g: &mut Gear) -> Vec<&mut String> {
-    let mut v = vec![
-        &mut g.module,
-        &mut g.teeth,
-        &mut g.pressure_angle,
-        &mut g.x,
-        &mut g.y,
-    ];
-    v.extend(
-        [
-            &mut g.profile_shift,
-            &mut g.tip_round,
-            &mut g.root_round,
-            &mut g.bore,
-            &mut g.phase,
-        ]
-        .into_iter()
-        .flatten(),
-    );
-    v
+impl Exprs for Gear {
+    fn exprs_mut(&mut self) -> Vec<&mut String> {
+        let mut v = vec![
+            &mut self.module,
+            &mut self.teeth,
+            &mut self.pressure_angle,
+            &mut self.x,
+            &mut self.y,
+        ];
+        v.extend(
+            [
+                &mut self.profile_shift,
+                &mut self.tip_round,
+                &mut self.root_round,
+                &mut self.bore,
+                &mut self.phase,
+            ]
+            .into_iter()
+            .flatten(),
+        );
+        v
+    }
 }
 
-fn value(ctx: &EvalCtx<'_>, src: &str, what: &str, dim: Dim) -> Result<f64, EvalError> {
+/// 空でない式の欄の中身。
+fn given(src: &Option<String>) -> Option<&str> {
+    src.as_deref().filter(|s| !s.trim().is_empty())
+}
+
+/// 単位の無い数の欄(係数)。空なら `default`。
+fn ratio(
+    ctx: &EvalCtx<'_>,
+    src: &Option<String>,
+    what: &str,
+    default: f64,
+) -> Result<f64, EvalError> {
+    let Some(src) = given(src) else {
+        return Ok(default);
+    };
     let q = ctx.expr(src)?;
-    if q.dim != dim {
-        let kind = if dim == Dim::LENGTH {
-            "長さ"
-        } else if dim == Dim::ANGLE {
-            "角度"
-        } else {
-            "単位の無い数"
-        };
+    if q.dim != Dim::NONE {
         return Err(EvalError::InvalidData(format!(
-            "{what} `{src}` は{kind}ではありません(値: {q})"
+            "{what} `{src}` は単位の無い数にしてください(値: {q})"
         )));
     }
     Ok(q.value)
 }
 
-fn opt_value(
-    ctx: &EvalCtx<'_>,
-    src: &Option<String>,
-    what: &str,
-    dim: Dim,
-    default: f64,
-) -> Result<f64, EvalError> {
-    match src {
-        Some(s) if !s.trim().is_empty() => value(ctx, s, what, dim),
-        _ => Ok(default),
-    }
-}
-
 impl Gear {
     fn params(&self, ctx: &EvalCtx<'_>) -> Result<kinds::Params, EvalError> {
-        let teeth = value(ctx, &self.teeth, "歯数", Dim::NONE)?;
-        if teeth.fract().abs() > 1e-9 || teeth < 1.0 || teeth > 10_000.0 {
-            return Err(EvalError::InvalidData(format!(
-                "歯数 `{}` は 1 以上の整数にしてください(値: {teeth})",
-                self.teeth
-            )));
-        }
         Ok(kinds::Params {
-            module: value(ctx, &self.module, "モジュール", Dim::LENGTH)?,
-            teeth: teeth.round() as u32,
-            pressure_angle: value(ctx, &self.pressure_angle, "圧力角", Dim::ANGLE)?,
-            profile_shift: opt_value(ctx, &self.profile_shift, "転位係数", Dim::NONE, 0.0)?,
-            tip_round: opt_value(ctx, &self.tip_round, "歯先の丸み", Dim::NONE, 0.0)?,
-            root_round: opt_value(
-                ctx,
-                &self.root_round,
-                "歯底の丸み",
-                Dim::NONE,
-                kinds::ROOT_ROUND,
-            )?,
+            module: length(ctx, &self.module, "モジュール")?,
+            teeth: count(ctx, &self.teeth)? as u32,
+            pressure_angle: angle(ctx, &self.pressure_angle, "圧力角")?,
+            profile_shift: ratio(ctx, &self.profile_shift, "転位係数", 0.0)?,
+            tip_round: ratio(ctx, &self.tip_round, "歯先の丸み", 0.0)?,
+            root_round: ratio(ctx, &self.root_round, "歯底の丸み", kinds::ROOT_ROUND)?,
         })
     }
 
     /// 置く平面と中心(平面の座標)。
-    fn origin(&self, ctx: &EvalCtx<'_>) -> Result<(kmb_core::Plane, [f64; 2]), EvalError> {
+    fn origin(&self, ctx: &EvalCtx<'_>) -> Result<(Plane, [f64; 2]), EvalError> {
         let offset = [
-            value(ctx, &self.x, "中心 x", Dim::LENGTH)?,
-            value(ctx, &self.y, "中心 y", Dim::LENGTH)?,
+            length(ctx, &self.x, "中心 x")?,
+            length(ctx, &self.y, "中心 y")?,
         ];
         let Some(sketch) = self.anchor else {
-            return Ok((resolve_plane(&self.plane, ctx)?, offset));
+            return Ok((self.plane(ctx)?, offset));
         };
-        let not_sketch = || EvalError::InvalidData(format!("{sketch} はスケッチではありません"));
-        let sol = solution_of(ctx.output(sketch, "sketch")?).ok_or_else(not_sketch)?;
-        let plane = profile_value(ctx.output(sketch, "profile")?)
-            .ok_or_else(not_sketch)?
-            .plane;
+        let sol = Points::from_value(ctx.output(sketch, "points")?)
+            .ok_or_else(|| EvalError::InvalidData(format!("{sketch} はスケッチではありません")))?;
+        let plane = sol.plane;
         let point = match self.anchor_point {
             Some(p) => p,
             None => *sol.lone.first().ok_or_else(|| {
@@ -219,26 +205,39 @@ impl Gear {
         })?;
         Ok((plane, [p[0] + offset[0], p[1] + offset[1]]))
     }
+
+    /// 置く平面。原点の平面と作業平面は X・Y の向きもそのまま使い、平らな面は面の点と法線から
+    /// 決める(X の向きは法線から決まる向き。寸法を変えて面が動いても座標が面の形に引きずられない)。
+    fn plane(&self, ctx: &EvalCtx<'_>) -> Result<Plane, EvalError> {
+        Ok(match &self.plane {
+            PlaneRef::OriginXy => Plane::XY,
+            PlaneRef::OriginYz => Plane::YZ,
+            PlaneRef::OriginZx => Plane::ZX,
+            PlaneRef::Datum { feature } => kmb_interchange::datum_plane(ctx, *feature)?,
+            PlaneRef::Vector => {
+                return Err(EvalError::InvalidData(
+                    "置く平面を選んでください(原点の平面・平らな面・作業平面)".into(),
+                ));
+            }
+            face => {
+                let (point, normal) = face
+                    .resolve(ctx, "置く平面")?
+                    .expect("平らな面は点と法線になる");
+                Plane::from_point_normal(point, normal)
+            }
+        })
+    }
 }
 
 impl Feature for Gear {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut out = Vec::new();
-        if let Some(s) = self.anchor {
-            for slot in ["sketch", "profile"] {
-                out.push(InputRef::Output {
-                    feature: s,
-                    slot: slot.into(),
-                });
-            }
-        } else {
-            out.extend(self.plane.inputs());
-        }
-        for e in exprs(&mut self.clone()) {
-            for i in expr_inputs(e)? {
-                if !out.contains(&i) {
-                    out.push(i);
-                }
+        let mut out = match self.anchor {
+            Some(s) => vec![output(s, "points")],
+            None => self.plane.inputs(),
+        };
+        for i in expr_refs(self)? {
+            if !out.contains(&i) {
+                out.push(i);
             }
         }
         Ok(out)
@@ -246,8 +245,8 @@ impl Feature for Gear {
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let params = self.params(ctx)?;
-        let phase = opt_value(ctx, &self.phase, "回す角", Dim::ANGLE, 0.0)?;
-        let bore = opt_value(ctx, &self.bore, "軸の穴の径", Dim::LENGTH, 0.0)?;
+        let phase = given(&self.phase).map_or(Ok(0.0), |s| angle(ctx, s, "回す角"))?;
+        let bore = given(&self.bore).map_or(Ok(0.0), |s| length(ctx, s, "軸の穴の径"))?;
         let (plane, center) = self.origin(ctx)?;
         let shape = kinds::outline(self.kind, &params).map_err(EvalError::InvalidData)?;
         let root = shape
@@ -347,17 +346,7 @@ impl Feature for Gear {
     }
 
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {
-        let mut c = self.clone();
-        let mut changed = false;
-        for e in exprs(&mut c) {
-            let r = kmb_core::rename_reference(e, old, new)
-                .map_err(|x| EvalError::InvalidData(x.to_string()))?;
-            if r != *e {
-                *e = r;
-                changed = true;
-            }
-        }
-        Ok(changed.then(|| serde_json::to_value(&c).expect("JSON にできる")))
+        rename(self, old, new)
     }
 }
 
@@ -378,7 +367,7 @@ pub fn register(reg: &mut Registry) {
             .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38"))
             .field(Field::opt_expr("bore", "軸の穴の径").length().help("空か 0 なら穴なし"))
             .field(
-                Field::opt_output("anchor", "中心の点のスケッチ", "sketch")
+                Field::opt_output("anchor", "中心の点のスケッチ", "points")
                     .help("スケッチの単独の点に中心を合わせる。点は拘束で動かせる"),
             )
             .field(Field::expr("x", "中心 x").length().help("中心の点があれば、そこからのずれ"))
