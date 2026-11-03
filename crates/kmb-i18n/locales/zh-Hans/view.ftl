@@ -10,3 +10,8 @@
 # view-measure-job-running = Calculating body properties…
 # view-measure-job-cancel = Cancel calculation
 # view-measure-job-failed = The measurement could not finish. Select the geometry again.
+# view-candidate-edge = Edge ({ $faces })
+# view-candidate-vertex = Vertex ({ $position })
+
+# view-others = Select other… (or hold)
+# view-others-help = Select from overlapping faces, edges and vertices at this point. You can also hold the left mouse button to open the list.

@@ -2237,3 +2237,28 @@ field-solid-thread-clearance-help = Diametral clearance. Leave empty for 0 mm.
 field-solid-thread-end = Far end
 field-solid-thread-flip = Start at the opposite end
 field-solid-thread-form = Thread form
+
+field-cam-spiral3d-levels = Cut in depth levels from the top
+field-cam-spiral3d-direction = Cutting direction
+field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+field-cam-radial3d-levels = Cut in depth levels from the top
+field-cam-radial3d-direction = Cutting direction
+field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+
+field-cam-setup-stock-cost-material-price = Cost: Stock price
+field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+field-cam-setup-stock-cost-currency = Cost: Currency
+field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
+
+field-solid-thicken-body = Body
+field-solid-thicken-body-help = Select a sheet body without thickness
+field-solid-thicken-thickness = Thickness
+field-solid-thicken-side = Side
+
+field-solid-import-iges-file = File
+field-solid-import-iges-stand-up = Convert Y-up to Z-up
+field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.

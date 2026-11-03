@@ -33,6 +33,9 @@ pub struct MachineProfile {
     /// 加速度(mm/s²、時間の見積もりに使う)。0 なら加減速を見込まない
     #[serde(default)]
     pub acceleration: f64,
+    /// 加工中の消費電力(W)。0 は不明で、段取り表の電気代に含めない
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub power_w: f64,
     /// 角を回る速さを決める値(mm、junction deviation。時間の見積もりに使う)
     #[serde(default)]
     pub junction_deviation: f64,
@@ -80,6 +83,10 @@ pub struct MachineProfile {
     /// 負荷制御粗取りの、溝で削る時の 1 段の深さの表(材料ごと)。空なら工具の条件を使う
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub slot_stepdown: Vec<SlotStepdown>,
+}
+
+fn is_zero(value: &f64) -> bool {
+    *value == 0.0
 }
 
 fn six() -> u32 {
