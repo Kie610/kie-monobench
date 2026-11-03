@@ -131,6 +131,10 @@ view-part-hues = Color by Component
 view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 view-keycast-drag = Drag
 view-keycast-mouse3d-button = 3D mouse button { $number }
+
+view-measure-job-running = Calculating body properties…
+view-measure-job-cancel = Cancel calculation
+view-measure-job-failed = The measurement could not finish. Select the geometry again.
 view-candidate-edge = Edge ({ $faces })
 view-candidate-vertex = Vertex ({ $position })
 

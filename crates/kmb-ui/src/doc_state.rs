@@ -172,6 +172,7 @@ pub(crate) struct DocState {
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
     pub(crate) measure: Option<measure_ui::Measure>,
+    pub(crate) measure_job: Option<measure_ui::BodyReadTask>,
     /// 断面で切って見る平面(開いている時だけ。M48)
     pub(crate) section: Option<section_ui::SectionView>,
     /// キャンバス内レンダリング(レンダリングの作業空間で押している時だけ)
@@ -308,6 +309,7 @@ impl DocState {
             view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,
+            measure_job: None,
             section: None,
             canvas_render: None,
             anim: Default::default(),
