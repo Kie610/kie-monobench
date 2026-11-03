@@ -1,6 +1,7 @@
 //! 種類ごとの歯の形。種類の並びはここの 1 か所だけで、種類を足す時は `match` に 1 行と
 //! `kinds/` に 1 ファイルを足す。形を作れない種類は「まだ作れない」誤りにする(黙って別の形にしない)。
 
+pub mod sprocket;
 mod spur;
 
 use crate::tooth::P2;
@@ -18,6 +19,8 @@ pub struct Params {
     pub tip_round: f64,
     /// 歯底の丸みの半径の係数
     pub root_round: f64,
+    /// ローラーチェーンの寸法。鎖車だけで使う。
+    pub chain: Option<sprocket::Chain>,
 }
 
 impl Default for Params {
@@ -29,6 +32,7 @@ impl Default for Params {
             profile_shift: 0.0,
             tip_round: 0.0,
             root_round: ROOT_ROUND,
+            chain: None,
         }
     }
 }
@@ -49,15 +53,12 @@ pub struct Outline {
 pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
     match kind {
         GearKind::External => spur::outline(p),
-        other => Err(format!(
-            "「{}」の形はまだ作れません(今作れるのは「{}」です)",
-            other.label(),
-            GearKind::External.label()
-        )),
+        GearKind::Sprocket => sprocket::outline(p),
+        other => Err(format!("「{}」の形はまだ作れません", other.label())),
     }
 }
 
 /// 種類 `kind` の形を作れるか(画面の種類の一覧で、作れない種類を灰色にする)。
 pub fn available(kind: GearKind) -> bool {
-    matches!(kind, GearKind::External)
+    matches!(kind, GearKind::External | GearKind::Sprocket)
 }

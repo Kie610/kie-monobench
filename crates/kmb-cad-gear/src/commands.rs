@@ -42,9 +42,16 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::integer("teeth", "歯数(3 以上)").default(20),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::choice("chain", "鎖の呼び", &crate::ChainSize::CHOICES).default("40"),
+        Arg::length("chain_pitch", "鎖のピッチ(手で打つ時に必須)"),
+        Arg::length("roller_diameter", "ローラーの径(手で打つ時に必須)"),
+        Arg::length("chain_inner_width", "鎖の内幅(手で打つ時に必須)"),
     ]);
     if body {
-        v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
+        v.push(Arg::length(
+            "width",
+            "歯の幅(省くと鎖車は鎖の内幅から、ほかは 10 mm)",
+        ));
     }
     v
 }
@@ -139,6 +146,52 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     if let Some(b) = cx.arg_f64("bore")?.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
     }
+    if kind == GearKind::Sprocket {
+        let key = cx.arg_str("chain").unwrap_or("40");
+        let size: crate::ChainSize =
+            serde_json::from_value(json!(key)).map_err(|_| "鎖の呼びを選んでください")?;
+        gear["chain"] = json!(key);
+        if size != crate::ChainSize::Manual
+            && ["chain_pitch", "roller_diameter", "chain_inner_width"]
+                .iter()
+                .any(|key| cx.arg(key).is_some())
+        {
+            return Err("鎖の寸法を直接指定する時は呼びを「手で打つ」にしてください".into());
+        }
+        let chain = match size.dimensions() {
+            Some(c) => c,
+            None => {
+                let read = |key: &str| -> Result<f64, Problem> {
+                    cx.arg_f64(key)?
+                        .ok_or_else(|| format!("{key} を入力してください").into())
+                };
+                let c = kinds::sprocket::Chain {
+                    pitch: read("chain_pitch")?,
+                    roller: read("roller_diameter")?,
+                    inner_width: read("chain_inner_width")?,
+                }
+                .validate()?;
+                gear["chain_pitch"] = json!(format!("{} mm", c.pitch));
+                gear["roller_diameter"] = json!(format!("{} mm", c.roller));
+                gear["chain_inner_width"] = json!(format!("{} mm", c.inner_width));
+                c
+            }
+        };
+        let z = u32::try_from(teeth).map_err(|_| "鎖車の歯数が大きすぎます")?;
+        kinds::sprocket::dimensions(chain, z)?;
+        if let Some(bore) = cx.arg_f64("bore")? {
+            if bore < 0.0 {
+                return Err("軸の穴の径は 0 以上にしてください".into());
+            }
+            gear["bore"] = json!(format!("{bore} mm"));
+        }
+    } else if cx.arg_str("chain").unwrap_or("40") != "40"
+        || ["chain_pitch", "roller_diameter", "chain_inner_width"]
+            .iter()
+            .any(|key| cx.arg(key).is_some())
+    {
+        return Err("鎖の寸法は種類が鎖車の時だけ指定できます".into());
+    }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {
         type_id: GEAR.into(),
@@ -146,14 +199,17 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         data: gear,
     }];
     if body {
-        let width = cx.arg_f64("width")?.unwrap_or(10.0);
-        if width <= 0.0 {
-            return Err("歯の幅は 0 より大きくしてください".into());
+        let mut data = json!({"gear": {"$new": 0}});
+        if let Some(width) = cx.arg_f64("width")? {
+            if width <= 0.0 {
+                return Err("歯の幅は 0 より大きくしてください".into());
+            }
+            data["width"] = json!(format!("{width} mm"));
         }
         edits.push(Edit::Insert {
             type_id: GEAR_BODY.into(),
             name: format!("歯車のボディ{}", cx.count_of(GEAR_BODY) + 1),
-            data: json!({"gear": {"$new": 0}, "width": mm(width)}),
+            data,
         });
     }
     Ok(Outcome::Change {

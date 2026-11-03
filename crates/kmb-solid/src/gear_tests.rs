@@ -91,3 +91,76 @@ fn an_extruded_gear_has_the_outline_area_times_its_width() {
     assert!(names.iter().any(|n| n.contains(":side:t11:tip")));
     assert!(!names.iter().any(|n| n.contains(":side:t13:")), "{names:?}");
 }
+
+#[test]
+fn sprocket_default_width_and_volume_follow_the_chain() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let g = b.feature(
+        kmb_cad_gear::GEAR,
+        "鎖車",
+        kmb_cad_gear::Gear {
+            kind: kmb_interchange::GearKind::Sprocket,
+            teeth: "17".into(),
+            bore: Some("6 mm".into()),
+            ..Default::default()
+        },
+    );
+    let e = b.feature(
+        kmb_cad_gear::GEAR_BODY,
+        "鎖車のボディ",
+        kmb_cad_gear::GearBody::new(g),
+    );
+    let mut doc = b.finish("鎖車");
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(g) else {
+        panic!("輪郭")
+    };
+    let profile_area = area(&Profile::from_value(&outputs["profile"]).unwrap());
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
+        panic!("ボディ")
+    };
+    let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+    let width = 7.95 * 0.93;
+    assert!((spec.face_width.unwrap() - width).abs() < 1e-12);
+    assert_eq!(spec.chain_pitch, Some(12.7));
+    let mass = final_mass(&mut doc, &k);
+    assert!(
+        close(mass.volume, profile_area * width, 2e-3),
+        "{} vs {}",
+        mass.volume,
+        profile_area * width
+    );
+}
+
+#[test]
+fn external_gears_keep_ten_mm_for_omitted_empty_and_explicit_widths() {
+    let k = TestKernel::new();
+    for width in [None, Some(""), Some("10 mm")] {
+        let mut b = DocBuilder::new();
+        let g = b.feature(
+            kmb_cad_gear::GEAR,
+            "平歯車",
+            kmb_cad_gear::Gear {
+                teeth: "12".into(),
+                ..Default::default()
+            },
+        );
+        let mut data = serde_json::json!({"gear":g});
+        if let Some(width) = width {
+            data["width"] = serde_json::json!(width);
+        }
+        let body: kmb_cad_gear::GearBody = serde_json::from_value(data).unwrap();
+        let e = b.feature(kmb_cad_gear::GEAR_BODY, "ボディ", body);
+        let mut doc = b.finish("平歯車");
+        let report = doc.recompute(&registry(), &*k);
+        assert_ok(&report);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(e) else {
+            panic!("ボディ")
+        };
+        let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+        assert_eq!(spec.face_width, Some(10.0));
+    }
+}
