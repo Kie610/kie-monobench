@@ -13,6 +13,7 @@
 
 pub mod body;
 pub mod commands;
+pub mod hub;
 pub mod kinds;
 pub mod tooth;
 
@@ -23,7 +24,7 @@ use kmb_cad::plane::PlaneRef;
 use kmb_cad::{Exprs, angle, count, expr_refs, length, output, rename};
 use kmb_core::{
     Curves, Dim, EvalCtx, EvalError, Feature, FeatureId, InputRef, Outputs, Payload, Plane,
-    PointId, Points, Profile, ProfileEdge, ProfileLoop, Region, Registry, Segment,
+    PointId, Points, ProfileLoop, Registry, Segment,
 };
 use kmb_interchange::{GEAR_OUTPUT, GearAxis, GearKind, GearSpec};
 use serde::{Deserialize, Serialize};
@@ -64,6 +65,21 @@ pub struct Gear {
     /// 軸の穴の径(空か 0 なら穴なし)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bore: Option<String>,
+    /// 軽くする穴の数(空か 0 なら穴なし)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lightening_count: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lightening_diameter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lightening_circle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boss_diameter: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub keyway: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_depth: Option<String>,
     /// 中心。平面の座標(`anchor` があれば、その点からのずれ)
     #[serde(default = "zero")]
     pub x: String,
@@ -112,6 +128,13 @@ impl Default for Gear {
             tip_round: None,
             root_round: None,
             bore: None,
+            lightening_count: None,
+            lightening_diameter: None,
+            lightening_circle: None,
+            boss_diameter: None,
+            keyway: false,
+            key_width: None,
+            key_depth: None,
             x: zero(),
             y: zero(),
             phase: None,
@@ -136,6 +159,12 @@ impl Exprs for Gear {
                 &mut self.tip_round,
                 &mut self.root_round,
                 &mut self.bore,
+                &mut self.lightening_count,
+                &mut self.lightening_diameter,
+                &mut self.lightening_circle,
+                &mut self.boss_diameter,
+                &mut self.key_width,
+                &mut self.key_depth,
                 &mut self.phase,
             ]
             .into_iter()
@@ -267,27 +296,42 @@ impl Feature for Gear {
                 2.0 * root
             )));
         }
-        let place = |e: &ProfileEdge| tooth::translate(&tooth::rotate(e, phase), center);
-        let outer = ProfileLoop {
-            edges: shape.edges.iter().map(place).collect(),
-        };
-        let mut holes = Vec::new();
-        if bore > 0.0 {
-            holes.push(ProfileLoop {
-                edges: vec![ProfileEdge {
-                    name: "bore".into(),
-                    segment: Segment::Circle {
-                        center,
-                        radius: bore / 2.0,
-                    },
-                    reversed: true,
-                }],
-            });
+        let hole_count = ratio(ctx, &self.lightening_count, "軽くする穴の数", 0.0)?;
+        if !hole_count.is_finite()
+            || !(0.0..=1000.0).contains(&hole_count)
+            || (hole_count - hole_count.round()).abs() > 1e-9
+        {
+            return Err(EvalError::InvalidData(
+                "軽くする穴の数は 0 から 1000 までの整数にしてください".into(),
+            ));
         }
-        let segments: Vec<Segment> = outer
-            .edges
+        let optional_length =
+            |src: &Option<String>, what| given(src).map(|s| length(ctx, s, what)).transpose();
+        let layout = hub::layout(
+            ProfileLoop { edges: shape.edges },
+            root,
+            params.module,
+            bore / 2.0,
+            &hub::Params {
+                count: hole_count.round() as u32,
+                hole_diameter: optional_length(&self.lightening_diameter, "軽くする穴の径")?
+                    .unwrap_or(0.0),
+                circle_diameter: optional_length(&self.lightening_circle, "穴を並べる円の径")?
+                    .unwrap_or(0.0),
+                boss_diameter: optional_length(&self.boss_diameter, "ボスの外径")?.unwrap_or(0.0),
+                keyway: self.keyway,
+                key_width: optional_length(&self.key_width, "キー溝の幅")?,
+                key_depth: optional_length(&self.key_depth, "キー溝の深さ")?,
+            },
+        )
+        .map_err(EvalError::InvalidData)?
+        .placed(plane, phase, center);
+        let segments: Vec<Segment> = layout
+            .profile
+            .regions
             .iter()
-            .chain(holes.iter().flat_map(|h| &h.edges))
+            .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
+            .flat_map(|ring| &ring.edges)
             .map(|e| e.segment.clone())
             .collect();
         let reference: Vec<Segment> = shape
@@ -325,10 +369,6 @@ impl Feature for Gear {
             chain_pitch: None,
             starts: 1,
         };
-        let profile = Profile {
-            plane,
-            regions: vec![Region { outer, holes }],
-        };
         let mut out: Outputs = [
             ("curves".to_string(), Curves { plane, segments }.to_value()),
             (
@@ -339,7 +379,8 @@ impl Feature for Gear {
                 }
                 .to_value(),
             ),
-            ("profile".to_string(), profile.to_value()),
+            ("profile".to_string(), layout.profile.to_value()),
+            (hub::PARTS_OUTPUT.to_string(), layout.parts.to_value()),
             (GEAR_OUTPUT.to_string(), spec.to_value()),
         ]
         .into();
@@ -375,6 +416,13 @@ pub fn register(reg: &mut Registry) {
             .field(Field::opt_expr("tip_round", "歯先の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0"))
             .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38"))
             .field(Field::opt_expr("bore", "軸の穴の径").length().help("空か 0 なら穴なし"))
+            .field(Field::opt_expr("lightening_count", "軽くする穴の数").unitless().step(1.0, 0.0).help("空か 0 なら穴なし"))
+            .field(Field::opt_expr("lightening_diameter", "軽くする穴の径").length())
+            .field(Field::opt_expr("lightening_circle", "穴を並べる円の径").length())
+            .field(Field::opt_expr("boss_diameter", "ボスの外径").length().help("空か 0 ならボスなし"))
+            .field(Field::bool("keyway", "キー溝"))
+            .field(Field::opt_expr("key_width", "キー溝の幅").length().help("空なら軸の穴の径で表から選ぶ").only("keyway", "true", "false"))
+            .field(Field::opt_expr("key_depth", "キー溝の深さ").length().help("空なら軸の穴の径で表から選ぶ").only("keyway", "true", "false"))
             .field(
                 Field::opt_output("anchor", "中心の点のスケッチ", "points")
                     .help("スケッチの単独の点に中心を合わせる。点は拘束で動かせる"),

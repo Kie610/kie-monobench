@@ -153,3 +153,36 @@ fn the_added_outline_evaluates_around_the_given_center() {
     assert_eq!(spec.teeth, 12);
     assert!((spec.axis.origin[0] - 30.0).abs() < 1e-9, "{:?}", spec.axis);
 }
+
+#[test]
+fn holes_boss_and_keyway_arguments_reach_the_same_feature_fields() {
+    let out = inserts(
+        run(
+            GEAR_ADD,
+            json!({
+                "plane": "xy", "module": 2, "teeth": 24, "bore": 8,
+                "lightening_count": 4, "lightening_diameter": 3,
+                "lightening_circle": 26, "boss_diameter": 16,
+                "keyway": true, "key_width": 2, "key_depth": 1,
+                "web": 3, "boss": 12, "alignment": "start"
+            }),
+        )
+        .unwrap(),
+    );
+    assert_eq!(out[0].1["lightening_count"], "4");
+    for (key, want) in [
+        ("lightening_diameter", "3 mm"),
+        ("lightening_circle", "26 mm"),
+        ("boss_diameter", "16 mm"),
+        ("key_width", "2 mm"),
+        ("key_depth", "1 mm"),
+    ] {
+        assert_eq!(out[0].1[key], want);
+    }
+    assert_eq!(out[0].1["keyway"], true);
+    assert_eq!(out[1].1["web"], "3 mm");
+    assert_eq!(out[1].1["boss"], "12 mm");
+    assert_eq!(out[1].1["alignment"], "start");
+    assert!(run(GEAR_ADD, json!({"lightening_count": -1})).is_err());
+    assert!(run(GEAR_OUTLINE_ADD, json!({"web": 3})).is_err());
+}
