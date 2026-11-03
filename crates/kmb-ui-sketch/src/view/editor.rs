@@ -106,6 +106,8 @@ pub(crate) struct Editor {
     /// 右クリックで頼んだモジュールの操作の役割(DXF として保存。画面が役割で操作を探し、
     /// ダイアログを出して実行する)
     pub(crate) run_action: Option<kmb_core::ActionRole>,
+    /// 投影のクリックを、CLI・MCP と同じ操作へ渡す。
+    pub(crate) project_axis: Option<(kmb_core::FeatureId, bool)>,
     /// オフセットの道具の状態
     pub(crate) offset: crate::offset_tool::State,
     /// 右クリックの「OK」: 次のコマで打った値の形を作ってから道具を終える
@@ -248,6 +250,7 @@ impl Default for Editor {
             app_ask: None,
             empty_esc: None,
             run_action: None,
+            project_axis: None,
             offset: crate::offset_tool::State::default(),
             ok: false,
             measured: None,
