@@ -288,6 +288,18 @@ fn mass_progress_background_measurement() {
         let (dir, tool) = (dir.to_owned(), tool.to_owned());
         std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args))
     };
+    for target in ["頂点", "辺"] {
+        let change = request(&dir.0, "ui_click", json!({"target":target}));
+        let before = Instant::now();
+        while !change.is_finished() {
+            h.step();
+            std::thread::sleep(Duration::from_millis(2));
+            assert!(before.elapsed() < Duration::from_secs(30));
+        }
+        assert_eq!(change.join().unwrap().unwrap()["ok"], true);
+        h.run_steps(4);
+    }
+    assert_eq!(h.state().win.pick_filter, PickFilter::FACE, "面だけを選ぶ");
     let pick = request(&dir.0, "ui_pick", json!({"face":top}));
     let before = Instant::now();
     while !pick.is_finished() {
@@ -297,6 +309,8 @@ fn mass_progress_background_measurement() {
     }
     assert_eq!(pick.join().unwrap().unwrap()["ok"], true);
     h.run_steps(4);
+    assert_eq!(h.state().picked_faces().len(), 1, "測定前に面を選ぶ");
+    assert_eq!(h.state().picked_faces()[0].feature, id);
     let data = h.state().document().data().clone();
     let depth = h.state().document().undo_depth();
     let key = request(&dir.0, "ui_key", json!({"keys":"I"}));
