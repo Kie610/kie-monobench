@@ -98,6 +98,11 @@ fn gear_hub_web_and_keyway_have_the_calculated_volume_and_alignment() {
     use std::f64::consts::PI;
     for alignment in [Alignment::Centered, Alignment::Start] {
         let k = TestKernel::new();
+        if k.is_truck() {
+            kmb_contract::skip!(
+                "truck はリム・腕・ボスの同じ円筒で接する領域のブーリアンに失敗する"
+            );
+        }
         let mut b = DocBuilder::new();
         let g = b.feature(
             kmb_cad_gear::GEAR,
@@ -180,6 +185,11 @@ fn gear_parts_keep_join_cut_and_same_thickness_intersection() {
     let stock_volume = 80.0 * 80.0 * 30.0;
     for operation in [Operation::Join, Operation::Cut, Operation::Intersect] {
         let k = TestKernel::new();
+        if k.is_truck() {
+            kmb_contract::skip!(
+                "truck はリム・腕・ボスの同じ円筒で接する領域のブーリアンに失敗する"
+            );
+        }
         let mut b = DocBuilder::new();
         let sk = rect_sketch(&mut b, SketchPlane::Xy, -40.0, -40.0, 80.0, 80.0);
         let stock = b.feature(
