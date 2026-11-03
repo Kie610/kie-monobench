@@ -190,31 +190,37 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
             .max_by(|a, b| a.z.total_cmp(&b.z))
             .map(|f| f.name.clone())
     });
-    let face = match &face {
-        Some(name) => p
-            .model
-            .flat(name)
-            .filter(|f| f.up)
-            .ok_or_else(|| {
-                invalid(format!(
+    let faces = match &face {
+        Some(name) => {
+            let faces: Vec<_> = p
+                .model
+                .flats_named(name)
+                .into_iter()
+                .filter(|f| f.up)
+                .cloned()
+                .collect();
+            if faces.is_empty() {
+                return Err(invalid(format!(
                     "面 {name} が見つかりません(参照が切れたか、上向きの水平な平面ではありません)"
-                ))
-            })?
-            .clone(),
-        None => p
-            .model
-            .flats
-            .iter()
-            .filter(|f| f.up)
-            .max_by(|a, b| {
-                if (a.z - b.z).abs() > 1e-6 {
-                    a.z.total_cmp(&b.z)
-                } else {
-                    a.area.area().total_cmp(&b.area.area())
-                }
-            })
-            .ok_or_else(|| invalid("部品に上向きの平らな面がありません"))?
-            .clone(),
+                )));
+            }
+            faces
+        }
+        None => vec![
+            p.model
+                .flats
+                .iter()
+                .filter(|f| f.up)
+                .max_by(|a, b| {
+                    if (a.z - b.z).abs() > 1e-6 {
+                        a.z.total_cmp(&b.z)
+                    } else {
+                        a.area.area().total_cmp(&b.area.area())
+                    }
+                })
+                .ok_or_else(|| invalid("部品に上向きの平らな面がありません"))?
+                .clone(),
+        ],
     };
     let half = (p.tool.tip_angle / 2.0).to_radians();
     let x = t * half.tan();
@@ -225,85 +231,87 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
             p.r()
         )));
     }
-    let top = face.z;
-    let bottom = top - t - w / half.tan();
-    p.check_depth(top, bottom)?;
-    let area = face.area.clone().normalized();
-    // 選んだ辺だけを削る時は、面の縁のうち選んだ辺の所だけ
-    let segs = if selected.is_empty() {
-        None
-    } else {
-        let others: Vec<&str> = selected
-            .iter()
-            .filter_map(|[a, b]| {
-                if *a == face.name {
-                    Some(b.as_str())
-                } else if *b == face.name {
-                    Some(a.as_str())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if others.is_empty() {
-            return Err(invalid(format!(
-                "選んだ辺は面 {} の縁にありません(「辺の選びをやめる」か、面を選び直してください)",
-                face.name
-            )));
-        }
-        let segs = edge_segments(&p.model, &others, top);
-        if segs.is_empty() {
-            return Err(invalid(
-                "選んだ辺が加工の形に見つかりません(参照が切れました)",
-            ));
-        }
-        Some(segs)
-    };
-    let near = |q: [f64; 2], d: f64| {
-        segs.as_ref()
-            .is_none_or(|s| s.iter().any(|(a, b)| to_segment(q, *a, *b) <= d))
-    };
-    let mut loops: Vec<(Loop, bool)> = Vec::new();
-    if edges != Edges::Holes || segs.is_some() {
-        loops.push((area.outer.clone(), true));
-    }
-    if edges != Edges::Outer || segs.is_some() {
-        loops.extend(area.holes.iter().map(|h| (h.clone(), false)));
-    }
     let mut skipped = 0;
-    let mut paths: Vec<Loop> = Vec::new();
-    let mut open: Vec<Vec<[f64; 2]>> = Vec::new();
-    for (l, outer) in loops {
-        // 選んだ辺の無い縁は削らない
-        if segs.is_some() && !l.flatten(0.05).iter().any(|q| near(*q, 0.05)) {
-            continue;
-        }
-        if !falls_away(&p.model, &l, top, (w + x).max(0.1), &|q| near(q, 0.05)) {
-            skipped += 1;
-            continue;
-        }
-        // 外周は外へ、穴は穴の中へ `x` だけずらす
-        let shifted = if x < 1e-6 {
-            vec![if l.signed_area() < 0.0 {
-                l.reversed()
-            } else {
-                l.clone()
-            }]
-        } else if outer {
-            offset_loop_outward(&l, x)
+    let mut paths: Vec<(Loop, f64, f64)> = Vec::new();
+    let mut open: Vec<(Vec<[f64; 2]>, f64, f64)> = Vec::new();
+    for face in faces {
+        let top = face.z;
+        let bottom = top - t - w / half.tan();
+        p.check_depth(top, bottom)?;
+        let area = face.area.clone().normalized();
+        // 選んだ辺だけを削る時は、面の縁のうち選んだ辺の所だけ
+        let segs = if selected.is_empty() {
+            None
         } else {
-            offset_loop_outward(&l, -x)
+            let others: Vec<&str> = selected
+                .iter()
+                .filter_map(|[a, b]| {
+                    if *a == face.name {
+                        Some(b.as_str())
+                    } else if *b == face.name {
+                        Some(a.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if others.is_empty() {
+                return Err(invalid(format!(
+                    "選んだ辺は面 {} の縁にありません(「辺の選びをやめる」か、面を選び直してください)",
+                    face.name
+                )));
+            }
+            let segs = edge_segments(&p.model, &others, top);
+            if segs.is_empty() {
+                return Err(invalid(
+                    "選んだ辺が加工の形に見つかりません(参照が切れました)",
+                ));
+            }
+            Some(segs)
         };
-        for s in shifted {
-            // 外周は時計回り、穴の中は反時計回り(どちらもダウンカット)
-            let s = if outer { s.reversed() } else { s };
-            // 選んだ辺の所だけを開いた経路で削る(縁が全部選んだ辺なら閉じたまま)
-            match segs
-                .as_ref()
-                .and_then(|_| runs(&s.flatten(0.05), &|q| near(q, x + 0.05)))
-            {
-                Some(r) => open.extend(r),
-                None => paths.push(s),
+        let near = |q: [f64; 2], d: f64| {
+            segs.as_ref()
+                .is_none_or(|s| s.iter().any(|(a, b)| to_segment(q, *a, *b) <= d))
+        };
+        let mut loops: Vec<(Loop, bool)> = Vec::new();
+        if edges != Edges::Holes || segs.is_some() {
+            loops.push((area.outer.clone(), true));
+        }
+        if edges != Edges::Outer || segs.is_some() {
+            loops.extend(area.holes.iter().map(|h| (h.clone(), false)));
+        }
+        for (l, outer) in loops {
+            // 選んだ辺の無い縁は削らない
+            if segs.is_some() && !l.flatten(0.05).iter().any(|q| near(*q, 0.05)) {
+                continue;
+            }
+            if !falls_away(&p.model, &l, top, (w + x).max(0.1), &|q| near(q, 0.05)) {
+                skipped += 1;
+                continue;
+            }
+            // 外周は外へ、穴は穴の中へ `x` だけずらす
+            let shifted = if x < 1e-6 {
+                vec![if l.signed_area() < 0.0 {
+                    l.reversed()
+                } else {
+                    l.clone()
+                }]
+            } else if outer {
+                offset_loop_outward(&l, x)
+            } else {
+                offset_loop_outward(&l, -x)
+            };
+            for s in shifted {
+                // 外周は時計回り、穴の中は反時計回り(どちらもダウンカット)
+                let s = if outer { s.reversed() } else { s };
+                // 選んだ辺の所だけを開いた経路で削る(縁が全部選んだ辺なら閉じたまま)
+                match segs
+                    .as_ref()
+                    .and_then(|_| runs(&s.flatten(0.05), &|q| near(q, x + 0.05)))
+                {
+                    Some(r) => open.extend(r.into_iter().map(|r| (r, top, bottom))),
+                    None => paths.push((s, top, bottom)),
+                }
             }
         }
     }
@@ -318,7 +326,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
     let mut tp = p.toolpath();
     // 形にない面取りを削るので、面取りの縦の深さまでの食い込みは許す
     tp.edge_break = w / half.tan() + 0.05;
-    for path in paths {
+    for (path, top, bottom) in paths {
         let start = [path.verts[0].x, path.verts[0].y];
         approach(&mut tp, start);
         for z in p.levels(top, bottom) {
@@ -331,7 +339,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         retract(&mut tp);
     }
     // 開いた経路は段ごとに始めの点から削り直す(同じ向きのまま。ダウンカットを保つ)
-    for run in open {
+    for (run, top, bottom) in open {
         for z in p.levels(top, bottom) {
             approach(&mut tp, run[0]);
             tp.moves.push(Move::Linear {

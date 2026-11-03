@@ -95,6 +95,10 @@ action-cad-extrude-to-face = Up to Face
 action-cad-extrude-to-face-tip = Extrude the selected extrude up to the clicked flat face, vertex or construction plane (an inclined face trims the end of the tool body). It cuts if the extrusion passes through the body, and joins if it does not
 action-cad-fillet = Fillet
 action-cad-fillet-tip = Press, then click an edge or face to apply it and go on to the value fields (a face means all edges around it; Ctrl+click to pick several). If edges or faces are already selected, it applies to them
+action-cad-gear = Gear
+action-cad-gear-tip = Press, then click a plane → the center to make a gear profile and its body. Edit the type, module, number of teeth and other fields, then OK or Enter. Esc cancels
+action-cad-gear-outline = Gear Profile
+action-cad-gear-outline-tip = Place only the gear profile (no body). Use it as is for laser cutting, 2D contour machining or extrude
 action-cad-hole-add = Add Same Hole
 action-cad-hole-add-tip = Add the same hole as the selected one on the same face where you click. Press Enter to finish
 action-cad-hole-on-face = Hole
@@ -361,7 +365,34 @@ action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+action-cam-nest-create = Nest on sheets
+action-cam-nest-create-tip = Create a setup that arranges the selected bodies on sheets
+action-cam-nest-add-part = Add nesting part
+action-cam-nest-add-part-tip = Add another body to the sheet layout
+action-cam-nest-remove-part = Remove nesting part
+action-cam-nest-remove-part-tip = Remove the part with the specified index from the layout
+action-cam-nest-set-part = Edit nesting part
+action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper face of a part
 
+action-study-converge = Check accuracy
+action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+action-study-check = Check conditions
+action-study-check-tip = List missing study conditions and explain how to fix them before solving
+action-drawing-set-paper = Sheet settings
+action-drawing-set-paper-tip = Set the drawing sheet size, orientation, binding margin, pens, and layer colors
+
+action-drawing-set-title = Title block settings
+action-drawing-set-title-tip = Set fixed text or document fields in the title block and embed the required font glyphs
+
+action-drawing-export-pdf = Export drawing as PDF
+action-drawing-export-pdf-tip = Export one sheet or all sheets as pages with the actual paper dimensions
+
+action-drawing-export-dxf = Export drawing as DXF
+action-drawing-export-dxf-tip = Export one sheet as DXF with layers for line roles and line types
+
+action-drawing-export-svg = Export drawing as SVG
+action-drawing-export-svg-tip = Export one sheet as SVG with paper dimensions, line widths, and line types
 action-cad-import-mesh = Import STL or 3MF…
 action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 action-view-part-hues = Color by Component

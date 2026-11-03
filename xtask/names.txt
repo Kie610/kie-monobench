@@ -67,6 +67,10 @@ cad.extrude	kmb-cad-extrude
 cad.extrude_regions	kmb-cad-extrude
 cad.extrude_to_face	kmb-cad-extrude
 cad.fillet	kmb-cad-edge
+cad.gear	kmb-cad-gear
+cad.gear@1	kmb-cad-gear
+cad.gear_body@1	kmb-cad-gear
+cad.gear_outline	kmb-cad-gear
 cad.hole_add	kmb-cad-hole
 cad.hole_on_face	kmb-cad-hole
 cad.hole_to_face	kmb-cad-hole
@@ -174,6 +178,10 @@ cam.laser@1	kmb-strategy-laser
 cam.machine	kmb-cam-commands
 cam.manual_nc@1	kmb-cam-setup
 cam.morph3d@1	kmb-strategy-raster3d
+cam.nest.add_part	kmb-cam-commands
+cam.nest.create	kmb-cam-commands
+cam.nest.remove_part	kmb-cam-commands
+cam.nest.set_part	kmb-cam-commands
 cam.op_defaults	kmb-cam-commands
 cam.pattern@1	kmb-cam-setup
 cam.pencil3d@1	kmb-strategy-pencil
@@ -220,6 +228,9 @@ drawing.delete	kmb-drawing
 drawing.detail_view	kmb-drawing
 drawing.dimension	kmb-drawing
 drawing.dimension_set	kmb-drawing
+drawing.export_dxf	kmb-drawing
+drawing.export_pdf	kmb-drawing
+drawing.export_svg	kmb-drawing
 drawing.import_dimensions	kmb-drawing
 drawing.move_view	kmb-drawing
 drawing.note	kmb-drawing
@@ -228,7 +239,9 @@ drawing.picture	kmb-drawing
 drawing.projected_view	kmb-drawing
 drawing.renumber_balloons	kmb-drawing
 drawing.section_view	kmb-drawing
+drawing.set_paper	kmb-drawing
 drawing.set_style	kmb-drawing
+drawing.set_title	kmb-drawing
 drawing.set_view	kmb-drawing
 fea.modal@1	kmb-fea
 fea.static@1	kmb-fea
@@ -290,6 +303,8 @@ solid.sweep@1	kmb-cad-sweep
 solid.thicken@1	kmb-cad-surface
 solid.thread@1	kmb-cad-hole
 study.cancel	kmb-study
+study.check	kmb-study
+study.converge	kmb-study
 study.run	kmb-study
 wave.radiate@1	kmb-wave
 wave.solve	kmb-wave

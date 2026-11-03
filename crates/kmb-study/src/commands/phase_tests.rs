@@ -1,6 +1,6 @@
 use super::*;
 use crate::result::{Frame, Part, Quantity, Values};
-use crate::run::{Control, Task};
+use crate::run::{Control, Mode, Task};
 use kmb_core::{
     Descriptor, Document, Extensions, FeatureEntry, NullKernel, Op, RecomputeReport, Registry,
     Transaction,
@@ -72,7 +72,7 @@ fn phase_seek_checks_the_result_address_and_declares_its_coefficient() {
     let commands = Arc::new(StudyCommands::default());
     commands
         .runner
-        .solve_now((9, fid.0), 42, &ResultTask(result()))
+        .solve_now((9, fid.0), 42, &ResultTask(result()), Mode::Solve)
         .unwrap();
     let ext = Extensions(vec![commands.clone()]);
     let bar = commands.frames(&cx).unwrap();
@@ -117,7 +117,7 @@ fn phase_seek_checks_the_result_address_and_declares_its_coefficient() {
     assert_ne!(cache_key(), mode_key);
     commands
         .runner
-        .solve_now((9, fid.0), 43, &ResultTask(result()))
+        .solve_now((9, fid.0), 43, &ResultTask(result()), Mode::Solve)
         .unwrap();
     assert_ne!(commands.frames(&cx).unwrap().seek, bar.seek);
     assert!(
@@ -131,7 +131,7 @@ fn phase_seek_checks_the_result_address_and_declares_its_coefficient() {
     let before_stamp = commands.frames(&cx).unwrap().seek;
     commands
         .runner
-        .solve_now((9, fid.0), 43, &ResultTask(changed))
+        .solve_now((9, fid.0), 43, &ResultTask(changed), Mode::Solve)
         .unwrap();
     assert_ne!(commands.frames(&cx).unwrap().seek, before_stamp);
     let previous_key = cache_key();
@@ -144,7 +144,7 @@ fn phase_seek_checks_the_result_address_and_declares_its_coefficient() {
     }
     commands
         .runner
-        .solve_now((9, fid.0), 44, &ResultTask(timed))
+        .solve_now((9, fid.0), 44, &ResultTask(timed), Mode::Solve)
         .unwrap();
     let bar = commands.frames(&cx).unwrap();
     assert!(bar.playable);
@@ -202,7 +202,7 @@ fn a_new_job_moves_the_phase_cache_even_when_the_result_stamp_stays_equal() {
     let original = result();
     commands
         .runner
-        .solve_now((9, fid.0), 42, &ResultTask(original.clone()))
+        .solve_now((9, fid.0), 42, &ResultTask(original.clone()), Mode::Solve)
         .unwrap();
     let seek = format!("{}0", commands.frames(&cx).unwrap().seek);
     let args = json!({"phase": 0.25});
@@ -219,7 +219,7 @@ fn a_new_job_moves_the_phase_cache_even_when_the_result_stamp_stays_equal() {
     assert_eq!(moved.stamp(), original.stamp());
     commands
         .runner
-        .solve_now((9, fid.0), 43, &ResultTask(moved.clone()))
+        .solve_now((9, fid.0), 43, &ResultTask(moved.clone()), Mode::Solve)
         .unwrap();
     let seek = format!("{}0", commands.frames(&cx).unwrap().seek);
     ext.run(&seek, &Context { args: &args, ..cx }).unwrap();

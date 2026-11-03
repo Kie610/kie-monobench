@@ -294,7 +294,11 @@ fn the_file_menu_packages_the_checked_items() {
 }
 
 fn bulk_recovery_fixture(count: usize) -> (Workspace, std::path::PathBuf) {
-    let dir = temp_dir("bulk-recoveries");
+    // 試験は並んで走るので、呼ぶたびに別の場所にする(同じ場所だと、ほかの試験の始めと終わりの
+    // 片付けが写しを消してしまう)
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = temp_dir(&format!("bulk-recoveries-{n}"));
     let mut ws = Workspace::new(Document::new(), None, reg()).show_start();
     ws.win.layout.appearance.language = "ja".into();
     for i in 0..count {

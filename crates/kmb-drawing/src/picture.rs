@@ -125,6 +125,14 @@ pub fn sheet_picture_with_lines(
     cx: &Context<'_>,
     sheet_id: &str,
 ) -> Result<(SheetPicture, BTreeMap<String, Vec<ViewLine>>), Problem> {
+    picture_dated(cx, sheet_id, None)
+}
+
+pub(super) fn picture_dated(
+    cx: &Context<'_>,
+    sheet_id: &str,
+    date: Option<&str>,
+) -> Result<(SheetPicture, BTreeMap<String, Vec<ViewLine>>), Problem> {
     let drawings: Drawings = cx
         .data
         .section()
@@ -229,15 +237,19 @@ pub fn sheet_picture_with_lines(
         }
     }
     items.extend(annotation_items);
-    Ok((
-        SheetPicture {
-            sheet: sheet.id.clone(),
-            size: sheet.paper.size(),
-            items,
-            problems,
-        },
-        tables,
-    ))
+    let mut picture = SheetPicture {
+        sheet: sheet.id.clone(),
+        size: sheet.paper.size(),
+        items,
+        problems,
+    };
+    let index = drawings
+        .sheets
+        .iter()
+        .position(|s| s.id == sheet_id)
+        .unwrap();
+    crate::paper::append(cx, sheet, index, drawings.sheets.len(), date, &mut picture);
+    Ok((picture, tables))
 }
 fn calculate(
     cx: &Context<'_>,
