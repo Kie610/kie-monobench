@@ -924,3 +924,6 @@ mod wide_toolbar_tests;
 
 #[cfg(test)]
 mod mass_progress_tests;
+
+#[cfg(test)]
+mod mass_progress_live_tests;
