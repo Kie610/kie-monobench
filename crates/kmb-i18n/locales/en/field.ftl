@@ -2319,3 +2319,16 @@ field-solid-thicken-side = Side
 field-solid-import-iges-file = File
 field-solid-import-iges-stand-up = Convert Y-up to Z-up
 field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+field-cad-gear-body-alignment = Web and Boss Alignment
+field-cad-gear-boss-diameter = Boss Outside Diameter
+field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+field-cad-gear-key-depth = Keyway Depth
+field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+field-cad-gear-key-width = Keyway Width
+field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+field-cad-gear-keyway = Keyway
+field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+field-cad-gear-lightening-count = Number of Lightening Holes
+field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+field-cad-gear-lightening-diameter = Lightening Hole Diameter
