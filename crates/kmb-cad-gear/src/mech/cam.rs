@@ -162,6 +162,16 @@ impl Term {
                     MotionLaw::Polynomial345 => "3-4-5",
                 }
             ),
+            None if self.direction < 0 => format!(
+                "{verb} {} {}",
+                self.span,
+                match self.law {
+                    MotionLaw::Uniform => "等速",
+                    MotionLaw::SimpleHarmonic => "単弦",
+                    MotionLaw::Cycloidal => "サイクロイド",
+                    MotionLaw::Polynomial345 => "3-4-5",
+                }
+            ),
             None => format!("{verb} {}", self.span),
         }
     }
@@ -186,7 +196,14 @@ fn terms(src: &str) -> Result<Vec<Term>, String> {
                 ));
             }
         };
-        let expected = if direction == 0 { 3 } else { 6 };
+        let implicit_fall = direction < 0 && words.len() == 4;
+        let expected = if direction == 0 {
+            3
+        } else if implicit_fall {
+            4
+        } else {
+            6
+        };
         if words.len() != expected {
             return Err(format!(
                 "区間 `{row}` は角度と単位、変位と単位、運動の法則を空白で区切ってください"
@@ -195,7 +212,7 @@ fn terms(src: &str) -> Result<Vec<Term>, String> {
         let law = if direction == 0 {
             MotionLaw::Uniform
         } else {
-            match words[5] {
+            match words[if implicit_fall { 3 } else { 5 }] {
                 "等速" | "uniform" => MotionLaw::Uniform,
                 "単弦" | "調和" | "harmonic" => MotionLaw::SimpleHarmonic,
                 "サイクロイド" | "cycloidal" => MotionLaw::Cycloidal,
@@ -210,7 +227,7 @@ fn terms(src: &str) -> Result<Vec<Term>, String> {
         result.push(Term {
             direction,
             span: format!("{} {}", words[1], words[2]),
-            lift: (direction != 0).then(|| format!("{} {}", words[3], words[4])),
+            lift: (direction != 0 && !implicit_fall).then(|| format!("{} {}", words[3], words[4])),
             law,
         });
     }
@@ -234,7 +251,13 @@ fn validate_program(segments: &[CamSegment]) -> Result<(), String> {
             span.to_degrees()
         ));
     }
-    let lift: f64 = segments.iter().map(|s| s.lift).sum();
+    let mut lift = 0.0f64;
+    for segment in segments {
+        lift += segment.lift;
+        if !lift.is_finite() || lift < -1e-8 {
+            return Err("変位は0以上の位置から動かし、基礎円より内側へ下げないでください".into());
+        }
+    }
     if !lift.is_finite() || lift.abs() > 1e-8 {
         return Err("一周後の変位を0へ戻してください".into());
     }
@@ -622,7 +645,7 @@ fn outlines(input: &ShapeInput) -> Result<(ProfileLoop, ProfileLoop, Vec<String>
     let curve = |t: f64| {
         let h = 1e-5;
         let p = input.point(t);
-        let d = mul(sub(input.point(t + h), input.point(t - h)), 1.0 / (2.0 * h));
+        let d = unit(sub(input.point(t + h), input.point(t - h)));
         (p, d)
     };
     let mut edges = Vec::new();
@@ -677,9 +700,11 @@ impl Cam {
     fn program(&self, ctx: &EvalCtx<'_>) -> Result<Vec<CamSegment>, EvalError> {
         let parsed = terms(&self.diagram).map_err(EvalError::InvalidData)?;
         let mut segments = Vec::new();
+        let mut at = 0.0;
         for row in parsed {
             let span = angle(ctx, &row.span, "区間の角")?;
             let lift = match row.lift {
+                None if row.direction < 0 => -at,
                 None => 0.0,
                 Some(src) => {
                     let value = if self.follower == Follower::Oscillating {
@@ -696,6 +721,7 @@ impl Cam {
                     value * row.direction as f64
                 }
             };
+            at += lift;
             segments.push(CamSegment {
                 span,
                 lift,

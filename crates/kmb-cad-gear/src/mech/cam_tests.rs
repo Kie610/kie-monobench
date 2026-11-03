@@ -84,6 +84,9 @@ fn a_diagram_requires_known_laws_a_full_turn_and_a_return_to_zero() {
     assert_eq!(parsed.len(), 4);
     assert_eq!(parsed[0].span, "120 deg");
     assert_eq!(parsed[0].lift.as_deref(), Some("10 mm"));
+    assert_eq!(parsed[2].direction, -1);
+    assert!(parsed[2].lift.is_none());
+    assert_eq!(parsed[2].render(), "下がり 120 deg 単弦");
     assert!(terms("上がり 120 deg 10 mm unknown").is_err());
     assert!(terms("上がり 120 10 サイクロイド").is_err());
     assert!(validate_program(&program(MotionLaw::Cycloidal)).is_ok());
