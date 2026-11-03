@@ -2,7 +2,30 @@
 ### Translations for zh-Hant (action). Add entries with the same IDs as locales/en/action.ftl; missing IDs fall back to English.
 
 # action-io-export-obj / action-io-export-obj-tip: OBJ (English fallback).
+# action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
+# action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 
+# action-study-converge = Check accuracy
+# action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+# action-study-check = Check conditions
+# action-study-check-tip = List missing study conditions and explain how to fix them before solving
+# action-drawing-set-paper = Sheet settings
+# action-drawing-set-paper-tip = Set the drawing sheet size, orientation, binding margin, pens, and layer colors
+
+# action-drawing-set-title = Title block settings
+# action-drawing-set-title-tip = Set fixed text or document fields in the title block and embed the required font glyphs
+
+# action-drawing-export-pdf = Export drawing as PDF
+# action-drawing-export-pdf-tip = Export one sheet or all sheets as pages with the actual paper dimensions
+
+# action-drawing-export-dxf = Export drawing as DXF
+# action-drawing-export-dxf-tip = Export one sheet as DXF with layers for line roles and line types
+
+# action-drawing-export-svg = Export drawing as SVG
+# action-drawing-export-svg-tip = Export one sheet as SVG with paper dimensions, line widths, and line types
+# action-cad-import-mesh = Import STL or 3MF…
+# action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
 # action-view-part-hues = Color by Component
 # action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
 # action-cad-sketch-dxf-layers = List DXF layers

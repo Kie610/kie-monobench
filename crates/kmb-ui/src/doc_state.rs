@@ -21,6 +21,8 @@ pub(crate) struct DocState {
     /// 文書の変更もここを通す
     pub(crate) work: kmb_session::Headless,
     pub(crate) selected: Option<FeatureId>,
+    /// ブラウザで選んだ部品。作業先の部品とは別に持ち、文書には保存しない。
+    pub(crate) selected_component: Option<u64>,
     /// 編集中のパラメータの式・名前(確定前)
     pub(crate) expr_edits: HashMap<ParamId, FieldEdit>,
     pub(crate) param_batch: crate::design::params_ui::BatchDraft,
@@ -170,6 +172,7 @@ pub(crate) struct DocState {
     pub(crate) hidden_now: HashSet<FeatureId>,
     /// 測る道具(開いている時だけ)
     pub(crate) measure: Option<measure_ui::Measure>,
+    pub(crate) measure_job: Option<measure_ui::BodyReadTask>,
     /// 断面で切って見る平面(開いている時だけ。M48)
     pub(crate) section: Option<section_ui::SectionView>,
     /// キャンバス内レンダリング(レンダリングの作業空間で押している時だけ)
@@ -228,6 +231,7 @@ impl DocState {
         DocState {
             work,
             selected: None,
+            selected_component: None,
             expr_edits: HashMap::new(),
             param_batch: Default::default(),
             name_edits: HashMap::new(),
@@ -305,6 +309,7 @@ impl DocState {
             view_saved: Default::default(),
             hidden_now: HashSet::new(),
             measure: None,
+            measure_job: None,
             section: None,
             canvas_render: None,
             anim: Default::default(),

@@ -12,6 +12,7 @@ layer = "ui"
 [dependencies]
 kmb-core.workspace = true
 kmb-interchange.workspace = true
+kmb-session.workspace = true
 kmb-ui.workspace = true
 kmb-sketch.workspace = true
 kmb-sketch-3d.workspace = true
@@ -21,7 +22,6 @@ log.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
-kmb-session.workspace = true
 kmb-io-dxf.workspace = true
 kmb-bundle = { workspace = true, features = ["smlib"] }
 kmb-samples.workspace = true

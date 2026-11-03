@@ -41,6 +41,7 @@ kmb-cad.workspace = true
 kmb-cad-boolean.workspace = true
 kmb-cad-edge.workspace = true
 kmb-cad-extrude.workspace = true
+kmb-cad-gear.workspace = true
 kmb-cad-hole.workspace = true
 kmb-cad-import-step.workspace = true
 kmb-cad-pattern.workspace = true

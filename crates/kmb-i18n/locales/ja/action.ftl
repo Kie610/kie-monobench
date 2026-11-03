@@ -7,9 +7,9 @@
 action-anim-appearance = 外観
 action-anim-appearance-tip = 選んだ部品の外観を、段の長さをかけて替える段を足す(設計の外観は変えない)。外観は段の帯で選び直す
 action-anim-auto-explode-all = 自動分解: すべてのレベル
-action-anim-auto-explode-all-tip = 部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-all-tip = 選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-auto-explode-one = 自動分解: 1 レベル
-action-anim-auto-explode-one-tip = 部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-one-tip = 選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-drive = ジョイントの動き
 action-anim-drive-tip = ジョイントの値を下限から上限へ動かす段を足す(上下限が無ければ回転は 90 度、スライダは部品の長さ)。値と長さは段の帯で直す
 action-anim-explode = 分解の移動
@@ -61,6 +61,8 @@ action-asm-new-contact-set = 新しい接触セット
 action-asm-new-contact-set-tip = 選んだボディ(2 つ以上)を接触セットにする。接触セットを有効にしている間、ジョイントの部品を引くと、同じセットの相手に食い込む手前で止まる
 action-asm-new-rigid-group = 剛性グループ
 action-asm-new-rigid-group-tip = 選んでいる部品(2 つ以上)を 1 つの塊にする。どの部品をジョイントや引く操作で動かしても、全部が一緒に動く
+action-asm-planetary-link = 遊星の組をつなぐ
+action-asm-planetary-link-tip = 遊星歯車の太陽・腕・外輪(と遊星の自転)の回転を、歯数から決まる式でつなぐ。タイムラインでいちばん後ろのジョイントが前の 2 つに連動する。差動は外輪の歯数を太陽と同じにする
 action-asm-snap-joint = ジョイント
 action-asm-snap-joint-tip = 部品 1 を動かして部品 2 に合わせてつなぐ: 部品 1 の面 → 原点 → 部品 2 の面 → 原点。種類・角度・ずらしは後で変える
 
@@ -94,6 +96,10 @@ action-cad-extrude-to-face = 対象の面までにする
 action-cad-extrude-to-face-tip = 選んでいる押し出しの範囲を、クリックした平らな面か頂点か作業平面までにする(斜めの面なら、道具の終わりをその面で切る)。押し出す先がボディの中を通れば切り取りに、通らなければ結合にする
 action-cad-fillet = フィレット
 action-cad-fillet-tip = 押してから辺か面をクリックすると、それに掛けて値を決める欄へ進む(面はそのまわりの辺すべて。いくつも選ぶ時は Ctrl を押しながらクリック)。先に辺や面を選んでいればそれに掛ける
+action-cad-gear = 歯車
+action-cad-gear-tip = 押してから、平面 → 中心の順にクリックすると歯車の輪郭とボディができる。種類・モジュール・歯数などは欄で直し、OK か Enter で決める。Esc でやめる
+action-cad-gear-outline = 歯車の輪郭
+action-cad-gear-outline-tip = 歯車の輪郭だけを置く(ボディは作らない)。レーザーや 2D 輪郭の加工、押し出しにそのまま使える
 action-cad-hole-add = 同じ穴を足す
 action-cad-hole-add-tip = 選んでいる穴と同じ面に、クリックした位置で同じ穴を足す。Enter で終える
 action-cad-hole-on-face = 穴
@@ -360,7 +366,36 @@ action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+action-cam-nest-create = 板への配置
+action-cam-nest-create-tip = 選んだボディを板へ並べるセットアップを作る
+action-cam-nest-add-part = 配置する部品を足す
+action-cam-nest-add-part-tip = 板への配置に、別のボディを部品として足す
+action-cam-nest-remove-part = 配置する部品を外す
+action-cam-nest-remove-part-tip = 板への配置から、指定した番号の部品を外す
+action-cam-nest-set-part = 配置する部品を直す
+action-cam-nest-set-part-tip = 部品の個数、回してよい向き、上に向ける面を直す
 
+action-study-converge = 精度を確かめる
+action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる
+
+action-study-check = 点検
+action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる
+action-drawing-set-paper = 用紙を設定
+action-drawing-set-paper-tip = 図面の用紙の大きさ・向き・とじ代・ペンと画層の色を決める
+
+action-drawing-set-title = 表題欄を設定
+action-drawing-set-title-tip = 表題欄の固定の文字や文書から取る項目と、使う文字の書体を設定する
+
+action-drawing-export-pdf = 図面をPDFに書き出す
+action-drawing-export-pdf-tip = 選んだ用紙か全部の用紙を、実寸のページのPDFに書き出す
+
+action-drawing-export-dxf = 図面をDXFに書き出す
+action-drawing-export-dxf-tip = 選んだ用紙を、線の役ごとの画層と線種を持つDXFに書き出す
+
+action-drawing-export-svg = 図面をSVGに書き出す
+action-drawing-export-svg-tip = 選んだ用紙を、用紙の大きさと線の太さと線種を持つSVGに書き出す
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
 action-view-part-hues = 部品ごとに色を変える
 action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 action-cad-sketch-dxf-layers = DXF の画層を一覧

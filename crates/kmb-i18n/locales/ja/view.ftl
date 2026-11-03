@@ -116,6 +116,10 @@ view-part-hues = 部品ごとに色を変える
 view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
 view-keycast-drag = ドラッグ
 view-keycast-mouse3d-button = 3D マウス ボタン { $number }
+
+view-measure-job-running = 体積などを計算中…
+view-measure-job-cancel = 計算を中止
+view-measure-job-failed = 測定の仕事を続けられません。選び直してください
 view-candidate-edge = 辺({ $faces })
 view-candidate-vertex = 頂点({ $position })
 

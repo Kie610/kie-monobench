@@ -25,6 +25,8 @@ pub mod action {
     /// 名前で出す)。テンプレートごとに付く([`super::MARKERS`])
     pub const USE_TEMPLATE: ActionRole = ActionRole("use_template");
     /// STEP のファイルを読み込む(CLI・MCP の短い命令が使う)
+    /// STL・3MF の網を読み込む。
+    pub const IMPORT_MESH: ActionRole = ActionRole("import_mesh");
     pub const IMPORT_STEP: ActionRole = ActionRole("import_step");
     /// IGES の面・立体を読み込み、上向きの軸を確かめる。
     pub const IMPORT_IGES: ActionRole = ActionRole("import_iges");
@@ -95,6 +97,7 @@ pub mod action {
         EXPORT_BODIES,
         USE_TEMPLATE,
         IMPORT_STEP,
+        IMPORT_MESH,
         IMPORT_IGES,
         ROLL_BACK,
         EXPORT_GCODE,

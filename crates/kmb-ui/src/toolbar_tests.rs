@@ -342,3 +342,40 @@ fn persistent_inspection_commands_already_paint_their_active_buttons() {
         assert!(!h.state().document().can_undo());
     }
 }
+
+/// 確かめること: 図面の用紙・表題欄・出力は既存の書き出しの一覧に一度だけ入り、大きなボタンを増やさない。
+#[test]
+fn drawing_exports_live_in_the_existing_export_menu() {
+    let ws = Workspace::new(reference_document(), None, kmb_bundle::modules());
+    let tabs = ws.ribbon_tabs();
+    for id in [
+        "drawing.set_paper",
+        "drawing.set_title",
+        "drawing.export_dxf",
+        "drawing.export_pdf",
+        "drawing.export_svg",
+    ] {
+        let key = format!("a:{id}");
+        let mut places = Vec::new();
+        for tab in &tabs {
+            for group in &tab.groups {
+                if group.items.iter().any(|item| item.key == key) {
+                    places.push((tab.name.as_str(), group.name.as_str()));
+                }
+            }
+        }
+        assert_eq!(places, [("ソリッド", "書き出し")], "{id} の置き場");
+        let tab = tabs.iter().find(|tab| tab.name == "ソリッド").unwrap();
+        let group = tab
+            .groups
+            .iter()
+            .find(|group| group.name == "書き出し")
+            .unwrap();
+        assert!(
+            !ribbon::front(Space::Design, &tab.name, group, &ws.win.layout)
+                .iter()
+                .any(|item| item.key == key),
+            "{id} は一覧から使う"
+        );
+    }
+}

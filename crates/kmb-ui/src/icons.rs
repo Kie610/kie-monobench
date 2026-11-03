@@ -121,6 +121,10 @@ const PATHS: &[(&str, &str)] = &[
     ("offset_face", "M3 20c4-7 14-7 18 0"),
     ("textf", "M3 18l4-12h14l-4 12z"),
     (
+        "mesh-import",
+        "M3 18L7 5l9 2 5 11H3zM7 5l4 13 5-11M12 2v7M9 6l3 3 3-3",
+    ),
+    (
         "iges",
         "M3 16C7 8 15 20 21 12M3 16v5c4-8 12 4 18-4v-5M12 2v8M9 7l3 3 3-3",
     ),
@@ -995,6 +999,7 @@ pub(crate) const ONE_LAYER: &[&str] = &[
     "play",
     // 取り込む(読み込んだ物を置くだけで、形を作る道具ではない)
     "step",
+    "mesh-import",
     "iges",
     "svg",
     "dxf",

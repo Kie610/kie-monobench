@@ -123,18 +123,59 @@ pub struct Drive {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dofs: Vec<Dof>,
     /// ほかのジョイントに連動する時の、連動元と比。値は
-    /// 連動元の値(内部の単位)× 比。アニメーションなどで連動元の値を動かすと、これも動く
+    /// 連動元の値(内部の単位)× 比(連動元が 2 つなら、それぞれの値 × 比の和)。アニメーションなどで
+    /// 連動元の値を動かすと、これも動く
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead: Option<Lead>,
 }
 
-/// ジョイントの連動元([`Drive::lead`])。
+/// ジョイントの連動元([`Drive::lead`])。この値は連動元の値の 1 次式
+/// `ratio × 連動元 + second.ratio × 2 つ目の連動元`(どれも内部の単位)。遊星歯車・差動のように、
+/// 2 つの動きから 3 つ目の動きが決まる組を結ぶ。
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Lead {
     /// 連動元のジョイント(タイムラインで前にある)
     pub joint: FeatureId,
-    /// この値(内部の単位)= 連動元の値(内部の単位)× `ratio`
+    /// この値(内部の単位)= 連動元の値(内部の単位)× `ratio`(+ 2 つ目の項)
     pub ratio: f64,
+    /// 2 つ目の連動元と比。無ければ連動元 1 つの比
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub second: Option<LeadTerm>,
+}
+
+/// 連動の 1 次式の 1 つの項([`Lead::second`])。
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct LeadTerm {
+    /// 連動元のジョイント(タイムラインで前にある)
+    pub joint: FeatureId,
+    /// この項 = 連動元の値(内部の単位)× `ratio`
+    pub ratio: f64,
+}
+
+impl Lead {
+    /// 連動元が 1 つの比。
+    pub fn one(joint: FeatureId, ratio: f64) -> Self {
+        Self {
+            joint,
+            ratio,
+            second: None,
+        }
+    }
+
+    /// 連動元のジョイント(1 つか 2 つ)。
+    pub fn joints(&self) -> impl Iterator<Item = FeatureId> + '_ {
+        std::iter::once(self.joint).chain(self.second.map(|t| t.joint))
+    }
+
+    /// 連動元の値(内部の単位。`value_of` が返す)から決まるこの値。連動元の値が 1 つでも
+    /// 分からなければ `None`。
+    pub fn value(&self, mut value_of: impl FnMut(FeatureId) -> Option<f64>) -> Option<f64> {
+        let mut v = value_of(self.joint)? * self.ratio;
+        if let Some(t) = self.second {
+            v += value_of(t.joint)? * t.ratio;
+        }
+        Some(v)
+    }
 }
 
 /// 値 `values` の時の動き(全部 0 の時の位置から。`dofs` の順に掛ける)。
@@ -744,11 +785,19 @@ pub fn joint_poses(
         };
         let v = match (values.get(&f.id), d.lead) {
             (Some(v), _) => d.from_shown(*v),
-            (None, Some(l)) => match inner.get(&l.joint) {
-                Some(a) => a * l.ratio,
-                None => continue,
-            },
-            (None, None) => continue,
+            // 連動元のどれかが動く時だけ。動かない連動元は今の値のまま
+            (None, Some(l)) if l.joints().any(|j| inner.contains_key(&j)) => {
+                match l.value(|j| {
+                    inner
+                        .get(&j)
+                        .copied()
+                        .or_else(|| drive_of(report, j).map(|d| d.value))
+                }) {
+                    Some(v) => v,
+                    None => continue,
+                }
+            }
+            (None, _) => continue,
         };
         inner.insert(f.id, v);
         let m = d.delta(v);

@@ -1,4 +1,4 @@
-//! STEP の読み込み(`solid.import_step@1`)。STEP の中身を文書に入れて持つので、元の
+//! STEP と三角形の網の読み込み。網の機能は [`mesh`]。STEP の中身を文書に入れて持つので、元の
 //! ファイルを動かしたり消したりしても文書は開ける。読み込んだ形は加工と計測に使え、カーネルが立体に
 //! 組めれば足し引きやフィレットにも使える(truck のカーネルと、組めない形では使えない)。
 //!
@@ -14,6 +14,7 @@ use kmb_core::{Field, Registry};
 use serde::{Deserialize, Serialize};
 
 mod iges;
+pub mod mesh;
 mod names;
 pub use iges::{IMPORT_IGES, IMPORT_IGES_FILE, ImportIges, ImportIgesCommands};
 pub use names::{import_name, product_names, written_by_jc};
@@ -154,6 +155,7 @@ impl Feature for ImportStep {
 
 /// 機能の種類を登録する。
 pub fn register(reg: &mut Registry) {
+    mesh::register(reg);
     iges::register(reg);
     reg.register_described(
         solid(IMPORT_STEP, "STEP の読み込み")
@@ -223,6 +225,7 @@ impl Extension for ImportStepCommands {
 pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-import-step", register)
         .with_extension(ImportStepCommands)
+        .with_extension(mesh::ImportMeshCommands)
         .with_extension(ImportIgesCommands)
 }
 

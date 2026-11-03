@@ -9,6 +9,7 @@
 //! | [`Segments`](`sketch.segments@1`、出力 `segments`) | 3D スケッチ(kmb-sketch-3d) | 回転・パターン・移動の軸 |
 //! | [`HoleInfo`](`hole.info@1`、出力 `hole`) | 穴(kmb-cad-hole) | 穴あけ・穴から加工を作る |
 //! | [`ThreadMarks`](`cad.thread_marks@1`、出力 `thread_marks`) | ねじ・ねじ穴(kmb-cad-hole) | 3D のビューのねじ山の陰影 |
+//! | [`GearSpec`](`gear.spec@1`、出力 `gear`)・[`gear::CamSpec`]・[`gear::CouplingSpec`] | 歯車と機構(kmb-cad-gear ほか) | 組立のかみ合わせと比、加工の工具の太さの確かめ |
 //! | [`motion::MotionStudies`](区画 `asm.motion`)・[`contact::Contacts`](区画 `asm.contacts`) | 組立(kmb-asm) | 画面・kmb-session |
 //! | [`animation::Storyboard`](区画 `asm.animation`)・ジョイントの今の様子 [`animation::Drive`] | 組立(kmb-asm) | 画面・レンダリングの書き出し・kmb-session |
 //! | [`configuration::Configurations`](区画 `config.table`) | 構成表(kmb-config) | 画面・kmb-session |
@@ -21,6 +22,7 @@ pub mod animation;
 pub mod configuration;
 pub mod contact;
 pub mod datum;
+pub mod gear;
 pub mod hole;
 pub mod ink;
 pub mod motion;
@@ -33,6 +35,7 @@ pub use datum::{
     DATUM_OUTPUT, DatumAxis, DatumPlane, DatumPoint, datum_axes, datum_axis, datum_axis_choices,
     datum_choices, datum_plane, datum_planes, datum_point, datum_points, selected_datum,
 };
+pub use gear::{GEAR_OUTPUT, GearAxis, GearKind, GearSpec};
 pub use hole::{HOLE_OUTPUT, HoleInfo, HoleKind, HolePart, Tap};
 pub use segment::{SEGMENTS_OUTPUT, Segment, Segments, segment_axis, segments_now};
 
