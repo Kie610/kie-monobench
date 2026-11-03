@@ -185,16 +185,11 @@ impl Extension for ExportCommands {
         ACTIONS
             .iter()
             .map(|(id, label, hint)| {
-                let action = Action::new(id, label, "cad")
+                Action::new(id, label, "cad")
                     .hint(hint)
                     .at(&[])
-                    .args(args(id));
-                match *id {
-                    "drawing.export_pdf" | "drawing.export_dxf" | "drawing.export_svg" => {
-                        action.menu("書き出し")
-                    }
-                    _ => action,
-                }
+                    .args(args(id))
+                    .menu("書き出し")
             })
             .collect()
     }

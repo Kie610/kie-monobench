@@ -343,12 +343,14 @@ fn persistent_inspection_commands_already_paint_their_active_buttons() {
     }
 }
 
-/// 確かめること: 図面の三つの出力は既存の書き出しの一覧に一度だけ入り、大きなボタンを増やさない。
+/// 確かめること: 図面の用紙・表題欄・出力は既存の書き出しの一覧に一度だけ入り、大きなボタンを増やさない。
 #[test]
 fn drawing_exports_live_in_the_existing_export_menu() {
     let ws = Workspace::new(reference_document(), None, kmb_bundle::modules());
     let tabs = ws.ribbon_tabs();
     for id in [
+        "drawing.set_paper",
+        "drawing.set_title",
         "drawing.export_dxf",
         "drawing.export_pdf",
         "drawing.export_svg",
