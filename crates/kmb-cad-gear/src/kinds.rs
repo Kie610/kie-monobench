@@ -43,8 +43,8 @@ impl Default for Params {
 /// 歯底の丸みの既定の係数(基準ラックの歯底の丸みの半径 0.38 × モジュール)。
 pub const ROOT_ROUND: f64 = 0.38;
 
-/// 歯車の形: 原点を中心に 1 枚目の歯を X 軸の向きに立てた外形の輪(反時計回り)、参照の円
-/// (名前と半径)、注意。
+/// 歯車やラックの外形の輪(反時計回り)、参照の円(名前と半径)と線、注意。
+/// 歯車は原点を中心に 1 枚目の歯を X 軸の向きに立て、ラックは原点から X 軸に沿って並べる。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outline {
     pub edges: Vec<ProfileEdge>,

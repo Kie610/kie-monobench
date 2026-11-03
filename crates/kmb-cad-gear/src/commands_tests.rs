@@ -218,7 +218,7 @@ fn rack_actions_accept_one_tooth_and_refuse_incomplete_or_conflicting_data() {
 
 #[test]
 fn a_racks_module_and_pitch_boundary_keep_the_input_precision() {
-    for module in [0.9999999, 0.0001, 2.7182818] {
+    for module in [0.9999999, 0.0001, 2.3456789] {
         let length = 12.0 * std::f64::consts::PI * module;
         let added = inserts(
             run(

@@ -1,5 +1,5 @@
 //! 歯車の輪郭(`cad.gear@1`)。平面の上に歯車の閉じた輪郭(`profile`)と線(`curves`)、参照の円
-//! (`reference`。ピッチ円・基礎円・歯先円・歯底円。加工はなぞらない)、諸元(`gear`、
+//! (`reference`。ピッチ円・基礎円・歯先円・歯底円、ラックはピッチ線。加工はなぞらない)、諸元(`gear`、
 //! [`kmb_interchange::GearSpec`])を出す。輪郭はそのまま押し出し・2D 輪郭の加工・ポケット・レーザーに
 //! 使える。厚さを付けた立体は歯車のボディ(`cad.gear_body@1`、[`body`])が輪郭を読んで作る。
 //!
@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 
 pub const GEAR: &str = "cad.gear@1";
 
-/// 参照の円を入れる出力の名前。
+/// 参照の円や線を入れる出力の名前。
 pub const REFERENCE_OUTPUT: &str = "reference";
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
