@@ -2237,3 +2237,28 @@ field-solid-thread-clearance-help = 径で指定するすき間。空なら 0 mm
 field-solid-thread-end = 奥の端
 field-solid-thread-flip = 反対の端から始める
 field-solid-thread-form = ねじ山
+
+field-cam-spiral3d-levels = 段に分けて上から削る
+field-cam-spiral3d-direction = 削る向き
+field-cam-spiral3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+field-cam-radial3d-levels = 段に分けて上から削る
+field-cam-radial3d-direction = 削る向き
+field-cam-radial3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+
+field-cam-setup-stock-cost-material-price = 費用: 材料の値段
+field-cam-setup-stock-cost-material-price-help = ストック 1 枚の値段。空なら材料費を含めない。0 以上
+field-cam-setup-stock-cost-pieces = 費用: 取れる個数
+field-cam-setup-stock-cost-pieces-help = このセットアップでストック 1 枚から削る個数。合計の加工時間をこの個数で割る。1 以上
+field-cam-setup-stock-cost-electricity-price = 費用: 電気の単価
+field-cam-setup-stock-cost-electricity-price-help = 1 kWh あたりの値段。空なら電気代を含めない。0 以上
+field-cam-setup-stock-cost-currency = 費用: 通貨
+field-cam-setup-stock-cost-currency-help = 値段に添える記号や名前。為替の換算はしない
+
+field-solid-thicken-body = ボディ
+field-solid-thicken-body-help = 厚みの無い面のボディを選ぶ
+field-solid-thicken-thickness = 厚み
+field-solid-thicken-side = 向き
+
+field-solid-import-iges-file = ファイル
+field-solid-import-iges-stand-up = Y が上の形を立てる
+field-solid-import-iges-stand-up-help = Y が上で作られた形を、X 軸のまわりに 90 度回して Z が上に立てる

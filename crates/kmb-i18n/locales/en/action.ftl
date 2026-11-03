@@ -127,7 +127,7 @@ action-cad-sketch-auto-constrain-tip = Add the coincident, horizontal, vertical,
 action-cad-sketch-export-dxf = Save as DXF…
 action-cad-sketch-export-dxf-tip = Export the lines of the selected sketch (except construction lines) to DXF
 action-cad-sketch-export-svg = Save as SVG…
-action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit (opens at the same size in laser cutter software such as LightBurn; connected lines are joined into closed outlines)
+action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit; join connected lines into closed outlines
 action-cad-sketch-find = Find Sketch Entities
 action-cad-sketch-find-tip = List the points, lines, circles and so on of the selected sketch in a table, filtered by type, construction, how constrained, length, radius and region
 action-cad-sketch-insert-dxf = Insert DXF…
@@ -198,7 +198,7 @@ action-cam-add-pocket-tip = Select bottom faces in the 3D view, then press (Shif
 action-cam-add-project3d = Project (3D)
 action-cam-add-project3d-tip = Drop sketch lines straight down onto the part's faces and trace them. A negative stock to leave cuts below the faces. A selected sketch gives its lines; with nothing selected, the last sketch (uses a ball end mill if there is one)
 action-cam-add-radial3d = Radial (3D)
-action-cam-add-radial3d-tip = Finish by tracing lines radiating out and in from the part's center (uses a ball end mill if there is one)
+action-cam-add-radial3d-tip = Finish by tracing radial lines from the part's center. Choose depth levels and back-and-forth or one-way cutting (uses a ball end mill if there is one)
 action-cam-add-ramp3d = Ramp (3D)
 action-cam-add-ramp3d-tip = Finish vertical walls and steep slopes without breaks, going down diagonally 0.5 mm per lap (uses a ball end mill if there is one)
 action-cam-add-raster3d = Parallel (3D)
@@ -212,7 +212,7 @@ action-cam-add-setup-tip = Add a setup to machine the last body
 action-cam-add-slot = Slot
 action-cam-add-slot-tip = Cut a slot of a set width and depth along the sketch's lines as its center. A selected sketch gives its lines; with nothing selected, the last sketch
 action-cam-add-spiral3d = Spiral (3D)
-action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in (uses a ball end mill if there is one)
+action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in. Choose depth levels and cutting direction (uses a ball end mill if there is one)
 action-cam-add-thread = Thread Milling
 action-cam-add-thread-tip = Cut a thread into the selected hole or boss wall with a thread mill. Needs a thread mill in the tool library
 action-cam-add-trace = Trace
@@ -352,7 +352,7 @@ action-drawing-move-view-tip = Change the paper position or distance from the pa
 action-drawing-set-view = Edit view
 action-drawing-set-view-tip = Change the scale and visibility of hidden and tangent lines
 action-drawing-delete = Delete drawing
-action-drawing-delete-tip = Delete a sheet or view; delete child views first
+action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
 action-drawing-picture = Export drawing lines
 action-drawing-picture-tip = Export the sheet geometry and problems as JSON
 action-cad-surface-patch = Surface patch
@@ -362,7 +362,51 @@ action-io-export-obj-tip = Export visible bodies as OBJ with object names, verti
 
 action-view-part-hues = Color by Component
 action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
+action-cad-sketch-dxf-layers = List DXF layers
+action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design
+action-cad-sketch-project-axis = Project Datum Axis
+action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
 action-hrtf-process = Align HRTF formats
 action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
 action-hrtf-compute = Compute HRTF from Head Mesh…
 action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA
+action-cad-sketch-regions = List sketch regions
+action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
+action-drawing-dimension = Dimension
+action-drawing-dimension-tip = Place a dimension that refers to view edges and shows the model value
+
+action-drawing-dimension-set = Place dimensions
+action-drawing-dimension-set-tip = Place baseline, chain, or ordinate dimensions once from selected points
+
+action-drawing-import-dimensions = Import model dimensions
+action-drawing-import-dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
+
+action-drawing-note = Annotation
+action-drawing-note-tip = Place text with an optional leader on the sheet
+
+action-drawing-center-mark = Center mark
+action-drawing-center-mark-tip = Mark the center of a circle or arc
+
+action-drawing-center-line = Centerline
+action-drawing-center-line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
+
+action-drawing-balloon = Balloon
+action-drawing-balloon-tip = Place a balloon linked to a parts table row at a chosen position
+
+action-drawing-renumber-balloons = Renumber balloons
+action-drawing-renumber-balloons-tip = Match balloon numbers to the current order of parts table rows
+
+action-drawing-align-balloons = Align balloons
+action-drawing-align-balloons-tip = Align selected balloons horizontally or vertically with the first balloon
+
+action-drawing-parts-table = Parts table
+action-drawing-parts-table-tip = Place selected parts table columns on the sheet as lines and text
+
+action-drawing-set-style = Dimension style
+action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
+action-cad-thicken = Thicken
+action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+action-cad-import-iges = Import IGES…
+action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.
+action-params-apply-batch = Apply expressions together
+action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid

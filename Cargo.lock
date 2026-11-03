@@ -2731,8 +2731,11 @@ dependencies = [
 name = "kmb-drawing"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-core",
  "kmb-interchange",
+ "kmb-sketch",
+ "kmb-text",
  "kmb-view-lines",
  "kmb-workspace-hack",
  "log",
@@ -3043,6 +3046,7 @@ dependencies = [
 name = "kmb-samples"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-bundle",
  "kmb-cad",
  "kmb-cad-edge",

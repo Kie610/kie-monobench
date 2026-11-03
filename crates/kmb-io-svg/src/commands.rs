@@ -39,7 +39,7 @@ fn export_svg(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
 pub struct SvgCommands;
 
 impl Extension for SvgCommands {
-    /// 画面の並びは前と同じ(DXF の挿入の後、スケッチの平面の再定義より前)。
+    /// SVG の挿入は DXF の挿入の後、スケッチの平面の再定義より前に並べる。
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let sketch = kmb_sketch::selected_sketch(cx).is_some();
         vec![
@@ -58,11 +58,12 @@ impl Extension for SvgCommands {
                     extensions: ["svg", "SVG"].map(String::from).to_vec(),
                 }),
             Action::new(EXPORT_SVG, "SVG として保存…", "cad")
+                .role(kmb_interchange::role::action::EXPORT_SKETCH_SVG)
                 .arg(kmb_core::Arg::flag("construction", "補助線も書く"))
                 .menu("書き出し")
                 .icon("svg")
-                .aliases("えすぶいじー svg ほぞん かきだし export れーざー lightburn らいとばーん")
-                .hint("選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(LightBurn などのレーザー加工機のソフトで同じ大きさで開ける。つながる線は閉じた輪郭にまとめる)")
+                .aliases("えすぶいじー svg ほぞん かきだし export れーざー")
+                .hint("選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(つながる線は閉じた輪郭にまとめる)")
                 .at(if sketch {
                     &[Place::FeatureMenu]
                 } else {
@@ -83,5 +84,33 @@ impl Extension for SvgCommands {
             EXPORT_SVG => export_svg(cx),
             _ => return None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kmb_core::{DocumentData, NullKernel, RecomputeReport, Registry};
+    use std::sync::Arc;
+
+    #[test]
+    fn svg_export_declares_the_sketch_save_role_once() {
+        let data = DocumentData::default();
+        let report = RecomputeReport::default();
+        let registry = Registry::new();
+        let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+        let cx = Context::new(&data, &report, &registry, &kernel);
+        let role = kmb_interchange::role::action::EXPORT_SKETCH_SVG;
+        let actions = SvgCommands.actions(&cx);
+        let found: Vec<_> = actions.iter().filter(|a| a.role == Some(role)).collect();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].id, EXPORT_SVG);
+        assert_eq!(
+            kmb_interchange::role::action::ALL
+                .iter()
+                .filter(|r| **r == role)
+                .count(),
+            1
+        );
     }
 }

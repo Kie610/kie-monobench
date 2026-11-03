@@ -35,6 +35,13 @@ pub fn import_name(step: &str, fallback: &str) -> String {
 /// JC が書く STEP の作った system の名前。前の名前で書いた STEP も JC の物と見分ける。
 const OUR_SYSTEMS: [&str; 2] = ["kieMonoBench", "jisaku-cadcam"];
 
+/// 頭の作成元を、書き出しと同じ上向きの軸として見分ける。
+pub(crate) fn our_producer(producer: &str) -> bool {
+    producer
+        .split_whitespace()
+        .any(|word| OUR_SYSTEMS.contains(&word))
+}
+
 /// JC が書いた STEP か(頭の FILE_NAME の作った system が `OUR_SYSTEMS` のどれか)。JC は Z が上で書くので、
 /// 読み込んだ後に立てるかを聞かない(U12)
 pub fn written_by_jc(step: &str) -> bool {

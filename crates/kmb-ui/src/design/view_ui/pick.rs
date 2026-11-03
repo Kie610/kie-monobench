@@ -2,13 +2,13 @@
 
 use super::*;
 
-/// 重なった面の一覧の幅(論理の点。字の大きさの設定で伸びる)。
+/// 重なった物の一覧の幅(論理の点。字の大きさの設定で伸びる)。
 const CANDIDATE_WIDTH: f32 = 280.0;
 
 impl Workspace {
-    /// 3D のビューの右クリック: メニューが使う、押した所の物と重なった面を覚え、押した面を選ぶ。
+    /// 3D のビューの右クリック: メニューが使う、押した所の物と重なった物を覚え、押した面を選ぶ。
     pub(crate) fn context_pick(&mut self, rect: Rect, p: Pos2) {
-        // 右クリックした所の物(「タイムライン内を検索」)と、重なった面(「ほかを選ぶ」)
+        // 右クリックした所の物(「タイムライン内を検索」)と、重なった物(「ほかを選ぶ」)
         let all = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p);
         let f = if self.win.pick_filter.body {
             PickFilter::FACE
@@ -16,7 +16,7 @@ impl Workspace {
             self.win.pick_filter
         };
         self.cur.context_hit = self.hit_at(rect, p, f);
-        self.view_menu.context_others = (p, all.iter().map(|h| h.0.clone()).collect());
+        self.view_menu.context_others = (p, self.overlap_candidates(rect, p));
         // 選んでいる辺・頂点の上の右クリックは選びを変えない(複数の辺を選んで右クリックすると、
         // 下の面が選びに入り、メニューがその面に効いていた。10-25 u7)
         let on_picked = match &self.cur.context_hit {
@@ -191,10 +191,7 @@ impl Workspace {
             }
         }
         if let Some(p) = ev.long_press {
-            let list: Vec<Pick> = view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, p)
-                .into_iter()
-                .map(|h| h.0)
-                .collect();
+            let list = self.overlap_candidates(rect, p);
             if list.len() > 1 {
                 self.view_menu.candidates = Some((p, list));
             }
@@ -273,7 +270,125 @@ impl Workspace {
         }
     }
 
-    /// 長押しで出す、重なった面の一覧。
+    /// 目を開けたボディの面・辺・頂点を、手前の物による遮蔽を除かずに集める。
+    fn overlap_candidates(&mut self, rect: Rect, pos: Pos2) -> Vec<Hit> {
+        let filter = self.win.pick_filter;
+        let mut hits = Vec::new();
+        if filter.body || filter.face_on() {
+            hits.extend(
+                view3d::picks_at(&self.cur.scene, &self.cur.camera, rect, pos)
+                    .into_iter()
+                    .map(|(p, at)| (self.cur.camera.project(at, rect).1, Hit::Face(p))),
+            );
+        }
+        if !filter.body {
+            self.scene_edges();
+            if filter.edge_on() {
+                for (feature, edges) in &self.cur.edge_cache.1 {
+                    for edge in edges {
+                        if let Some(pick) = view3d::edge_at(
+                            &self.cur.scene,
+                            &self.cur.camera,
+                            rect,
+                            pos,
+                            &[(*feature, vec![edge.clone()])],
+                            true,
+                        ) && let Some(depth) =
+                            candidate_edge_depth(&self.cur.scene, &self.cur.camera, rect, pos, edge)
+                        {
+                            hits.push((depth, Hit::Edge(pick)));
+                        }
+                    }
+                }
+            }
+            if filter.vertex_on() {
+                let (_, dir) = self.cur.camera.ray(pos, rect);
+                for (feature, vertices) in &self.cur.vertex_cache {
+                    if !self
+                        .cur
+                        .scene
+                        .bodies
+                        .iter()
+                        .any(|body| body.feature == *feature)
+                    {
+                        continue;
+                    }
+                    for vertex in vertices {
+                        let at = vertex.at.map(|v| v as f32);
+                        let (point, depth) = self.cur.camera.project(at, rect);
+                        let behind = self.cur.camera.eye_position(rect).is_some_and(|eye| {
+                            (0..3).map(|i| (at[i] - eye[i]) * dir[i]).sum::<f32>() <= 0.0
+                        });
+                        if point.distance(pos) < crate::select_ui::VERTEX_PX
+                            && !behind
+                            && !self
+                                .cur
+                                .scene
+                                .section
+                                .is_some_and(|section| section.removes(at))
+                        {
+                            hits.push((
+                                depth,
+                                Hit::Vertex(kmb_core::VertexPick {
+                                    feature: *feature,
+                                    vertex: vertex.name.clone(),
+                                }),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+        hits.sort_by(|a, b| b.0.total_cmp(&a.0));
+        hits.into_iter().map(|(_, hit)| hit).collect()
+    }
+
+    fn candidate_label(&self, hit: &Hit) -> String {
+        let name = self
+            .cur
+            .work
+            .doc()
+            .data()
+            .feature(hit.feature())
+            .map_or(String::new(), |entry| entry.name.clone());
+        let item = match hit {
+            Hit::Face(p) => self.face_label(&p.face),
+            Hit::Edge(p) => self.win.t_with(
+                "view-candidate-edge",
+                &[(
+                    "faces",
+                    p.faces
+                        .iter()
+                        .map(|face| self.face_label(face))
+                        .collect::<Vec<_>>()
+                        .join(" / ")
+                        .into(),
+                )],
+            ),
+            Hit::Vertex(p) => {
+                let at = self
+                    .cur
+                    .vertex_cache
+                    .iter()
+                    .find(|(id, _)| *id == p.feature)
+                    .and_then(|(_, vertices)| vertices.iter().find(|v| v.name == p.vertex))
+                    .map_or_else(
+                        || p.vertex.clone(),
+                        |v| {
+                            v.at.iter()
+                                .map(|c| kmb_core::display_unit().length(*c, 3))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        },
+                    );
+                self.win
+                    .t_with("view-candidate-vertex", &[("position", at.into())])
+            }
+        };
+        format!("{name}: {item}")
+    }
+
+    /// 長押しで出す、重なった物の一覧。
     pub(super) fn candidates_popup(&mut self, ui: &egui::Ui) {
         let Some((pos, list)) = self.view_menu.candidates.clone() else {
             return;
@@ -281,43 +396,57 @@ impl Workspace {
         let mut chosen = None;
         let mut close = false;
         let (candidates, cancel) = (self.win.t("view-candidates"), self.win.t("common-cancel"));
+        let screen = ui.ctx().content_rect().shrink(4.0);
+        let max_w = crate::theme::fs(CANDIDATE_WIDTH).min((screen.width() - 24.0).max(1.0));
+        let estimated_height =
+            (crate::theme::fs(30.0) * (list.len() + 3) as f32).min(screen.height());
+        let anchor = pos + egui::vec2(8.0, 8.0);
+        let anchor = egui::pos2(
+            anchor.x.clamp(
+                screen.left(),
+                (screen.right() - max_w - 24.0).max(screen.left()),
+            ),
+            anchor.y.clamp(
+                screen.top(),
+                (screen.bottom() - estimated_height).max(screen.top()),
+            ),
+        );
         let r = egui::Area::new(egui::Id::new("pick_candidates"))
-            .fixed_pos(pos + egui::vec2(8.0, 8.0))
+            .fixed_pos(anchor)
+            .constrain_to(screen)
             .order(egui::Order::Foreground)
             .show(ui.ctx(), |ui| {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     // 長い名前は … で切って一覧の幅に収め、指すと全部の名前を出す
-                    let max_w = crate::theme::fs(CANDIDATE_WIDTH);
                     ui.set_max_width(max_w);
                     ui.weak(&candidates);
-                    for p in &list {
-                        let name = self
-                            .cur
-                            .work
-                            .doc()
-                            .data()
-                            .feature(p.feature)
-                            .map_or(String::new(), |f| f.name.clone());
-                        let label = format!("{name}: {}", self.face_label(&p.face));
-                        let b = ui.add(egui::Button::new(label.as_str()).truncate());
-                        let full_w = ui.fonts_mut(|f| {
-                            f.layout_no_wrap(
-                                label.clone(),
-                                egui::TextStyle::Button.resolve(ui.style()),
-                                egui::Color32::WHITE,
-                            )
-                            .size()
-                            .x
+                    // 見出し・キャンセル・枠を残し、字の倍率が大きくても窓内に収める。
+                    let rows_height = (screen.height() - crate::theme::fs(140.0)).max(1.0);
+                    egui::ScrollArea::vertical()
+                        .max_height(rows_height)
+                        .show(ui, |ui| {
+                            for p in &list {
+                                let label = self.candidate_label(p);
+                                let b = ui.add(egui::Button::new(label.as_str()).truncate());
+                                let full_w = ui.fonts_mut(|f| {
+                                    f.layout_no_wrap(
+                                        label.clone(),
+                                        egui::TextStyle::Button.resolve(ui.style()),
+                                        egui::Color32::WHITE,
+                                    )
+                                    .size()
+                                    .x
+                                });
+                                let b = if full_w + 2.0 * ui.spacing().button_padding.x > max_w {
+                                    b.on_hover_text(label)
+                                } else {
+                                    b
+                                };
+                                if b.clicked() {
+                                    chosen = Some(p.clone());
+                                }
+                            }
                         });
-                        let b = if full_w + 2.0 * ui.spacing().button_padding.x > max_w {
-                            b.on_hover_text(label)
-                        } else {
-                            b
-                        };
-                        if b.clicked() {
-                            chosen = Some(p.clone());
-                        }
-                    }
                     if ui.button(&cancel).clicked() {
                         close = true;
                     }
@@ -327,11 +456,80 @@ impl Workspace {
             close = true;
         }
         if let Some(p) = chosen {
-            self.pick_with(Some(p), false, false);
+            self.pick_hit(Some(p), false, false);
             close = true;
         }
         if close {
             self.view_menu.candidates = None;
         }
     }
+}
+
+/// 一覧の奥行きは、視線に最も近い辺の点で比べる。辺を拾う距離・切り口の判断は
+/// `edge_at` に任せ、ここでは並びだけを計算する。
+fn candidate_edge_depth(
+    scene: &view3d::Scene,
+    camera: &view3d::Camera,
+    rect: Rect,
+    pos: Pos2,
+    edge: &kmb_core::EdgeInfo,
+) -> Option<f32> {
+    use kmb_core::kernel::{add, dot, normalize, scale, sub};
+    let (origin, dir) = camera.ray(pos, rect);
+    let origin = origin.map(f64::from);
+    let dir = normalize(dir.map(f64::from));
+    let mut best: Option<(f64, f32)> = None;
+    for pair in view3d::edge_polyline(edge).windows(2) {
+        let (mut a, mut b) = (pair[0], pair[1]);
+        // 奥行きも、切り取った側と視点の後ろを除いた区間で測る。
+        let mut clip = |signed: &dyn Fn([f64; 3]) -> f64| {
+            let (da, db) = (signed(a), signed(b));
+            if da > 0.0 && db > 0.0 {
+                return false;
+            }
+            if (da > 0.0) != (db > 0.0) {
+                let p = add(a, scale(sub(b, a), da / (da - db)));
+                if da > 0.0 {
+                    a = p;
+                } else {
+                    b = p;
+                }
+            }
+            true
+        };
+        if scene
+            .section
+            .is_some_and(|s| !clip(&|p| dot(p, s.normal.map(f64::from)) - f64::from(s.offset)))
+        {
+            continue;
+        }
+        if camera
+            .eye_position(rect)
+            .is_some_and(|eye| !clip(&|p| 1e-4 - dot(sub(p, eye.map(f64::from)), dir)))
+        {
+            continue;
+        }
+        let u = sub(b, a);
+        let w = sub(a, origin);
+        let den = dot(u, u) - dot(u, dir).powi(2);
+        let t = if den.abs() > 1e-12 {
+            ((dot(u, dir) * dot(w, dir) - dot(u, w)) / den).clamp(0.0, 1.0)
+        } else if camera.project(a.map(|v| v as f32), rect).1
+            >= camera.project(b.map(|v| v as f32), rect).1
+        {
+            0.0
+        } else {
+            1.0
+        };
+        let at = add(a, scale(u, t));
+        let w = sub(at, origin);
+        let distance = dot(w, w) - dot(w, dir).powi(2);
+        let depth = camera.project(at.map(|v| v as f32), rect).1;
+        if best
+            .is_none_or(|(d, z)| distance < d - 1e-9 || ((distance - d).abs() <= 1e-9 && depth > z))
+        {
+            best = Some((distance, depth));
+        }
+    }
+    best.map(|(_, depth)| depth)
 }

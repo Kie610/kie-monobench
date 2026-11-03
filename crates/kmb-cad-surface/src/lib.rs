@@ -1,4 +1,7 @@
-//! スケッチの領域、3D の線、ボディの辺を縁として面を張る。
+//! スケッチの領域、3D の線、ボディの辺を縁として面を張り、厚みを付けてソリッドへ続ける。
+mod thicken;
+pub use thicken::{ADD_THICKEN, THICKEN, Thicken};
+
 use kmb_cad::{output, parse, solid};
 use kmb_core::kernel::{self as k, BoundaryCurve, BoundarySegment, P3};
 use kmb_core::{
@@ -579,6 +582,7 @@ fn validate_profile(profile: &k::Profile) -> Result<(), EvalError> {
 }
 
 pub fn register(reg: &mut Registry) {
+    thicken::register(reg);
     reg.register_described(
         solid(SURFACE_PATCH, "面を張る")
             .icon("body")
@@ -713,7 +717,9 @@ impl Extension for Commands {
     }
 }
 pub fn module() -> kmb_core::Module {
-    kmb_core::Module::new("kmb-cad-surface", register).with_extension(Commands)
+    kmb_core::Module::new("kmb-cad-surface", register)
+        .with_extension(Commands)
+        .with_extension(thicken::Commands)
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 [package]
 name = "kmb-cad-import-step"
-description = "ソリッドの機能: STEP の読み込み"
+description = "形の機能: STEP と IGES の読み込み"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
