@@ -153,3 +153,20 @@ fn the_added_outline_evaluates_around_the_given_center() {
     assert_eq!(spec.teeth, 12);
     assert!((spec.axis.origin[0] - 30.0).abs() < 1e-9, "{:?}", spec.axis);
 }
+
+#[test]
+fn pulley_actions_preserve_section_values_and_reject_fields_for_other_kinds() {
+    let a=inserts(run(GEAR_ADD,json!({"kind":"v_pulley","pulley_diameter":150.1234567,"pulley_width":60.0,"groove_count":3,"v_section":"B","groove_angle":36.0,"groove_top_width":20.0,"groove_depth":12.0})).unwrap());
+    assert_eq!(a.len(), 2);
+    assert_eq!(a[0].1["pulley_diameter"], json!("150.1234567 mm"));
+    assert_eq!(a[0].1["groove_count"], json!("3"));
+    assert_eq!(a[0].1["groove_angle"], json!("36 deg"));
+    for args in [
+        json!({"pulley_diameter":100.0}),
+        json!({"kind":"flat_pulley","groove_count":2}),
+        json!({"kind":"rope_sheave","rope_diameter":0.0}),
+        json!({"kind":"v_pulley","groove_count":-1}),
+    ] {
+        assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
+    }
+}

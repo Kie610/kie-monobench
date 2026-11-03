@@ -102,24 +102,50 @@ impl Feature for GearBody {
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let not_gear =
             || EvalError::InvalidData(format!("{} は歯車の輪郭ではありません", self.gear));
-        let profile =
+        let mut profile =
             Profile::from_value(ctx.output(self.gear, "profile")?).ok_or_else(not_gear)?;
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
-        let width = length(ctx, &self.width, "歯の幅")?;
-        if width <= 0.0 {
+        let specified_width = length(ctx, &self.width, "歯の幅")?;
+        if !specified_width.is_finite() || specified_width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
         }
+        let width = if spec.kind.is_pulley() {
+            let values: Vec<_> = profile
+                .regions
+                .iter()
+                .flat_map(|r| &r.outer.edges)
+                .flat_map(|e| [e.from_point()[1], e.to_point()[1]])
+                .collect();
+            let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let width = hi - lo;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(EvalError::InvalidData(
+                    "ベルト車かロープ車の軸断面に幅がありません".into(),
+                ));
+            }
+            width
+        } else {
+            specified_width
+        };
         let mut warnings = Vec::new();
+        if spec.kind.is_pulley() && (specified_width - width).abs() > 1e-9 {
+            warnings.push(format!(
+                "ベルト車とロープ車の歯の幅は使いません。輪郭の幅 {width:.3} mm で作りました"
+            ));
+        }
         for (src, what) in [(&self.web, "腕の厚さ"), (&self.boss, "ボスの長さ")] {
             if let Some(s) = src.as_ref().filter(|s| !s.trim().is_empty()) {
                 let v = length(ctx, s, what)?;
                 if (v - width).abs() > 1e-9 {
-                    warnings.push(format!(
-                        "{what}は、輪郭が円板の間は使いません(歯の幅で作りました)"
-                    ));
+                    warnings.push(if spec.kind.is_pulley() {
+                        format!("{what}はベルト車とロープ車では使いません(輪郭の幅で作りました)")
+                    } else {
+                        format!("{what}は、輪郭が円板の間は使いません(歯の幅で作りました)")
+                    });
                 }
             }
         }
@@ -128,14 +154,26 @@ impl Feature for GearBody {
             Side::Reverse => (-width, 0.0),
             Side::Symmetric => (-width / 2.0, width / 2.0),
         };
-        let recipe = Recipe::Extrude {
-            operation: self.operation,
-            profile,
-            from,
-            to,
-            through: false,
-            stop: None,
-            taper: 0.0,
+        let recipe = if spec.kind.is_pulley() {
+            let direction = spec.axis.direction;
+            profile.plane.origin = [0, 1, 2].map(|i| profile.plane.origin[i] + direction[i] * from);
+            Recipe::Revolve {
+                operation: self.operation,
+                profile,
+                origin: spec.axis.origin,
+                dir: direction,
+                angle: std::f64::consts::TAU,
+            }
+        } else {
+            Recipe::Extrude {
+                operation: self.operation,
+                profile,
+                from,
+                to,
+                through: false,
+                stop: None,
+                taper: 0.0,
+            }
         };
         let mut out = finish(ctx, recipe, self.target)?;
         // 諸元の軸の点は歯の幅の始まりの側に置く
@@ -161,7 +199,11 @@ pub fn register(reg: &mut Registry) {
             .hint("歯車の輪郭を歯の幅だけ押し出して歯車の立体にする")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))
-            .field(Field::expr("width", "歯の幅").length())
+            .field(
+                Field::expr("width", "歯の幅")
+                    .length()
+                    .help("歯車の幅。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す"),
+            )
             .field(
                 Field::opt_expr("web", "腕の厚さ")
                     .length()
