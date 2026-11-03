@@ -12,10 +12,12 @@
 //! 穴)。歯数を減らして消えた歯の面を指していた後ろの機能は、参照切れで止まる(別の歯へ付け替えない)。
 
 pub mod body;
+pub mod commands;
 pub mod kinds;
 pub mod tooth;
 
 pub use body::{GEAR_BODY, GearBody};
+pub use commands::{GEAR_ADD, GEAR_OUTLINE_ADD, GearCommands};
 
 use kmb_cad::plane::PlaneRef;
 use kmb_cad::{Exprs, angle, count, expr_refs, length, output, rename};
@@ -358,7 +360,14 @@ pub fn register(reg: &mut Registry) {
             .icon("gear")
             .hint("平面の上に歯車の輪郭を置く。モジュールと歯数から歯の形を作り、押し出し・2D 輪郭の加工・レーザーにそのまま使える")
             .aliases("はぐるま gear ぎあ へいはぐるま spur いんぼりゅーと involute")
-            .field(Field::choice("kind", "種類", &kinds))
+            .field(
+                GearKind::ALL
+                    .iter()
+                    .filter(|k| !kinds::available(**k))
+                    .fold(Field::choice("kind", "種類", &kinds), |f, k| {
+                        f.hide_choice(k.key())
+                    }),
+            )
             .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数"))
             .field(Field::expr("teeth", "歯数").unitless().step(1.0, 3.0))
             .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg"))
@@ -373,7 +382,10 @@ pub fn register(reg: &mut Registry) {
             .field(Field::expr("x", "中心 x").length().help("中心の点があれば、そこからのずれ"))
             .field(Field::expr("y", "中心 y").length())
             .field(Field::opt_expr("phase", "回す角").angle().help("1 枚目の歯の向き。空なら 0"))
-            .template(serde_json::json!({"module": "1 mm", "teeth": "20"})),
+            .template(serde_json::json!({"module": "1 mm", "teeth": "20"}))
+            // 輪郭を足す時は、それを押し出すボディも同じ取り消し単位で足す(直すのは輪郭の欄)。
+            // ボディの無い輪郭は操作「歯車の輪郭」で足す
+            .companion(body::GEAR_BODY, serde_json::json!({"gear": {"$new": 0}})),
         |d| {
             let g: Gear = serde_json::from_value(d.clone())
                 .map_err(|e| EvalError::InvalidData(e.to_string()))?;
@@ -382,13 +394,16 @@ pub fn register(reg: &mut Registry) {
     );
 }
 
-/// この crate の名乗り(歯車の輪郭とボディの種類)。組み立て(kmb-bundle)が 1 回だけ並べる。
+/// この crate の名乗り(歯車の輪郭とボディの種類、操作「歯車」「歯車の輪郭」)。組み立て(kmb-bundle)が 1 回だけ並べる。
 pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-gear", |reg| {
         register(reg);
         body::register(reg);
     })
+    .with_extension(GearCommands)
 }
 
+#[cfg(test)]
+mod commands_tests;
 #[cfg(test)]
 mod tests;
