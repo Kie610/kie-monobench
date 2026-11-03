@@ -1797,4 +1797,6 @@ mod space_view_tests;
 mod tests;
 
 #[cfg(test)]
+mod cursor_readout_tests;
+#[cfg(test)]
 mod plane_frame_tests;
