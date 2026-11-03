@@ -163,6 +163,10 @@ impl Workspace {
             self.highlighted_faces()
         };
         let controls = view3d::Controls {
+            body_hover: self.active_pick_field().is_some_and(|(_, field)| {
+                matches!(field.kind, kmb_core::FieldKind::Pick { accept, .. }
+                    if accept.as_slice() == [RefKind::Body])
+            }),
             middle_orbits: self.win.layout.middle_drag == crate::MiddleDrag::Orbit,
             left: self.win.left_drag,
             // 部品を引いている間は、カーソルの下の面を色付けしない(下の別の部品が動くように見える)
