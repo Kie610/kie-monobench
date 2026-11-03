@@ -2201,3 +2201,7 @@
 # field-solid-thicken-body-help = Select a sheet body without thickness
 # field-solid-thicken-thickness = Thickness
 # field-solid-thicken-side = Side
+
+# field-solid-import-iges-file = File
+# field-solid-import-iges-stand-up = Convert Y-up to Z-up
+# field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.

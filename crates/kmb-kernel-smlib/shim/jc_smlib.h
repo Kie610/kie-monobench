@@ -178,6 +178,8 @@ typedef struct JcStepFace {
 } JcStepFace;
 /* 面を辺の曲線で切り抜いて縫い、閉じた立体にする。失敗した面の添字を *failed に書く(面でなければ -1)。 */
 int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32_t* failed, JcBrep** out);
+int jc_iges_face(const JcStepFace* face, int32_t uv, double tolerance, JcBrep** out);
+int jc_iges_stitch(const JcBrep* const* faces, size_t count, double tolerance, int32_t mode, JcBrep** out);
 
 int jc_face_count(const JcBrep* brep, size_t* out);
 /* 面を out[0..cap] に書く。cap は jc_face_count 以上にすること。

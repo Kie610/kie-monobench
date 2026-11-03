@@ -405,3 +405,5 @@ action-drawing-set-style = 寸法の様式
 action-drawing-set-style-tip = 文字・矢印・補助線・桁・単位・公差の様式を用紙ごとに決める
 action-cad-thicken = 厚みを付ける
 action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
+action-cad-import-iges = IGES を読み込む…
+action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す

@@ -404,3 +404,5 @@ action-drawing-set-style = Dimension style
 action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
 action-cad-thicken = Thicken
 action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+action-cad-import-iges = Import IGES…
+action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.

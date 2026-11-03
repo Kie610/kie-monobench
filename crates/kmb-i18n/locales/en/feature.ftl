@@ -64,3 +64,5 @@ feature-cam-radial3d = Radial (3D)
 feature-cam-radial3d-tip = Finish by tracing radial lines from the center. Choose depth levels and back-and-forth or one-way cutting
 feature-solid-thicken = Thicken
 feature-solid-thicken-tip = Add thickness to a sheet body to create a closed solid
+feature-solid-import-iges = IGES import
+feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.

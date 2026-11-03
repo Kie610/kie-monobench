@@ -2258,3 +2258,7 @@ field-solid-thicken-body = ボディ
 field-solid-thicken-body-help = 厚みの無い面のボディを選ぶ
 field-solid-thicken-thickness = 厚み
 field-solid-thicken-side = 向き
+
+field-solid-import-iges-file = ファイル
+field-solid-import-iges-stand-up = Y が上の形を立てる
+field-solid-import-iges-stand-up-help = Y が上で作られた形を、X 軸のまわりに 90 度回して Z が上に立てる
