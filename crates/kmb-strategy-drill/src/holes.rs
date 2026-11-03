@@ -14,6 +14,14 @@ use kmb_core::FeatureId;
 use kmb_interchange::hole::hole_face;
 use kmb_interchange::{HoleInfo, HoleKind, HolePart, Tap};
 
+/// 同じ壁の名前を持つ円筒を全て返す。離れた写しは別の円筒として残す。
+pub(crate) fn with_face<'a>(all: &[&'a Bore], face: &str) -> Vec<&'a Bore> {
+    all.iter()
+        .copied()
+        .filter(|b| b.faces.iter().any(|f| f == face))
+        .collect()
+}
+
 /// 穴 `b` が穴の機能 `hole` の部分 `part` なら、その点の番号。皿は穴そのものの壁で見分ける。
 pub fn bore_of(b: &Bore, hole: FeatureId, part: HolePart) -> Option<u32> {
     let want = match part {

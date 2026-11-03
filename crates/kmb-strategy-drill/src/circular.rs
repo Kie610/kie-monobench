@@ -292,12 +292,15 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         }
     } else {
         for (k, f) in c.faces.iter().enumerate() {
-            let b = all.iter().find(|b| b.faces.contains(f)).ok_or_else(|| {
-                invalid(format!(
+            let found = holes::with_face(&all, f);
+            if found.is_empty() {
+                return Err(invalid(format!(
                     "選んだ面 {f} が、ひと回りある穴かボスに見つかりません(形が変わったか、円筒ではない面です)"
-                ))
-            })?;
-            push(&mut targets, b, k);
+                )));
+            }
+            for b in found {
+                push(&mut targets, b, k);
+            }
         }
         if c.same_diameter {
             let picked: Vec<(f64, bool)> = targets
