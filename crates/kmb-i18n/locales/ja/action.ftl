@@ -61,6 +61,8 @@ action-asm-new-contact-set = 新しい接触セット
 action-asm-new-contact-set-tip = 選んだボディ(2 つ以上)を接触セットにする。接触セットを有効にしている間、ジョイントの部品を引くと、同じセットの相手に食い込む手前で止まる
 action-asm-new-rigid-group = 剛性グループ
 action-asm-new-rigid-group-tip = 選んでいる部品(2 つ以上)を 1 つの塊にする。どの部品をジョイントや引く操作で動かしても、全部が一緒に動く
+action-asm-planetary-link = 遊星の組をつなぐ
+action-asm-planetary-link-tip = 遊星歯車の太陽・腕・外輪(と遊星の自転)の回転を、歯数から決まる式でつなぐ。タイムラインでいちばん後ろのジョイントが前の 2 つに連動する。差動は外輪の歯数を太陽と同じにする
 action-asm-snap-joint = ジョイント
 action-asm-snap-joint-tip = 部品 1 を動かして部品 2 に合わせてつなぐ: 部品 1 の面 → 原点 → 部品 2 の面 → 原点。種類・角度・ずらしは後で変える
 

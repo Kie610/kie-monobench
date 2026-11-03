@@ -38,6 +38,7 @@ asm.occurrence@1	kmb-asm
 asm.occurrence_detach	kmb-asm
 asm.occurrence_sync	kmb-asm
 asm.place_occurrence	kmb-asm
+asm.planetary_link	kmb-asm
 asm.position@1	kmb-asm
 asm.rigid_group@1	kmb-asm
 asm.snap_joint	kmb-asm

@@ -60,6 +60,8 @@ action-asm-new-contact-set = New Contact Set
 action-asm-new-contact-set-tip = Make the selected bodies (two or more) a contact set. While contact sets are enabled, dragging a joint's part stops just before it digs into a partner in the same set
 action-asm-new-rigid-group = Rigid Group
 action-asm-new-rigid-group-tip = Make the selected components (two or more) one block. Whichever part a joint or drag moves, they all move together
+action-asm-planetary-link = Link Planetary Set
+action-asm-planetary-link-tip = Link the rotations of the sun, carrier and ring (and the planet spin) of a planetary gear set by an equation from the tooth counts. The latest joint in the timeline follows the earlier two. For a differential, give the ring the same tooth count as the sun
 action-asm-snap-joint = Joint
 action-asm-snap-joint-tip = Move part 1 to meet part 2 and join them: face of part 1 → origin → face of part 2 → origin. Type, angle and offset can be changed later
 
