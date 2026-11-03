@@ -492,6 +492,27 @@ pub(crate) fn steer(
     (Some(sn.pos), Some(sn), rel)
 }
 
+/// 曲線の上に置いた円周の位置を点として残す。円周上と曲線上の拘束が同じ点を指す。
+pub(crate) fn materialize_curve_spots(
+    sketch: &mut Sketch,
+    spots: &mut [kmb_sketch::Spot],
+    placed: &[([f64; 2], EntityId)],
+) {
+    for spot in spots {
+        if spot.0.is_none()
+            && placed
+                .iter()
+                .any(|(pos, _)| same_placed_position(*pos, spot.1))
+        {
+            spot.0 = Some(sketch.add_point(spot.1[0], spot.1[1]));
+        }
+    }
+}
+
+fn same_placed_position(a: [f64; 2], b: [f64; 2]) -> bool {
+    (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-9
+}
+
 /// 道具が作ったスケッチ `made` で、曲線の上に置いた位置にできた新しい点へ、線上・円周上の拘束を
 /// 足す。`before` は道具に渡したスケッチ(これに無い点が新しい点)。既にほかの拘束で決まって
 /// いれば足さない。
@@ -513,7 +534,7 @@ pub(crate) fn attach_placed(
     for (pos, curve) in placed {
         let Some((id, _)) = new_points
             .iter()
-            .find(|(_, p)| (p[0] - pos[0]).hypot(p[1] - pos[1]) < 1e-9)
+            .find(|(_, p)| same_placed_position(*p, *pos))
         else {
             continue;
         };
@@ -564,6 +585,9 @@ pub(crate) fn add_line_rel(
 
 #[cfg(test)]
 mod curve_snap_tests;
+
+#[cfg(test)]
+mod three_point_circle_tests;
 
 #[cfg(test)]
 mod tests {
