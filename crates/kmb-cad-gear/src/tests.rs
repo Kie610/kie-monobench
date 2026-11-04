@@ -25,9 +25,12 @@ fn every_expression_field_is_listed_for_renaming() {
         root_round: Some("s".into()),
         bore: Some("s".into()),
         phase: Some("s".into()),
+        rack_length: Some("s".into()),
+        rack_back: Some("s".into()),
+        outer_diameter: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 10);
+    assert_eq!(g.exprs_mut().len(), 13);
 }
 
 #[test]
@@ -140,4 +143,43 @@ fn internal_outer_diameter_is_an_expression_for_dependency_and_rename() {
     assert!(gear.exprs_mut().iter().any(|v| v.as_str() == "rim_size"));
     let renamed = gear.rename_param("rim_size", "ring_size").unwrap().unwrap();
     assert_eq!(renamed["outer_diameter"], "ring_size");
+}
+
+#[test]
+fn internal_and_rack_fields_remain_available_for_their_own_kinds() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let descriptor = reg.descriptor(GEAR).unwrap();
+    for kind in [GearKind::External, GearKind::Internal, GearKind::Rack] {
+        let data = json!({"kind":kind.key(),"rack_size":"teeth"});
+        let applies = |key: &str| {
+            descriptor
+                .fields
+                .iter()
+                .find(|field| field.key == key)
+                .unwrap()
+                .applies(&data)
+        };
+        assert!(applies("teeth"));
+        assert_eq!(applies("profile_shift"), kind != GearKind::Rack);
+        assert_eq!(applies("bore"), kind == GearKind::External);
+        assert_eq!(applies("outer_diameter"), kind == GearKind::Internal);
+        assert_eq!(applies("rack_size"), kind == GearKind::Rack);
+        assert_eq!(applies("rack_back"), kind == GearKind::Rack);
+        assert!(!applies("rack_length"));
+    }
+    let length = json!({"kind":"rack","rack_size":"length"});
+    for (key, expected) in [
+        ("teeth", false),
+        ("rack_length", true),
+        ("rack_back", true),
+        ("outer_diameter", false),
+    ] {
+        let field = descriptor
+            .fields
+            .iter()
+            .find(|field| field.key == key)
+            .unwrap();
+        assert_eq!(field.applies(&length), expected, "{key}");
+    }
 }

@@ -39,7 +39,16 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::vector("point", "中心(世界座標の mm。省くと平面の原点か面の代表点)"),
         Arg::choice("kind", "歯車の種類", &kinds).default(GearKind::External.key()),
         Arg::length("module", "モジュール(ピッチ円の径 = モジュール × 歯数)").default(1.0),
-        Arg::integer("teeth", "歯数(3 以上)").default(20),
+        Arg::integer("teeth", "歯数(平歯車は 3 以上、ラックは 1 以上)").default(20),
+        Arg::choice(
+            "rack_size",
+            "ラックの長さの指定",
+            &[("teeth", "歯数"), ("length", "長さ")],
+        )
+        .default("teeth"),
+        Arg::length("rack_length", "ラックの全長(長さ指定の時に必須)"),
+        Arg::length("rack_back", "ラックの背の厚さ(省くとモジュールの 2 倍)"),
+        Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
         Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
@@ -122,13 +131,18 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         return Err("モジュールは 0 より大きくしてください".into());
     }
     let teeth = cx.arg("teeth").and_then(|v| v.as_u64()).unwrap_or(20);
-    if teeth < 3 {
-        return Err("歯数は 3 以上にしてください".into());
+    if teeth < if kind == GearKind::Rack { 1 } else { 3 } {
+        return Err("歯数は平歯車と内歯車で 3 以上、ラックで 1 以上にしてください".into());
     }
     let pressure = cx.arg_f64("pressure_angle")?.unwrap_or(20.0);
+    let module_text = if kind == GearKind::Rack {
+        format!("{module} mm")
+    } else {
+        mm(module)
+    };
     let mut gear = json!({
         "plane": serde_json::to_value(&plane).expect("JSON にできる"),
-        "module": mm(module),
+        "module": module_text,
         "teeth": teeth.to_string(),
         "pressure_angle": format!("{pressure} deg"),
         "x": mm(center[0]),
@@ -143,6 +157,34 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     }
     if let Some(b) = bore.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
+    }
+    if let Some(phase) = cx.arg_f64("phase")? {
+        gear["phase"] = json!(format!("{phase} deg"));
+    }
+    let rack_size = cx.arg_str("rack_size").unwrap_or("teeth");
+    if kind == GearKind::Rack {
+        gear["rack_size"] = json!(rack_size);
+        if rack_size == "length" {
+            let value = cx
+                .arg_f64("rack_length")?
+                .ok_or("ラックの長さを入力してください")?;
+            kinds::rack::teeth_for_length(module, value)?;
+            gear["rack_length"] = json!(format!("{value} mm"));
+        }
+        if let Some(back) = cx.arg_f64("rack_back")? {
+            if back <= 0.0 {
+                return Err("背の厚さは 0 より大きくしてください".into());
+            }
+            gear["rack_back"] = json!(format!("{back} mm"));
+        }
+        if cx.arg_f64("bore")?.unwrap_or(0.0) != 0.0 {
+            return Err("ラックに軸の穴は付けられません".into());
+        }
+    } else if rack_size != "teeth"
+        || cx.arg("rack_length").is_some()
+        || cx.arg("rack_back").is_some()
+    {
+        return Err("ラックの長さと背の厚さは種類がラックの時だけ指定できます".into());
     }
     if kind == GearKind::Internal {
         let d = cx
