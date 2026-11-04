@@ -51,6 +51,7 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
     ]);
     if body {
         v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
@@ -131,7 +132,7 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     }
     let teeth = cx.arg("teeth").and_then(|v| v.as_u64()).unwrap_or(20);
     if teeth < if kind == GearKind::Rack { 1 } else { 3 } {
-        return Err("歯数は平歯車で 3 以上、ラックで 1 以上にしてください".into());
+        return Err("歯数は平歯車と内歯車で 3 以上、ラックで 1 以上にしてください".into());
     }
     let pressure = cx.arg_f64("pressure_angle")?.unwrap_or(20.0);
     let module_text = if kind == GearKind::Rack {
@@ -150,7 +151,11 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     if kind != GearKind::default() {
         gear["kind"] = json!(kind.key());
     }
-    if let Some(b) = cx.arg_f64("bore")?.filter(|b| *b > 0.0) {
+    let bore = cx.arg_f64("bore")?;
+    if kind == GearKind::Internal && bore.is_some_and(|b| b != 0.0) {
+        return Err("内歯車には軸の穴の径を指定できません。輪の外径を指定してください".into());
+    }
+    if let Some(b) = bore.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
     }
     if let Some(phase) = cx.arg_f64("phase")? {
@@ -180,6 +185,20 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         || cx.arg("rack_back").is_some()
     {
         return Err("ラックの長さと背の厚さは種類がラックの時だけ指定できます".into());
+    }
+    if kind == GearKind::Internal {
+        let d = cx
+            .arg_f64("outer_diameter")?
+            .ok_or("内歯車では輪の外径を指定してください")?;
+        let minimum = 2.0 * (module * teeth as f64 / 2.0 + 1.25 * module) + 2.0 * module;
+        if d < minimum {
+            return Err(format!("輪の外径は {minimum:.3} mm 以上にしてください").into());
+        }
+        // 内歯の必須外径とモジュールは、最小外径の境界でも同じ精度で読む。
+        gear["module"] = json!(format!("{module} mm"));
+        gear["outer_diameter"] = json!(format!("{d} mm"));
+    } else if cx.arg("outer_diameter").is_some() {
+        return Err("輪の外径は内歯車で指定してください".into());
     }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {

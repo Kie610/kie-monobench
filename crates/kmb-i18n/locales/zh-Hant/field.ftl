@@ -2234,3 +2234,5 @@
 # field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
 # field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
 # field-cad-gear-y-help = For a rack, the start of the pitch line.
+# field-cad-gear-outer-diameter = Ring Outer Diameter
+# field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.

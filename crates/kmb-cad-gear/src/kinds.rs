@@ -1,6 +1,7 @@
 //! 種類ごとの歯の形。種類の並びはここの 1 か所だけで、種類を足す時は `match` に 1 行と
 //! `kinds/` に 1 ファイルを足す。形を作れない種類は「まだ作れない」誤りにする(黙って別の形にしない)。
 
+mod internal;
 pub mod rack;
 mod spur;
 
@@ -43,8 +44,9 @@ impl Default for Params {
 /// 歯底の丸みの既定の係数(基準ラックの歯底の丸みの半径 0.38 × モジュール)。
 pub const ROOT_ROUND: f64 = 0.38;
 
-/// 歯車やラックの外形の輪(反時計回り)、参照の円(名前と半径)と線、注意。
-/// 歯車は原点を中心に 1 枚目の歯を X 軸の向きに立て、ラックは原点から X 軸に沿って並べる。
+/// 歯車やラックの外形の輪(反時計回り)、参照の円と線、注意。
+/// 歯車は原点を中心に歯を並べ、ラックは原点から X 軸に沿って並べる。
+/// 内歯は穴の境界で、機能が外径の円と組み合わせる。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outline {
     pub edges: Vec<ProfileEdge>,
@@ -58,16 +60,22 @@ pub struct Outline {
 pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
     match kind {
         GearKind::External => spur::outline(p),
+        GearKind::Internal => internal::outline(p),
         GearKind::Rack => rack::outline(p),
         other => Err(format!(
-            "「{}」の形はまだ作れません(今作れるのは「{}」と「ラック」です)",
+            "「{}」の形はまだ作れません(今作れるのは「{}」と「{}」と「{}」です)",
             other.label(),
-            GearKind::External.label()
+            GearKind::External.label(),
+            GearKind::Internal.label(),
+            GearKind::Rack.label()
         )),
     }
 }
 
 /// 種類 `kind` の形を作れるか(画面の種類の一覧で、作れない種類を灰色にする)。
 pub fn available(kind: GearKind) -> bool {
-    matches!(kind, GearKind::External | GearKind::Rack)
+    matches!(
+        kind,
+        GearKind::External | GearKind::Internal | GearKind::Rack
+    )
 }

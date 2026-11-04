@@ -166,12 +166,14 @@ field-cad-gear-bore-help = 空か 0 なら穴なし
 field-cad-gear-kind = 種類
 field-cad-gear-module = モジュール
 field-cad-gear-module-help = 歯の大きさ。ピッチ円の径 = モジュール × 歯数
+field-cad-gear-outer-diameter = 輪の外径
+field-cad-gear-outer-diameter-help = 内歯車で必須。歯底円の径 + モジュールの 2 倍以上
 field-cad-gear-phase = 回す角
 field-cad-gear-phase-help = 1 枚目の歯の向き。ラックは進む向き。空なら 0
 field-cad-gear-pressure-angle = 圧力角
 field-cad-gear-pressure-angle-help = ふつうは 20 deg
 field-cad-gear-profile-shift = 転位係数
-field-cad-gear-profile-shift-help = 空なら 0。正で歯が厚く、歯先円と歯底円が外へ広がる
+field-cad-gear-profile-shift-help = 空なら 0。正で外歯は厚く、内歯は薄くなり、歯先円と歯底円が外へ広がる
 field-cad-gear-root-round = 歯底の丸み
 field-cad-gear-root-round-help = 丸みの半径をモジュールに対する割合で。空なら 0.38
 field-cad-gear-teeth = 歯数
