@@ -81,6 +81,50 @@ pub struct Solution {
     pub measured: BTreeMap<ConstraintId, f64>,
 }
 
+/// 全体と、自由な要素ごとの自由度。要素が同じ動きを分け合うので、各要素の数は加算できない。
+#[derive(Debug, Clone, PartialEq)]
+pub struct FreedomReport {
+    pub dof: usize,
+    pub entities: BTreeMap<EntityId, usize>,
+}
+
+/// 解けた位置で、各要素が持つ自由な動きの数を調べる。
+pub fn freedom_report(
+    sketch: &Sketch,
+    sol: &Solution,
+    values: &HashMap<ConstraintId, f64>,
+) -> Result<FreedomReport, SketchError> {
+    let mut solved = sketch.clone();
+    solved.adopt_solution(sol);
+    let sys = build(&solved, values)?;
+    let space = Factor::new(
+        &sparse_jacobian(&sys.equations, &sys.x0),
+        sys.x0.len(),
+        None,
+    );
+    let rank = space.rank();
+    let dof = sys.x0.len() - rank;
+    let mut entities = BTreeMap::new();
+    if dof > 0 {
+        for (id, vars) in &sys.entity_vars {
+            if sol.fixed.contains(id) {
+                continue;
+            }
+            // 要素の変数を全部固定した時に増える階数が、その要素へ現れる自由な動きの次元。
+            // 動ける座標の数とは異なる(円周上を動く点は x/y が変わっても自由度は 1)。
+            let mut fixed = space.clone();
+            for &v in vars {
+                fixed.add(&vec![(v, 1.0)]);
+            }
+            let count = fixed.rank() - rank;
+            if count > 0 {
+                entities.insert(*id, count);
+            }
+        }
+    }
+    Ok(FreedomReport { dof, entities })
+}
+
 /// 何も描いていないスケッチの状態の言葉。画面・CLI・AI で同じにする(動く物が無いだけで
 /// 「完全拘束」と出すと、描き終えたと思わせる)。
 pub const NO_SHAPE: &str = "まだ形がありません";
@@ -1668,3 +1712,7 @@ mod check_tests;
 #[cfg(test)]
 #[path = "solver_regression_tests.rs"]
 mod regression_tests;
+
+#[cfg(test)]
+#[path = "freedom_report_tests.rs"]
+mod freedom_report_tests;

@@ -2279,6 +2279,8 @@ field-solid-thread-size = 呼び
 field-solid-thread-size-help = 空ならメートルの呼びを優先。インチ・管用は呼び径(めねじは下穴も)と面の径の差が 0.001 mm 未満の時だけ選ぶ。一覧は面の径に近い順
 field-solid-thread-target = 対象
 
+field-cad-sketch-freedom = 自由度
+field-cad-sketch-freedom-help = 全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。
 field-solid-import-mesh-file = ファイル
 field-solid-import-mesh-object = 物の名前
 field-solid-import-mesh-triangles = 三角形の数

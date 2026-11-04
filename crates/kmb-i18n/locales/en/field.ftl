@@ -2279,6 +2279,8 @@ field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 field-solid-thread-target = Target
 
+field-cad-sketch-freedom = Degrees of freedom
+field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
 field-solid-import-mesh-file = File
 field-solid-import-mesh-object = Object name
 field-solid-import-mesh-triangles = Triangles
