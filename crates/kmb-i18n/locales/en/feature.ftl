@@ -74,3 +74,5 @@ feature-solid-thicken = Thicken
 feature-solid-thicken-tip = Add thickness to a sheet body to create a closed solid
 feature-solid-import-iges = IGES import
 feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.
+
+feature-tool-clearance-warning = The tool cannot reach { $count } regions. An estimated fitting tool diameter is { $diameter } mm or less. Use a smaller tool for rest machining.

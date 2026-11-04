@@ -134,6 +134,9 @@ impl Headless {
                 let mut o = json!({"id": f.id.0, "name": f.name, "type": f.type_id});
                 let (state, detail) = match self.report.feature(f.id) {
                     Some(FeatureStatus::Ok { outputs, .. }) => {
+                        o.as_object_mut()
+                            .expect("機能の状態")
+                            .extend(kmb_core::warning_info(outputs));
                         let scalars: serde_json::Map<String, Json> = outputs
                             .iter()
                             .filter_map(|(k, v)| match v {

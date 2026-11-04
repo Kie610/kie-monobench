@@ -26,6 +26,33 @@ impl Words {
         self.texts.find(self.lang, id)
     }
 
+    /// 計算側の型付き引数を共通の翻訳口へ渡す。訳がなければ呼ぶ側で原文を出す。
+    pub(crate) fn warning_message(&self, message: &kmb_core::WarningMessage) -> Option<String> {
+        message.validate().ok()?;
+        let args: Vec<_> = message
+            .args
+            .iter()
+            .map(|(key, value)| {
+                (
+                    key.as_str(),
+                    match value {
+                        kmb_core::WarningArg::Text(s) => kmb_i18n::Arg::Text(s.clone()),
+                        kmb_core::WarningArg::Number(n) => kmb_i18n::Arg::Number(*n),
+                    },
+                )
+            })
+            .collect();
+        self.texts.find_with(self.lang, &message.id, &args)
+    }
+
+    pub(crate) fn warnings(&self, outputs: &kmb_core::Outputs) -> Vec<String> {
+        kmb_core::warnings_with(outputs, |m| self.warning_message(m))
+    }
+
+    pub(crate) fn output_warnings(&self, info: &serde_json::Value) -> Vec<String> {
+        kmb_core::warnings_from_info_with(info, |m| self.warning_message(m))
+    }
+
     fn key() -> egui::Id {
         egui::Id::new("kmb_words")
     }
@@ -219,5 +246,77 @@ impl WinState {
     pub(crate) fn warn(&mut self, text: impl Into<String>) {
         self.message = Some(text.into());
         self.message_tone = Tone::Warn;
+    }
+}
+
+#[cfg(test)]
+mod warning_tests {
+    use super::*;
+    #[test]
+    fn the_same_outputs_are_translated_without_recomputing_or_losing_raw_text() {
+        let message = kmb_core::WarningMessage {
+            id: "feature-tool-clearance-warning".into(),
+            args: [
+                ("count".into(), kmb_core::WarningArg::Number(20.0)),
+                ("diameter".into(), kmb_core::WarningArg::Number(0.76)),
+            ]
+            .into(),
+            fallback: "raw fallback".into(),
+        };
+        let mut outputs = kmb_core::Outputs::new();
+        kmb_core::add_warnings(&mut outputs, vec!["legacy".into()]);
+        kmb_core::add_warning_messages(&mut outputs, vec![message.clone()]);
+        let original = outputs.clone();
+        let texts = Arc::new(kmb_i18n::Catalog::with_os(kmb_i18n::Lang::Ja));
+        for lang in [kmb_i18n::Lang::Ja, kmb_i18n::Lang::En] {
+            let words = Words {
+                texts: texts.clone(),
+                lang,
+            };
+            let rendered = words.warnings(&outputs);
+            assert_eq!(rendered.len(), 2);
+            assert_eq!(rendered[0], "legacy");
+            assert!(
+                rendered[1].contains("20") && rendered[1].contains("0.76"),
+                "{rendered:?}"
+            );
+            assert!(rendered[1].contains(if lang == kmb_i18n::Lang::Ja {
+                "取残し加工"
+            } else {
+                "rest machining"
+            }));
+            assert!(!rendered[1].contains("feature-tool-clearance-warning"));
+            let status = kmb_core::FeatureStatus::Ok {
+                outputs: outputs.clone(),
+                reused: false,
+            };
+            assert_eq!(
+                crate::timeline_ui::status_mark(&words, Some(&status)).1,
+                rendered.join("\n")
+            );
+            assert_eq!(
+                crate::timeline_ui::Health::with_words(&words, Some(&status)),
+                crate::timeline_ui::Health::Warning(rendered.join("\n"))
+            );
+            assert_eq!(
+                words.output_warnings(&serde_json::Value::Object(kmb_core::warning_info(&outputs))),
+                rendered
+            );
+        }
+        assert_eq!(outputs, original);
+        assert_eq!(kmb_core::warnings_of(&outputs), ["legacy", "raw fallback"]);
+        let words = Words {
+            texts,
+            lang: kmb_i18n::Lang::En,
+        };
+        let mut unknown = message.clone();
+        unknown.id = "not-a-known-message".into();
+        assert!(words.warning_message(&unknown).is_none());
+        let mut missing = message;
+        missing.args.clear();
+        assert!(words.warning_message(&missing).is_none());
+        let mut fallback = kmb_core::Outputs::new();
+        kmb_core::add_warning_messages(&mut fallback, vec![unknown, missing]);
+        assert_eq!(words.warnings(&fallback), ["raw fallback", "raw fallback"]);
     }
 }

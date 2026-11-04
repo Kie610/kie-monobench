@@ -831,6 +831,27 @@ impl CamCommands {
         Ok((f(post, m)?, post.id().to_string()))
     }
 
+    /// 経路の持ち主の注意を、同じ持ち主を重ねずに補足へ運ぶ。
+    pub(crate) fn path_warnings(
+        &self,
+        cx: &Context<'_>,
+        paths: &[&crate::SetupPaths],
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut out = kmb_core::Outputs::new();
+        for source in paths.iter().flat_map(|p| &p.sources) {
+            if !seen.insert(source.id) {
+                continue;
+            }
+            if let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = cx.report.feature(source.id)
+            {
+                kmb_core::add_warnings(&mut out, kmb_core::legacy_warnings_of(outputs));
+                kmb_core::add_warning_messages(&mut out, kmb_core::warning_messages_of(outputs));
+            }
+        }
+        kmb_core::warning_info(&out)
+    }
+
     /// G-code の書き出し。
     fn gcode(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
@@ -843,13 +864,16 @@ impl CamCommands {
             .iter()
             .map(|p| p.minutes(&self.machine_for(&s.info).motion()))
             .sum();
-        let info = json!({
+        let mut info = json!({
             "setup": setup.0,
             "post": post,
             "lines": g.lines().count(),
             "tools": s.program().tools().iter().map(|t| t.number).collect::<Vec<_>>(),
             "minutes": (minutes * 10.0).round() / 10.0,
         });
+        info.as_object_mut()
+            .expect("書き出しの補足")
+            .extend(self.path_warnings(cx, &[&s]));
         Ok(Outcome::File {
             suffix: format!("{}.{}", file_part(&s.name), kmb_post::file_extension(&post)),
             contents: g.into_bytes(),
@@ -865,7 +889,10 @@ impl CamCommands {
         let (files, post) = self.with_post(cx, s.info.machine_profile(), |post, m| {
             kmb_cam_program::gcode_files(s, post, m)
         })?;
-        let info = json!({"setup":s.setup.0,"post":post,"sections":files.len()});
+        let mut info = json!({"setup":s.setup.0,"post":post,"sections":files.len()});
+        info.as_object_mut()
+            .expect("書き出しの補足")
+            .extend(self.path_warnings(cx, &[s]));
         let mut files: Vec<_> = files
             .into_iter()
             .map(|(name, text)| (name, text.into_bytes()))
