@@ -21,7 +21,7 @@ fn group_color(id: u64, l: &theme::Look) -> egui::Color32 {
 pub(crate) fn status_mark(w: &Words, status: Option<&FeatureStatus>) -> (&'static str, String) {
     match status {
         Some(FeatureStatus::Ok { outputs, .. }) => {
-            let w = kmb_core::warnings_of(outputs);
+            let w = w.warnings(outputs);
             if w.is_empty() {
                 ("✔", String::new())
             } else {
@@ -75,6 +75,18 @@ impl Health {
             },
             _ => Health::Idle,
         }
+    }
+
+    pub(crate) fn with_words(words: &Words, status: Option<&FeatureStatus>) -> Health {
+        if let Some(FeatureStatus::Ok { outputs, .. }) = status {
+            let warnings = words.warnings(outputs);
+            return if warnings.is_empty() {
+                Health::Ok
+            } else {
+                Health::Warning(warnings.join("\n"))
+            };
+        }
+        Self::of(status)
     }
 
     /// 印を目立たせる問題か(注意・エラー・止まっている)。
@@ -642,7 +654,7 @@ impl Workspace {
         let mut s = count("timeline-count", design.len());
         let (mut errors, mut warnings) = (0, 0);
         for f in design {
-            match Health::of(self.cur.work.report().feature(f.id)) {
+            match Health::with_words(&self.win.words(), self.cur.work.report().feature(f.id)) {
                 Health::Error(_) | Health::Blocked { .. } => errors += 1,
                 Health::Warning(_) => warnings += 1,
                 _ => {}
@@ -1053,11 +1065,9 @@ impl Workspace {
                     );
                 }
                 // 畳んでいても、中に問題があれば印を出す(エラーがあればエラーの印)
-                let worst = worst_health(
-                    data.features[s..=e]
-                        .iter()
-                        .map(|f| Health::of(self.cur.work.report().feature(f.id))),
-                );
+                let worst = worst_health(data.features[s..=e].iter().map(|f| {
+                    Health::with_words(&self.win.words(), self.cur.work.report().feature(f.id))
+                }));
                 if let Some(h) = worst {
                     paint_health(ui.painter(), egui::pos2(r.right() - 6.0, cy), &h, &l, false);
                     resp.on_hover_text(h.inside(&self.win.words(), "timeline"));
@@ -1245,11 +1255,9 @@ impl Workspace {
                         .color(l.pal.ink3),
                 );
                 // 畳んでいても、中に問題があれば印を出す(エラーがあればエラーの印)
-                let worst = worst_health(
-                    data.features[s..=e]
-                        .iter()
-                        .map(|f| Health::of(self.cur.work.report().feature(f.id))),
-                );
+                let worst = worst_health(data.features[s..=e].iter().map(|f| {
+                    Health::with_words(&self.win.words(), self.cur.work.report().feature(f.id))
+                }));
                 if collapsed && let Some(h) = worst {
                     let (d, r) = ui.allocate_exact_size(Vec2::splat(12.0), Sense::hover());
                     paint_health(ui.painter(), d.center(), &h, &l, false);

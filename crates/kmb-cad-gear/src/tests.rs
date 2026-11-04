@@ -3,6 +3,7 @@
 
 use super::*;
 use kmb_cad::Exprs;
+use kmb_core::Profile;
 use serde_json::json;
 
 #[test]
@@ -31,9 +32,12 @@ fn every_expression_field_is_listed_for_renaming() {
         boss_diameter: Some("s".into()),
         key_width: Some("s".into()),
         key_depth: Some("s".into()),
+        rack_length: Some("s".into()),
+        rack_back: Some("s".into()),
+        outer_diameter: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 16);
+    assert_eq!(g.exprs_mut().len(), 19);
 }
 
 #[test]
@@ -116,5 +120,181 @@ fn keyway_size_fields_are_available_with_the_boolean_enabled() {
     for key in ["key_width", "key_depth"] {
         let field = descriptor.fields.iter().find(|f| f.key == key).unwrap();
         assert!(field.applies(&data));
+    }
+}
+
+fn internal_profile(data: serde_json::Value) -> Result<(Profile, GearSpec), String> {
+    let mut doc = kmb_core::Document::new();
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let id = doc
+        .apply_edits(
+            "内歯車",
+            vec![kmb_core::Edit::Insert {
+                type_id: GEAR.into(),
+                name: "内歯車".into(),
+                data,
+            }],
+        )
+        .unwrap()[0];
+    let report = doc.recompute(&reg, &kmb_core::NullKernel);
+    match report.feature(id).unwrap() {
+        kmb_core::FeatureStatus::Ok { outputs, .. } => {
+            let profile = Profile::from_value(&outputs["profile"]).unwrap();
+            let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
+            assert_eq!(parts.rim, profile);
+            assert!(parts.web.is_none() && parts.boss.is_none());
+            Ok((
+                profile,
+                GearSpec::from_value(&outputs[GEAR_OUTPUT]).unwrap(),
+            ))
+        }
+        kmb_core::FeatureStatus::Error { message } => Err(message.clone()),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn internal_gears_are_a_ring_with_a_clockwise_tooth_hole_and_internal_spec() {
+    let (p, spec) = internal_profile(
+        json!({"kind":"internal", "module":"2 mm", "teeth":"20", "outer_diameter":"60 mm"}),
+    )
+    .unwrap();
+    assert_eq!(spec.kind, GearKind::Internal);
+    assert_eq!(spec.teeth, 20);
+    assert_eq!(spec.pitch_radius, 20.0);
+    let region = &p.regions[0];
+    assert_eq!(region.outer.edges[0].name, "rim");
+    assert_eq!(region.holes.len(), 1);
+    assert!(region.outer.signed_area() > 0.0 && region.holes[0].signed_area() < 0.0);
+    let area = region.outer.signed_area() + region.holes[0].signed_area();
+    let pitch_ring = std::f64::consts::PI / 4.0 * (60.0f64.powi(2) - 40.0f64.powi(2));
+    assert!(
+        (area - pitch_ring).abs() < 0.05 * pitch_ring,
+        "{area} vs {pitch_ring}"
+    );
+}
+
+#[test]
+fn an_internal_outer_diameter_is_required_and_the_minimum_is_in_the_error() {
+    let base = json!({"kind":"internal", "module":"2 mm", "teeth":"20"});
+    assert!(
+        internal_profile(base.clone())
+            .unwrap_err()
+            .contains("輪の外径")
+    );
+    let mut data = base.clone();
+    data["outer_diameter"] = json!("48 mm");
+    assert!(
+        internal_profile(data.clone())
+            .unwrap_err()
+            .contains("49.000 mm")
+    );
+    data["outer_diameter"] = json!("49 mm");
+    assert!(
+        internal_profile(data.clone()).is_ok(),
+        "最小の外径ちょうどは使える"
+    );
+    data["outer_diameter"] = json!("2 in");
+    let (profile, _) = internal_profile(data).unwrap();
+    let Segment::Circle { radius, .. } = profile.regions[0].outer.edges[0].segment else {
+        panic!("外径の円")
+    };
+    assert!((radius - 25.4).abs() < 1e-10);
+
+    let mut data = base;
+    data["outer_diameter"] = json!("60 mm");
+    data["bore"] = json!("2 mm");
+    assert!(internal_profile(data).unwrap_err().contains("軸の穴"));
+}
+
+#[test]
+fn internal_outer_diameter_is_an_expression_for_dependency_and_rename() {
+    let mut gear = Gear {
+        kind: GearKind::Internal,
+        outer_diameter: Some("rim_size".into()),
+        ..Gear::default()
+    };
+    assert!(gear.exprs_mut().iter().any(|v| v.as_str() == "rim_size"));
+    let renamed = gear.rename_param("rim_size", "ring_size").unwrap().unwrap();
+    assert_eq!(renamed["outer_diameter"], "ring_size");
+}
+
+#[test]
+fn internal_and_rack_fields_remain_available_for_their_own_kinds() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let descriptor = reg.descriptor(GEAR).unwrap();
+    for kind in [GearKind::External, GearKind::Internal, GearKind::Rack] {
+        let data = json!({"kind":kind.key(),"rack_size":"teeth"});
+        let applies = |key: &str| {
+            descriptor
+                .fields
+                .iter()
+                .find(|field| field.key == key)
+                .unwrap()
+                .applies(&data)
+        };
+        assert!(applies("teeth"));
+        assert_eq!(applies("profile_shift"), kind != GearKind::Rack);
+        assert_eq!(applies("bore"), kind == GearKind::External);
+        assert_eq!(applies("outer_diameter"), kind == GearKind::Internal);
+        assert_eq!(applies("rack_size"), kind == GearKind::Rack);
+        assert_eq!(applies("rack_back"), kind == GearKind::Rack);
+        assert!(!applies("rack_length"));
+    }
+    let length = json!({"kind":"rack","rack_size":"length"});
+    for (key, expected) in [
+        ("teeth", false),
+        ("rack_length", true),
+        ("rack_back", true),
+        ("outer_diameter", false),
+    ] {
+        let field = descriptor
+            .fields
+            .iter()
+            .find(|field| field.key == key)
+            .unwrap();
+        assert_eq!(field.applies(&length), expected, "{key}");
+    }
+}
+
+#[test]
+fn default_rack_parts_keep_the_finite_placed_profile() {
+    let (profile, spec) = internal_profile(json!({
+        "kind":"rack", "module":"2 mm", "teeth":"12", "rack_back":"5 mm",
+        "phase":"30 deg", "x":"7 mm", "y":"11 mm"
+    }))
+    .unwrap();
+    assert_eq!(spec.kind, GearKind::Rack);
+    assert_eq!(spec.pitch_radius, 0.0);
+    assert!(profile.regions[0].holes.is_empty());
+    assert!(profile.regions[0].outer.signed_area().is_finite());
+}
+
+#[test]
+fn hub_options_are_external_only_and_do_not_replace_other_profiles() {
+    for kind in ["internal", "rack"] {
+        let data = json!({"kind":kind, "outer_diameter":"60 mm", "boss_diameter":"6 mm"});
+        assert!(internal_profile(data).unwrap_err().contains("平歯車で指定"));
+    }
+    let mut reg = Registry::new();
+    register(&mut reg);
+    for field in &reg.descriptor(GEAR).unwrap().fields {
+        if [
+            "lightening_count",
+            "lightening_diameter",
+            "lightening_circle",
+            "boss_diameter",
+            "keyway",
+            "key_width",
+            "key_depth",
+        ]
+        .contains(&field.key.as_str())
+        {
+            assert!(field.applies(&json!({"kind":"external"})), "{}", field.key);
+            assert!(!field.applies(&json!({"kind":"internal"})), "{}", field.key);
+            assert!(!field.applies(&json!({"kind":"rack"})), "{}", field.key);
+        }
     }
 }
