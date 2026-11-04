@@ -35,6 +35,7 @@ use kmb_cam_setup::{
 /// タブの付く経路の出力(加工の操作が読むので kmb-cam-setup に置く)。
 pub use kmb_cam_setup::{TAB_PATHS, TabPath, TabPaths, TabSettings};
 
+mod clearance;
 mod cut;
 
 use cut::{Cut, Notes};
@@ -869,6 +870,7 @@ fn run(input: &StrategyInput) -> Result<StrategyOutput, EvalError> {
         source_radius: None,
     };
     let mut out = p.output(tp);
+    notes.messages(&mut out.extra);
     if !paths.paths.is_empty() {
         out.extra
             .insert(TAB_PATHS.into(), kmb_core::Payload::to_value(&paths));
