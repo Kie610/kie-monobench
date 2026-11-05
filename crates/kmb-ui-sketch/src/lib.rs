@@ -23,6 +23,11 @@ mod snap;
 mod space3d;
 mod view;
 
+#[cfg(test)]
+mod tool_button_live_tests;
+#[cfg(test)]
+mod tool_button_tests;
+
 pub use space3d::{Sketch3dEditor, Tool3};
 pub use view::Tool;
 
@@ -124,6 +129,15 @@ impl SketchEditor {
     /// 描く道具を選ぶ。
     pub fn set_tool(&mut self, tool: Tool) {
         self.editor.set_tool(tool);
+    }
+}
+
+/// 道具のボタンを押す。同じ道具なら描きかけを捨てて選ぶ状態へ戻し、選びは保つ。
+fn press_tool_button(editor: &mut view::Editor, tool: Tool) {
+    if editor.tool == tool {
+        editor.finish(tool);
+    } else {
+        editor.set_tool(tool);
     }
 }
 
@@ -1622,7 +1636,7 @@ impl FeatureEditor for SketchEditor {
             Tool::Measure,
         ]);
         if let Some(t) = all.into_iter().find(|t| tool_id(*t) == id) {
-            self.editor.set_tool(t);
+            press_tool_button(&mut self.editor, t);
             return None;
         }
         if id == "act:extrude" {
@@ -1666,6 +1680,10 @@ impl FeatureEditor for SketchEditor {
                 .map(to_value);
         }
         let name = id.strip_prefix("c:")?;
+        if constraint_tool::tool_of(name).is_some_and(|tool| tool == self.editor.tool) {
+            self.editor.finish(self.editor.tool);
+            return None;
+        }
         let sel = if name == "等しい" {
             constraints_ui::selected_in_order(&self.editor, &sketch)
         } else {
@@ -1726,7 +1744,7 @@ impl FeatureEditor for SketchEditor {
                 if !constraint_tool::usable(name, &sketch, &sel) {
                     self.editor.clear_selection();
                 }
-                self.editor.set_tool(tool);
+                press_tool_button(&mut self.editor, tool);
                 None
             }
         }

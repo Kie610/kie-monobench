@@ -568,11 +568,11 @@ pub(crate) fn apply(
             None
         }
         Ask::Tool(t) => {
-            editor.set_tool(t);
+            crate::press_tool_button(editor, t);
             None
         }
         Ask::Dimension => {
-            editor.set_tool(Tool::Dimension);
+            crate::press_tool_button(editor, Tool::Dimension);
             None
         }
         Ask::Undo => {
