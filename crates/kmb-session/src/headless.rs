@@ -31,6 +31,15 @@ pub struct BodyMass {
     /// 質量(g)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mass: Option<f64>,
+    /// 重心のまわりの質量の慣性テンソル(kg·mm²。`inertia` は密度 1 の mm⁵)。密度と慣性があれば
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mass_inertia: Option<kmb_core::kernel::InertiaTensor>,
+    /// 主慣性モーメント(kg·mm²、小さい順)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal_moments: Option<[f64; 3]>,
+    /// 主軸(長さ 1。`principal_moments` と同じ並び)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal_axes: Option<[kmb_core::kernel::P3; 3]>,
 }
 
 /// 面のボディの測定値。体積と質量の項目を持たない。
