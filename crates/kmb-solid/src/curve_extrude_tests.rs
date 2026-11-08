@@ -96,7 +96,10 @@ fn an_extruded_ellipse_has_one_side_face_and_its_top_edge_rounds() {
     let (mut doc, body, curve) = extruded(ellipse, None);
     let (names, h) = face_names(&mut doc, &k);
     let want = std::f64::consts::PI * 30.0 * 12.0 * 10.0;
-    assert!(close(k.mass(h).unwrap().volume, want, 1e-4));
+    // truck は曲面を網で近づけて体積を測るので、楕円柱より 0.1% ほどずれる
+    let tol = if k.is_truck() { 2e-3 } else { 1e-4 };
+    let v = k.mass(h).unwrap().volume;
+    assert!(close(v, want, tol), "{v} {want}");
     if k.is_truck() {
         kmb_contract::skip!("truck は曲線のまま押し出さず、線分と円弧の並びで作る");
     }
