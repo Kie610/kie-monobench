@@ -2328,7 +2328,7 @@ field-cad-gear-chain = 鎖の呼び
 field-cad-gear-chain-pitch = 鎖のピッチ
 field-cad-gear-roller-diameter = ローラーの径
 field-cad-gear-chain-inner-width = 鎖の内幅
-field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm
+field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す
 field-cad-gear-body-alignment = 腕とボスの位置
 field-cad-gear-boss-diameter = ボスの外径
 field-cad-gear-boss-diameter-help = 空か 0 ならボスなし
@@ -2353,4 +2353,44 @@ field-cad-gear-helix-angle-help = 空か 0 deg なら平歯車。0 deg 以上、
 field-cad-gear-hand = ねじれの向き
 field-cad-gear-body-herringbone = やまば
 field-cad-gear-body-groove = 中央の溝の幅
-field-cad-gear-body-groove-help = やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする
+field-cad-gear-body-groove-help = やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする。軽くする穴やキー溝があれば 0 mm にする
+
+field-cad-gear-pulley-diameter = ピッチ円の径
+
+field-cad-gear-pulley-diameter-help = 空なら 100 mm
+
+field-cad-gear-pulley-width = 幅
+
+field-cad-gear-pulley-width-help = 空なら 30 mm。ベルト車とロープ車の軸方向の幅
+
+field-cad-gear-crown-height = 中高の高さ
+
+field-cad-gear-crown-height-help = 空なら 0 mm
+
+field-cad-gear-groove-count = 溝の数
+
+field-cad-gear-groove-count-help = 空なら 1
+
+field-cad-gear-v-section = 溝の型
+
+field-cad-gear-groove-angle = 溝の角
+
+field-cad-gear-groove-angle-help = 空なら型とピッチ円の径から選ぶ
+
+field-cad-gear-groove-top-width = 溝の上の幅
+
+field-cad-gear-groove-top-width-help = 空なら型のピッチの位置の幅から求める
+
+field-cad-gear-groove-depth = 溝の深さ
+
+field-cad-gear-groove-depth-help = 溝の上端から底まで。空なら型の寸法から求める
+
+field-cad-gear-rope-diameter = ロープの径
+
+field-cad-gear-rope-diameter-help = 空なら 10 mm
+
+field-cad-gear-flange-height = 縁の高さ
+
+field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ
+
+field-cad-gear-body-herringbone-help = はすばは腕とボスも歯の幅にそろえ、穴とキー溝を含む円板全体をねじる

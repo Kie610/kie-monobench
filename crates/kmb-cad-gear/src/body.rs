@@ -18,6 +18,10 @@ use crate::hub::{PARTS_OUTPUT, Parts};
 
 pub const GEAR_BODY: &str = "cad.gear_body@1";
 
+pub(crate) const HELICAL_KIND_UNSUPPORTED: &str = "ねじれ角・ねじれの向き・やまばは、外歯か内歯の歯車だけで使えます。 / Helix angle, helix hand, and herringbone are available only for external and internal gears.";
+pub(crate) const HELICAL_THICKNESS_UNSUPPORTED: &str = "はすばとやまばでは、腕とボスの厚さを歯の幅にそろえてください。異なる厚さには対応していません。 / Helical and herringbone gears require web and boss thicknesses equal to the face width. Different thicknesses are not supported.";
+pub(crate) const HELICAL_GROOVE_HOLES_UNSUPPORTED: &str = "軽くする穴やキー溝があるやまばは、中央の溝の幅を 0 mm にしてください。この組み合わせには対応していません。 / Herringbone gears with lightening holes or a keyway require a zero center groove width. This combination is not supported.";
+
 /// 歯の幅をどちらへ取るか。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -63,7 +67,7 @@ pub struct GearBody {
     /// ボスの長さ(空なら歯の幅)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boss: Option<String>,
-    /// 左右を中央で合わせる歯すじ
+    /// 円板全体を左右で逆向きにねじる
     #[serde(default, skip_serializing_if = "is_default")]
     pub herringbone: bool,
     /// 中央の溝の幅(空か 0 なら溝なし)
@@ -150,11 +154,11 @@ impl Feature for GearBody {
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let not_gear =
             || EvalError::InvalidData(format!("{} は歯車の輪郭ではありません", self.gear));
-        let profile =
+        let mut profile =
             Profile::from_value(ctx.output(self.gear, "profile")?).ok_or_else(not_gear)?;
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
-        let width = if self.width.trim().is_empty() {
+        let specified_width = if self.width.trim().is_empty() {
             let kmb_core::Value::Scalar(q) = ctx.output(self.gear, crate::DEFAULT_WIDTH_OUTPUT)?
             else {
                 return Err(EvalError::InvalidData("歯の幅の既定値がありません".into()));
@@ -168,36 +172,80 @@ impl Feature for GearBody {
         } else {
             length(ctx, &self.width, "歯の幅")?
         };
-        if !width.is_finite() || width <= 0.0 {
+        if !specified_width.is_finite() || specified_width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
         }
+        let width = if spec.kind.is_pulley() {
+            let values: Vec<_> = profile
+                .regions
+                .iter()
+                .flat_map(|r| &r.outer.edges)
+                .flat_map(|e| [e.from_point()[1], e.to_point()[1]])
+                .collect();
+            let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let width = hi - lo;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(EvalError::InvalidData(
+                    "ベルト車かロープ車の軸断面に幅がありません".into(),
+                ));
+            }
+            width
+        } else {
+            specified_width
+        };
         let parts = Parts::from_value(ctx.output(self.gear, PARTS_OUTPUT)?).ok_or_else(not_gear)?;
         let mut warnings = Vec::new();
-        let thickness = |src: &Option<String>, what: &str| {
-            let value = src
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .map_or(Ok(width), |s| length(ctx, s, what))?;
-            if !value.is_finite() || value <= 0.0 {
-                return Err(EvalError::InvalidData(format!(
-                    "{what}は 0 より大きくしてください"
-                )));
+        let (web, boss) = if spec.kind.is_pulley() {
+            if (specified_width - width).abs() > 1e-9 {
+                warnings.push(format!(
+                    "ベルト車とロープ車の歯の幅は使いません。輪郭の幅 {width:.3} mm で作りました"
+                ));
             }
-            Ok(value)
+            for (src, what) in [(&self.web, "腕の厚さ"), (&self.boss, "ボスの長さ")] {
+                if let Some(s) = src.as_ref().filter(|s| !s.trim().is_empty()) {
+                    let v = length(ctx, s, what)?;
+                    if (v - width).abs() > 1e-9 {
+                        warnings.push(format!(
+                            "{what}はベルト車とロープ車では使いません(輪郭の幅で作りました)"
+                        ));
+                    }
+                }
+            }
+            (width, width)
+        } else {
+            let thickness = |src: &Option<String>, what: &str| {
+                let value = src
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map_or(Ok(width), |s| length(ctx, s, what))?;
+                if !value.is_finite() || value <= 0.0 {
+                    return Err(EvalError::InvalidData(format!(
+                        "{what}は 0 より大きくしてください"
+                    )));
+                }
+                Ok(value)
+            };
+            let mut web = thickness(&self.web, "腕の厚さ")?;
+            let mut boss = thickness(&self.boss, "ボスの長さ")?;
+            if spec.helix_angle != 0.0
+                && ((web - width).abs() > 1e-9 || (boss - width).abs() > 1e-9)
+            {
+                return Err(EvalError::Other(HELICAL_THICKNESS_UNSUPPORTED.into()));
+            }
+            for (present, value, what) in [
+                (parts.web.is_some(), &mut web, "腕の厚さ"),
+                (parts.boss.is_some(), &mut boss, "ボスの長さ"),
+            ] {
+                if !present && (*value - width).abs() > 1e-9 {
+                    warnings.push(format!("{what}は、その領域がないため使いません"));
+                    *value = width;
+                }
+            }
+            (web, boss)
         };
-        let mut web = thickness(&self.web, "腕の厚さ")?;
-        let mut boss = thickness(&self.boss, "ボスの長さ")?;
-        for (present, value, what) in [
-            (parts.web.is_some(), &mut web, "腕の厚さ"),
-            (parts.boss.is_some(), &mut boss, "ボスの長さ"),
-        ] {
-            if !present && (*value - width).abs() > 1e-9 {
-                warnings.push(format!("{what}は、その領域がないため使いません"));
-                *value = width;
-            }
-        }
         let (from, to) = match self.direction {
             Side::Normal => (0.0, width),
             Side::Reverse => (-width, 0.0),
@@ -228,13 +276,11 @@ impl Feature for GearBody {
             taper: 0.0,
         };
         let recipe = if spec.helix_angle != 0.0 {
-            if self.operation == Operation::Intersect
-                && (parts.web.is_some() || parts.boss.is_some())
-            {
-                return Err(EvalError::InvalidData("領域を分けたはすば歯車の交差には対応していません。新規ボディ・結合・切り取りを選んでください".into()));
+            if self.herringbone && gap > 0.0 && !crate::helical::concentric_holes(&profile, &spec) {
+                return Err(EvalError::Other(HELICAL_GROOVE_HOLES_UNSUPPORTED.into()));
             }
-            let rim = crate::helical::recipe(
-                &parts.rim,
+            crate::helical::recipe(
+                &profile,
                 &spec,
                 from,
                 to,
@@ -242,15 +288,17 @@ impl Feature for GearBody {
                 gap,
                 self.operation,
             )
-            .map_err(EvalError::InvalidData)?;
-            let mut recipes = vec![rim];
-            for (part, size) in [(parts.web, web), (parts.boss, boss)] {
-                if let Some(part) = part {
-                    let (a, b) = self.part_span(from, to, size);
-                    recipes.push(extrude(part, a, b));
-                }
+            .map_err(EvalError::InvalidData)?
+        } else if spec.kind.is_pulley() {
+            let direction = spec.axis.direction;
+            profile.plane.origin = [0, 1, 2].map(|i| profile.plane.origin[i] + direction[i] * from);
+            Recipe::Revolve {
+                operation: self.operation,
+                profile,
+                origin: spec.axis.origin,
+                dir: direction,
+                angle: std::f64::consts::TAU,
             }
-            Recipe::Many { parts: recipes }
         } else if (web - width).abs() < 1e-9 && (boss - width).abs() < 1e-9 {
             // 同じ厚さなら分割する前の輪郭を一度押し出し、余分な面を作らない。
             extrude(profile, from, to)
@@ -297,7 +345,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::opt_expr("width", "歯の幅")
                     .length()
-                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm"),
+                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す"),
             )
             .field(
                 Field::opt_expr("web", "腕の厚さ")
@@ -323,8 +371,8 @@ pub fn register(reg: &mut Registry) {
                     ("symmetric", "対称"),
                 ],
             ))
-            .field(Field::bool("herringbone", "やまば"))
-            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする"))
+            .field(Field::bool("herringbone", "やまば").help("はすばは腕とボスも歯の幅にそろえ、穴とキー溝を含む円板全体をねじる").only_reference("gear","kind","external|internal","external"))
+            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする。軽くする穴やキー溝があれば 0 mm にする").only_reference("gear","kind","external|internal","external"))
             .fields(operation_fields()),
         |d| {
             let g: GearBody = serde_json::from_value(d.clone())
@@ -333,7 +381,6 @@ pub fn register(reg: &mut Registry) {
         },
     );
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

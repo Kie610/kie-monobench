@@ -436,11 +436,11 @@ fn helical_internal_actions_check_the_transverse_ring_limit_and_keep_precision()
 
 #[test]
 fn helical_body_actions_keep_main_part_dimensions_and_automatic_width() {
-    let added = inserts(run(GEAR_ADD,json!({"helix_angle":25.0,"herringbone":true,"groove":1.0,"web":3.0,"boss":12.0,"alignment":"start"})).unwrap());
+    let added = inserts(run(GEAR_ADD,json!({"helix_angle":25.0,"herringbone":true,"groove":1.0,"web":10.0,"boss":10.0,"alignment":"start"})).unwrap());
     let body = &added[1].1;
     assert!(body.get("width").is_none());
-    assert_eq!(body["web"], "3 mm");
-    assert_eq!(body["boss"], "12 mm");
+    assert_eq!(body["web"], "10 mm");
+    assert_eq!(body["boss"], "10 mm");
     assert_eq!(body["alignment"], "start");
     assert_eq!(body["herringbone"], true);
     assert_eq!(body["groove"], "1 mm");
@@ -449,5 +449,51 @@ fn helical_body_actions_keep_main_part_dimensions_and_automatic_width() {
         json!({"kind":"sprocket","hand":"left"}),
     ] {
         assert!(run(GEAR_ADD, args).is_err());
+    }
+}
+
+#[test]
+fn pulley_actions_preserve_section_values_and_reject_fields_for_other_kinds() {
+    let a=inserts(run(GEAR_ADD,json!({"kind":"v_pulley","pulley_diameter":150.1234567,"pulley_width":60.0,"groove_count":3,"v_section":"B","groove_angle":36.0,"groove_top_width":20.0,"groove_depth":12.0})).unwrap());
+    assert_eq!(a.len(), 2);
+    assert_eq!(a[0].1["pulley_diameter"], json!("150.1234567 mm"));
+    assert_eq!(a[0].1["groove_count"], json!("3"));
+    assert_eq!(a[0].1["groove_angle"], json!("36 deg"));
+    for args in [
+        json!({"pulley_diameter":100.0}),
+        json!({"kind":"flat_pulley","groove_count":2}),
+        json!({"kind":"rope_sheave","rope_diameter":0.0}),
+        json!({"kind":"v_pulley","groove_count":-1}),
+    ] {
+        assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
+    }
+}
+
+/// 確かめること: CLIの未対応組合せはUnavailableで、変更の提案も文書の変更も返さない。
+#[test]
+fn unsupported_helical_combinations_return_unavailable_without_mutation() {
+    let mut doc = Document::new();
+    let reg = registry();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let report = doc.recompute(&reg, kernel.as_ref());
+    let before = serde_json::to_value(doc.data()).unwrap();
+    for args in [
+        json!({"helix_angle":25,"width":8,"web":3,"boss":12}),
+        json!({"helix_angle":25,"herringbone":true,"groove":1,"bore":8,"keyway":true}),
+        json!({"helix_angle":25,"herringbone":true,"groove":1,"lightening_count":4,"lightening_diameter":3,"lightening_circle":26}),
+        json!({"kind":"flat_pulley","helix_angle":20}),
+    ] {
+        let mut cx = kmb_core::Context::new(doc.data(), &report, &reg, &kernel);
+        cx.args = &args;
+        let error = Extensions(vec![Arc::new(GearCommands)])
+            .run(GEAR_ADD, &cx)
+            .unwrap_err();
+        assert_eq!(
+            error.kind,
+            kmb_core::ProblemKind::Unavailable,
+            "{args}: {error}"
+        );
+        assert!(error.message.contains(" / "), "日本語と英語の理由");
+        assert_eq!(serde_json::to_value(doc.data()).unwrap(), before);
     }
 }
