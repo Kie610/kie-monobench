@@ -112,6 +112,9 @@ fn releasing_keeps_the_copies_and_deleting_removes_them() {
     let mut h = four_circles_in_a_row();
     click_at(&mut h, [5.39, 11.15]);
     h.run();
+    // 下のボタンは、表示欄が増えてもスクロールで見える所へ送ってから押す。
+    h.get_by_label("パターンを消す").scroll_to_me();
+    h.run();
     h.get_by_label("パターンを消す").click();
     h.run();
     h.run();
