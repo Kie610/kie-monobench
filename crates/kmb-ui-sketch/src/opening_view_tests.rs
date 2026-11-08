@@ -160,7 +160,19 @@ fn opening_preference_checkbox_is_on_by_default_and_reaches_the_extension() {
         .build_ui_state(|ui, ws: &mut kmb_ui::Workspace| ws.ui(ui), ws);
     h.run();
     assert!(store.front());
-    h.get_by_label("開く時に正面から見る").click();
+    let batch = h
+        .state_mut()
+        .run_script("click \"開く時に正面から見る\"")
+        .unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 15, "設定の台本の時間切れ");
+    }
     h.run();
     assert!(!store.front());
     assert!(
