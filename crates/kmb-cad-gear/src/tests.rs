@@ -550,33 +550,51 @@ fn every_integrated_outline_exports_finite_parts_in_the_same_placement() {
         };
         let profile = Profile::from_value(&outputs["profile"]).unwrap();
         let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
-        assert_eq!(
-            parts.rim, profile,
-            "分割を使わない輪郭は同じ位置で渡す: {kind:?}"
-        );
-        assert!(parts.web.is_none() && parts.boss.is_none());
-        for edge in profile
-            .regions
-            .iter()
-            .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
-            .flat_map(|r| &r.edges)
-        {
+        if kind == GearKind::External {
+            assert_eq!(parts.rim.plane, profile.plane);
+            assert_eq!(parts.rim.regions[0].outer, profile.regions[0].outer);
             assert!(
-                edge.from_point()
+                !parts.rim.regions[0].holes.is_empty(),
+                "リムの内側は腕に渡す"
+            );
+            let web = parts.web.as_ref().expect("平歯車の腕の領域");
+            assert_eq!(web.plane, profile.plane);
+            assert!(parts.boss.is_none());
+        } else {
+            assert_eq!(
+                parts.rim, profile,
+                "分割しない種類は全profileを渡す: {kind:?}"
+            );
+            assert!(parts.web.is_none() && parts.boss.is_none());
+        }
+        for placed in std::iter::once(&profile)
+            .chain(std::iter::once(&parts.rim))
+            .chain(parts.web.iter())
+            .chain(parts.boss.iter())
+        {
+            for edge in placed
+                .regions
+                .iter()
+                .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
+                .flat_map(|r| &r.edges)
+            {
+                assert!(
+                    edge.from_point()
+                        .into_iter()
+                        .chain(edge.to_point())
+                        .all(f64::is_finite),
+                    "{kind:?}"
+                );
+            }
+            assert!(
+                placed
+                    .plane
+                    .origin
                     .into_iter()
-                    .chain(edge.to_point())
-                    .all(f64::is_finite),
-                "{kind:?}"
+                    .chain(placed.plane.x_axis)
+                    .chain(placed.plane.y_axis)
+                    .all(f64::is_finite)
             );
         }
-        assert!(
-            profile
-                .plane
-                .origin
-                .into_iter()
-                .chain(profile.plane.x_axis)
-                .chain(profile.plane.y_axis)
-                .all(f64::is_finite)
-        );
     }
 }
