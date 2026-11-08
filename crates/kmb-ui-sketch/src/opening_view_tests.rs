@@ -187,10 +187,47 @@ fn drawing_selection_and_dimensions_work_from_the_preserved_oblique_view() {
     assert!(sketch.constraints.iter().any(|c| matches!(c.kind,
         kmb_sketch::ConstraintKind::Length { line: target, .. } if target == line)));
     assert_eq!(h.state().report().error_count(), 0);
-    h.get_by_label("正面から見る").click();
-    for _ in 0..45 {
+    eprintln!(
+        "169 front node before normal click: {:#?}",
+        h.get_by_label("正面から見る")
+    );
+    {
+        let ed = editor(h.state_mut());
+        eprintln!(
+            "169 front before: canvas={:?} to_front={} camera={:?}",
+            ed.view.seen.map(|seen| seen.1),
+            ed.view.to_front,
+            ed.view.space
+        );
+    }
+    let batch = h.state_mut().run_script("click \"正面から見る\"").unwrap();
+    let started = std::time::Instant::now();
+    loop {
         h.step();
-        if editor(h.state_mut()).view.space.is_none() {
+        let now = h.ctx.input(|i| i.time);
+        {
+            let ed = editor(h.state_mut());
+            eprintln!(
+                "169 front command: time={now} to_front={} camera={:?}",
+                ed.view.to_front, ed.view.space
+            );
+        }
+        if let Some(result) = h.state_mut().script_result(batch) {
+            eprintln!("169 front normal click result: {}", result.report());
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 15, "視点の台本の時間切れ");
+    }
+    for frame in 0..45 {
+        h.step();
+        let now = h.ctx.input(|i| i.time);
+        let ed = editor(h.state_mut());
+        eprintln!(
+            "169 front wait: frame={frame} time={now} to_front={} camera={:?}",
+            ed.view.to_front, ed.view.space
+        );
+        if ed.view.space.is_none() {
             break;
         }
     }
