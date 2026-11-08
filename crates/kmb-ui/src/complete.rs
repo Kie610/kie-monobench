@@ -266,8 +266,13 @@ impl Completion {
                 } else {
                     matches(&word, &all)
                 };
-                // 打ち終えた名前だけが残ったら出さない(Enter で欄を決められるように)
-                if found.len() == 1 && found[0].name == word && !found[0].call {
+                // 打ち終えた名前だけが残ったら出さない(Enter で欄を決められるように)。大文字と
+                // 小文字だけが違う同じ物(定数の `pi` と `PI`)は 1 つと数える
+                if found.iter().any(|c| c.name == word)
+                    && found
+                        .iter()
+                        .all(|c| !c.call && c.name.to_lowercase() == word.to_lowercase())
+                {
                     found.clear();
                 }
             }
