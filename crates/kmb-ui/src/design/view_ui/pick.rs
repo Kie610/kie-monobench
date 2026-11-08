@@ -89,11 +89,11 @@ impl Workspace {
                 (hit, _) => self.pick_hit(hit, m.shift, m.command),
             }
         }
-        // 範囲: 面を選べれば面、無ければ辺、無ければ頂点。左から右へ囲むと全部入った物、
-        // 右から左へ囲むとかかった物(U30)
+        // 範囲(四角の窓か自由な形): 面を選べれば面、無ければ辺、無ければ頂点。左から右へ囲むと
+        // 全部入った物、右から左へ囲むとかかった物(U30)
         let crossing = ev.crossing;
         if !f.body && !f.face_on() && f.edge_on() {
-            if let Some(area) = ev.boxed {
+            if let Some(area) = &ev.boxed {
                 if !m.shift {
                     self.cur.picked_edges.clear();
                 }
@@ -110,10 +110,9 @@ impl Workspace {
                             .map(|p| self.cur.camera.project(p.map(|c| c as f32), rect).0)
                             .collect();
                         if crossing {
-                            line.windows(2)
-                                .any(|w| view3d::segment_touches(area, w[0], w[1]))
+                            area.polyline_touches(&line)
                         } else {
-                            line.iter().all(|p| area.contains(*p))
+                            area.contains_all(&line)
                         }
                     })
                     .map(|(feature, e)| kmb_core::EdgePick {
@@ -131,7 +130,7 @@ impl Workspace {
             return;
         }
         if !f.body && !f.face_on() && !f.edge_on() {
-            if let Some(area) = ev.boxed {
+            if let Some(area) = &ev.boxed {
                 if !m.shift {
                     self.cur.picked_vertices.clear();
                 }
@@ -164,7 +163,7 @@ impl Workspace {
             let hit = view3d::pick_at(&self.cur.scene, &self.cur.camera, rect, p);
             self.pick_with(hit, m.shift, m.command);
         }
-        if let Some(area) = ev.boxed {
+        if let Some(area) = &ev.boxed {
             match f.body {
                 false => {
                     let faces =

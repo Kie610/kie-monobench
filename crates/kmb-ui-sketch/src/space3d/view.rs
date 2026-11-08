@@ -1089,7 +1089,7 @@ pub(crate) fn view(
         out = ed.apply_menu(a, host, entry, at);
     }
     // 囲んで選ぶ。左から右へ囲むと全部入った物、右から左へ囲むとかかった物(U30。2D と同じ)
-    if let Some(area) = ev.boxed
+    if let Some(area) = &ev.boxed
         && !was_dragging
         && ed.tool == Tool3::Select
     {
@@ -1125,12 +1125,9 @@ pub(crate) fn view(
                 if line.is_empty() {
                     false
                 } else if crossing {
-                    line.iter().any(|p| area.contains(*p))
-                        || line
-                            .windows(2)
-                            .any(|w| view3d::segment_touches(area, w[0], w[1]))
+                    area.polyline_touches(&line)
                 } else {
-                    line.iter().all(|p| area.contains(*p))
+                    area.contains_all(&line)
                 }
             })
             .map(|e| Sel::Ent(e.id()))

@@ -100,6 +100,8 @@ pub struct Controls {
     pub no_guide_planes: bool,
     /// 左ドラッグで範囲を囲まない(2D スケッチが点を引く・自分の範囲で選ぶのに使う)
     pub no_box: bool,
+    /// 左ドラッグで囲む形(四角の窓か、なぞった自由な形)
+    pub enclose: Enclose,
     /// 回す時に上下の軸に縛らない(フリーオービット。偽なら Z を上に保つ拘束オービット)
     pub free_orbit: bool,
     /// 本体の奥のスケッチ・作業平面も普通の線で描く(表示の「全部透かす」。偽なら隠れた所は薄い点線)
@@ -168,9 +170,10 @@ pub struct ViewEvents {
     pub double_click: Option<Pos2>,
     /// クリックの時に Ctrl(macOS は Cmd)を押していたか(選ぶ欄・選ぶ手順で、次の欄へ進まずに足す)
     pub add: bool,
-    /// 左ドラッグで囲んだ範囲(離した時)
-    pub boxed: Option<Rect>,
-    /// 範囲を右から左へ囲んだか(U30。真なら範囲にかかった物、偽なら全部入った物を選ぶ)
+    /// 左ドラッグで囲んだ範囲(離した時。四角の窓か、なぞった自由な形)
+    pub boxed: Option<Area>,
+    /// 範囲を右から左へ囲んだか(U30。真なら範囲にかかった物、偽なら全部入った物を選ぶ。自由な形は
+    /// 押した所から最初に横へ動いた向きで決める)
     pub crossing: bool,
     /// 左の長押し(動かさずに押し続けた位置。1 回だけ)
     pub long_press: Option<Pos2>,

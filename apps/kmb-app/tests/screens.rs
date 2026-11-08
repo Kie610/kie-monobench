@@ -610,6 +610,66 @@ fn ui_script(name: &str) {
     }
 }
 
+/// 確かめること: 四角の窓(前)と自由な形(後)で囲んでいる最中の見た目と、選択のメニューの囲む形を、
+/// 暗い画面と明るい画面で比べる。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に自由な形で囲む前後の写真を書く"]
+fn write_lasso_screens() {
+    let Ok(dir) = std::env::var("JC_SCREENS_OUT") else {
+        return;
+    };
+    std::fs::create_dir_all(&dir).unwrap();
+    for (theme, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        let mut ws = Workspace::new(
+            kmb_samples::reference_document(),
+            None,
+            kmb_bundle::modules(),
+        );
+        ws.layout_mut().brightness = brightness;
+        let mut screen = Screen::sized(ws, Some([1280.0, 800.0]));
+        let c = egui::pos2(640.0, 430.0);
+        // 押して点を順に通り、離す前に撮る
+        let trace = |screen: &mut Screen, pts: &[egui::Pos2], name: &str| {
+            screen.h.hover_at(pts[0]);
+            screen.h.drag_at(pts[0]);
+            screen.h.step();
+            for p in &pts[1..] {
+                screen.h.hover_at(*p);
+                screen.h.step();
+            }
+            screen.write(&dir, name);
+            screen.h.drop_at(*pts.last().unwrap());
+            screen.settle();
+        };
+        // 前: 四角の窓は余計な物まで入る
+        trace(
+            &mut screen,
+            &[c - egui::vec2(160.0, 120.0), c + egui::vec2(160.0, 120.0)],
+            &format!("lasso-{theme}-before"),
+        );
+        assert!(screen.click("選択 ▾"), "選択のメニューを開く");
+        screen.write(&dir, &format!("lasso-{theme}-menu"));
+        assert!(screen.click_exact("自由な形で囲んで選ぶ"));
+        // 何も無い所を押して、前の選びを外す
+        let empty = egui::pos2(300.0, 680.0);
+        screen.h.drag_at(empty);
+        screen.h.drop_at(empty);
+        screen.settle();
+        // 後: なぞった形(上から右へ動かしてから回るので、全部入った物を選ぶ)
+        let path: Vec<egui::Pos2> = (0..=40)
+            .map(|k| {
+                let t = std::f32::consts::TAU * k as f32 / 48.0;
+                let r = 150.0 + 40.0 * (3.0 * t).sin();
+                c + egui::vec2(r * t.sin(), -0.75 * r * t.cos())
+            })
+            .collect();
+        trace(&mut screen, &path, &format!("lasso-{theme}-after"));
+    }
+}
+
 /// 確かめること: 設定の部品から入れた操作表示を、暗明とビューの幅・字の倍率で比べる。
 #[test]
 #[ignore = "道具: JC_SCREENS_OUT に操作の表示の前後の写真を書く"]

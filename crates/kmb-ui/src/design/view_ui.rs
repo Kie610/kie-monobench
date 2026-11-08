@@ -183,6 +183,7 @@ impl Workspace {
                 .is_some_and(|h| matches!(h.gesture, kmb_core::Gesture::Choice)),
             // 部品を引いてジョイントを動かしている間は、範囲で選ばない
             no_box: self.joint_dragging(),
+            enclose: self.win.enclose,
             free_orbit: self.win.layout.free_orbit,
             see_through: self.win.layout.see_through,
         };

@@ -624,7 +624,7 @@ fn hidden_bodies_leave_the_view_but_not_the_machining() {
     assert!(ws.cur.scene.is_empty());
     assert!(ws.cur.scene.bodies.iter().all(|b| b.feature != body));
     assert!(view3d::pick_at(&ws.cur.scene, &ws.cur.camera, rect, p).is_none());
-    assert!(view3d::picks_in(&ws.cur.scene, &ws.cur.camera, rect, rect, false).is_empty());
+    assert!(view3d::picks_in(&ws.cur.scene, &ws.cur.camera, rect, &rect.into(), false).is_empty());
     assert!(ws.picked().is_none());
     let edges = ws.scene_edges().to_vec();
     assert!(!edges.is_empty(), "辺の表は持ったまま");
