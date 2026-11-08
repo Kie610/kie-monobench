@@ -159,3 +159,63 @@ fn existing_invalid_parameter_and_configuration_rows_stay_unchanged_and_show_err
         finish(h, dir);
     }
 }
+
+#[test]
+fn mcp_configuration_unitless_rejection_keeps_input_and_its_cell_reason() {
+    use egui_kittest::kittest::Queryable;
+    let (mut h, dir) = fixture("10 mm", Some("10 mm"));
+    h.state_mut()
+        .cur
+        .work
+        .set_param_info(
+            "w",
+            None,
+            &kmb_session::edit::ParamInfo {
+                unit: Some(kmb_core::ParamUnit::Length),
+                comment: None,
+            },
+        )
+        .unwrap();
+    let mut properties = h.state().document().data().properties.clone();
+    properties.units = kmb_core::LengthUnit::In;
+    assert!(h.state_mut().set_properties(properties));
+    h.run_steps(12);
+    let before = h.state().document().to_json();
+    let mark = h.state().cur.work.mark();
+    let typed = "10 + 5 mm";
+    app(
+        &mut h,
+        &dir.0,
+        "ui_type",
+        json!({"target":"row の w","text":typed}),
+    );
+    assert_eq!(h.state().document().to_json(), before);
+    assert_eq!(h.state().cur.work.mark(), mark);
+    assert!(red_input(&h, typed), "拒否した式を欄に誤りの色で残す");
+    let problem = crate::doc_id(&h.ctx, ("config_cell", 0usize, 0usize)).with("problem");
+    let reason = kmb_session::params::unitless_reason(kmb_core::LengthUnit::In);
+    assert_eq!(
+        h.ctx.data(|d| d.get_temp::<String>(problem)),
+        Some(reason.clone())
+    );
+    h.ctx.all_styles_mut(|s| s.interaction.tooltip_delay = 0.0);
+    h.get_by_label("row の w").hover();
+    h.run_steps(12);
+    assert!(
+        h.query_all_by_label(&reason).next().is_some(),
+        "欄に重ねると理由が出る"
+    );
+    app(
+        &mut h,
+        &dir.0,
+        "ui_type",
+        json!({"target":"row の w","text":"20 mm"}),
+    );
+    assert_eq!(
+        kmb_interchange::configuration::of(h.state().document().data()).rows[0].cells[0],
+        ConfigCell::Expr("20 mm".into())
+    );
+    assert!(!red_input(&h, "20 mm"));
+    assert!(h.ctx.data(|d| d.get_temp::<String>(problem)).is_none());
+    finish(h, dir);
+}
