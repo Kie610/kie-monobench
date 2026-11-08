@@ -791,19 +791,46 @@ impl Feature for Gear {
     }
 }
 
+/// 種類の一覧で名前の前に出す絵の名前(絵そのものは画面の絵の表が持つ)。種類を足す時は、ここに
+/// 1 行と画面の絵の表に 1 つ足すと一覧に絵が出る。
+pub fn kind_icon(kind: GearKind) -> &'static str {
+    match kind {
+        GearKind::External => "gearSpur",
+        GearKind::Internal => "gearInternal",
+        GearKind::Rack => "gearRack",
+        GearKind::Bevel => "gearBevel",
+        GearKind::Worm => "gearWorm",
+        GearKind::WormWheel => "gearWormWheel",
+        GearKind::Ratchet => "gearRatchet",
+        GearKind::EscapeWheel => "gearEscape",
+        GearKind::Sprocket => "gearSprocket",
+        GearKind::Geneva => "gearGeneva",
+        GearKind::CountWheel => "gearCount",
+        GearKind::PinWheel => "gearLantern",
+        GearKind::Face => "gearFace",
+        GearKind::FlatPulley => "mechFlatPulley",
+        GearKind::VPulley => "mechPulley",
+        GearKind::RopeSheave => "mechSheave",
+    }
+}
+
 pub fn register(reg: &mut Registry) {
     use kmb_core::Field;
     let kinds: Vec<(&str, &str)> = GearKind::ALL.iter().map(|k| (k.key(), k.label())).collect();
+    let icons: Vec<(&str, &str)> = GearKind::ALL
+        .iter()
+        .map(|k| (k.key(), kind_icon(*k)))
+        .collect();
     reg.register_described(
         kmb_core::Descriptor::new(GEAR, kmb_core::category::SKETCH, "歯車の輪郭")
-            .icon("gear")
+            .icon("gears")
             .hint("平面の上に歯車の輪郭を置く。モジュールと歯数から歯の形を作り、押し出し・2D 輪郭の加工・レーザーにそのまま使える")
             .aliases("はぐるま gear ぎあ へいはぐるま spur いんぼりゅーと involute")
             .field(
                 GearKind::ALL
                     .iter()
                     .filter(|k| !kinds::available(**k))
-                    .fold(Field::choice("kind", "種類", &kinds), |f, k| {
+                    .fold(Field::choice("kind", "種類", &kinds).choice_icons(&icons), |f, k| {
                         f.hide_choice(k.key())
                     }),
             )

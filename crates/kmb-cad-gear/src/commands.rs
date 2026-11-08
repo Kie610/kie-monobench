@@ -4,12 +4,12 @@
 //! 歯数…)を直し、OK か Enter で決める(Esc でやめる)。「歯車の輪郭」はボディを作らない(レーザーや
 //! 2D の加工にそのまま使う)。画面・CLI・MCP・コマンド欄は同じ引数の宣言を通る。
 
-use crate::{GEAR, GEAR_BODY, kinds};
+use crate::{GEAR, GEAR_BODY, REFERENCE_OUTPUT, kinds};
 use kmb_cad::plane::PlaneRef;
 use kmb_core::kernel::P3;
 use kmb_core::{
-    Action, Arg, Context, Edit, Extension, FeatureId, Gesture, Handle, Outcome, Payload, Place,
-    Plane, Problem, Value,
+    Action, Arg, Context, Curves, Edit, Extension, FeatureId, Gesture, Handle, LineKind, Outcome,
+    Overlay, Payload, Place, Plane, Problem, Value,
 };
 use kmb_interchange::GearKind;
 use serde_json::json;
@@ -494,6 +494,26 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     })
 }
 
+/// 歯車の参照の線の種類(凡例の名前つき)。
+pub const REFERENCE_LINE: LineKind =
+    LineKind::new(kmb_interchange::ink::line::FAINT, "ピッチ円など");
+
+/// 選んでいる機能が歯車の輪郭ならそれ、歯車のボディならその元の輪郭。
+fn selected_outline(cx: &Context<'_>) -> Option<FeatureId> {
+    let sel = cx.selected?;
+    match cx.selected_type()? {
+        GEAR => Some(sel),
+        GEAR_BODY => cx
+            .data
+            .feature(sel)?
+            .data
+            .get("gear")
+            .and_then(serde_json::Value::as_u64)
+            .map(FeatureId),
+        _ => None,
+    }
+}
+
 /// 操作「歯車」「歯車の輪郭」。
 pub struct GearCommands;
 
@@ -523,6 +543,29 @@ impl Extension for GearCommands {
             GEAR_OUTLINE_ADD => Some(add(cx, false)),
             _ => None,
         }
+    }
+
+    /// 選んでいる・直している歯車の輪郭かボディの参照の線(ピッチ円・基礎円・歯先円・歯底円、ラックは
+    /// ピッチ線)。加工はなぞらない線なので、形の線や経路と取り違えない薄い参照の線の役割で渡す。
+    /// 選んでいない間は出さない(並べた歯車の線が重なって形が見えにくくならないように)。
+    fn overlay(&self, cx: &Context<'_>) -> Overlay {
+        let mut o = Overlay::default();
+        if let Some(outline) = selected_outline(cx)
+            && let Some(c) = cx
+                .output(outline, REFERENCE_OUTPUT)
+                .and_then(Curves::from_value)
+        {
+            for seg in &c.segments {
+                let mut pts: Vec<[f64; 3]> = seg
+                    .polyline(seg.steps_per_turn(0.01))
+                    .into_iter()
+                    .map(|q| c.plane.to_world(q))
+                    .collect();
+                pts.push(c.plane.to_world(seg.end_point()));
+                o.lines.push((pts, REFERENCE_LINE));
+            }
+        }
+        o
     }
 
     /// 平面を選んでいなければ平面の候補から、平らな面を選んでいれば中心から始める。

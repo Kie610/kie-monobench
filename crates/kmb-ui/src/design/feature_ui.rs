@@ -604,22 +604,34 @@ fn value_ui(
                     .or(choices.first())
                     .map_or(String::new(), |c| c.label.clone())
             };
-            egui::ComboBox::from_id_salt(key)
-                .selected_text(shown)
-                .show_ui(ui, |ui| {
-                    // 前の版の値は、その値の時だけ一覧に出す
-                    for c in choices
-                        .iter()
-                        .filter(|c| !f.hidden.contains(&c.value) || cur.as_ref() == Some(&c.value))
-                    {
-                        if ui
-                            .selectable_label(cur.as_ref() == Some(&c.value), &c.label)
-                            .clicked()
-                        {
-                            f.set(data, Some(Json::String(c.value.clone())));
+            let icon = choices
+                .iter()
+                .find(|c| Some(&c.value) == cur.as_ref())
+                .or(choices.first())
+                .map_or("", |c| c.icon.as_str());
+            // 絵のある選択肢は、選んでいる物の絵を一覧の前に並べる(表の欄の 1 つに収める)
+            let combo = |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(key)
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        // 前の版の値は、その値の時だけ一覧に出す
+                        for c in choices.iter().filter(|c| {
+                            !f.hidden.contains(&c.value) || cur.as_ref() == Some(&c.value)
+                        }) {
+                            if choice_row(ui, cur.as_ref() == Some(&c.value), c).clicked() {
+                                f.set(data, Some(Json::String(c.value.clone())));
+                            }
                         }
-                    }
+                    });
+            };
+            if icon.is_empty() {
+                combo(ui);
+            } else {
+                ui.horizontal(|ui| {
+                    choice_icon(ui, icon);
+                    combo(ui);
                 });
+            }
         }
         FieldKind::Output { slot, optional } if slot == "body" && is_cam(ws, entry) => {
             if f.get(data).is_none()
@@ -974,6 +986,63 @@ fn suggestions(
 
 /// 数だけを打った時は、今の値の単位を付ける(「1 mm」の欄に「3」と打てば「3 mm」。
 /// 単位を省ける)。今の値が単位つきの数でなければ(式、個数、空)、打ったまま。
+/// 選択肢の絵の一辺(倍率を掛ける前の px)と線の太さ。種類を見分けられる大きさにし、一覧の行の
+/// 高さは字の行より少しだけ高くする。
+const CHOICE_ICON: f32 = 20.0;
+const CHOICE_ICON_LINE: f32 = 1.4;
+
+/// 選ぶ欄の一覧の 1 行。絵のある選択肢([`kmb_core::Choice::icon`])は名前の前に絵を描き、無ければ
+/// 字だけの行。読み上げと `ui_*` の道具が探す名前は表示名のまま。
+pub(crate) fn choice_row(ui: &mut egui::Ui, on: bool, c: &kmb_core::Choice) -> egui::Response {
+    if c.icon.is_empty() {
+        return ui.selectable_label(on, &c.label);
+    }
+    let iw = crate::theme::icon_px(CHOICE_ICON);
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let galley = ui
+        .painter()
+        .layout_no_wrap(c.label.clone(), font, egui::Color32::PLACEHOLDER);
+    let pad = ui.spacing().button_padding;
+    let h = (iw + 4.0).max(galley.size().y + 2.0 * pad.y);
+    let w = (pad.x + iw + 6.0 + galley.size().x + pad.x).max(ui.available_width());
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click());
+    r.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, &c.label)
+    });
+    if ui.is_rect_visible(rect) {
+        let vis = ui.style().interact_selectable(&r, on);
+        if on || r.hovered() || r.has_focus() {
+            ui.painter()
+                .rect_filled(rect, vis.corner_radius, vis.weak_bg_fill);
+        }
+        let color = vis.text_color();
+        let ic = egui::Rect::from_center_size(
+            egui::pos2(rect.left() + pad.x + iw / 2.0, rect.center().y),
+            egui::Vec2::splat(iw),
+        );
+        crate::icons::paint_exact(ui.painter(), ic, &c.icon, color, CHOICE_ICON_LINE);
+        ui.painter().galley(
+            egui::pos2(ic.right() + 6.0, rect.center().y - galley.size().y / 2.0),
+            galley,
+            color,
+        );
+    }
+    r
+}
+
+/// 選んでいる選択肢の絵を、閉じた一覧の前に描く(絵の名前が空なら何もしない)。
+pub(crate) fn choice_icon(ui: &mut egui::Ui, icon: &str) {
+    if icon.is_empty() {
+        return;
+    }
+    let iw = crate::theme::icon_px(CHOICE_ICON);
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(iw), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let color = ui.visuals().text_color();
+        crate::icons::paint_exact(ui.painter(), rect, icon, color, CHOICE_ICON_LINE);
+    }
+}
+
 pub fn with_unit_of(new: &str, cur: &str) -> String {
     let unit = cur
         .trim()

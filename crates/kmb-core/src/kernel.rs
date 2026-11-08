@@ -36,10 +36,12 @@ impl From<ShapeHandle> for HandleRepr {
 pub type P2 = [f64; 2];
 pub type P3 = [f64; 3];
 
+mod inertia;
 mod instances;
 mod math;
 mod profile;
 
+pub use inertia::*;
 pub use instances::*;
 pub use math::*;
 pub use profile::*;
@@ -328,6 +330,25 @@ pub struct MassProps {
     /// 重心(密度が一様な時。M47)。求められないカーネルは `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub centroid: Option<P3>,
+    /// 重心を通り世界の軸に平行な軸のまわりの慣性テンソル(密度 1 の時。長さの 5 乗)。
+    /// 質量の慣性は密度を掛ける。求められないカーネルは `None`([`MassProps::inertia`] が
+    /// 対応していない誤りにする)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inertia: Option<InertiaTensor>,
+}
+
+impl MassProps {
+    /// 重心まわりの慣性テンソル。カーネルが求めていなければ対応していない誤り
+    /// (0 の慣性を返して計算を続けない)。
+    pub fn inertia(&self) -> Result<InertiaTensor, KernelError> {
+        self.inertia
+            .ok_or_else(|| KernelError::Unsupported("慣性の計算".into()))
+    }
+
+    /// 重心まわりの主軸と主慣性モーメント(密度 1 の時)。
+    pub fn principal(&self) -> Result<PrincipalInertia, KernelError> {
+        Ok(principal_inertia(&self.inertia()?))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -682,3 +682,22 @@ fn hidden_spoke_expressions_do_not_create_inputs_but_remain_renameable() {
     gear.web_form = WebForm::Spokes;
     assert!(!gear.inputs().unwrap().is_empty());
 }
+
+/// 確かめること: 歯車の輪郭の種類の欄は、どの種類(一覧に隠した作れない種類も)にも互いに違う絵の
+/// 名前を持つ。種類を足したら絵の名前も書かないと、この試験とコンパイル(`kind_icon` の match)が落ちる。
+#[test]
+fn every_kind_choice_names_its_own_picture() {
+    let mut reg = kmb_core::Registry::new();
+    register(&mut reg);
+    let d = reg.descriptor(GEAR).unwrap();
+    let f = d.fields.iter().find(|f| f.key == "kind").unwrap();
+    let kmb_core::FieldKind::Choice { choices } = &f.kind else {
+        panic!("種類は選ぶ欄");
+    };
+    assert_eq!(choices.len(), GearKind::ALL.len());
+    let mut seen = std::collections::HashSet::new();
+    for c in choices {
+        assert!(!c.icon.is_empty(), "{} に絵が無い", c.value);
+        assert!(seen.insert(c.icon.clone()), "{} の絵が重なる", c.value);
+    }
+}
