@@ -160,6 +160,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
             ("root", [0.0, 0.0], rf),
         ],
         warnings,
+        reference_lines: Vec::new(),
     })
 }
 

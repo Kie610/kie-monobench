@@ -2,8 +2,7 @@
 //! ボディ(`body`)を作り、輪郭の諸元に歯の幅を足した諸元(`gear`)を出す。押し出した面の名前は
 //! 輪郭の区間の名前を受け継ぐ(`f<この機能>:side:t3:r0` など。押し出しと同じ決まり)。
 //!
-//! 腕(ウェブ)の厚さとボスの長さの欄も持つ。輪郭が歯の輪・腕・ボスの領域に分かれていない間(円板)は
-//! 使わず、空でない時は注意を出す。
+//! 歯の輪・腕・ボスをそれぞれの厚さに押し出す。腕とボスは歯の幅の中央か片側へそろえる。
 
 use kmb_cad::{
     Exprs, Operation, Recipe, expr_refs, finish, keep_target, length, operation_fields, output,
@@ -14,6 +13,8 @@ use kmb_core::{
 };
 use kmb_interchange::{GEAR_OUTPUT, GearSpec};
 use serde::{Deserialize, Serialize};
+
+use crate::hub::{PARTS_OUTPUT, Parts};
 
 pub const GEAR_BODY: &str = "cad.gear_body@1";
 
@@ -28,6 +29,15 @@ pub enum Side {
     Reverse,
     /// 輪郭の平面を真ん中に両側へ半分ずつ
     Symmetric,
+}
+
+/// 腕とボスを歯の幅へそろえる位置。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Alignment {
+    #[default]
+    Centered,
+    Start,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -54,6 +64,8 @@ pub struct GearBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boss: Option<String>,
     #[serde(default, skip_serializing_if = "is_default")]
+    pub alignment: Alignment,
+    #[serde(default, skip_serializing_if = "is_default")]
     pub direction: Side,
     #[serde(default, skip_serializing_if = "is_default")]
     pub operation: Operation,
@@ -68,6 +80,7 @@ impl GearBody {
             width: width_default(),
             web: None,
             boss: None,
+            alignment: Alignment::default(),
             direction: Side::default(),
             operation: Operation::default(),
             target: None,
@@ -88,7 +101,11 @@ impl Exprs for GearBody {
 
 impl Feature for GearBody {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v = vec![output(self.gear, "profile"), output(self.gear, GEAR_OUTPUT)];
+        let mut v = vec![
+            output(self.gear, "profile"),
+            output(self.gear, GEAR_OUTPUT),
+            output(self.gear, PARTS_OUTPUT),
+        ];
         if self.width.trim().is_empty() {
             v.push(output(self.gear, crate::DEFAULT_WIDTH_OUTPUT));
         }
@@ -131,15 +148,29 @@ impl Feature for GearBody {
                 "歯の幅は 0 より大きくしてください".into(),
             ));
         }
+        let parts = Parts::from_value(ctx.output(self.gear, PARTS_OUTPUT)?).ok_or_else(not_gear)?;
         let mut warnings = Vec::new();
-        for (src, what) in [(&self.web, "腕の厚さ"), (&self.boss, "ボスの長さ")] {
-            if let Some(s) = src.as_ref().filter(|s| !s.trim().is_empty()) {
-                let v = length(ctx, s, what)?;
-                if (v - width).abs() > 1e-9 {
-                    warnings.push(format!(
-                        "{what}は、輪郭が円板の間は使いません(歯の幅で作りました)"
-                    ));
-                }
+        let thickness = |src: &Option<String>, what: &str| {
+            let value = src
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .map_or(Ok(width), |s| length(ctx, s, what))?;
+            if !value.is_finite() || value <= 0.0 {
+                return Err(EvalError::InvalidData(format!(
+                    "{what}は 0 より大きくしてください"
+                )));
+            }
+            Ok(value)
+        };
+        let mut web = thickness(&self.web, "腕の厚さ")?;
+        let mut boss = thickness(&self.boss, "ボスの長さ")?;
+        for (present, value, what) in [
+            (parts.web.is_some(), &mut web, "腕の厚さ"),
+            (parts.boss.is_some(), &mut boss, "ボスの長さ"),
+        ] {
+            if !present && (*value - width).abs() > 1e-9 {
+                warnings.push(format!("{what}は、その領域がないため使いません"));
+                *value = width;
             }
         }
         let (from, to) = match self.direction {
@@ -147,7 +178,7 @@ impl Feature for GearBody {
             Side::Reverse => (-width, 0.0),
             Side::Symmetric => (-width / 2.0, width / 2.0),
         };
-        let recipe = Recipe::Extrude {
+        let extrude = |profile, from, to| Recipe::Extrude {
             operation: self.operation,
             profile,
             from,
@@ -155,6 +186,30 @@ impl Feature for GearBody {
             through: false,
             stop: None,
             taper: 0.0,
+        };
+        let recipe = if (web - width).abs() < 1e-9 && (boss - width).abs() < 1e-9 {
+            // 同じ厚さなら分割する前の輪郭を一度押し出し、余分な面を作らない。
+            extrude(profile, from, to)
+        } else {
+            if self.operation == Operation::Intersect {
+                return Err(EvalError::InvalidData("厚さが異なる歯車の交差には対応していません。歯の幅・腕の厚さ・ボスの長さをそろえるか、新しいボディとして作ってください".into()));
+            }
+            let span = |thickness: f64| match self.alignment {
+                Alignment::Centered => {
+                    let middle = (from + to) / 2.0;
+                    (middle - thickness / 2.0, middle + thickness / 2.0)
+                }
+                Alignment::Start if self.direction == Side::Reverse => (to - thickness, to),
+                Alignment::Start => (from, from + thickness),
+            };
+            let mut recipes = vec![extrude(parts.rim, from, to)];
+            for (part, size) in [(parts.web, web), (parts.boss, boss)] {
+                if let Some(part) = part {
+                    let (a, b) = span(size);
+                    recipes.push(extrude(part, a, b));
+                }
+            }
+            Recipe::Many { parts: recipes }
         };
         let mut out = finish(ctx, recipe, self.target)?;
         // 諸元の軸の点は歯の幅の始まりの側に置く
@@ -195,6 +250,11 @@ pub fn register(reg: &mut Registry) {
                     .length()
                     .help("空なら歯の幅"),
             )
+            .field(Field::choice(
+                "alignment",
+                "腕とボスの位置",
+                &[("centered", "中央にそろえる"), ("start", "片側にそろえる")],
+            ))
             .field(Field::choice(
                 "direction",
                 "方向",

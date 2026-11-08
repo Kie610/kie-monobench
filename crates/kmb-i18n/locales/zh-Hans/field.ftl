@@ -2184,6 +2184,8 @@
 # field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 # field-solid-thread-target = Target
 
+# field-cad-sketch-freedom = Degrees of freedom
+# field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
 # field-solid-import-mesh-file = File
 # field-solid-import-mesh-object = Object name
 # field-solid-import-mesh-triangles = Triangles
@@ -2232,3 +2234,24 @@
 # field-cad-gear-roller-diameter = ローラーの径
 # field-cad-gear-chain-inner-width = 鎖の内幅
 # field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm
+# field-cad-gear-body-alignment = Web and Boss Alignment
+# field-cad-gear-boss-diameter = Boss Outside Diameter
+# field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+# field-cad-gear-key-depth = Keyway Depth
+# field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+# field-cad-gear-key-width = Keyway Width
+# field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+# field-cad-gear-keyway = Keyway
+# field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+# field-cad-gear-lightening-count = Number of Lightening Holes
+# field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+# field-cad-gear-lightening-diameter = Lightening Hole Diameter
+# field-cad-gear-rack-size = Rack Size By
+# field-cad-gear-rack-length = Rack Length
+# field-cad-gear-rack-length-help = Overall length including the teeth. Fits as many complete circular pitches as possible.
+# field-cad-gear-rack-back = Back Thickness
+# field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
+# field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
+# field-cad-gear-y-help = For a rack, the start of the pitch line.
+# field-cad-gear-outer-diameter = Ring Outer Diameter
+# field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.

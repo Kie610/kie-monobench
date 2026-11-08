@@ -13,26 +13,14 @@ pub(crate) struct Ran {
 
 impl Workspace {
     fn show_output_warnings(&mut self, info: &serde_json::Value) {
-        if let Some(warnings) = info.get("warnings").and_then(|w| w.as_array()) {
-            let warnings = warnings
-                .iter()
-                .filter_map(|w| w.as_str())
-                .collect::<Vec<_>>()
-                .join(
-                    "
-",
-                );
-            if !warnings.is_empty() {
-                let current = self.win.message.take().unwrap_or_default();
-                self.win.message = Some(if current.is_empty() {
-                    warnings
-                } else {
-                    format!(
-                        "{current}
-{warnings}"
-                    )
-                });
-            }
+        let warnings = self.win.words().output_warnings(info).join("\n");
+        if !warnings.is_empty() {
+            let current = self.win.message.take().unwrap_or_default();
+            self.win.message = Some(if current.is_empty() {
+                warnings
+            } else {
+                format!("{current}\n{warnings}")
+            });
         }
     }
 
@@ -1119,7 +1107,7 @@ impl Workspace {
     /// 機能の注意: 評価の警告と、モジュールの検査(セットアップならストックの大きさや機械の検査)。
     pub fn notes(&self, id: FeatureId) -> Vec<String> {
         let mut out = match self.cur.work.report().feature(id) {
-            Some(kmb_core::FeatureStatus::Ok { outputs, .. }) => kmb_core::warnings_of(outputs),
+            Some(kmb_core::FeatureStatus::Ok { outputs, .. }) => self.win.words().warnings(outputs),
             _ => Vec::new(),
         };
         out.extend(self.win.extensions.notes(&self.context(), id));

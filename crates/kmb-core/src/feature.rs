@@ -27,7 +27,7 @@ pub fn add_warnings(out: &mut Outputs, list: Vec<String>) {
     if list.is_empty() {
         return;
     }
-    let mut all = warnings_of(out);
+    let mut all = crate::legacy_warnings_of(out);
     all.extend(list);
     out.insert(
         WARNINGS.into(),
@@ -37,10 +37,7 @@ pub fn add_warnings(out: &mut Outputs, list: Vec<String>) {
 
 /// 出力の中の警告。
 pub fn warnings_of(out: &Outputs) -> Vec<String> {
-    out.get(WARNINGS)
-        .and_then(<crate::Warnings as crate::Payload>::from_value)
-        .map(|w| w.0)
-        .unwrap_or_default()
+    crate::warnings_with(out, |_| None)
 }
 
 /// 機能が宣言する依存先。宣言していない入力は評価中に読めない。

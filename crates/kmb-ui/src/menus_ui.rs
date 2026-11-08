@@ -738,7 +738,10 @@ impl Workspace {
         let words = self.win.words();
         let t = |id: &str| words.t(id);
         // 注意・エラーのある機能は、まず確かめる・文を写す
-        let health = crate::timeline_ui::Health::of(self.cur.work.report().feature(id));
+        let health = crate::timeline_ui::Health::with_words(
+            &self.win.words(),
+            self.cur.work.report().feature(id),
+        );
         if health.is_problem() {
             let review = t(if health.is_red() {
                 "timeline-menu-review-error"

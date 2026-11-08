@@ -208,6 +208,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
             ("root", [0.0, 0.0], d.root_radius),
         ],
         warnings: Vec::new(),
+        reference_lines: Vec::new(),
     })
 }
 
