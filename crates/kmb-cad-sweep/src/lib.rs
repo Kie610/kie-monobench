@@ -371,14 +371,8 @@ impl Feature for Loft {
         self.sections
             .iter()
             .filter(|s| s.kind == SectionKind::Point)
-            .filter_map(|s| match s.point.as_ref()? {
-                PointRef::Vertex { feature, .. }
-                    if self.operation == Operation::New || self.target != Some(*feature) =>
-                {
-                    Some(*feature)
-                }
-                _ => None,
-            })
+            .filter_map(|s| s.point.as_ref()?.body())
+            .filter(|feature| self.operation == Operation::New || self.target != Some(*feature))
             .collect()
     }
 

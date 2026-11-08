@@ -179,7 +179,7 @@ pub(super) fn planar(
         boundary.extend(lines);
     }
     let (segs, lens) = segments(&loops);
-    let _g = ffi::lock();
+    let _g = ffi::lock()?;
     let brep = ffi::planar_sheet(&jc_plane(&profile.plane), &segs, &lens).map_err(|why| {
         error(format!(
             "平らな面を張れませんでした({why})。縁を交わらない輪に描き直してください"
@@ -279,7 +279,7 @@ pub(super) fn patch(
         }
     }
     validate(&lines)?;
-    let _g = ffi::lock();
+    let _g = ffi::lock()?;
     let store = kernel.lock();
     let mut raw = Vec::new();
     for (segment, (_, pts)) in boundary.iter().zip(&lines) {
@@ -437,7 +437,7 @@ pub(super) fn thicken(
     if !thickness.is_finite() || thickness <= 0. {
         return Err(error("厚みは 0 より大きい有限の値にしてください"));
     }
-    let _g = ffi::lock();
+    let _g = ffi::lock()?;
     let mut store = kernel.lock();
     let source = store.get(sheet)?;
     if !source.brep.is_sheet().map_err(failed("ボディの種類"))? {
@@ -1042,7 +1042,7 @@ mod tests {
         let sheet = kernel.planar_sheet(&rectangle(), "sheet").unwrap();
         let mut successes = 0;
         {
-            let _g = ffi::lock();
+            let _g = ffi::lock_wait();
             let store = kernel.store.lock().unwrap();
             let source = store.get(sheet).unwrap();
             for offset in [2.0, -2.0] {
@@ -1119,7 +1119,7 @@ mod tests {
         let kernel = SmlibKernel::new();
         for kind in [1, 3] {
             let sheet = {
-                let _guard = ffi::lock();
+                let _guard = ffi::lock_wait();
                 let brep = ffi::test_curved_sheet(kind, 20.).unwrap();
                 let count = brep.faces(0).unwrap().len();
                 assert_eq!(count, 1);

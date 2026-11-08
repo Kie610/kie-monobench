@@ -551,7 +551,7 @@ fn the_grid_fades_out_far_away_instead_of_ending_in_a_line() {
     assert!(far < 40, "遠くの格子が濃い: {far}");
     assert!(lines < 20_000, "{lines}");
     // 描かなくなる角度の近くでは、全体が薄くなっている(急に消えない)
-    cam.set_view(-60.0, 5.0);
+    cam.set_view(-60.0, 2.0);
     let mut most = 0u8;
     guide_segments(&cam, rect, &colors, g, &mut |_, _, c| {
         most = most.max(c.a())

@@ -455,6 +455,7 @@ impl BodyFacts {
                 min,
                 max,
                 centroid: None,
+                inertia: None,
             }
         } else {
             kernel.mass(shape)?

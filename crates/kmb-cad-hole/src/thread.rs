@@ -1034,6 +1034,7 @@ impl Feature for Thread {
             .iter()
             .enumerate()
             .map(|(i, s)| kmb_core::Choice {
+                icon: String::new(),
                 value: s.name(),
                 label: format!(
                     "{}(呼び径 {} mm・ピッチ {} mm・{}){}",

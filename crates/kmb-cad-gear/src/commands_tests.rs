@@ -383,3 +383,46 @@ fn pulley_actions_preserve_section_values_and_reject_fields_for_other_kinds() {
         assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
     }
 }
+
+/// 確かめること: 歯車の輪郭かボディを選んでいる間だけ、ピッチ円・基礎円・歯先円・歯底円の 4 つの円を
+/// 薄い参照の線の役割で重ね、何も選んでいない時は何も重ねない。
+#[test]
+fn the_reference_circles_are_overlaid_faintly_while_the_gear_is_selected() {
+    let added = inserts(
+        run(
+            GEAR_ADD,
+            json!({"plane": "xy", "point": [30.0, 0.0, 0.0], "teeth": 12, "module": "2 mm"}),
+        )
+        .unwrap(),
+    );
+    let mut doc = Document::new();
+    let reg = registry();
+    let edits = added
+        .into_iter()
+        .enumerate()
+        .map(|(i, (type_id, data))| Edit::Insert {
+            type_id,
+            name: format!("歯車{i}"),
+            data,
+        })
+        .collect();
+    let ids = doc.apply_edits("歯車", edits).unwrap();
+    let kernel: Arc<dyn kmb_core::Kernel> = Arc::new(NullKernel);
+    let report = doc.recompute(&reg, kernel.as_ref());
+    let mut cx = kmb_core::Context::new(doc.data(), &report, &reg, &kernel);
+    assert!(
+        GearCommands.overlay(&cx).lines.is_empty(),
+        "選んでいなければ出さない"
+    );
+    for id in &ids {
+        cx.selected = Some(*id);
+        let o = GearCommands.overlay(&cx);
+        assert_eq!(o.lines.len(), 4, "ピッチ円・基礎円・歯先円・歯底円");
+        for (pts, kind) in &o.lines {
+            assert_eq!(kind.ink, kmb_interchange::ink::line::FAINT);
+            // 円は置いた中心のまわり(ピッチ円の半径 12 mm の前後)
+            let r = ((pts[0][0] - 30.0).powi(2) + pts[0][1].powi(2)).sqrt();
+            assert!(r > 9.0 && r < 15.0, "{r}");
+        }
+    }
+}

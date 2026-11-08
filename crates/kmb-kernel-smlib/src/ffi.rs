@@ -2,11 +2,18 @@
 //!
 //! SMLib は 1 つの文脈を全体で共有するので、ここの関数はすべて [`lock`] を取った状態で呼ぶ。
 //! [`Brep`] の後始末(`Drop`)も錠を取らずに SMLib を呼ぶので、錠を持っている間に捨てること。
+//!
+//! 錠はすべての文書(タブごとのカーネル)で 1 つ。SMLib の中には糸ごとに分かれていない作業用の
+//! 値(曲線の当てはめの誤差の表・らせんの近似の値・誤りの入れ子の深さなど)が残っており、2 つの
+//! 糸から同時に呼ぶと黙って形が狂うおそれがあるため。錠を待たない糸(画面。
+//! [`kmb_core::kernel::set_kernel_wait`])は、ほかの計算が錠を持っていれば待たずに
+//! [`KernelError::Busy`] で戻る。
 #![allow(unsafe_code)]
 
+use kmb_core::KernelError;
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, TryLockError};
 
 #[repr(C)]
 pub struct JcBrep {
@@ -156,6 +163,9 @@ pub struct JcMassProps {
     pub max: [f64; 3],
     pub centroid: [f64; 3],
     pub has_centroid: i32,
+    pub inertia_origin: [f64; 3],
+    pub moments: [f64; 3],
+    pub products: [f64; 3],
 }
 
 #[repr(C)]
@@ -363,8 +373,20 @@ unsafe extern "C" {
 
 static SMLIB: Mutex<()> = Mutex::new(());
 
-/// SMLib を呼ぶための錠。
-pub fn lock() -> MutexGuard<'static, ()> {
+/// SMLib を呼ぶための錠。錠を待たない糸では、ほかの計算が持っていれば [`KernelError::Busy`]。
+pub fn lock() -> Result<MutexGuard<'static, ()>, KernelError> {
+    if kmb_core::kernel::kernel_waits() {
+        return Ok(lock_wait());
+    }
+    match SMLIB.try_lock() {
+        Ok(g) => Ok(g),
+        Err(TryLockError::Poisoned(e)) => Ok(e.into_inner()),
+        Err(TryLockError::WouldBlock) => Err(kmb_core::kernel::note_kernel_busy()),
+    }
+}
+
+/// SMLib を呼ぶための錠を、空くまで待って取る(後始末など、やめられない所)。
+pub fn lock_wait() -> MutexGuard<'static, ()> {
     SMLIB.lock().unwrap_or_else(|e| e.into_inner())
 }
 

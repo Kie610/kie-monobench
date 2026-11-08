@@ -68,12 +68,17 @@ typedef struct JcArcEdge {
     int32_t convex;
 } JcArcEdge;
 
-/* has_centroid = 0 なら重心は求められなかった(閉じた立体でないなど)。 */
+/* has_centroid = 0 なら重心と慣性は求められなかった(閉じた立体でないなど)。
+   慣性は密度 1 で、点 inertia_origin を通り世界の軸に平行な軸のまわりの値。moments は
+   ∫(y²+z²)・∫(z²+x²)・∫(x²+y²)、products は ∫yz・∫zx・∫xy(正の積分のまま)。 */
 typedef struct JcMassProps {
     double volume, area;
     double min[3], max[3];
     double centroid[3];
     int32_t has_centroid;
+    double inertia_origin[3];
+    double moments[3];
+    double products[3];
 } JcMassProps;
 
 /* 三角形の網。tri_face は jc_faces の添字。edge_counts[i] 個ずつの点が edge_points に並ぶ。 */
