@@ -21,7 +21,7 @@ pub fn named_canvas_marker(ui: &egui::Ui, rect: Rect, id: egui::Id, label_key: &
         crate::window_state::Words::of(ui.ctx()).t(label_key)
     );
     ui.interact(rect, id, egui::Sense::hover())
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name));
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name.as_str()));
 }
 
 /// 画面の部品 1 つ(木から写した物。位置は egui の論理の座標)。
