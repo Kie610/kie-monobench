@@ -823,6 +823,28 @@ mod reference_field_tests {
                 "{kind}"
             );
         }
+        let wrong = doc
+            .apply_edits(
+                "異なる機能",
+                vec![Edit::Insert {
+                    type_id: "sample.other@1".into(),
+                    name: "別".into(),
+                    data: json!({}),
+                }],
+            )
+            .unwrap()[0];
+        doc.apply(kmb_core::Transaction::new(
+            "違う型への参照",
+            vec![kmb_core::Op::SetFeatureData {
+                id: bodies[0],
+                data: json!({"gear":wrong.0}),
+            }],
+        ))
+        .unwrap();
+        assert!(
+            !has(fields(&doc, &[bodies[0]]), "herringbone"),
+            "存在しても型が違えばkind省略にfallbackしない"
+        );
         doc.apply(kmb_core::Transaction::new(
             "切れた参照",
             vec![kmb_core::Op::SetFeatureData {

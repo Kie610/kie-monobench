@@ -2244,6 +2244,32 @@ fn referenced_field_conditions_use_declared_defaults_and_follow_document_changes
         .unwrap();
         assert_eq!(field.applies_in(&input, doc.data()), want);
     }
+    let wrong = doc
+        .apply_edits(
+            "違う型",
+            vec![Edit::Insert {
+                type_id: "sample.other@1".into(),
+                name: "別".into(),
+                data: json!({}),
+            }],
+        )
+        .unwrap()[0];
+    let typed = field.clone().only_reference_of_type(
+        "source",
+        "sample.source@1",
+        "mode",
+        "supported|also",
+        "supported",
+    );
+    let wrong_input = json!({"source":wrong.0,"enabled":"yes"});
+    assert!(
+        !typed.applies_in(&wrong_input, doc.data()),
+        "違う型のkind省略にfallbackしない"
+    );
+    assert!(
+        field.applies_in(&wrong_input, doc.data()),
+        "型指定のない宣言の挙動は変えない"
+    );
     let ordinary = Field::bool("flag", "入").only("enabled", "yes", "no");
     assert_eq!(
         ordinary.applies_in(&input, doc.data()),

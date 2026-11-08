@@ -280,6 +280,8 @@ pub struct When {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ReferenceWhen {
     pub reference: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_type: Option<String>,
     pub key: String,
     pub value: String,
     pub default: String,
@@ -294,6 +296,13 @@ impl ReferenceWhen {
         let Some(entry) = doc.feature(crate::FeatureId(id)) else {
             return false;
         };
+        if self
+            .expected_type
+            .as_ref()
+            .is_some_and(|expected| *expected != entry.type_id)
+        {
+            return false;
+        }
         let target = Field::info(&self.key, "");
         let current = match target.get(&entry.data) {
             None => self.default.as_str(),
@@ -795,11 +804,28 @@ impl Field {
     ) -> Self {
         self.reference_when = Some(ReferenceWhen {
             reference: reference.into(),
+            expected_type: None,
             key: key.into(),
             value: value.into(),
             default: default.into(),
         });
         self
+    }
+
+    /// 参照先の機能の型も指定する参照条件。型が違う時は省略時の既定を使わない。
+    pub fn only_reference_of_type(
+        self,
+        reference: &str,
+        expected_type: &str,
+        key: &str,
+        value: &str,
+        default: &str,
+    ) -> Self {
+        let mut field = self.only_reference(reference, key, value, default);
+        if let Some(condition) = &mut field.reference_when {
+            condition.expected_type = Some(expected_type.into());
+        }
+        field
     }
 
     /// 文書を参照できる編集画面でこの欄を使うか。参照条件のない既存欄は `applies` と同じ。
