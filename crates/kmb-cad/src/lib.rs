@@ -10,7 +10,7 @@ mod flush;
 mod inspect;
 pub mod plane;
 mod point_ref;
-pub use point_ref::PointRef;
+pub use point_ref::{PointRef, point_choices};
 pub mod prism;
 pub mod regions;
 pub mod stop_at;
