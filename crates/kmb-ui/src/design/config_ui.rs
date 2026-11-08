@@ -249,6 +249,9 @@ impl Workspace {
                         match self.typed_param(unit, e.trim()) {
                             Ok(e) => ConfigCell::Expr(e.trim().to_string()),
                             Err(why) => {
+                                if let Some(problem) = problem {
+                                    ctx.data_mut(|d| d.insert_temp(problem, why.clone()));
+                                }
                                 self.win.fail(why);
                                 return;
                             }
