@@ -21,7 +21,24 @@ fn setting_checkbox_reaches_the_extension_and_survives_reset_and_fresh() {
         .build_ui_state(|ui, ws: &mut kmb_ui::Workspace| ws.ui(ui), ws);
     harness.run();
     assert!(!store.enabled());
-    harness.get_by_label("直近の補助線の交点にスナップ").click();
+    eprintln!(
+        "direct label query selects: {:#?}",
+        harness.get_by_label("直近の補助線の交点にスナップ")
+    );
+    let batch = harness
+        .state_mut()
+        .run_script("click \"直近の補助線の交点にスナップ\"")
+        .unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        harness.step();
+        if let Some(result) = harness.state_mut().script_result(batch) {
+            eprintln!("{}", result.report());
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 15, "設定の台本の時間切れ");
+    }
     harness.run();
     assert!(store.enabled());
     let editor = harness.state_mut().editor_mut::<SketchEditor>().unwrap();
