@@ -576,11 +576,11 @@ impl Feature for Gear {
                     return Err(EvalError::InvalidData(format!("輪の外径は歯底円の径 + モジュールの 2 倍以上にしてください(最小の外径 {minimum:.3} mm)")));
                 }
                 let hole = ProfileLoop { edges: outline.edges.into_iter().rev().map(|mut e| { e.reversed = !e.reversed; e }).collect() };
-                (ProfileLoop { edges: vec![ProfileEdge { name: "rim".into(), segment: Segment::Circle { center: [0.0; 2], radius: diameter / 2.0 }, reversed: false }] }, vec![hole])
+                (ProfileLoop { edges: vec![ProfileEdge { curve: None, name: "rim".into(), segment: Segment::Circle { center: [0.0; 2], radius: diameter / 2.0 }, reversed: false }] }, vec![hole])
             } else { (outline, Vec::new()) };
             if !internal && bore > 0.0 {
                 holes.push(ProfileLoop {
-                    edges: vec![ProfileEdge {
+                    edges: vec![ProfileEdge { curve: None,
                         name: "bore".into(),
                         segment: Segment::Circle { center: [0.0; 2], radius: bore / 2.0 },
                         reversed: true,

@@ -574,6 +574,7 @@ mod tests {
                 outer: ProfileLoop {
                     edges: (0..4)
                         .map(|i| ProfileEdge {
+                            curve: None,
                             name: format!("e{i}"),
                             segment: Segment::Line {
                                 a: pts[i],
@@ -762,6 +763,7 @@ mod tests {
         let mut profile = rectangle();
         profile.regions[0].holes.push(ProfileLoop {
             edges: vec![ProfileEdge {
+                curve: None,
                 name: "hole".into(),
                 segment: Segment::Circle {
                     center: [5., 5.],
@@ -944,6 +946,7 @@ mod tests {
             regions: vec![k::Region {
                 outer: ProfileLoop {
                     edges: vec![ProfileEdge {
+                        curve: None,
                         name: "circle".into(),
                         segment: Segment::Circle {
                             center: [0., 0.],

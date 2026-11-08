@@ -167,6 +167,7 @@ fn adopt_gives_a_void_to_the_shell_around_it() {
     let outer = ProfileLoop {
         edges: (0..6)
             .map(|i| ProfileEdge {
+                curve: None,
                 name: format!("e{i}"),
                 segment: Segment::Line {
                     a: pts[i],

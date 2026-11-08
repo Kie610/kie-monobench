@@ -498,6 +498,7 @@ fn frame(n: P3) -> (P3, P3) {
 
 fn line(name: String, a: P2, b: P2) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name,
         segment: Segment::Line { a, b },
         reversed: false,
@@ -532,6 +533,7 @@ fn hexagon(s: f64) -> Vec<P2> {
 fn circle(name: &str, r: f64) -> ProfileLoop {
     ProfileLoop {
         edges: vec![ProfileEdge {
+            curve: None,
             name: name.into(),
             segment: Segment::Circle {
                 center: [0.0, 0.0],

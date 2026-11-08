@@ -302,6 +302,7 @@ fn a_closed_cylinder_has_no_straight_boundary_edges() {
         regions: vec![Region {
             outer: ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "rim".into(),
                     reversed: false,
                     segment: Segment::Circle {

@@ -68,6 +68,7 @@ fn step_round_trip_keeps_curved_faces_and_seams_are_not_drawn() {
                 .map(|(i, a)| {
                     let b = [[0.0, 8.0], [12.0, 3.0], [12.0, 0.0], [0.0, 0.0]][i];
                     ProfileEdge {
+                        curve: None,
                         name: format!("e{}", i + 1),
                         segment: Segment::Line { a: *a, b },
                         reversed: false,
@@ -160,6 +161,7 @@ fn an_arc_ending_past_a_full_turn_is_extruded() {
             outer: ProfileLoop {
                 edges: vec![
                     ProfileEdge {
+                        curve: None,
                         name: "e1".into(),
                         segment: Segment::Arc {
                             center: [0.0, 0.0],
@@ -170,6 +172,7 @@ fn an_arc_ending_past_a_full_turn_is_extruded() {
                         reversed: false,
                     },
                     ProfileEdge {
+                        curve: None,
                         name: "e2".into(),
                         segment: Segment::Line {
                             a: at(50.0),
@@ -205,6 +208,7 @@ fn a_cut_from_the_bottom_of_a_cylinder_draws_no_line_where_its_side_was_split() 
         ProfileLoop {
             edges: vec![
                 ProfileEdge {
+                    curve: None,
                     name: "e1".into(),
                     segment: Segment::Arc {
                         center: [0.0, 0.0],
@@ -215,6 +219,7 @@ fn a_cut_from_the_bottom_of_a_cylinder_draws_no_line_where_its_side_was_split() 
                     reversed: false,
                 },
                 ProfileEdge {
+                    curve: None,
                     name: "e2".into(),
                     segment: Segment::Line { a: at(a), b: at(b) },
                     reversed: false,
@@ -570,6 +575,7 @@ fn the_tangent_chain_does_not_run_on_into_the_seams_beside_a_slot() {
     use std::f64::consts::PI;
     let k = kernel();
     let edge = |name: &str, segment| ProfileEdge {
+        curve: None,
         name: name.into(),
         segment,
         reversed: false,

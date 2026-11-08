@@ -50,6 +50,7 @@ pub fn chain(paths: &[(u32, Segment)], entity: Option<u32>) -> Result<Vec<Profil
         None => 0,
     };
     let edge = |i: usize, reversed: bool| ProfileEdge {
+        curve: None,
         name: format!("e{}", paths[i].0),
         segment: paths[i].1.clone(),
         reversed,

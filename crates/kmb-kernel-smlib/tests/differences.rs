@@ -11,6 +11,7 @@ fn plate(k: &SmlibKernel) -> ShapeHandle {
             outer: rect_loop(0.0, 0.0, 60.0, 40.0, 1),
             holes: vec![ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "e9".into(),
                     segment: Segment::Circle {
                         center: [30.0, 20.0],
