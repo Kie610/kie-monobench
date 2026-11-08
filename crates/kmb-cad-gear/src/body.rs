@@ -1,9 +1,8 @@
-//! 歯車のボディ(`cad.gear_body@1`)。歯車の輪郭の機能 1 つを読み、押し出しかねじり付きスイープで
-//! 歯の幅を持つボディ(`body`)と諸元(`gear`)を出す。押し出した面の名前は
+//! 歯車のボディ(`cad.gear_body@1`)。歯車の輪郭の機能 1 つを読み、輪郭を歯の幅だけ押し出して
+//! ボディ(`body`)を作り、輪郭の諸元に歯の幅を足した諸元(`gear`)を出す。押し出した面の名前は
 //! 輪郭の区間の名前を受け継ぐ(`f<この機能>:side:t3:r0` など。押し出しと同じ決まり)。
 //!
-//! 腕(ウェブ)の厚さとボスの長さの欄も持つ。輪郭が歯の輪・腕・ボスの領域に分かれていない間(円板)は
-//! 使わず、空でない時は注意を出す。
+//! 歯の輪・腕・ボスをそれぞれの厚さに押し出す。腕とボスは歯の幅の中央か片側へそろえる。
 
 use kmb_cad::{
     Exprs, Operation, Recipe, expr_refs, finish, keep_target, length, operation_fields, output,
@@ -14,6 +13,8 @@ use kmb_core::{
 };
 use kmb_interchange::{GEAR_OUTPUT, GearSpec};
 use serde::{Deserialize, Serialize};
+
+use crate::hub::{PARTS_OUTPUT, Parts};
 
 pub const GEAR_BODY: &str = "cad.gear_body@1";
 
@@ -30,12 +31,21 @@ pub enum Side {
     Symmetric,
 }
 
+/// 腕とボスを歯の幅へそろえる位置。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Alignment {
+    #[default]
+    Centered,
+    Start,
+}
+
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
     *v == T::default()
 }
 
 fn width_default() -> String {
-    "10 mm".into()
+    String::new()
 }
 
 /// 歯車のボディの機能のデータ。例: `{"gear": 3, "width": "8 mm"}`
@@ -44,8 +54,8 @@ fn width_default() -> String {
 pub struct GearBody {
     /// 歯車の輪郭の機能
     pub gear: FeatureId,
-    /// 歯の幅(歯の輪の厚さ)
-    #[serde(default = "width_default")]
+    /// 歯の幅。空欄なら鎖車は鎖幅から決め、ほかの歯車は 10 mm。
+    #[serde(default = "width_default", skip_serializing_if = "String::is_empty")]
     pub width: String,
     /// 腕(ウェブ)の厚さ(空なら歯の幅)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -59,6 +69,8 @@ pub struct GearBody {
     /// 中央の溝の幅(空か 0 なら溝なし)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub groove: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub alignment: Alignment,
     #[serde(default, skip_serializing_if = "is_default")]
     pub direction: Side,
     #[serde(default, skip_serializing_if = "is_default")]
@@ -76,6 +88,7 @@ impl GearBody {
             boss: None,
             herringbone: false,
             groove: None,
+            alignment: Alignment::default(),
             direction: Side::default(),
             operation: Operation::default(),
             target: None,
@@ -83,9 +96,25 @@ impl GearBody {
     }
 }
 
+impl GearBody {
+    fn part_span(&self, from: f64, to: f64, thickness: f64) -> (f64, f64) {
+        match self.alignment {
+            Alignment::Centered => {
+                let middle = (from + to) / 2.0;
+                (middle - thickness / 2.0, middle + thickness / 2.0)
+            }
+            Alignment::Start if self.direction == Side::Reverse => (to - thickness, to),
+            Alignment::Start => (from, from + thickness),
+        }
+    }
+}
+
 impl Exprs for GearBody {
     fn exprs_mut(&mut self) -> Vec<&mut String> {
-        let mut v = vec![&mut self.width];
+        let mut v = Vec::new();
+        if !self.width.trim().is_empty() {
+            v.push(&mut self.width);
+        }
         v.extend(
             [&mut self.web, &mut self.boss, &mut self.groove]
                 .into_iter()
@@ -97,7 +126,14 @@ impl Exprs for GearBody {
 
 impl Feature for GearBody {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
-        let mut v = vec![output(self.gear, "profile"), output(self.gear, GEAR_OUTPUT)];
+        let mut v = vec![
+            output(self.gear, "profile"),
+            output(self.gear, GEAR_OUTPUT),
+            output(self.gear, PARTS_OUTPUT),
+        ];
+        if self.width.trim().is_empty() {
+            v.push(output(self.gear, crate::DEFAULT_WIDTH_OUTPUT));
+        }
         v.extend(target_inputs(self.operation, self.target)?);
         for i in expr_refs(self)? {
             if !v.contains(&i) {
@@ -118,21 +154,48 @@ impl Feature for GearBody {
             Profile::from_value(ctx.output(self.gear, "profile")?).ok_or_else(not_gear)?;
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
-        let width = length(ctx, &self.width, "歯の幅")?;
+        let width = if self.width.trim().is_empty() {
+            let kmb_core::Value::Scalar(q) = ctx.output(self.gear, crate::DEFAULT_WIDTH_OUTPUT)?
+            else {
+                return Err(EvalError::InvalidData("歯の幅の既定値がありません".into()));
+            };
+            if q.dim != kmb_core::Dim::LENGTH {
+                return Err(EvalError::InvalidData(
+                    "歯の幅の既定値が長さではありません".into(),
+                ));
+            }
+            q.value
+        } else {
+            length(ctx, &self.width, "歯の幅")?
+        };
         if !width.is_finite() || width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
         }
+        let parts = Parts::from_value(ctx.output(self.gear, PARTS_OUTPUT)?).ok_or_else(not_gear)?;
         let mut warnings = Vec::new();
-        for (src, what) in [(&self.web, "腕の厚さ"), (&self.boss, "ボスの長さ")] {
-            if let Some(s) = src.as_ref().filter(|s| !s.trim().is_empty()) {
-                let v = length(ctx, s, what)?;
-                if (v - width).abs() > 1e-9 {
-                    warnings.push(format!(
-                        "{what}は、輪郭が円板の間は使いません(歯の幅で作りました)"
-                    ));
-                }
+        let thickness = |src: &Option<String>, what: &str| {
+            let value = src
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .map_or(Ok(width), |s| length(ctx, s, what))?;
+            if !value.is_finite() || value <= 0.0 {
+                return Err(EvalError::InvalidData(format!(
+                    "{what}は 0 より大きくしてください"
+                )));
+            }
+            Ok(value)
+        };
+        let mut web = thickness(&self.web, "腕の厚さ")?;
+        let mut boss = thickness(&self.boss, "ボスの長さ")?;
+        for (present, value, what) in [
+            (parts.web.is_some(), &mut web, "腕の厚さ"),
+            (parts.boss.is_some(), &mut boss, "ボスの長さ"),
+        ] {
+            if !present && (*value - width).abs() > 1e-9 {
+                warnings.push(format!("{what}は、その領域がないため使いません"));
+                *value = width;
             }
         }
         let (from, to) = match self.direction {
@@ -155,9 +218,23 @@ impl Feature for GearBody {
                 "やまばには 0 deg より大きいねじれ角を指定してください".into(),
             ));
         }
+        let extrude = |profile, from, to| Recipe::Extrude {
+            operation: self.operation,
+            profile,
+            from,
+            to,
+            through: false,
+            stop: None,
+            taper: 0.0,
+        };
         let recipe = if spec.helix_angle != 0.0 {
-            crate::helical::recipe(
-                &profile,
+            if self.operation == Operation::Intersect
+                && (parts.web.is_some() || parts.boss.is_some())
+            {
+                return Err(EvalError::InvalidData("領域を分けたはすば歯車の交差には対応していません。新規ボディ・結合・切り取りを選んでください".into()));
+            }
+            let rim = crate::helical::recipe(
+                &parts.rim,
                 &spec,
                 from,
                 to,
@@ -165,17 +242,30 @@ impl Feature for GearBody {
                 gap,
                 self.operation,
             )
-            .map_err(EvalError::InvalidData)?
-        } else {
-            Recipe::Extrude {
-                operation: self.operation,
-                profile,
-                from,
-                to,
-                through: false,
-                stop: None,
-                taper: 0.0,
+            .map_err(EvalError::InvalidData)?;
+            let mut recipes = vec![rim];
+            for (part, size) in [(parts.web, web), (parts.boss, boss)] {
+                if let Some(part) = part {
+                    let (a, b) = self.part_span(from, to, size);
+                    recipes.push(extrude(part, a, b));
+                }
             }
+            Recipe::Many { parts: recipes }
+        } else if (web - width).abs() < 1e-9 && (boss - width).abs() < 1e-9 {
+            // 同じ厚さなら分割する前の輪郭を一度押し出し、余分な面を作らない。
+            extrude(profile, from, to)
+        } else {
+            if self.operation == Operation::Intersect {
+                return Err(EvalError::InvalidData("厚さが異なる歯車の交差には対応していません。歯の幅・腕の厚さ・ボスの長さをそろえるか、新しいボディとして作ってください".into()));
+            }
+            let mut recipes = vec![extrude(parts.rim, from, to)];
+            for (part, size) in [(parts.web, web), (parts.boss, boss)] {
+                if let Some(part) = part {
+                    let (a, b) = self.part_span(from, to, size);
+                    recipes.push(extrude(part, a, b));
+                }
+            }
+            Recipe::Many { parts: recipes }
         };
         let mut out = finish(ctx, recipe, self.target)?;
         // 諸元の軸の点は歯の幅の始まりの側に置く
@@ -204,7 +294,11 @@ pub fn register(reg: &mut Registry) {
             .hint("歯車の輪郭を歯の幅だけ押し出すかねじって立体にする。やまばは中央で左右の歯すじを合わせる")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))
-            .field(Field::expr("width", "歯の幅").length())
+            .field(
+                Field::opt_expr("width", "歯の幅")
+                    .length()
+                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm"),
+            )
             .field(
                 Field::opt_expr("web", "腕の厚さ")
                     .length()
@@ -216,6 +310,11 @@ pub fn register(reg: &mut Registry) {
                     .help("空なら歯の幅"),
             )
             .field(Field::choice(
+                "alignment",
+                "腕とボスの位置",
+                &[("centered", "中央にそろえる"), ("start", "片側にそろえる")],
+            ))
+            .field(Field::choice(
                 "direction",
                 "方向",
                 &[
@@ -225,11 +324,7 @@ pub fn register(reg: &mut Registry) {
                 ],
             ))
             .field(Field::bool("herringbone", "やまば"))
-            .field(
-                Field::opt_expr("groove", "中央の溝の幅")
-                    .length()
-                    .help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする"),
-            )
+            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする"))
             .fields(operation_fields()),
         |d| {
             let g: GearBody = serde_json::from_value(d.clone())
@@ -237,4 +332,72 @@ pub fn register(reg: &mut Registry) {
             Ok(Box::new(g))
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 確かめること: 歯の幅の全方向で、腕とボスの中央そろえ・片側そろえを保つ。
+    #[test]
+    fn all_part_spans_preserve_alignment_for_both_short_and_long_parts() {
+        for (direction, alignment, from, to, short, long) in [
+            (
+                Side::Normal,
+                Alignment::Centered,
+                0.0,
+                8.0,
+                (2.5, 5.5),
+                (-2.0, 10.0),
+            ),
+            (
+                Side::Reverse,
+                Alignment::Centered,
+                -8.0,
+                0.0,
+                (-5.5, -2.5),
+                (-10.0, 2.0),
+            ),
+            (
+                Side::Symmetric,
+                Alignment::Centered,
+                -4.0,
+                4.0,
+                (-1.5, 1.5),
+                (-6.0, 6.0),
+            ),
+            (
+                Side::Normal,
+                Alignment::Start,
+                0.0,
+                8.0,
+                (0.0, 3.0),
+                (0.0, 12.0),
+            ),
+            (
+                Side::Reverse,
+                Alignment::Start,
+                -8.0,
+                0.0,
+                (-3.0, 0.0),
+                (-12.0, 0.0),
+            ),
+            (
+                Side::Symmetric,
+                Alignment::Start,
+                -4.0,
+                4.0,
+                (-4.0, -1.0),
+                (-4.0, 8.0),
+            ),
+        ] {
+            let body = GearBody {
+                direction,
+                alignment,
+                ..GearBody::new(FeatureId(1))
+            };
+            assert_eq!(body.part_span(from, to, 3.0), short);
+            assert_eq!(body.part_span(from, to, 12.0), long);
+        }
+    }
 }

@@ -155,6 +155,65 @@ fn the_added_outline_evaluates_around_the_given_center() {
 }
 
 #[test]
+fn sprocket_actions_preserve_manual_dimensions_and_leave_default_width_automatic() {
+    let added = inserts(run(GEAR_ADD, json!({"kind":"sprocket","chain":"manual","chain_pitch":12.71234567,"roller_diameter":7.9,"chain_inner_width":8.1234567,"teeth":17})).unwrap());
+    assert_eq!(added.len(), 2);
+    assert_eq!(added[0].1["chain_pitch"], json!("12.71234567 mm"));
+    assert!(added[1].1.get("width").is_none());
+    let external = inserts(run(GEAR_ADD, json!({})).unwrap());
+    assert!(external[1].1.get("width").is_none());
+    let explicit = inserts(
+        run(
+            GEAR_ADD,
+            json!({"kind":"sprocket","chain":"35","teeth":17,"width":3.5}),
+        )
+        .unwrap(),
+    );
+    assert_eq!(explicit[1].1["width"], json!("3.5 mm"));
+    for args in [
+        json!({"kind":"sprocket","chain":"manual"}),
+        json!({"kind":"sprocket","chain":"manual","chain_pitch":12.7,"roller_diameter":13.0,"chain_inner_width":8.0}),
+        json!({"kind":"sprocket","bore":-1.0}),
+        json!({"kind":"sprocket","chain_pitch":12.7}),
+    ] {
+        assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
+    }
+}
+
+#[test]
+fn holes_boss_and_keyway_arguments_reach_the_same_feature_fields() {
+    let out = inserts(
+        run(
+            GEAR_ADD,
+            json!({
+                "plane": "xy", "module": 2, "teeth": 24, "bore": 8,
+                "lightening_count": 4, "lightening_diameter": 3,
+                "lightening_circle": 26, "boss_diameter": 16,
+                "keyway": true, "key_width": 2, "key_depth": 1,
+                "web": 3, "boss": 12, "alignment": "start"
+            }),
+        )
+        .unwrap(),
+    );
+    assert_eq!(out[0].1["lightening_count"], "4");
+    for (key, want) in [
+        ("lightening_diameter", "3 mm"),
+        ("lightening_circle", "26 mm"),
+        ("boss_diameter", "16 mm"),
+        ("key_width", "2 mm"),
+        ("key_depth", "1 mm"),
+    ] {
+        assert_eq!(out[0].1[key], want);
+    }
+    assert_eq!(out[0].1["keyway"], true);
+    assert_eq!(out[1].1["web"], "3 mm");
+    assert_eq!(out[1].1["boss"], "12 mm");
+    assert_eq!(out[1].1["alignment"], "start");
+    assert!(run(GEAR_ADD, json!({"lightening_count": -1})).is_err());
+    assert!(run(GEAR_OUTLINE_ADD, json!({"web": 3})).is_err());
+}
+
+#[test]
 fn a_rack_keeps_its_length_start_direction_and_actual_tooth_count() {
     let length = 12.75 * std::f64::consts::PI * 2.0;
     let added = inserts(
@@ -372,5 +431,23 @@ fn helical_internal_actions_check_the_transverse_ring_limit_and_keep_precision()
         json!({"kind":"rack","hand":"left"}),
     ] {
         assert!(run(GEAR_OUTLINE_ADD, args.clone()).is_err(), "{args}");
+    }
+}
+
+#[test]
+fn helical_body_actions_keep_main_part_dimensions_and_automatic_width() {
+    let added = inserts(run(GEAR_ADD,json!({"helix_angle":25.0,"herringbone":true,"groove":1.0,"web":3.0,"boss":12.0,"alignment":"start"})).unwrap());
+    let body = &added[1].1;
+    assert!(body.get("width").is_none());
+    assert_eq!(body["web"], "3 mm");
+    assert_eq!(body["boss"], "12 mm");
+    assert_eq!(body["alignment"], "start");
+    assert_eq!(body["herringbone"], true);
+    assert_eq!(body["groove"], "1 mm");
+    for args in [
+        json!({"kind":"sprocket","helix_angle":20}),
+        json!({"kind":"sprocket","hand":"left"}),
+    ] {
+        assert!(run(GEAR_ADD, args).is_err());
     }
 }

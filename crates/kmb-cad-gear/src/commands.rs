@@ -53,11 +53,29 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::angle("helix_angle", "ねじれ角(省くと平歯車)"),
         Arg::choice("hand", "ねじれの向き", &[("right", "右"), ("left", "左")]).default("right"),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::choice("chain", "鎖の呼び", &crate::ChainSize::CHOICES).default("40"),
+        Arg::length("chain_pitch", "鎖のピッチ(手で打つ時に必須)"),
+        Arg::length("roller_diameter", "ローラーの径(手で打つ時に必須)"),
+        Arg::length("chain_inner_width", "鎖の内幅(手で打つ時に必須)"),
+        Arg::integer("lightening_count", "軽くする穴の数(0 なら穴なし)"),
+        Arg::length("lightening_diameter", "軽くする穴の径"),
+        Arg::length("lightening_circle", "穴を並べる円の径"),
+        Arg::length("boss_diameter", "ボスの外径(0 ならボスなし)"),
+        Arg::flag("keyway", "軸の穴にキー溝を付ける"),
+        Arg::length("key_width", "キー溝の幅(省くと軸の穴の径で表から選ぶ)"),
+        Arg::length("key_depth", "キー溝の深さ(省くと軸の穴の径で表から選ぶ)"),
         Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
     ]);
     if body {
         v.extend([
-            Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0),
+            Arg::length("width", "歯の幅(省くと鎖車は鎖の内幅から、ほかは 10 mm)"),
+            Arg::length("web", "腕の厚さ(省くと歯の幅)"),
+            Arg::length("boss", "ボスの長さ(省くと歯の幅)"),
+            Arg::choice(
+                "alignment",
+                "腕とボスの位置",
+                &[("centered", "中央にそろえる"), ("start", "片側にそろえる")],
+            ),
             Arg::flag("herringbone", "やまばの歯すじにする"),
             Arg::length("groove", "やまばの中央の溝の幅(省くと 0 mm)"),
         ]);
@@ -166,7 +184,8 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
             beta.to_radians(),
         )?
     };
-    if kind == GearKind::Rack && (beta != 0.0 || hand != "right") {
+    if !matches!(kind, GearKind::External | GearKind::Internal) && (beta != 0.0 || hand != "right")
+    {
         return Err("ねじれ角と向きは外歯か内歯の歯車に指定してください".into());
     }
     let mut gear = json!({
@@ -186,6 +205,73 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     }
     if let Some(b) = bore.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
+    }
+    if kind == GearKind::Sprocket {
+        let key = cx.arg_str("chain").unwrap_or("40");
+        let size: crate::ChainSize =
+            serde_json::from_value(json!(key)).map_err(|_| "鎖の呼びを選んでください")?;
+        gear["chain"] = json!(key);
+        if size != crate::ChainSize::Manual
+            && ["chain_pitch", "roller_diameter", "chain_inner_width"]
+                .iter()
+                .any(|key| cx.arg(key).is_some())
+        {
+            return Err("鎖の寸法を直接指定する時は呼びを「手で打つ」にしてください".into());
+        }
+        let chain = match size.dimensions() {
+            Some(c) => c,
+            None => {
+                let read = |key: &str| -> Result<f64, Problem> {
+                    cx.arg_f64(key)?
+                        .ok_or_else(|| format!("{key} を入力してください").into())
+                };
+                let c = kinds::sprocket::Chain {
+                    pitch: read("chain_pitch")?,
+                    roller: read("roller_diameter")?,
+                    inner_width: read("chain_inner_width")?,
+                }
+                .validate()?;
+                gear["chain_pitch"] = json!(format!("{} mm", c.pitch));
+                gear["roller_diameter"] = json!(format!("{} mm", c.roller));
+                gear["chain_inner_width"] = json!(format!("{} mm", c.inner_width));
+                c
+            }
+        };
+        let z = u32::try_from(teeth).map_err(|_| "鎖車の歯数が大きすぎます")?;
+        kinds::sprocket::dimensions(chain, z)?;
+        if let Some(bore) = cx.arg_f64("bore")? {
+            if bore < 0.0 {
+                return Err("軸の穴の径は 0 以上にしてください".into());
+            }
+            gear["bore"] = json!(format!("{bore} mm"));
+        }
+    } else if cx.arg_str("chain").unwrap_or("40") != "40"
+        || ["chain_pitch", "roller_diameter", "chain_inner_width"]
+            .iter()
+            .any(|key| cx.arg(key).is_some())
+    {
+        return Err("鎖の寸法は種類が鎖車の時だけ指定できます".into());
+    }
+    if let Some(value) = cx.arg("lightening_count") {
+        let count = value
+            .as_u64()
+            .filter(|n| *n <= 1000)
+            .ok_or("軽くする穴の数は 0 から 1000 までの整数にしてください")?;
+        gear["lightening_count"] = json!(count.to_string());
+    }
+    for key in [
+        "lightening_diameter",
+        "lightening_circle",
+        "boss_diameter",
+        "key_width",
+        "key_depth",
+    ] {
+        if let Some(value) = cx.arg_f64(key)? {
+            gear[key] = json!(mm(value));
+        }
+    }
+    if let Some(value) = cx.arg("keyway") {
+        gear["keyway"] = value.clone();
     }
     if let Some(phase) = cx.arg_f64("phase")? {
         gear["phase"] = json!(format!("{phase} deg"));
@@ -243,14 +329,26 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         data: gear,
     }];
     if body {
-        let width = cx.arg_f64("width")?.unwrap_or(10.0);
-        if width <= 0.0 {
-            return Err("歯の幅は 0 より大きくしてください".into());
+        let mut data = json!({"gear": {"$new": 0}});
+        if let Some(width) = cx.arg_f64("width")? {
+            if width <= 0.0 {
+                return Err("歯の幅は 0 より大きくしてください".into());
+            }
+            data["width"] = json!(format!("{width} mm"));
+        }
+        for key in ["web", "boss"] {
+            if let Some(value) = cx.arg_f64(key)? {
+                data[key] = json!(mm(value));
+            }
+        }
+        if let Some(value) = cx.arg("alignment") {
+            data["alignment"] = value.clone();
         }
         let herringbone = cx
             .arg("herringbone")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let width = cx.arg_f64("width")?.unwrap_or(10.0);
         let groove = cx.arg_f64("groove")?.unwrap_or(0.0);
         if !groove.is_finite() || groove < 0.0 || groove >= width {
             return Err("中央の溝の幅は 0 以上、歯の幅より小さくしてください".into());
@@ -261,7 +359,6 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         if herringbone && beta == 0.0 {
             return Err("やまばには 0 deg より大きいねじれ角を指定してください".into());
         }
-        let mut data = json!({"gear": {"$new": 0}, "width": mm(width)});
         if herringbone {
             data["herringbone"] = json!(true);
         }

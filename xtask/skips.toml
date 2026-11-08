@@ -7,6 +7,8 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+gear_hub_web_and_keyway_have_the_calculated_volume_and_alignment = "truck の回(リム・腕・ボスの同じ円筒で接する領域のブーリアンに失敗する)"
+gear_parts_keep_join_cut_and_same_thickness_intersection = "truck の回(リム・腕・ボスの同じ円筒で接する領域のブーリアンに失敗する)"
 a_shaft_with_clearance_is_neither_overlap_nor_coincident = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
 an_oversized_shaft_has_the_annular_overlap_volume = "truck の回(同軸の軸と穴のブーリアンの内部分類)"
 an_exact_shaft_reports_the_cylindrical_face_as_coincident = "truck の回(同じ円筒で接するブーリアン)"
