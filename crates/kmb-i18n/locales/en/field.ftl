@@ -2324,6 +2324,23 @@ field-solid-import-iges-file = File
 field-solid-import-iges-stand-up = Convert Y-up to Z-up
 field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
 
+field-cad-gear-chain = Chain Size
+field-cad-gear-chain-pitch = Chain Pitch
+field-cad-gear-roller-diameter = Roller Diameter
+field-cad-gear-chain-inner-width = Chain Inner Width
+field-cad-gear-body-width-help = Empty uses 0.93 or 0.95 times the chain inner width for sprockets, or 10 mm for other gears. Belt pulleys and rope sheaves use the profile width and show a warning when the value differs.
+field-cad-gear-body-alignment = Web and Boss Alignment
+field-cad-gear-boss-diameter = Boss Outside Diameter
+field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+field-cad-gear-key-depth = Keyway Depth
+field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+field-cad-gear-key-width = Keyway Width
+field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+field-cad-gear-keyway = Keyway
+field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+field-cad-gear-lightening-count = Number of Lightening Holes
+field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+field-cad-gear-lightening-diameter = Lightening Hole Diameter
 field-cad-gear-rack-size = Rack Size By
 field-cad-gear-rack-length = Rack Length
 field-cad-gear-rack-length-help = Overall length including the teeth. Fits as many complete circular pitches as possible.
@@ -2331,3 +2348,41 @@ field-cad-gear-rack-back = Back Thickness
 field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
 field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
 field-cad-gear-y-help = For a rack, the start of the pitch line.
+
+field-cad-gear-pulley-diameter = Pitch Diameter
+
+field-cad-gear-pulley-diameter-help = Empty uses 100 mm.
+
+field-cad-gear-pulley-width = Width
+
+field-cad-gear-pulley-width-help = Empty uses 30 mm. Axial width of the belt or rope pulley.
+
+field-cad-gear-crown-height = Crown Height
+
+field-cad-gear-crown-height-help = Empty uses 0 mm.
+
+field-cad-gear-groove-count = Number of Grooves
+
+field-cad-gear-groove-count-help = Empty uses 1.
+
+field-cad-gear-v-section = Groove Section
+
+field-cad-gear-groove-angle = Groove Angle
+
+field-cad-gear-groove-angle-help = Empty selects the angle from the section and pitch diameter.
+
+field-cad-gear-groove-top-width = Groove Opening Width
+
+field-cad-gear-groove-top-width-help = Empty derives the opening from the section width at the pitch position.
+
+field-cad-gear-groove-depth = Groove Depth
+
+field-cad-gear-groove-depth-help = From the opening to the bottom. Empty derives it from the section dimensions.
+
+field-cad-gear-rope-diameter = Rope Diameter
+
+field-cad-gear-rope-diameter-help = Empty uses 10 mm.
+
+field-cad-gear-flange-height = Flange Height
+
+field-cad-gear-flange-height-help = Empty uses 3 mm above the rope center.

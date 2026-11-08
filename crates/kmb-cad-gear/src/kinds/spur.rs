@@ -152,6 +152,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
         p.teeth,
     );
     Ok(Outline {
+        axial: false,
         edges,
         reference: vec![
             ("pitch", [0.0, 0.0], r),
