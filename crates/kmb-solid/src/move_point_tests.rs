@@ -4,7 +4,7 @@ use super::modify_tests::set;
 use super::tests::{TestKernel, assert_ok, registry};
 use super::*;
 use kmb_cad::PointRef;
-use kmb_cad_modify::{MOVE, MOVE_TO, ModifyCommands, MoveBody};
+use kmb_cad_modify::{MOVE, MOVE_POINTS, MOVE_TO, ModifyCommands, MoveBody};
 use kmb_core::{
     Context, Extension, FeatureId, FeatureStatus, Op, Transaction, visible_bodies_before,
 };
@@ -267,7 +267,7 @@ fn picking_the_destination_point_stores_the_reference() {
         .unwrap()
         .value
         .clone();
-    let args = json!({"point": chosen});
+    let args = json!({"to": chosen});
     let cx = Context { args: &args, ..cx };
     let Some(Ok(kmb_core::Outcome::Change { edits, .. })) = ModifyCommands.run(MOVE_TO, &cx) else {
         panic!("先の点を選べない");
@@ -284,11 +284,25 @@ fn picking_the_destination_point_stores_the_reference() {
         json!({"kind": "vertex", "feature": a.0, "vertex": "無い角"}),
         json!({"kind": "vertex", "feature": a.0}),
     ] {
-        let args = json!({"point": wrong});
+        let args = json!({"to": wrong});
         let cx = Context { args: &args, ..cx };
         assert!(
             matches!(ModifyCommands.run(MOVE_TO, &cx), Some(Err(_))),
             "{wrong}"
         );
     }
+    // 「点から点」を選ぶと始まる手順は、元の点と先の点を続けて受ける
+    let handles = ModifyCommands.handles(MOVE_POINTS, &cx).unwrap();
+    let keys: Vec<&str> = handles.iter().map(|h| h.key.as_str()).collect();
+    assert_eq!(keys, ["from", "to"]);
+    let args = json!({"from": chosen, "to": chosen});
+    let cx = Context { args: &args, ..cx };
+    let Some(Ok(kmb_core::Outcome::Change { edits, .. })) = ModifyCommands.run(MOVE_POINTS, &cx)
+    else {
+        panic!("元の点と先の点を選べない");
+    };
+    let kmb_core::Edit::SetData { data: new, .. } = &edits[0] else {
+        panic!();
+    };
+    assert_eq!((&new["from_ref"], &new["to_ref"]), (&chosen, &chosen));
 }

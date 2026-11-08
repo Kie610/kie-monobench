@@ -13,6 +13,8 @@ use serde_json::json;
 pub const MOVE: &str = "solid.move@1";
 /// 回転の軸を、原点の軸かスケッチの線のクリックで選ぶ操作。
 pub const MOVE_AXIS: &str = "cad.move_axis";
+/// 点から点の元の点と先の点を、続けてクリックで選ぶ操作(移動タイプを「点から点」にすると始まる)。
+pub const MOVE_POINTS: &str = "cad.move_points";
 /// 点から点の元の点を、ボディの角・円の中心・辺の中点・スケッチの点・作業点のクリックで選ぶ操作。
 pub const MOVE_FROM: &str = "cad.move_from";
 /// 点から点の先の点を、同じくクリックで選ぶ操作。
@@ -286,15 +288,18 @@ pub fn register(reg: &mut Registry) {
                 Field::pick("body", "ボディ", &[RefKind::Body], 1, Some(1))
                     .help("動かすボディ。3D のビューでボディの面をクリックして選ぶ"),
             )
-            .field(Field::choice(
-                "mode",
-                "移動タイプ",
-                &[
-                    ("translate", "移動"),
-                    ("rotate", "回転"),
-                    ("point_to_point", "点から点"),
-                ],
-            ))
+            .field(
+                Field::choice(
+                    "mode",
+                    "移動タイプ",
+                    &[
+                        ("translate", "移動"),
+                        ("rotate", "回転"),
+                        ("point_to_point", "点から点"),
+                    ],
+                )
+                .pick_on("point_to_point", MOVE_POINTS),
+            )
             .field(
                 Field::expr("x", "X 距離")
                     .length()

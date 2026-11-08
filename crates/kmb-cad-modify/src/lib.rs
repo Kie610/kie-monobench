@@ -10,7 +10,9 @@ pub mod split;
 pub use face_edit::{
     DELETE_FACES, DRAFT, DRAFT_PLANE, DeleteFaces, Draft, REPLACE_FACE, ReplaceFace,
 };
-pub use move_body::{EndPoint, MOVE, MOVE_AXIS, MOVE_FROM, MOVE_TO, MoveBody, MoveMode};
+pub use move_body::{
+    EndPoint, MOVE, MOVE_AXIS, MOVE_FROM, MOVE_POINTS, MOVE_TO, MoveBody, MoveMode,
+};
 pub use offset::{OFFSET_FACES, OffsetFaces};
 pub use scale::{SCALE, ScaleBody, ScaleMode};
 pub use split::{SPLIT, SPLIT_PART, SPLIT_PLANE, Split, SplitPart};
@@ -72,31 +74,50 @@ fn move_axis(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     })
 }
 
-/// 点から点の端の点(`key` は `from_ref` か `to_ref`)を、手順で選んだ値(`point`)にする。値は
-/// この移動より前にある点の候補([`kmb_cad::point_choices`])のどれかでなければ誤り。
-fn move_point(cx: &Context<'_>, key: &str, what: &str) -> Result<Outcome, kmb_core::Problem> {
+/// 点から点の端の点を、手順で選んだ値にする。`ends` は(引数の鍵、データの鍵、点の説明)。
+/// 値はこの移動より前にある点の候補([`kmb_cad::point_choices`])のどれかでなければ誤り。
+fn move_points(
+    cx: &Context<'_>,
+    ends: &[(&str, &str, &str)],
+) -> Result<Outcome, kmb_core::Problem> {
     let (id, mut data) = selected(cx, MOVE).ok_or("移動/コピーを選んでいません")?;
-    let v = cx.arg("point").ok_or_else(|| {
-        format!("point に{what}({{\"kind\": \"vertex\", \"feature\": ボディ, \"vertex\": 角の名前}} など、手順の値)を指定します")
-    })?;
-    let point: kmb_cad::PointRef =
-        serde_json::from_value(v.clone()).map_err(|e| format!("{what}の参照を読めません: {e}"))?;
-    let known = kmb_cad::point_choices(cx, Some(id))
+    let choices: Vec<kmb_cad::PointRef> = kmb_cad::point_choices(cx, Some(id))
         .into_iter()
-        .any(|c| serde_json::from_value::<kmb_cad::PointRef>(c.value).is_ok_and(|p| p == point));
-    if !known {
+        .filter_map(|c| serde_json::from_value(c.value).ok())
+        .collect();
+    let mut set = Vec::new();
+    for (arg, key, what) in ends {
+        let Some(v) = cx.arg(arg).filter(|v| !v.is_null()) else {
+            continue;
+        };
+        let point: kmb_cad::PointRef = serde_json::from_value(v.clone())
+            .map_err(|e| format!("{what}の参照を読めません: {e}"))?;
+        if !choices.contains(&point) {
+            return Err(format!(
+                "{what}にした点が、この移動より前の見えている形・スケッチ・作業点にありません"
+            )
+            .into());
+        }
+        data[*key] = serde_json::to_value(point).map_err(|e| e.to_string())?;
+        set.push(*what);
+    }
+    if set.is_empty() {
+        let args: Vec<&str> = ends.iter().map(|e| e.0).collect();
         return Err(format!(
-            "{what}にした点が、この移動より前の見えている形・スケッチ・作業点にありません"
+            "{} に点({{\"kind\": \"vertex\", \"feature\": ボディ, \"vertex\": 角の名前}} など、手順の値)を指定します",
+            args.join("・")
         )
         .into());
     }
-    data[key] = serde_json::to_value(point).map_err(|e| e.to_string())?;
     data["mode"] = json!("point_to_point");
     Ok(Outcome::Change {
-        label: format!("{what}を選ぶ"),
+        label: format!("{}を選ぶ", set.join("と")),
         edits: vec![kmb_core::Edit::SetData { id, data }],
     })
 }
+
+const FROM: (&str, &str, &str) = ("from", "from_ref", "元の点");
+const TO: (&str, &str, &str) = ("to", "to_ref", "先の点");
 
 /// 割る平面と回転の軸を選ぶ操作。
 pub struct ModifyCommands;
@@ -139,8 +160,9 @@ impl Extension for ModifyCommands {
                     &[]
                 })
                 .disabled_if((!moving).then_some("移動/コピーを選んでから使う")),
-            point_action(MOVE_FROM, "元の点を選ぶ", "動かすボディの上の点", moving),
-            point_action(MOVE_TO, "先の点を選ぶ", "元の点が来る所", moving),
+            point_action(MOVE_POINTS, "元の点と先の点を選ぶ", "元の点と先の点", &[FROM, TO], moving),
+            point_action(MOVE_FROM, "元の点を選ぶ", "動かすボディの上の点", &[FROM], moving),
+            point_action(MOVE_TO, "先の点を選ぶ", "元の点が来る所", &[TO], moving),
             Action::new(DRAFT_PLANE, "引き出し方向を選ぶ", "cad")
                 .args(kmb_cad::plane::args())
                 .menu("修正")
@@ -161,8 +183,9 @@ impl Extension for ModifyCommands {
         Some(match id {
             SPLIT_PLANE => split_plane(cx),
             MOVE_AXIS => move_axis(cx),
-            MOVE_FROM => move_point(cx, "from_ref", "元の点"),
-            MOVE_TO => move_point(cx, "to_ref", "先の点"),
+            MOVE_POINTS => move_points(cx, &[FROM, TO]),
+            MOVE_FROM => move_points(cx, &[FROM]),
+            MOVE_TO => move_points(cx, &[TO]),
             DRAFT_PLANE => pull_plane(cx),
             _ => return None,
         })
@@ -208,36 +231,51 @@ impl Extension for ModifyCommands {
                     )
                 }])
             }
-            MOVE_FROM | MOVE_TO => {
+            MOVE_POINTS | MOVE_FROM | MOVE_TO => {
                 let (mid, _) = selected(cx, MOVE)?;
-                Some(vec![Handle {
-                    choices: kmb_cad::point_choices(cx, Some(mid)),
-                    ..Handle::new(
-                        "point",
-                        if id == MOVE_FROM {
-                            "元の点にするボディの角・円の中心・辺の中点・スケッチの点・作業点をクリック"
-                        } else {
-                            "先の点にするボディの角・円の中心・辺の中点・スケッチの点・作業点をクリック"
-                        },
-                        Gesture::Choice,
-                    )
-                }])
+                let choices = kmb_cad::point_choices(cx, Some(mid));
+                let ends: &[(&str, &str, &str)] = match id {
+                    MOVE_POINTS => &[FROM, TO],
+                    MOVE_FROM => &[FROM],
+                    _ => &[TO],
+                };
+                Some(
+                    ends.iter()
+                        .map(|(arg, _, what)| Handle {
+                            choices: choices.clone(),
+                            ..Handle::new(
+                                arg,
+                                &format!(
+                                    "{what}にするボディの角・円の中心・辺の中点・スケッチの点・作業点をクリック"
+                                ),
+                                Gesture::Choice,
+                            )
+                        })
+                        .collect(),
+                )
             }
             _ => None,
         }
     }
 }
 
-/// 点から点の端の点を選ぶ操作(`what` は点の説明)。
-fn point_action(id: &str, label: &str, what: &str, moving: bool) -> Action {
-    Action::new(id, label, "cad")
-        .arg(
-            kmb_core::Arg::value(
-                "point",
-                "点の参照({\"kind\": \"vertex\", \"feature\": ボディ, \"vertex\": 角の名前}・center・midpoint(faces に辺の両側の面)・sketch・datum。手順の値)",
-            )
-            .required(),
-        )
+/// 点から点の端の点を選ぶ操作(`what` は点の説明、`ends` は受ける端)。
+fn point_action(
+    id: &str,
+    label: &str,
+    what: &str,
+    ends: &[(&str, &str, &str)],
+    moving: bool,
+) -> Action {
+    let mut a = Action::new(id, label, "cad");
+    for (arg, _, end) in ends {
+        let help = format!(
+            "{end}の参照({{\"kind\": \"vertex\", \"feature\": ボディ, \"vertex\": 角の名前}}・center・midpoint(faces に辺の両側の面)・sketch・datum。手順の値)"
+        );
+        let arg = kmb_core::Arg::value(arg, &help);
+        a = a.arg(if ends.len() == 1 { arg.required() } else { arg });
+    }
+    a
         .menu("修正")
         .icon("movecopy")
         .aliases("いどう てんからてん 点から点 てん 点 かど 角 ちゅうてん 中点 ちゅうしん 中心 move point")
@@ -245,10 +283,11 @@ fn point_action(id: &str, label: &str, what: &str, moving: bool) -> Action {
             "選んでいる移動/コピーの点から点の{what}を、ボディの角・円の中心・辺の中点・スケッチの点・作業点をクリックして決める。元の形を変えても同じ点を追う"
         ))
         .keep_edit()
-        .at(if moving {
-            &[Place::FeatureMenu, Place::Panel]
-        } else {
-            &[]
+        // 編集パネルには続けて選ぶ物だけを出し、片方の選び直しは右クリックに置く(ボタンを増やしすぎない)
+        .at(match (moving, ends.len()) {
+            (false, _) => &[],
+            (true, 1) => &[Place::FeatureMenu],
+            (true, _) => &[Place::FeatureMenu, Place::Panel],
         })
         .disabled_if((!moving).then_some("移動/コピーを選んでから使う"))
 }
