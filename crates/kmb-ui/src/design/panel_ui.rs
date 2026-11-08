@@ -679,7 +679,7 @@ fn same_kind(a: &FieldKind, b: &FieldKind) -> bool {
 fn common_fields_in(
     entries: &[FeatureEntry],
     descs: &[kmb_core::Descriptor],
-    _doc: &kmb_core::DocumentData,
+    doc: &kmb_core::DocumentData,
 ) -> Vec<Field> {
     if descs.len() != entries.len() {
         return Vec::new();
@@ -703,7 +703,7 @@ fn common_fields_in(
                     .any(|g| g.key == f.key && same_kind(&g.kind, &f.kind))
             })
         })
-        .filter(|f| entries.iter().all(|e| f.applies(&e.data)))
+        .filter(|f| entries.iter().all(|e| f.applies_in(&e.data, doc)))
         .cloned()
         .collect()
 }
@@ -793,5 +793,44 @@ mod reference_field_tests {
         ))
         .unwrap();
         assert!(!has(fields(&doc, &bodies), "herringbone"));
+        for kind in [
+            "external",
+            "internal",
+            "rack",
+            "sprocket",
+            "flat_pulley",
+            "v_pulley",
+            "rope_sheave",
+            "unknown",
+        ] {
+            doc.apply(kmb_core::Transaction::new(
+                "親の種類",
+                vec![kmb_core::Op::SetFeatureData {
+                    id: gears[0],
+                    data: json!({"kind":kind}),
+                }],
+            ))
+            .unwrap();
+            let expected = matches!(kind, "external" | "internal");
+            assert_eq!(
+                has(fields(&doc, &[bodies[0]]), "herringbone"),
+                expected,
+                "{kind}"
+            );
+            assert_eq!(
+                has(fields(&doc, &[bodies[0]]), "groove"),
+                expected,
+                "{kind}"
+            );
+        }
+        doc.apply(kmb_core::Transaction::new(
+            "切れた参照",
+            vec![kmb_core::Op::SetFeatureData {
+                id: bodies[0],
+                data: json!({"gear":9999}),
+            }],
+        ))
+        .unwrap();
+        assert!(!has(fields(&doc, &[bodies[0]]), "herringbone"));
     }
 }

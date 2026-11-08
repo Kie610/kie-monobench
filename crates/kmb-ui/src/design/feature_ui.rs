@@ -1036,8 +1036,8 @@ fn descriptor_form(ui: &mut egui::Ui, ws: &Workspace, entry: &FeatureEntry) -> O
             .striped(false)
             .show(ui, |ui| {
                 for f in &desc.fields[start..end] {
-                    let before = f.applies(&entry.data);
-                    if !f.applies(&data) {
+                    let before = f.applies_in(&entry.data, ws.cur.work.doc().data());
+                    if !f.applies_in(&data, ws.cur.work.doc().data()) {
                         // 使わない欄の値は消す(例: 新しいボディの押し出しの対象)
                         if f.get(&data).is_some() {
                             f.set(&mut data, None);

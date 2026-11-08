@@ -261,6 +261,14 @@ impl Feature for GearBody {
                 "中央の溝の幅は 0 以上、歯の幅より小さくしてください".into(),
             ));
         }
+        if (self.herringbone || gap != 0.0)
+            && !matches!(
+                spec.kind,
+                kmb_interchange::GearKind::External | kmb_interchange::GearKind::Internal
+            )
+        {
+            return Err(EvalError::Other(HELICAL_KIND_UNSUPPORTED.into()));
+        }
         if (self.herringbone || gap != 0.0) && spec.helix_angle == 0.0 {
             return Err(EvalError::InvalidData(
                 "やまばには 0 deg より大きいねじれ角を指定してください".into(),

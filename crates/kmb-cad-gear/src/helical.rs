@@ -114,7 +114,7 @@ fn sweep(
 }
 
 /// 中央の溝をまっすぐにつなげる、軸と同心の円形の穴だけか。
-pub fn concentric_holes(profile: &Profile, spec: &GearSpec) -> bool {
+pub(crate) fn concentric_holes(profile: &Profile, spec: &GearSpec) -> bool {
     let center = profile.plane.to_local(spec.axis.origin);
     profile.regions.iter().flat_map(|r| &r.holes).all(|hole| {
         matches!(hole.edges.as_slice(), [ProfileEdge {segment: Segment::Circle {center: c,..},..}] if (c[0]-center[0]).hypot(c[1]-center[1]) <= 1e-9)

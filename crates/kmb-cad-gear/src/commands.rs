@@ -182,7 +182,7 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         pressure_angle: pressure.to_radians(),
         ..Default::default()
     };
-    let transverse = if kind == GearKind::Rack {
+    let transverse = if !matches!(kind, GearKind::External | GearKind::Internal) {
         normal
     } else {
         crate::helical::transverse(
