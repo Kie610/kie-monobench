@@ -37,6 +37,10 @@ pub struct Scene {
     /// 隠すボディ(画面の状態。文書には入れない)
     hide: HashSet<FeatureId>,
     key: Vec<(FeatureId, ShapeHandle)>,
+    /// ほかの文書の計算がカーネルを使っていて作れなかった網のボディ([`Scene::retry`] で作り直す)
+    pending_meshes: Option<Vec<(FeatureId, ShapeHandle)>>,
+    /// ほかの文書の計算がカーネルを使っていて、ボディの種類を確かめられなかった
+    pending_kinds: bool,
     /// 作り直すたびに増える。描いた絵を使い回すかの判断に使う
     pub(super) generation: u64,
     pub(super) min: [f32; 3],
@@ -255,25 +259,68 @@ impl Scene {
         if !self.needs(bodies) {
             return false;
         }
-        self.set(bodies, build_meshes_at(kernel, bodies, self.tolerance()));
+        self.rebuild(kernel, bodies, self.tolerance())
+    }
+
+    /// `bodies` の網を作って置き換える。ほかの文書の計算がカーネルを使っていて作れなければ、今の網の
+    /// まま、[`Scene::retry`] で作り直す(作れた網だけで置き換えると、ボディが消えて見える)。
+    fn rebuild(
+        &mut self,
+        kernel: &dyn Kernel,
+        bodies: &[(FeatureId, ShapeHandle)],
+        tolerance: f64,
+    ) -> bool {
+        let (meshes, busy) =
+            kmb_core::kernel::without_waiting(|| build_meshes_at(kernel, bodies, tolerance));
+        if busy {
+            self.pending_meshes = Some(bodies.to_vec());
+            return false;
+        }
+        self.set(bodies, meshes);
         self.set_body_kinds(kernel);
         true
     }
 
-    /// 作った網のボディの種類を反映する。裏側の三角形を測定用の網へ混ぜない。
+    /// ほかの文書の計算がカーネルを使っていて作れなかった網とボディの種類を作り直す。毎フレーム
+    /// 呼んでよい(作る物が無ければ何もしない)。作り直したら真。
+    pub fn retry(&mut self, kernel: &dyn Kernel) -> bool {
+        if let Some(bodies) = self.pending_meshes.take() {
+            return self.rebuild(kernel, &bodies, self.tolerance());
+        }
+        if self.pending_kinds {
+            self.set_body_kinds(kernel);
+            return !self.pending_kinds;
+        }
+        false
+    }
+
+    /// 作り直しを待っているか([`Scene::retry`])。
+    pub fn is_pending(&self) -> bool {
+        self.pending_meshes.is_some() || self.pending_kinds
+    }
+
+    /// 作った網のボディの種類を反映する。裏側の三角形を測定用の網へ混ぜない。ほかの文書の計算が
+    /// カーネルを使っていて確かめられないボディは前の種類のまま、[`Scene::retry`] で確かめ直す。
     pub fn set_body_kinds(&mut self, kernel: &dyn Kernel) {
         let mut changed = false;
+        let mut pending = false;
         for b in self.bodies.iter_mut().chain(&mut self.stowed) {
-            let two_sided = self
-                .key
-                .iter()
-                .find(|(f, _)| *f == b.feature)
-                .is_some_and(|(_, h)| {
-                    kernel.body_kind(*h).ok() == Some(kmb_core::kernel::BodyKind::Sheet)
-                });
+            let Some((_, h)) = self.key.iter().find(|(f, _)| *f == b.feature) else {
+                changed |= b.two_sided;
+                b.two_sided = false;
+                continue;
+            };
+            let two_sided = match kmb_core::kernel::without_waiting(|| kernel.body_kind(*h)).0 {
+                Err(e) if e.is_busy() => {
+                    pending = true;
+                    continue;
+                }
+                kind => kind.ok() == Some(kmb_core::kernel::BodyKind::Sheet),
+            };
             changed |= b.two_sided != two_sided;
             b.two_sided = two_sided;
         }
+        self.pending_kinds = pending;
         if changed {
             self.sort_hidden();
         }
@@ -292,8 +339,7 @@ impl Scene {
         self.tolerance = Some(tolerance);
         let bodies = self.key.clone();
         log::info!("網の細かさを {tolerance} mm にして作り直す");
-        self.set(&bodies, build_meshes_at(kernel, &bodies, tolerance));
-        self.set_body_kinds(kernel);
+        self.rebuild(kernel, &bodies, tolerance);
         true
     }
 
@@ -309,6 +355,7 @@ impl Scene {
 
     /// 作っておいた網に置き換える。
     pub fn set(&mut self, bodies: &[(FeatureId, ShapeHandle)], meshes: Vec<(FeatureId, Mesh)>) {
+        self.pending_meshes = None;
         self.key = bodies.to_vec();
         self.stowed.clear();
         self.bodies = meshes
