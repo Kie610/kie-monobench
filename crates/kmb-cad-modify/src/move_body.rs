@@ -1,6 +1,7 @@
 //! ボディの移動・コピー(`solid.move@1`)。値を打って動かす(移動・回転・点から点)。引いて動かす取っ手は作らない: 初めの値は 0 なので、
 //! 打つまで何も動かない(選んだだけで物が跳ねない)。「コピー」を入れると元のボディを残し、
-//! 動かした写しを新しいボディにする。
+//! 動かした写しを新しいボディにする。点から点の元の点と先の点は、座標か点の参照([`EndPoint`])で持つ。
+//! 参照で持てば、元の形やスケッチの寸法を変えた時に動かしたボディが付いて来る。
 use kmb_cad::*;
 use kmb_core::kernel::{self as k, P3};
 use kmb_core::{
@@ -12,6 +13,41 @@ use serde_json::json;
 pub const MOVE: &str = "solid.move@1";
 /// 回転の軸を、原点の軸かスケッチの線のクリックで選ぶ操作。
 pub const MOVE_AXIS: &str = "cad.move_axis";
+/// 点から点の元の点を、ボディの角・円の中心・辺の中点・スケッチの点・作業点のクリックで選ぶ操作。
+pub const MOVE_FROM: &str = "cad.move_from";
+/// 点から点の先の点を、同じくクリックで選ぶ操作。
+pub const MOVE_TO: &str = "cad.move_to";
+
+/// 点から点の端の点(`from_ref`・`to_ref`)。`At` は座標の欄(`from_point`・`to_point`)で決める
+/// (前から保存していた文書の形。鍵が無ければこれ)。`Pick` は欄で「クリックで選ぶ」を選んだだけで、
+/// まだ点が無い。ほかは点の参照で、参照が切れたら座標へ戻さず誤りにする。
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EndPoint {
+    #[default]
+    At,
+    Pick,
+    #[serde(untagged)]
+    Ref(PointRef),
+}
+
+impl EndPoint {
+    pub fn is_at(&self) -> bool {
+        *self == EndPoint::At
+    }
+
+    /// 端の点の位置。`coords` は座標の欄、`what` は「元の点」か「先の点」。
+    fn resolve(&self, ctx: &EvalCtx<'_>, coords: Option<P3>, what: &str) -> Result<P3, EvalError> {
+        match self {
+            EndPoint::At => coords
+                .ok_or_else(|| EvalError::InvalidData(format!("{what}の座標を入れてください"))),
+            EndPoint::Pick => Err(EvalError::InvalidData(format!(
+                "{what}をまだ選んでいません。右クリックの「{what}を選ぶ」で、ボディの角・円の中心・辺の中点・スケッチの点・作業点をクリックしてください"
+            ))),
+            EndPoint::Ref(r) => r.resolve(ctx),
+        }
+    }
+}
 
 /// 動かし方。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +81,8 @@ fn is_false(b: &bool) -> bool {
 /// 例: `{"body": 2, "x": "10 mm"}`、`{"body": 2, "mode": "rotate", "axis_ref": {"kind": "origin_z"},
 /// "angle": "90 deg", "copy": true}`、`{"body": 2, "mode": "point_to_point", "from_point": [0, 0, 0],
 /// "to_point": [5, 5, 0]}`。回転の軸は `axis_ref`(原点の軸かスケッチの線)か、`origin` と `axis`
-/// (`origin` を省くとボディの外形の中心)。
+/// (`origin` を省くとボディの外形の中心)。点から点の端は `from_ref`・`to_ref` に点の参照も書ける
+/// (例: `"to_ref": {"kind": "vertex", "feature": 3, "vertex": "f3:end|f3:side:e0|f3:side:e1"}`)。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MoveBody {
@@ -70,6 +107,10 @@ pub struct MoveBody {
     pub from_point: Option<P3>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub to_point: Option<P3>,
+    #[serde(default, skip_serializing_if = "EndPoint::is_at")]
+    pub from_ref: EndPoint,
+    #[serde(default, skip_serializing_if = "EndPoint::is_at")]
+    pub to_ref: EndPoint,
     /// 元のボディを残し、動かした写しを新しいボディにする
     #[serde(default, skip_serializing_if = "is_false")]
     pub copy: bool,
@@ -82,6 +123,16 @@ impl Exprs for MoveBody {
 }
 
 impl MoveBody {
+    /// 点から点の端のうち、点の参照で持つ物。
+    fn point_refs(&self) -> impl Iterator<Item = &PointRef> {
+        [&self.from_ref, &self.to_ref]
+            .into_iter()
+            .filter_map(|e| match e {
+                EndPoint::Ref(r) => Some(r),
+                _ => None,
+            })
+    }
+
     /// 動かす行列。
     fn matrix(&self, ctx: &EvalCtx<'_>, src: k::ShapeHandle) -> Result<k::Matrix4, EvalError> {
         Ok(match self.mode {
@@ -110,11 +161,16 @@ impl MoveBody {
                 k::rotation(origin, axis, angle(ctx, &self.angle, "角度")?)
             }
             MoveMode::PointToPoint => {
-                let (Some(a), Some(b)) = (self.from_point, self.to_point) else {
+                if self.from_ref.is_at()
+                    && self.to_ref.is_at()
+                    && (self.from_point.is_none() || self.to_point.is_none())
+                {
                     return Err(EvalError::InvalidData(
                         "元の点と先の点を入れてください".into(),
                     ));
-                };
+                }
+                let a = self.from_ref.resolve(ctx, self.from_point, "元の点")?;
+                let b = self.to_ref.resolve(ctx, self.to_point, "先の点")?;
                 k::translation(k::sub(b, a))
             }
         })
@@ -126,6 +182,14 @@ impl Feature for MoveBody {
         let mut v = vec![output(self.body, "body")];
         if self.mode == MoveMode::Rotate {
             v.extend(self.axis_ref.inputs());
+        }
+        if self.mode == MoveMode::PointToPoint {
+            for r in self.point_refs() {
+                let i = r.input();
+                if !v.contains(&i) {
+                    v.push(i);
+                }
+            }
         }
         v.extend(expr_refs(self)?);
         Ok(v)
@@ -141,11 +205,20 @@ impl Feature for MoveBody {
     }
 
     fn keeps(&self) -> Vec<FeatureId> {
-        if self.copy {
+        let mut v = if self.copy {
             vec![self.body]
         } else {
             Vec::new()
+        };
+        // 点を借りるだけのほかのボディは、読んでも見えるボディに残す
+        if self.mode == MoveMode::PointToPoint {
+            for f in self.point_refs().filter_map(PointRef::body) {
+                if f != self.body && !v.contains(&f) {
+                    v.push(f);
+                }
+            }
         }
+        v
     }
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
@@ -172,6 +245,28 @@ impl Feature for MoveBody {
     fn rename_param(&self, old: &str, new: &str) -> Result<Option<serde_json::Value>, EvalError> {
         rename(self, old, new)
     }
+}
+
+/// 端の点の欄。参照の種類はクリックで選んだ時だけ入るので、欄では隠す。
+fn end_choice(key: &str, label: &str) -> Field {
+    let mut f = Field::choice(
+        key,
+        label,
+        &[
+            ("at", "座標で指定"),
+            ("pick", "クリックで選ぶ"),
+            ("vertex", "ボディの角"),
+            ("center", "円の中心"),
+            ("midpoint", "辺の中点"),
+            ("sketch", "スケッチの点"),
+            ("datum", "作業点"),
+        ],
+    )
+    .only("mode", "point_to_point", "translate");
+    for hidden in ["vertex", "center", "midpoint", "sketch", "datum"] {
+        f = f.hide_choice(hidden);
+    }
+    f
 }
 
 pub fn register(reg: &mut Registry) {
@@ -240,15 +335,29 @@ pub fn register(reg: &mut Registry) {
             )
             .field(rotate(Field::expr("angle", "角度").angle()))
             .field(
-                Field::vector("from_point", "元の点")
+                end_choice("from_ref.kind", "元の点")
+                    .pick_on("pick", MOVE_FROM)
+                    .help("動かすボディの上の点。クリックで選ぶと、元の形を変えても同じ点を追う"),
+            )
+            .field(
+                Field::vector("from_point", "元の点の座標")
                     .length()
                     .only("mode", "point_to_point", "translate")
+                    .and_only("from_ref.kind", "at", "at")
                     .help("動かすボディの上の点の座標"),
             )
             .field(
-                Field::vector("to_point", "先の点")
+                end_choice("to_ref.kind", "先の点")
+                    .pick_on("pick", MOVE_TO)
+                    .help(
+                        "元の点が来る所。クリックで選ぶと、相手の形やスケッチを変えても付いて来る",
+                    ),
+            )
+            .field(
+                Field::vector("to_point", "先の点の座標")
                     .length()
                     .only("mode", "point_to_point", "translate")
+                    .and_only("to_ref.kind", "at", "at")
                     .help("元の点が来る所の座標"),
             )
             .field(
