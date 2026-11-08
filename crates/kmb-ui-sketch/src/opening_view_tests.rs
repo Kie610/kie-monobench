@@ -56,6 +56,37 @@ fn camera_is_copied_whole_when_front_is_off_and_defaults_remain_front() {
 
 #[test]
 fn drawing_selection_and_dimensions_work_from_the_preserved_oblique_view() {
+    fn trace_click_at(h: &mut egui_kittest::Harness<'static, kmb_ui::Workspace>, p: [f64; 2]) {
+        let pos = crate::tests::screen(h, p);
+        h.hover_at(pos);
+        h.run();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.run();
+            let pointer = h.ctx.input(|i| {
+                (
+                    i.pointer.latest_pos(),
+                    i.pointer.primary_clicked(),
+                    i.pointer.primary_down(),
+                )
+            });
+            let ed = editor(h.state_mut());
+            let t = ed.view.last.as_ref().unwrap();
+            eprintln!(
+                "169 pointer event: world={p:?} delivered={pos:?} pressed={pressed} pointer={pointer:?} rect={:?} transform_center={:?} transform_scale={} pending={:?} tool={:?}",
+                t.space.map(|space| space.rect),
+                t.center_screen,
+                t.scale,
+                ed.editor.pending,
+                ed.editor.tool
+            );
+        }
+    }
     let mut h = empty_sketch();
     let id = h.state().selected().unwrap();
     h.state_mut().finish_sketch();
@@ -72,8 +103,52 @@ fn drawing_selection_and_dimensions_work_from_the_preserved_oblique_view() {
     h.run();
     assert_eq!(editor(h.state_mut()).editor.tool, Tool::Line);
     let (a, b) = ([-12.3, -8.5], [14.6, 9.7]);
-    click_at(&mut h, a);
-    click_at(&mut h, b);
+    let before_clicks = h.state().document().to_json();
+    {
+        let ed = editor(h.state_mut());
+        let t = ed.view.last.as_ref().unwrap();
+        let rect = t.space.map(|space| space.rect);
+        eprintln!(
+            "169 before clicks: camera={:?} a={a:?} screen_a={:?} b={b:?} screen_b={:?} rect={rect:?} contains_a={:?} contains_b={:?}",
+            ed.view.space,
+            t.to_screen(a),
+            t.to_screen(b),
+            rect.map(|r| r.contains(t.to_screen(a))),
+            rect.map(|r| r.contains(t.to_screen(b)))
+        );
+    }
+    trace_click_at(&mut h, a);
+    {
+        let ed = editor(h.state_mut());
+        eprintln!(
+            "169 after first click: tool={:?} pending={:?} notice={:?}",
+            ed.editor.tool,
+            ed.editor.pending.as_ref().map(|pick| pick.pos),
+            ed.editor.notice
+        );
+    }
+    eprintln!(
+        "169 after first click: entities={:?} errors={} document_changed={}",
+        current_sketch(h.state()).entities,
+        h.state().report().error_count(),
+        h.state().document().to_json() != before_clicks
+    );
+    trace_click_at(&mut h, b);
+    {
+        let ed = editor(h.state_mut());
+        eprintln!(
+            "169 after second click: tool={:?} pending={:?} notice={:?}",
+            ed.editor.tool,
+            ed.editor.pending.as_ref().map(|pick| pick.pos),
+            ed.editor.notice
+        );
+    }
+    eprintln!(
+        "169 after second click: entities={:?} errors={} document_changed={}",
+        current_sketch(h.state()).entities,
+        h.state().report().error_count(),
+        h.state().document().to_json() != before_clicks
+    );
     let sketch = current_sketch(h.state());
     let line = sketch
         .entities
