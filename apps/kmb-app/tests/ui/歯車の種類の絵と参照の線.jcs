@@ -1,0 +1,14 @@
+# 歯車の種類の一覧に種類ごとの絵が出て、直している・選んでいる歯車にピッチ円などの参照の線が薄く重なる。
+#! size 1280x800
+run cad.gear module=2 teeth=24
+expect "種類" = "平歯車"
+shot 歯車の欄
+click "種類"
+expect "ラック" exists
+expect "V ベルト車" exists
+shot 種類の一覧
+click "ラック"
+expect "種類" = "ラック"
+shot ラックの欄
+click ~OK
+expect "OK" missing

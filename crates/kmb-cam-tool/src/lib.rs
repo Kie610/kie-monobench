@@ -1006,6 +1006,7 @@ impl ToolLibrary {
             self.tools
                 .iter()
                 .map(|t| kmb_core::Choice {
+                    icon: String::new(),
                     value: t.number.to_string(),
                     label: format!("T{} {}", t.number, t.name),
                 })
