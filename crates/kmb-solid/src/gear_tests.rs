@@ -1023,7 +1023,7 @@ fn assert_spoke_target_operations(section: kmb_cad_gear::SpokeSection, new_volum
         let mut doc = b.finish("腕と材料");
         let report = doc.recompute(&registry(), &*k);
         if intersection && section != kmb_cad_gear::SpokeSection::Rectangle {
-            let status = &report.feature(e).unwrap();
+            let status = report.feature(e).unwrap();
             assert!(matches!(status, FeatureStatus::Error { .. }), "{status:?}");
             assert!(format!("{status:?}").contains("新しいボディ"));
             continue;
@@ -1080,6 +1080,6 @@ fn spoke_profile_area(profile: &Profile) -> f64 {
     profile
         .regions
         .iter()
-        .map(|r| ring(&r.outer) + r.holes.iter().map(&ring).sum::<f64>())
+        .map(|r| ring(&r.outer) + r.holes.iter().map(ring).sum::<f64>())
         .sum()
 }
