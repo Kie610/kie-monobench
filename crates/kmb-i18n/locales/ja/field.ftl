@@ -165,13 +165,13 @@ field-cad-gear-bore = 軸の穴の径
 field-cad-gear-bore-help = 空か 0 なら穴なし
 field-cad-gear-kind = 種類
 field-cad-gear-module = モジュール
-field-cad-gear-module-help = 歯の大きさ。ピッチ円の径 = モジュール × 歯数
+field-cad-gear-module-help = 歯の大きさ。ねじれ角があれば歯直角のモジュール。ピッチ円の径 = モジュール × 歯数 / cos(ねじれ角)
 field-cad-gear-outer-diameter = 輪の外径
 field-cad-gear-outer-diameter-help = 内歯車で必須。歯底円の径 + モジュールの 2 倍以上
 field-cad-gear-phase = 回す角
 field-cad-gear-phase-help = 1 枚目の歯の向き。ラックは進む向き。空なら 0
 field-cad-gear-pressure-angle = 圧力角
-field-cad-gear-pressure-angle-help = ふつうは 20 deg
+field-cad-gear-pressure-angle-help = ふつうは 20 deg。ねじれ角を指定する時は歯直角の圧力角
 field-cad-gear-profile-shift = 転位係数
 field-cad-gear-profile-shift-help = 空なら 0。正で外歯は厚く、内歯は薄くなり、歯先円と歯底円が外へ広がる
 field-cad-gear-root-round = 歯底の丸み
@@ -2331,3 +2331,9 @@ field-cad-gear-rack-back = 背の厚さ
 field-cad-gear-rack-back-help = 歯底から背の面まで。空ならモジュールの 2 倍
 field-cad-gear-teeth-help = ラックでは長さの指定が「歯数」の時だけ使う
 field-cad-gear-y-help = ラックはピッチ線の始点
+field-cad-gear-helix-angle = ねじれ角
+field-cad-gear-helix-angle-help = 空か 0 deg なら平歯車。0 deg 以上、90 deg 未満
+field-cad-gear-hand = ねじれの向き
+field-cad-gear-body-herringbone = やまば
+field-cad-gear-body-groove = 中央の溝の幅
+field-cad-gear-body-groove-help = 0 mm なら溝なし。歯の幅より小さくする

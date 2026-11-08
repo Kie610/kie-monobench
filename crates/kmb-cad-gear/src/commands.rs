@@ -50,11 +50,17 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::length("rack_back", "ラックの背の厚さ(省くとモジュールの 2 倍)"),
         Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
+        Arg::angle("helix_angle", "ねじれ角(省くと平歯車)"),
+        Arg::choice("hand", "ねじれの向き", &[("right", "右"), ("left", "左")]).default("right"),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
         Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
     ]);
     if body {
-        v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
+        v.extend([
+            Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0),
+            Arg::flag("herringbone", "やまばの歯すじにする"),
+            Arg::length("groove", "やまばの中央の溝の幅(省くと 0 mm)"),
+        ]);
     }
     v
 }
@@ -135,11 +141,34 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         return Err("歯数は平歯車と内歯車で 3 以上、ラックで 1 以上にしてください".into());
     }
     let pressure = cx.arg_f64("pressure_angle")?.unwrap_or(20.0);
-    let module_text = if kind == GearKind::Rack {
+    let module_text = if kind == GearKind::Rack || cx.arg_f64("helix_angle")?.unwrap_or(0.0) != 0.0
+    {
         format!("{module} mm")
     } else {
         mm(module)
     };
+    let beta = cx.arg_f64("helix_angle")?.unwrap_or(0.0);
+    let hand = cx.arg_str("hand").unwrap_or("right");
+    let normal = kinds::Params {
+        module,
+        pressure_angle: pressure.to_radians(),
+        ..Default::default()
+    };
+    let transverse = if kind == GearKind::Rack {
+        normal
+    } else {
+        crate::helical::transverse(
+            &kinds::Params {
+                module,
+                pressure_angle: pressure.to_radians(),
+                ..Default::default()
+            },
+            beta.to_radians(),
+        )?
+    };
+    if kind == GearKind::Rack && (beta != 0.0 || hand != "right") {
+        return Err("ねじれ角と向きは外歯か内歯の歯車に指定してください".into());
+    }
     let mut gear = json!({
         "plane": serde_json::to_value(&plane).expect("JSON にできる"),
         "module": module_text,
@@ -190,7 +219,8 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         let d = cx
             .arg_f64("outer_diameter")?
             .ok_or("内歯車では輪の外径を指定してください")?;
-        let minimum = 2.0 * (module * teeth as f64 / 2.0 + 1.25 * module) + 2.0 * module;
+        let minimum = 2.0 * (transverse.module * teeth as f64 / 2.0 + 1.25 * transverse.module)
+            + 2.0 * transverse.module;
         if d < minimum {
             return Err(format!("輪の外径は {minimum:.3} mm 以上にしてください").into());
         }
@@ -199,6 +229,12 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         gear["outer_diameter"] = json!(format!("{d} mm"));
     } else if cx.arg("outer_diameter").is_some() {
         return Err("輪の外径は内歯車で指定してください".into());
+    }
+    if beta != 0.0 {
+        gear["helix_angle"] = json!(format!("{beta} deg"));
+    }
+    if hand != "right" {
+        gear["hand"] = json!(hand);
     }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {
@@ -211,10 +247,31 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         if width <= 0.0 {
             return Err("歯の幅は 0 より大きくしてください".into());
         }
+        let herringbone = cx
+            .arg("herringbone")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let groove = cx.arg_f64("groove")?.unwrap_or(0.0);
+        if !groove.is_finite() || groove < 0.0 || groove >= width {
+            return Err("中央の溝の幅は 0 以上、歯の幅より小さくしてください".into());
+        }
+        if groove > 0.0 && !herringbone {
+            return Err("中央の溝は、やまばの時に指定してください".into());
+        }
+        if herringbone && beta == 0.0 {
+            return Err("やまばには 0 deg より大きいねじれ角を指定してください".into());
+        }
+        let mut data = json!({"gear": {"$new": 0}, "width": mm(width)});
+        if herringbone {
+            data["herringbone"] = json!(true);
+        }
+        if groove != 0.0 {
+            data["groove"] = json!(format!("{groove} mm"));
+        }
         edits.push(Edit::Insert {
             type_id: GEAR_BODY.into(),
             name: format!("歯車のボディ{}", cx.count_of(GEAR_BODY) + 1),
-            data: json!({"gear": {"$new": 0}, "width": mm(width)}),
+            data,
         });
     }
     Ok(Outcome::Change {

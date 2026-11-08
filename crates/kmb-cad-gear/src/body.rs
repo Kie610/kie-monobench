@@ -1,5 +1,5 @@
-//! 歯車のボディ(`cad.gear_body@1`)。歯車の輪郭の機能 1 つを読み、輪郭を歯の幅だけ押し出して
-//! ボディ(`body`)を作り、輪郭の諸元に歯の幅を足した諸元(`gear`)を出す。押し出した面の名前は
+//! 歯車のボディ(`cad.gear_body@1`)。歯車の輪郭の機能 1 つを読み、押し出しかねじり付きスイープで
+//! 歯の幅を持つボディ(`body`)と諸元(`gear`)を出す。押し出した面の名前は
 //! 輪郭の区間の名前を受け継ぐ(`f<この機能>:side:t3:r0` など。押し出しと同じ決まり)。
 //!
 //! 腕(ウェブ)の厚さとボスの長さの欄も持つ。輪郭が歯の輪・腕・ボスの領域に分かれていない間(円板)は
@@ -53,6 +53,12 @@ pub struct GearBody {
     /// ボスの長さ(空なら歯の幅)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boss: Option<String>,
+    /// 左右を中央で合わせる歯すじ
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub herringbone: bool,
+    /// 中央の溝の幅(空か 0 なら溝なし)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove: Option<String>,
     #[serde(default, skip_serializing_if = "is_default")]
     pub direction: Side,
     #[serde(default, skip_serializing_if = "is_default")]
@@ -68,6 +74,8 @@ impl GearBody {
             width: width_default(),
             web: None,
             boss: None,
+            herringbone: false,
+            groove: None,
             direction: Side::default(),
             operation: Operation::default(),
             target: None,
@@ -78,7 +86,11 @@ impl GearBody {
 impl Exprs for GearBody {
     fn exprs_mut(&mut self) -> Vec<&mut String> {
         let mut v = vec![&mut self.width];
-        v.extend([&mut self.web, &mut self.boss].into_iter().flatten());
+        v.extend(
+            [&mut self.web, &mut self.boss, &mut self.groove]
+                .into_iter()
+                .flatten(),
+        );
         v
     }
 }
@@ -107,7 +119,7 @@ impl Feature for GearBody {
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
         let width = length(ctx, &self.width, "歯の幅")?;
-        if width <= 0.0 {
+        if !width.is_finite() || width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
@@ -128,20 +140,51 @@ impl Feature for GearBody {
             Side::Reverse => (-width, 0.0),
             Side::Symmetric => (-width / 2.0, width / 2.0),
         };
-        let recipe = Recipe::Extrude {
-            operation: self.operation,
-            profile,
-            from,
-            to,
-            through: false,
-            stop: None,
-            taper: 0.0,
+        let gap = self
+            .groove
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map_or(Ok(0.0), |s| length(ctx, s, "中央の溝の幅"))?;
+        if !gap.is_finite() || gap < 0.0 || gap >= width {
+            return Err(EvalError::InvalidData(
+                "中央の溝の幅は 0 以上、歯の幅より小さくしてください".into(),
+            ));
+        }
+        if (self.herringbone || gap != 0.0) && spec.helix_angle == 0.0 {
+            return Err(EvalError::InvalidData(
+                "やまばには 0 deg より大きいねじれ角を指定してください".into(),
+            ));
+        }
+        let recipe = if spec.helix_angle != 0.0 {
+            crate::helical::recipe(
+                &profile,
+                &spec,
+                from,
+                to,
+                self.herringbone,
+                gap,
+                self.operation,
+            )
+            .map_err(EvalError::InvalidData)?
+        } else {
+            Recipe::Extrude {
+                operation: self.operation,
+                profile,
+                from,
+                to,
+                through: false,
+                stop: None,
+                taper: 0.0,
+            }
         };
         let mut out = finish(ctx, recipe, self.target)?;
         // 諸元の軸の点は歯の幅の始まりの側に置く
         let n = spec.axis.direction;
         spec.axis.origin = [0, 1, 2].map(|i| spec.axis.origin[i] + n[i] * from);
         spec.face_width = Some(width);
+        if self.herringbone {
+            spec.hand = kmb_interchange::gear::Hand::Both;
+        }
         out.insert(GEAR_OUTPUT.to_string(), spec.to_value());
         kmb_core::add_warnings(&mut out, warnings);
         Ok(out)
@@ -158,7 +201,7 @@ pub fn register(reg: &mut Registry) {
     reg.register_described(
         kmb_cad::solid(GEAR_BODY, "歯車のボディ")
             .icon("gear")
-            .hint("歯車の輪郭を歯の幅だけ押し出して歯車の立体にする")
+            .hint("歯車の輪郭を歯の幅だけ押し出すかねじって立体にする。やまばは中央で左右の歯すじを合わせる")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))
             .field(Field::expr("width", "歯の幅").length())
@@ -181,6 +224,13 @@ pub fn register(reg: &mut Registry) {
                     ("symmetric", "対称"),
                 ],
             ))
+            .field(Field::bool("herringbone", "やまば"))
+            .field(
+                Field::opt_expr("groove", "中央の溝の幅")
+                    .length()
+                    .help("0 mm なら溝なし。歯の幅より小さくする")
+                    .only("herringbone", "true", "false"),
+            )
             .fields(operation_fields()),
         |d| {
             let g: GearBody = serde_json::from_value(d.clone())

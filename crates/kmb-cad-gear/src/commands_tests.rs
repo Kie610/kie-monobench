@@ -307,3 +307,70 @@ fn an_internal_action_keeps_module_and_outer_diameter_precision_at_the_limit() {
         .is_err()
     );
 }
+
+#[test]
+fn helical_actions_keep_normal_values_and_herringbone_body_fields() {
+    let added = inserts(
+        run(
+            GEAR_ADD,
+            json!({"module":2.0,"helix_angle":25.0,"hand":"left","herringbone":true,"groove":1.0}),
+        )
+        .unwrap(),
+    );
+    assert_eq!(added[0].1["module"], "2 mm");
+    assert_eq!(added[0].1["helix_angle"], "25 deg");
+    assert_eq!(added[0].1["hand"], "left");
+    assert_eq!(added[1].1["herringbone"], true);
+    assert_eq!(added[1].1["groove"], "1 mm");
+    for args in [
+        json!({"helix_angle":90}),
+        json!({"helix_angle":-5}),
+        json!({"herringbone":true}),
+        json!({"helix_angle":20,"groove":1}),
+    ] {
+        assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
+    }
+}
+
+#[test]
+fn helical_internal_actions_check_the_transverse_ring_limit_and_keep_precision() {
+    let module = 1.0000001;
+    let beta = 25.0f64;
+    let mt = module / beta.to_radians().cos();
+    let minimum = mt * 24.5;
+    let added = inserts(
+        run(
+            GEAR_OUTLINE_ADD,
+            json!({
+                "kind":"internal", "module":module, "teeth":20,
+                "helix_angle":beta, "outer_diameter":minimum
+            }),
+        )
+        .unwrap(),
+    );
+    let mut doc = Document::new();
+    let (type_id, data) = added.into_iter().next().unwrap();
+    let id = doc
+        .apply_edits(
+            "内歯",
+            vec![Edit::Insert {
+                type_id,
+                name: "内歯".into(),
+                data,
+            }],
+        )
+        .unwrap()[0];
+    let report = doc.recompute(&registry(), &NullKernel);
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+        panic!("輪郭")
+    };
+    let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+    assert_eq!(spec.module, module);
+    for args in [
+        json!({"kind":"rack","helix_angle":20}),
+        json!({"kind":"rack","hand":"left"}),
+    ] {
+        assert!(run(GEAR_OUTLINE_ADD, args.clone()).is_err(), "{args}");
+    }
+}

@@ -28,9 +28,10 @@ fn every_expression_field_is_listed_for_renaming() {
         rack_length: Some("s".into()),
         rack_back: Some("s".into()),
         outer_diameter: Some("s".into()),
+        helix_angle: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 13);
+    assert_eq!(g.exprs_mut().len(), 14);
 }
 
 #[test]
@@ -182,4 +183,80 @@ fn internal_and_rack_fields_remain_available_for_their_own_kinds() {
             .unwrap();
         assert_eq!(field.applies(&length), expected, "{key}");
     }
+}
+
+#[test]
+fn helical_outline_keeps_normal_spec_and_uses_the_transverse_pitch() {
+    let mut doc = kmb_core::Document::new();
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let id = doc
+        .apply_edits(
+            "はすば",
+            vec![kmb_core::Edit::Insert {
+                type_id: GEAR.into(),
+                name: "はすば".into(),
+                data: json!({"module":"2 mm","teeth":"20","helix_angle":"30 deg","hand":"left"}),
+            }],
+        )
+        .unwrap()[0];
+    let report = doc.recompute(&reg, &kmb_core::NullKernel);
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+        panic!("輪郭")
+    };
+    let spec = GearSpec::from_value(&outputs[GEAR_OUTPUT]).unwrap();
+    assert_eq!(spec.module, 2.0);
+    assert!(spec.normal_module);
+    assert_eq!(spec.hand, kmb_interchange::gear::Hand::Left);
+    assert!((spec.pressure_angle - 20f64.to_radians()).abs() < 1e-12);
+    assert!((spec.pitch_radius - 20.0 / 30f64.to_radians().cos()).abs() < 1e-12);
+    assert!((spec.helix_angle - 30f64.to_radians()).abs() < 1e-12);
+}
+
+#[test]
+fn internal_helical_gears_use_transverse_pitch_and_keep_the_circular_rim() {
+    for hand in ["right", "left"] {
+        let (profile, spec) = internal_profile(json!({
+            "kind":"internal", "module":"2 mm", "teeth":"24", "outer_diameter":"70 mm",
+            "helix_angle":"25 deg", "hand":hand
+        }))
+        .unwrap();
+        assert_eq!(spec.module, 2.0);
+        assert!(spec.normal_module);
+        assert!((spec.pitch_radius - 24.0 / 25f64.to_radians().cos()).abs() < 1e-12);
+        assert!(
+            matches!(profile.regions[0].outer.edges[0].segment, Segment::Circle { radius, .. } if radius == 35.0)
+        );
+        assert!(profile.regions[0].holes[0].signed_area() < 0.0);
+    }
+}
+
+#[test]
+fn helix_fields_apply_to_external_and_internal_but_not_to_racks() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    for kind in [GearKind::External, GearKind::Internal, GearKind::Rack] {
+        let data = json!({"kind":kind.key()});
+        for key in ["helix_angle", "hand"] {
+            let field = reg
+                .descriptor(GEAR)
+                .unwrap()
+                .fields
+                .iter()
+                .find(|f| f.key == key)
+                .unwrap();
+            assert_eq!(
+                field.applies(&data),
+                kind != GearKind::Rack,
+                "{kind:?} {key}"
+            );
+        }
+    }
+    let gear = Gear {
+        helix_angle: Some("slope".into()),
+        ..Gear::default()
+    };
+    let renamed = gear.rename_param("slope", "angle").unwrap().unwrap();
+    assert_eq!(renamed["helix_angle"], "angle");
 }
