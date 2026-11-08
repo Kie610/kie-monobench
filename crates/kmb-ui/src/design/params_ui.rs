@@ -379,21 +379,21 @@ impl Workspace {
         }
         // 失敗した時は入力をそのまま残し、理由を欄の横に出す
         if let Some((id, expr)) = commit_expr {
-            // 長さのパラメータに数だけを打てば、文書の単位を付ける(候補 19)
-            let length = self
+            // 長さ・角度のパラメータに数だけを打てば、文書の単位か deg を付ける(候補 19)
+            let unit = self
                 .cur
                 .work
                 .doc()
                 .data()
                 .params
                 .iter()
-                .any(|p| p.id == id && p.unit == kmb_core::ParamUnit::Length);
-            let expr = if length {
-                self.in_doc_unit(&expr)
-            } else {
-                expr
-            };
-            if !self.set_param_expr(id, &expr) {
+                .find(|p| p.id == id)
+                .map(|p| p.unit)
+                .unwrap_or_default();
+            let typed = self.typed_param(unit, &expr);
+            if let Err(why) = &typed {
+                ui.data_mut(|d| d.insert_temp(failed_id(id), why.clone()));
+            } else if !self.set_param_expr(id, typed.as_deref().unwrap_or(&expr)) {
                 // 式を読めなければ読み取りの理由だけ(「式 `…` の誤り:」の繰り返しを省く)
                 let text = self
                     .cur
@@ -605,12 +605,11 @@ impl Workspace {
             if ui.add(egui::Button::new("追加").small()).clicked() || enter {
                 let (name, expr) = std::mem::take(&mut self.cur.new_param);
                 let unit = self.cur.new_param_unit;
-                let expr = if unit == kmb_core::ParamUnit::Length {
-                    self.in_doc_unit(&expr)
-                } else {
-                    expr
-                };
-                if self.add_param_with(&name, &expr, unit) {
+                let typed = self.typed_param(unit, &expr);
+                if let Err(why) = &typed {
+                    ui.data_mut(|d| d.insert_temp(failed_new, why.clone()));
+                    self.cur.new_param = (name, expr);
+                } else if self.add_param_with(&name, typed.as_deref().unwrap_or(&expr), unit) {
                     ui.data_mut(|d| d.remove::<String>(failed_new));
                     // 作った表を開いている時は、足したパラメータをその表にも入れる
                     // (お気に入りを開いている時は ☆ を付ける)

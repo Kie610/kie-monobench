@@ -505,7 +505,25 @@ fn ticket_origin(data_dir: &Path, t: &Ticket) -> String {
     )
 }
 
-fn send(data_dir: &Path, mut req: Value) -> Result<Value, String> {
+/// 人が画面の今のタブで開いている文書のファイル。保存先の無い文書・画面が無い・すぐ答えない時は
+/// `None`。AI に許すフォルダを足す時([`crate::roots::Roots::allow_document_folder`])に引くだけ
+/// なので、長くは待たない。
+pub fn open_document(data_dir: &Path) -> Option<PathBuf> {
+    read_ticket(data_dir)?;
+    let req = json!({ "tool": "status", "args": {} });
+    let v = send_waiting(data_dir, req, Some(QUICK_WAIT)).ok()?;
+    v["file"].as_str().map(PathBuf::from)
+}
+
+/// [`open_document`] が画面の答えを待つ長さ。
+const QUICK_WAIT: Duration = Duration::from_secs(10);
+
+fn send(data_dir: &Path, req: Value) -> Result<Value, String> {
+    send_waiting(data_dir, req, None)
+}
+
+/// `wait` を省くと、道具ごとの長さ([`answer_wait`])だけ答えを待つ。
+fn send_waiting(data_dir: &Path, mut req: Value, wait: Option<Duration>) -> Result<Value, String> {
     let tool = req["tool"].as_str().unwrap_or_default().to_string();
     let path = ticket_path(data_dir);
     let t = match read_ticket(data_dir) {
@@ -533,9 +551,10 @@ fn send(data_dir: &Path, mut req: Value) -> Result<Value, String> {
             ticket_origin(data_dir, &t)
         )
     })?;
-    let _ = s.set_read_timeout(Some(
-        answer_wait(&tool, &req["args"]) + Duration::from_secs(5),
-    ));
+    let _ =
+        s.set_read_timeout(Some(wait.unwrap_or_else(|| {
+            answer_wait(&tool, &req["args"]) + Duration::from_secs(5)
+        })));
     req["token"] = json!(t.token);
     write_line(&mut s, &req).map_err(|e| e.to_string())?;
     let mut line = String::new();
