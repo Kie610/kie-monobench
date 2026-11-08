@@ -18,6 +18,7 @@ mod marks;
 mod menu;
 mod more_tools;
 mod offset_tool;
+mod opening_settings;
 mod pattern_ui;
 mod snap;
 mod space3d;
@@ -37,6 +38,8 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 /// スケッチの編集器の状態(表示の移動と倍率、描いている途中の道具)。
 #[derive(Default)]
 pub struct SketchEditor {
+    /// 開く時の PC 設定。カメラの途中の状態とは分け、文書のタブ間で共有する。
+    opening_settings: opening_settings::Store,
     view: view::ViewState,
     editor: view::Editor,
     /// 下の帯へ出した失敗の理由。解けた時は自分が出した知らせだけを消す。
@@ -916,7 +919,39 @@ impl SketchEditor {
 
 impl FeatureEditor for SketchEditor {
     fn fresh(&self) -> Box<dyn FeatureEditor> {
-        Box::new(SketchEditor::new())
+        Box::new(SketchEditor {
+            opening_settings: self.opening_settings.clone(),
+            ..SketchEditor::new()
+        })
+    }
+
+    fn set_settings_dir(&mut self, dir: Option<&std::path::Path>) {
+        self.opening_settings.set_data_dir(dir);
+    }
+
+    fn settings(&self, text: &dyn Fn(&str) -> String) -> Vec<kmb_core::Settings> {
+        vec![self.opening_settings.settings(text)]
+    }
+
+    fn change_settings(
+        &mut self,
+        id: &str,
+        value: &serde_json::Value,
+        persist: bool,
+    ) -> Option<Result<(), String>> {
+        (id == opening_settings::ID).then(|| self.opening_settings.change(value, persist))
+    }
+
+    fn open_view(&mut self, camera: kmb_ui::view3d::Camera) {
+        self.view = if self.opening_settings.front() {
+            view::ViewState::default()
+        } else {
+            view::ViewState {
+                space: Some(camera),
+                ..view::ViewState::default()
+            }
+        };
+        self.editor.look_front = false;
     }
 
     fn handles(&self, type_id: &str) -> bool {
@@ -1783,7 +1818,10 @@ impl FeatureEditor for SketchEditor {
     }
 
     fn reset(&mut self) {
-        *self = Self::default();
+        *self = Self {
+            opening_settings: self.opening_settings.clone(),
+            ..Self::default()
+        };
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -1853,3 +1891,6 @@ mod plane_frame_tests;
 
 #[cfg(test)]
 mod undo_line_tests;
+
+#[cfg(test)]
+mod opening_view_tests;

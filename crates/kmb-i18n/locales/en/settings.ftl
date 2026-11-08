@@ -86,3 +86,7 @@ settings-key-name-sketch-construction = Sketch: Toggle construction geometry; wh
 
 settings-import-upright = Ask whether to rotate imported STEP and IGES geometry upright
 settings-import-upright-tip = Ask once whether to rotate Y-up geometry to Z-up. This can also be changed in the feature fields.
+
+settings-sketch-opening-view = Opening sketches
+settings-sketch-opening-view-hint = Turn off to open a sketch from the current view. Look Front remains available while editing.
+settings-sketch-opening-front = Look front when opening a sketch

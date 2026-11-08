@@ -83,3 +83,7 @@ settings-key-name-sketch-construction = スケッチ: 選んだ線を補助線�
 
 settings-import-upright = STEP・IGES を読み込んだら、立てるかを聞く
 settings-import-upright-tip = Y が上で作られた形が寝ている時、Z が上になるように立てるかを1回聞く。機能の欄でも変えられる
+
+settings-sketch-opening-view = スケッチを開く時
+settings-sketch-opening-view-hint = 切にすると、今の視点のままスケッチを開きます。編集中も正面から見るボタンを使えます。
+settings-sketch-opening-front = 開く時に正面から見る

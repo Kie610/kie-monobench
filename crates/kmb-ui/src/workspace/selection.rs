@@ -78,9 +78,11 @@ impl Workspace {
         if self.cur.editing != Some(id) && self.hold_for_moved(joint_drag_ui::Held::Edit(id)) {
             return;
         }
+        let camera = self.current_editor_view_camera();
         self.select(id);
         if self.cur.editing != Some(id) {
             self.cur.editing = Some(id);
+            self.open_editor_view(id, camera);
             self.cur.edit_start = Some((id, self.cur.work.doc().undo_labels().len()));
             // 履歴の印より後の機能は計算されないので、直しても形に出ない。印をその機能の後ろまで
             // 進める。直し始めの後に入れるので、キャンセルで印も戻る
@@ -94,6 +96,35 @@ impl Workspace {
             {
                 log::info!("履歴の印を、直す機能 {id:?} の後ろまで進める");
                 self.apply(tx);
+            }
+        }
+    }
+
+    /// 最後に描いた専用ビューの視点。まだ 3D のフレームへ戻っていなくても今の見方を得る。
+    pub(crate) fn current_editor_view_camera(&self) -> view3d::Camera {
+        self.cur
+            .view_editor_was
+            .as_deref()
+            .and_then(|kind| {
+                self.cur
+                    .editors
+                    .iter()
+                    .find(|editor| editor.handles(kind) && editor.takes_view())
+            })
+            .and_then(|editor| editor.view_camera())
+            .map_or(self.cur.camera, |(camera, _)| camera)
+    }
+
+    /// 直し始める機能の専用ビューへカメラを渡す。機能の名前は外枠に持たない。
+    pub(crate) fn open_editor_view(&mut self, id: FeatureId, camera: view3d::Camera) {
+        let Some(entry) = self.cur.work.doc().data().feature(id) else {
+            return;
+        };
+        let type_id = entry.type_id.clone();
+        self.cur.camera = camera;
+        for editor in &mut self.cur.editors {
+            if editor.handles(&type_id) && editor.takes_view() {
+                editor.open_view(camera);
             }
         }
     }

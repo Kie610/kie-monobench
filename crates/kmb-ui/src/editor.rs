@@ -223,6 +223,9 @@ pub trait FeatureEditor: Any + Send {
         false
     }
 
+    /// 編集を開いた時の 3D の視点。専用のビューが現在の見方を引き継ぐ時に使う。
+    fn open_view(&mut self, _camera: crate::view3d::Camera) {}
+
     /// 中央のビューを描く([`FeatureEditor::takes_view`] が真の時)。
     fn view(
         &mut self,
@@ -304,6 +307,24 @@ pub trait FeatureEditor: Any + Send {
 
     /// データフォルダが決まった時(PC 全体の設定を読む)。
     fn set_data_dir(&mut self, _dir: Option<&Path>) {}
+
+    /// PC 設定を読んでよい場所。安全モードでは `None` を渡す。
+    fn set_settings_dir(&mut self, _dir: Option<&Path>) {}
+
+    /// 編集器が持つ PC 設定。文言は画面の現在の言語で作り、文書のデータには入れない。
+    fn settings(&self, _text: &dyn Fn(&str) -> String) -> Vec<kmb_core::Settings> {
+        Vec::new()
+    }
+
+    /// 編集器自身の設定なら結果を返す。安全モードでは `persist` が偽で、保存しない。
+    fn change_settings(
+        &mut self,
+        _id: &str,
+        _value: &serde_json::Value,
+        _persist: bool,
+    ) -> Option<Result<(), String>> {
+        None
+    }
 
     /// 同じ種類の新しい編集器(文書のタブごとに 1 つずつ持ち、編集の途中の状態を混ぜない。候補 20)。
     /// データフォルダは呼ぶ側が [`FeatureEditor::set_data_dir`] で渡し直す。
