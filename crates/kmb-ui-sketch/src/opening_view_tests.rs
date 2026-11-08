@@ -102,7 +102,18 @@ fn drawing_selection_and_dimensions_work_from_the_preserved_oblique_view() {
     h.key_press(egui::Key::L);
     h.run();
     assert_eq!(editor(h.state_mut()).editor.tool, Tool::Line);
-    let (a, b) = ([-12.3, -8.5], [14.6, 9.7]);
+    let (a, b) = {
+        let ed = editor(h.state_mut());
+        let t = ed.view.last.as_ref().unwrap();
+        let rect = t.space.expect("斜めの作図面").rect;
+        let offset = egui::vec2(rect.width() * 0.15, rect.height() * 0.10);
+        let (a, b) = (rect.center() - offset, rect.center() + offset);
+        assert!(
+            rect.contains(a) && rect.contains(b),
+            "作図面の内側をクリックする"
+        );
+        (t.to_world(a), t.to_world(b))
+    };
     let before_clicks = h.state().document().to_json();
     {
         let ed = editor(h.state_mut());
@@ -158,7 +169,14 @@ fn drawing_selection_and_dimensions_work_from_the_preserved_oblique_view() {
         .id();
     editor(h.state_mut()).set_tool(Tool::Select);
     h.run();
-    let middle = [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+    let middle = {
+        let Entity::Line { a, b, .. } = sketch.entity(line).unwrap() else {
+            unreachable!("作った線分")
+        };
+        let solution = crate::tests::solved(h.state());
+        let (a, b) = (solution.points[a], solution.points[b]);
+        [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
+    };
     click_at(&mut h, middle);
     assert!(editor(h.state_mut()).editor.selection.contains(&line));
     h.key_press(egui::Key::D);
