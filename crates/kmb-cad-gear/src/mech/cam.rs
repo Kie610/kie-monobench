@@ -484,6 +484,7 @@ impl ShapeInput {
 fn polygon(points: Vec<[f64; 2]>, prefix: &str) -> ProfileLoop {
     let mut edges: Vec<_> = (0..points.len())
         .map(|i| ProfileEdge {
+            curve: None,
             name: format!("{prefix}:{i}"),
             segment: Segment::Line {
                 a: points[i],
@@ -536,6 +537,7 @@ fn follower_ring(input: &ShapeInput) -> ProfileLoop {
             let points = [right, place([half, end]), place([-half, end]), left];
             for i in 0..3 {
                 edges.push(ProfileEdge {
+                    curve: None,
                     name: format!("stem:{i}"),
                     segment: Segment::Line {
                         a: points[i],
