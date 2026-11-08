@@ -236,16 +236,11 @@ fn internal_helical_gears_use_transverse_pitch_and_keep_the_circular_rim() {
 fn helix_fields_apply_to_external_and_internal_but_not_to_racks() {
     let mut reg = Registry::new();
     register(&mut reg);
+    let descriptor = reg.descriptor(GEAR).unwrap();
     for kind in [GearKind::External, GearKind::Internal, GearKind::Rack] {
         let data = json!({"kind":kind.key()});
         for key in ["helix_angle", "hand"] {
-            let field = reg
-                .descriptor(GEAR)
-                .unwrap()
-                .fields
-                .iter()
-                .find(|f| f.key == key)
-                .unwrap();
+            let field = descriptor.fields.iter().find(|f| f.key == key).unwrap();
             assert_eq!(
                 field.applies(&data),
                 kind != GearKind::Rack,
