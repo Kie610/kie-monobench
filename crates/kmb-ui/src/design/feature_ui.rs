@@ -391,18 +391,27 @@ fn value_ui(
                 // 範囲のある欄(ジョイントの値と戻る位置)は、範囲の外の値を赤くして受け付けない
                 let range = range_slider(ws, entry, f);
                 let check = |t: &str| {
-                    let s = range.as_ref()?;
-                    let expression = kmb_session::params::parse_named_parameter(
+                    let values = ws.report().param_values();
+                    let named = kmb_session::params::parse_named_parameter(
                         ws.cur.work.doc().data(),
                         ws.cur.work.report(),
                         t,
                         f.unit.as_ref(),
                         ws.length_unit(),
-                    )
-                    .ok()
-                    .flatten()
-                    .map(|p| p.expr)
-                    .unwrap_or_else(|| typed_expr(ws, f, &cur, t));
+                    );
+                    // mm でない文書で単位の無い数を長さと足し引きする式は、入れずに理由を出す
+                    let typed = t.split_once('=').map_or(t, |(_, e)| e);
+                    let plain = match kmb_session::params::read_typed(
+                        f.unit.as_ref(),
+                        typed,
+                        ws.length_unit(),
+                        &|n| values.get(n).copied(),
+                    ) {
+                        Ok(e) => e,
+                        Err(why) => return Some(why),
+                    };
+                    let expression = named.ok().flatten().map_or(plain, |p| p.expr);
+                    let s = range.as_ref()?;
                     out_of_range(ws, s, data, &expression)
                         .map(|why| format!("{} は{why}なので入れられません", t.trim()))
                 };
@@ -464,10 +473,16 @@ fn value_ui(
                         f.set(data, Some(Json::String(v)));
                     }
                 }
-                // 範囲の外で受け付けなかった印(次に欄を触るまで)。欄の横は狭いので、理由は吹き出しに
+                // 範囲の外か、単位の無い数を長さと足し引きして受け付けなかった印(次に欄を触るまで)。
+                // 欄の横は狭いので、理由は吹き出しに
                 if let Some(why) = refused(ui.ctx(), key) {
+                    let mark = if why == kmb_session::params::unitless_reason(ws.length_unit()) {
+                        "単位が要る"
+                    } else {
+                        "範囲外"
+                    };
                     ui.label(
-                        egui::RichText::new("範囲外")
+                        egui::RichText::new(mark)
                             .color(ui.visuals().error_fg_color)
                             .small(),
                     )
@@ -1595,7 +1610,7 @@ fn expr_field_reserving(
     }
     let refused = out.as_deref().and_then(check);
     if let Some(why) = refused.clone() {
-        log::info!("範囲の外の値を受け付けない: {why}");
+        log::info!("欄に入れられない値を受け付けない: {why}");
         ui.data_mut(|d| d.insert_temp(refused_id(), (key, why)));
         out = None;
     }

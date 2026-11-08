@@ -43,6 +43,59 @@ impl Expr {
         }
     }
 
+    /// 単位も名前も含まない、数だけの式か(`10 + 5`、`pi`、`sqrt(2)`。定数は数)。長さ・角度の欄に
+    /// 打った時は、式全体を欄の単位で読む(`(10 + 5) in`)。
+    pub fn is_plain_number(&self) -> bool {
+        match self {
+            Expr::Num(q) => q.dim.is_none(),
+            Expr::Ref(n) => constant(n).is_some(),
+            Expr::Neg(a) => a.is_plain_number(),
+            Expr::Bin(_, a, b) => a.is_plain_number() && b.is_plain_number(),
+            Expr::Call(_, args) => args.iter().all(Expr::is_plain_number),
+        }
+    }
+
+    /// 単位の無い数を長さと足し引きしている所があるか(`10 + 5 mm`、長さのパラメータ `w` の
+    /// `w + 1`)。計算ではその数を mm と読む。掛け算・割り算の係数(`2 * 5 mm`)は数えない。
+    pub fn adds_number_to_length(
+        &self,
+        lookup: &dyn Fn(&str) -> Option<Quantity>,
+    ) -> Result<bool, ExprError> {
+        let mut hit = false;
+        self.scan(lookup, &mut hit)?;
+        Ok(hit)
+    }
+
+    /// [`Self::eval`] と同じ計算をしながら、単位の無い数と長さの足し引きに印を付ける。
+    fn scan(
+        &self,
+        lookup: &dyn Fn(&str) -> Option<Quantity>,
+        hit: &mut bool,
+    ) -> Result<Quantity, ExprError> {
+        match self {
+            Expr::Neg(e) => {
+                let q = e.scan(lookup, hit)?;
+                Ok(Quantity::new(-q.value, q.dim))
+            }
+            Expr::Bin(op, a, b) => {
+                let (x, y) = (a.scan(lookup, hit)?, b.scan(lookup, hit)?);
+                let mixed = |p: Quantity, q: Quantity| p.dim.is_none() && q.dim == Dim::LENGTH;
+                if matches!(op, BinOp::Add | BinOp::Sub) && (mixed(x, y) || mixed(y, x)) {
+                    *hit = true;
+                }
+                binary(*op, x, y)
+            }
+            Expr::Call(name, args) => {
+                let vals = args
+                    .iter()
+                    .map(|a| a.scan(lookup, hit))
+                    .collect::<Result<Vec<_>, _>>()?;
+                call(name, &vals)
+            }
+            e => e.eval(lookup),
+        }
+    }
+
     pub fn eval(&self, lookup: &dyn Fn(&str) -> Option<Quantity>) -> Result<Quantity, ExprError> {
         match self {
             Expr::Num(q) => Ok(*q),
