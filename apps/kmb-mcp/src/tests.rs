@@ -1679,15 +1679,19 @@ fn a_parameter_gets_its_comment_and_unit_from_the_ai() {
     let p = |s: &Session| s.work.doc().data().param_by_name("pitch").cloned().unwrap();
     assert_eq!(p(&s).comment, "穴の間隔");
     assert_eq!(p(&s).unit, kmb_core::ParamUnit::Length);
-    // 式とコメントを変えるのは 1 回で取り消せる。省いた単位は今のまま
+    // 式とコメントを変えるのは 1 回で取り消せる。省いた単位は今のまま。長さのパラメータに数だけを
+    // 打つと、画面のパラメータの表と同じく文書の単位を付ける
     let depth = s.work.doc().undo_depth();
     s.set_param_info("pitch", "4", Some("間隔"), None).unwrap();
     assert_eq!(s.work.doc().undo_depth(), depth + 1);
-    assert_eq!((p(&s).expr.as_str(), p(&s).comment.as_str()), ("4", "間隔"));
+    assert_eq!(
+        (p(&s).expr.as_str(), p(&s).comment.as_str()),
+        ("4 mm", "間隔")
+    );
     assert_eq!(p(&s).unit, kmb_core::ParamUnit::Length);
     // 知らない単位は断り、文書を変えない
     assert!(s.set_param_info("pitch", "5", None, Some("feet")).is_err());
-    assert_eq!(p(&s).expr, "4");
+    assert_eq!(p(&s).expr, "4 mm");
 }
 
 #[test]
