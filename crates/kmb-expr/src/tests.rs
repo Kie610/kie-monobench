@@ -289,3 +289,54 @@ fn full_width_digits_and_signs_are_numbers() {
     assert_eq!(ev("1e３").unwrap(), Quantity::scalar(1000.0));
     assert_eq!(ev("width ＋ ５ mm").unwrap(), Quantity::mm(45.0));
 }
+
+#[test]
+fn unitless_numbers_are_told_apart_by_how_they_are_used() {
+    // 確かめること: 数だけの式と、単位の無い数を長さと足し引きする式を見分ける
+    let plain = |s: &str| parse(s).unwrap().is_plain_number();
+    for s in ["10", "10 + 5", "(2 + 3) * 2", "pi", "-sqrt(2)", "PI / 4"] {
+        assert!(plain(s), "{s}");
+    }
+    for s in [
+        "10 mm",
+        "pi mm",
+        "2 * 5 mm",
+        "width / 2",
+        "5 [mm]",
+        "1 + count",
+    ] {
+        assert!(!plain(s), "{s}");
+    }
+    let lookup = |n: &str| match n {
+        "width" => Some(Quantity::mm(40.0)),
+        "angle" => Some(Quantity::deg(30.0)),
+        "count" => Some(Quantity::scalar(3.0)),
+        _ => None,
+    };
+    let mixed = |s: &str| parse(s).unwrap().adds_number_to_length(&lookup).unwrap();
+    for s in [
+        "10 + 5 mm",
+        "width + 1",
+        "1 - width",
+        "max(width + 2; 3 mm)",
+        "count + width",
+    ] {
+        assert!(mixed(s), "{s}");
+    }
+    for s in [
+        "10 + 5",
+        "pi mm",
+        "2 * 5 mm",
+        "width / 2 + 1 mm",
+        "angle + 15",
+        "10 in + 5 mm",
+    ] {
+        assert!(!mixed(s), "{s}");
+    }
+    // 計算の値は今のまま(数を mm と読む)
+    assert_eq!(ev("10 + 5 mm").unwrap(), Quantity::mm(15.0));
+    assert!(matches!(
+        parse("height + 1").unwrap().adds_number_to_length(&lookup),
+        Err(ExprError::UnknownName(_))
+    ));
+}
