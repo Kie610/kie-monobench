@@ -166,19 +166,21 @@ field-cad-gear-bore-help = Empty or 0 for no bore.
 field-cad-gear-kind = Type
 field-cad-gear-module = Module
 field-cad-gear-module-help = Tooth size. Pitch diameter = module × number of teeth.
+field-cad-gear-outer-diameter = Ring Outer Diameter
+field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
 field-cad-gear-phase = Rotation
-field-cad-gear-phase-help = Direction of the first tooth. Empty for 0.
+field-cad-gear-phase-help = Direction of the first tooth, or the travel direction of a rack. Empty for 0.
 field-cad-gear-pressure-angle = Pressure Angle
 field-cad-gear-pressure-angle-help = Usually 20 deg.
 field-cad-gear-profile-shift = Profile Shift Coefficient
-field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken the teeth and move the tip and root circles outward.
+field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken external teeth, thin internal teeth, and move the tip and root circles outward.
 field-cad-gear-root-round = Root Fillet
 field-cad-gear-root-round-help = Fillet radius as a ratio of the module. Empty for 0.38.
 field-cad-gear-teeth = Number of Teeth
 field-cad-gear-tip-round = Tip Round
 field-cad-gear-tip-round-help = Round radius as a ratio of the module. Empty for 0.
 field-cad-gear-x = Center X
-field-cad-gear-x-help = Offset from the center point, if present.
+field-cad-gear-x-help = Offset from the center point, if present. For a rack, the start of the pitch line.
 field-cad-gear-y = Center Y
 field-cad-text-align = Horizontal Alignment
 field-cad-text-anchor = Anchor Point Sketch
@@ -2277,6 +2279,8 @@ field-solid-thread-size = Nominal Size
 field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 field-solid-thread-target = Target
 
+field-cad-sketch-freedom = Degrees of freedom
+field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
 field-solid-import-mesh-file = File
 field-solid-import-mesh-object = Object name
 field-solid-import-mesh-triangles = Triangles
@@ -2319,3 +2323,66 @@ field-solid-thicken-side = Side
 field-solid-import-iges-file = File
 field-solid-import-iges-stand-up = Convert Y-up to Z-up
 field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+field-cad-gear-chain = Chain Size
+field-cad-gear-chain-pitch = Chain Pitch
+field-cad-gear-roller-diameter = Roller Diameter
+field-cad-gear-chain-inner-width = Chain Inner Width
+field-cad-gear-body-width-help = Empty uses 0.93 or 0.95 times the chain inner width for sprockets, or 10 mm for other gears. Belt pulleys and rope sheaves use the profile width and show a warning when the value differs.
+field-cad-gear-body-alignment = Web and Boss Alignment
+field-cad-gear-boss-diameter = Boss Outside Diameter
+field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+field-cad-gear-key-depth = Keyway Depth
+field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+field-cad-gear-key-width = Keyway Width
+field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+field-cad-gear-keyway = Keyway
+field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+field-cad-gear-lightening-count = Number of Lightening Holes
+field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+field-cad-gear-lightening-diameter = Lightening Hole Diameter
+field-cad-gear-rack-size = Rack Size By
+field-cad-gear-rack-length = Rack Length
+field-cad-gear-rack-length-help = Overall length including the teeth. Fits as many complete circular pitches as possible.
+field-cad-gear-rack-back = Back Thickness
+field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
+field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
+field-cad-gear-y-help = For a rack, the start of the pitch line.
+
+field-cad-gear-pulley-diameter = Pitch Diameter
+
+field-cad-gear-pulley-diameter-help = Empty uses 100 mm.
+
+field-cad-gear-pulley-width = Width
+
+field-cad-gear-pulley-width-help = Empty uses 30 mm. Axial width of the belt or rope pulley.
+
+field-cad-gear-crown-height = Crown Height
+
+field-cad-gear-crown-height-help = Empty uses 0 mm.
+
+field-cad-gear-groove-count = Number of Grooves
+
+field-cad-gear-groove-count-help = Empty uses 1.
+
+field-cad-gear-v-section = Groove Section
+
+field-cad-gear-groove-angle = Groove Angle
+
+field-cad-gear-groove-angle-help = Empty selects the angle from the section and pitch diameter.
+
+field-cad-gear-groove-top-width = Groove Opening Width
+
+field-cad-gear-groove-top-width-help = Empty derives the opening from the section width at the pitch position.
+
+field-cad-gear-groove-depth = Groove Depth
+
+field-cad-gear-groove-depth-help = From the opening to the bottom. Empty derives it from the section dimensions.
+
+field-cad-gear-rope-diameter = Rope Diameter
+
+field-cad-gear-rope-diameter-help = Empty uses 10 mm.
+
+field-cad-gear-flange-height = Flange Height
+
+field-cad-gear-flange-height-help = Empty uses 3 mm above the rope center.

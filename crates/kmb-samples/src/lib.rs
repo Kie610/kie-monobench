@@ -52,6 +52,8 @@ mod cam_2d_tests;
 #[cfg(test)]
 mod cam_3d_tests;
 #[cfg(test)]
+mod cam_gear_clearance_tests;
+#[cfg(test)]
 mod cam_pick_tests;
 #[cfg(test)]
 mod cam_program_tests;

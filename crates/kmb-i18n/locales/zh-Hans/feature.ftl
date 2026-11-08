@@ -13,3 +13,5 @@
 # feature-solid-thicken-tip = Add thickness to a sheet body to create a closed solid
 # feature-solid-import-iges = IGES import
 # feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.
+
+# TODO: feature-tool-clearance-warning

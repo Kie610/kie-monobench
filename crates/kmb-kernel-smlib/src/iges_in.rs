@@ -732,7 +732,7 @@ pub(super) fn import(
 ) -> Result<(k::ShapeHandle, Vec<String>), String> {
     use crate::{ffi, names::points, step_face, step_in};
     let mut model = read(text)?;
-    let _guard = ffi::lock();
+    let _guard = ffi::lock().map_err(|e| e.to_string())?;
     let mut faces = Vec::new();
     for (i, face) in model.faces.iter().enumerate() {
         let definition = step_in::StepFace {

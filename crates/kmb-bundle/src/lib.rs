@@ -140,6 +140,25 @@ pub fn kernel_of(kind: KernelKind) -> Arc<dyn Kernel> {
     }
 }
 
+/// 試験用: ほかの文書の重い計算が形状カーネルを使っている間([`occupy_kernel`])。捨てるまで錠を持つ。
+#[cfg(feature = "smlib")]
+pub struct KernelHeld(kmb_kernel_smlib::Occupied);
+
+/// 試験用: ほかの文書の重い計算が形状カーネル(SMLib。錠はすべての文書で 1 つ)を使っている間を作る。
+/// 捨てるか `limit` が過ぎるまで錠を持つ。
+#[cfg(feature = "smlib")]
+pub fn occupy_kernel(limit: std::time::Duration) -> KernelHeld {
+    KernelHeld(kmb_kernel_smlib::occupy(limit))
+}
+
+#[cfg(feature = "smlib")]
+impl KernelHeld {
+    /// まだ錠を持っているか(待った呼び出しは錠が空いてから戻るので、戻った時に偽になる)。
+    pub fn still_held(&self) -> bool {
+        self.0.still_held()
+    }
+}
+
 /// 使う形状カーネル([`KernelKind::from_env`] で選ぶ)。
 pub fn kernel() -> Arc<dyn Kernel> {
     let kind = KernelKind::from_env();
@@ -259,3 +278,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod warning_tests;
