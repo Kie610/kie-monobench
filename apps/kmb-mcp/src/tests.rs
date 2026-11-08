@@ -2145,3 +2145,28 @@ fn pack_shares_the_session_and_enforces_the_allowed_output_folder() {
     assert_eq!(s.document().to_json(), before);
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// Claude 011-2: AI も質量の慣性と主軸を読め、組立全体の質量特性の表を操作で出せる。
+/// 表の組立全体の質量は、ボディごとの質量の和と合う。
+#[test]
+fn the_ai_reads_inertia_and_the_mass_properties_table() {
+    let mut s = Session::new(temp_root("inertia"));
+    s.sample(true, false).unwrap();
+    let bodies = s.mass().unwrap();
+    let b = &bodies[0];
+    let m = b["principal_moments"].as_array().expect("主慣性").clone();
+    assert!(m.iter().all(|v| v.as_f64().unwrap() > 0.0), "{b}");
+    assert!(b["mass_inertia"][0][0].as_f64().unwrap() > 0.0, "{b}");
+    let total: f64 = bodies
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|b| b["mass"].as_f64())
+        .sum();
+    let r = s
+        .run_action("asm.mass_props", None, None, &Value::Null, None)
+        .unwrap();
+    let text = r.to_string();
+    assert!(text.contains("組立全体"), "{r}");
+    assert!(text.contains(&format!("{total:.1}")), "{total} {r}");
+}

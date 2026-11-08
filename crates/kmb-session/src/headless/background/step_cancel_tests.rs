@@ -62,6 +62,7 @@ fn box_shape(
     let outer = ProfileLoop {
         edges: (0..4)
             .map(|i| ProfileEdge {
+                curve: None,
                 name: format!("e{i}"),
                 reversed: false,
                 segment: Segment::Line {

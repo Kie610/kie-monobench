@@ -19,14 +19,19 @@ extern "C" {
 
 typedef struct JcBrep JcBrep;
 
-/* 輪郭の 1 区間。座標はスケッチの平面の 2D 座標。角度はラジアンで、円弧は start から end へ反時計回り。 */
-enum { JC_SEG_LINE = 0, JC_SEG_ARC = 1, JC_SEG_CIRCLE = 2 };
+/* 輪郭の 1 区間。座標はスケッチの平面の 2D 座標。角度はラジアンで、円弧は start から end へ反時計回り。
+ * JC_SEG_NURBS は平面の上の有理 B スプライン(楕円・スプライン・円錐曲線)。節点は端を含む全部
+ * (count + degree + 1 個)、points は x, y, 重み を count 組。指す配列は呼び出しの間だけ生きていればよい。 */
+enum { JC_SEG_LINE = 0, JC_SEG_ARC = 1, JC_SEG_CIRCLE = 2, JC_SEG_NURBS = 3 };
 typedef struct JcSegment {
     int32_t kind;
     double a[2], b[2];      /* 直線の両端 */
     double center[2];       /* 円弧・円 */
     double radius;
     double start, end;      /* 円弧 */
+    uint32_t degree, count; /* 有理 B スプライン */
+    const double* knots;
+    const double* points;
 } JcSegment;
 
 /* 平面: origin, x_axis, y_axis(法線は x × y)。 */

@@ -295,6 +295,7 @@ fn variable_fillet_on_a_round_rim_keeps_the_cylinder() {
         regions: vec![Region {
             outer: ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "rim".into(),
                     segment: Segment::Circle {
                         center: [0.0, 0.0],

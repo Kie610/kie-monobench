@@ -384,6 +384,7 @@ fn cut_by_stop(
     let corners = [[-r, -r], [r, -r], [r, r], [-r, r]];
     let edges = (0..4)
         .map(|i| k::ProfileEdge {
+            curve: None,
             name: format!("s{i}"),
             segment: Segment::Line {
                 a: corners[i],

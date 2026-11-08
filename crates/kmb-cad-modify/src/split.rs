@@ -148,6 +148,7 @@ pub(crate) fn half_space(
     let outer = ProfileLoop {
         edges: (0..4)
             .map(|i| ProfileEdge {
+                curve: None,
                 name: format!("q{}", i + 1),
                 segment: Segment::Line {
                     a: c[i],

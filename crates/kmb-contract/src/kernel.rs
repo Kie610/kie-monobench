@@ -24,6 +24,7 @@ pub fn rect_loop(x0: f64, y0: f64, w: f64, h: f64, base: u32) -> ProfileLoop {
     ProfileLoop {
         edges: (0..4)
             .map(|i| ProfileEdge {
+                curve: None,
                 name: format!("e{}", base + i as u32),
                 segment: Segment::Line {
                     a: p[i],
@@ -39,6 +40,7 @@ pub fn rect_loop(x0: f64, y0: f64, w: f64, h: f64, base: u32) -> ProfileLoop {
 pub fn circle_loop(c: [f64; 2], r: f64, name: &str, reversed: bool) -> ProfileLoop {
     ProfileLoop {
         edges: vec![ProfileEdge {
+            curve: None,
             name: name.into(),
             segment: Segment::Circle {
                 center: c,
@@ -78,6 +80,7 @@ fn polygon(points: &[[f64; 2]]) -> Profile {
             outer: ProfileLoop {
                 edges: (0..n)
                     .map(|i| ProfileEdge {
+                        curve: None,
                         name: format!("e{}", i + 1),
                         segment: Segment::Line {
                             a: points[i],
@@ -618,6 +621,7 @@ pub fn shapes_we_make_read_back_from_step<K: Kernel>(k: &K, q: &KernelQuirks<K>)
         )
         .unwrap();
     let line = |a: [f64; 2], b: [f64; 2], name: &str| ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Line { a, b },
         reversed: false,
