@@ -284,7 +284,11 @@ impl Feature for GearBody {
             taper: 0.0,
         };
         let recipe = if spec.helix_angle != 0.0 {
-            if self.herringbone && gap > 0.0 && !crate::helical::concentric_holes(&profile, &spec) {
+            if spec.kind == kmb_interchange::GearKind::External
+                && self.herringbone
+                && gap > 0.0
+                && !crate::helical::concentric_holes(&profile, &spec)
+            {
                 return Err(EvalError::Other(HELICAL_GROOVE_HOLES_UNSUPPORTED.into()));
             }
             crate::helical::recipe(
