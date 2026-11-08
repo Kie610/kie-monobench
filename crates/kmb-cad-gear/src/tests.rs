@@ -26,6 +26,16 @@ fn every_expression_field_is_listed_for_renaming() {
         root_round: Some("s".into()),
         bore: Some("s".into()),
         phase: Some("s".into()),
+        pulley_diameter: Some("s".into()),
+        pulley_width: Some("s".into()),
+        crown_height: Some("s".into()),
+        groove_count: Some("s".into()),
+        groove_angle: Some("s".into()),
+        groove_top_width: Some("s".into()),
+        groove_depth: Some("s".into()),
+        rope_diameter: Some("s".into()),
+        flange_height: Some("s".into()),
+
         chain_pitch: Some("s".into()),
         roller_diameter: Some("s".into()),
         chain_inner_width: Some("s".into()),
@@ -40,7 +50,7 @@ fn every_expression_field_is_listed_for_renaming() {
         outer_diameter: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 22);
+    assert_eq!(g.exprs_mut().len(), 31);
 }
 
 #[test]
@@ -382,6 +392,209 @@ fn hub_options_are_external_only_and_do_not_replace_other_profiles() {
             assert!(field.applies(&json!({"kind":"external"})), "{}", field.key);
             assert!(!field.applies(&json!({"kind":"internal"})), "{}", field.key);
             assert!(!field.applies(&json!({"kind":"rack"})), "{}", field.key);
+        }
+    }
+}
+
+#[test]
+fn pulley_profiles_contain_the_axis_and_curves_stay_perpendicular_to_it() {
+    use kmb_core::{Document, Edit, FeatureStatus, NullKernel};
+    for kind in [
+        GearKind::FlatPulley,
+        GearKind::VPulley,
+        GearKind::RopeSheave,
+    ] {
+        let mut reg = Registry::new();
+        register(&mut reg);
+        let mut doc = Document::new();
+        let data = serde_json::to_value(Gear {
+            kind,
+            plane: PlaneRef::OriginYz,
+            pulley_diameter: Some("80 mm".into()),
+            pulley_width: Some("30 mm".into()),
+            x: "7 mm".into(),
+            y: "11 mm".into(),
+            phase: Some("30 deg".into()),
+            ..Default::default()
+        })
+        .unwrap();
+        let id = doc
+            .apply_edits(
+                "輪郭",
+                vec![Edit::Insert {
+                    type_id: GEAR.into(),
+                    name: "車".into(),
+                    data,
+                }],
+            )
+            .unwrap()[0];
+        let report = doc.recompute(&reg, &NullKernel);
+        assert_eq!(report.error_count(), 0, "{report:?}");
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+            panic!("輪郭")
+        };
+        let profile = Profile::from_value(&outputs["profile"]).unwrap();
+        let curves = Curves::from_value(&outputs["curves"]).unwrap();
+        let spec = GearSpec::from_value(&outputs[GEAR_OUTPUT]).unwrap();
+        assert_eq!(spec.kind, kind);
+        assert_eq!(spec.module, 0.0);
+        assert_eq!(spec.teeth, 0);
+        assert_eq!(spec.pitch_radius, 40.0);
+        assert_eq!(profile.plane.y_axis, spec.axis.direction);
+        assert_eq!(profile.plane.origin, Plane::YZ.to_world([7.0, 11.0]));
+        assert!((spec.phase - 30f64.to_radians()).abs() < 1e-12);
+        for i in 0..3 {
+            let expected = Plane::YZ.x_axis[i] * 30f64.to_radians().cos()
+                + Plane::YZ.y_axis[i] * 30f64.to_radians().sin();
+            assert!((profile.plane.x_axis[i] - expected).abs() < 1e-12);
+        }
+        assert_eq!(curves.plane.normal(), spec.axis.direction);
+        assert_eq!(curves.segments.len(), 1);
+        assert!(matches!(curves.segments[0], Segment::Circle { .. }));
+        assert!(
+            kmb_core::warnings_of(outputs)
+                .iter()
+                .any(|s| s.contains("軸断面") && s.contains("2D"))
+        );
+    }
+}
+
+#[test]
+fn the_seven_integrated_kinds_keep_their_own_fields() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let fields = reg.descriptor(GEAR).unwrap();
+    for kind in [
+        GearKind::External,
+        GearKind::Internal,
+        GearKind::Rack,
+        GearKind::Sprocket,
+        GearKind::FlatPulley,
+        GearKind::VPulley,
+        GearKind::RopeSheave,
+    ] {
+        assert!(kinds::available(kind));
+        let data = json!({"kind":kind.key(),"rack_size":"teeth"});
+        let on = |key| fields.field_at(key).unwrap().applies(&data);
+        assert_eq!(
+            on("module"),
+            matches!(
+                kind,
+                GearKind::External | GearKind::Internal | GearKind::Rack
+            ),
+            "{kind:?}"
+        );
+        assert_eq!(on("teeth"), !kind.is_pulley(), "{kind:?}");
+        assert_eq!(
+            on("bore"),
+            matches!(kind, GearKind::External | GearKind::Sprocket) || kind.is_pulley(),
+            "{kind:?}"
+        );
+        assert_eq!(on("outer_diameter"), kind == GearKind::Internal, "{kind:?}");
+        assert_eq!(
+            on("lightening_count"),
+            kind == GearKind::External,
+            "{kind:?}"
+        );
+        assert_eq!(on("boss_diameter"), kind == GearKind::External, "{kind:?}");
+        assert_eq!(on("chain"), kind == GearKind::Sprocket, "{kind:?}");
+        assert!(!on("rack_length"), "歯数で指定するラックの長さは隠す");
+        assert_eq!(on("pulley_diameter"), kind.is_pulley(), "{kind:?}");
+        assert_eq!(on("groove_count"), kind == GearKind::VPulley, "{kind:?}");
+        assert_eq!(
+            on("rope_diameter"),
+            kind == GearKind::RopeSheave,
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
+fn every_integrated_outline_exports_finite_parts_in_the_same_placement() {
+    use kmb_core::{Document, Edit, FeatureStatus, NullKernel};
+    let mut reg = Registry::new();
+    register(&mut reg);
+    for kind in [
+        GearKind::External,
+        GearKind::Internal,
+        GearKind::Rack,
+        GearKind::Sprocket,
+        GearKind::FlatPulley,
+        GearKind::VPulley,
+        GearKind::RopeSheave,
+    ] {
+        let mut doc = Document::new();
+        let g = Gear {
+            kind,
+            teeth: "12".into(),
+            plane: PlaneRef::OriginYz,
+            outer_diameter: (kind == GearKind::Internal).then(|| "40 mm".into()),
+            x: "7 mm".into(),
+            y: "11 mm".into(),
+            phase: Some("30 deg".into()),
+            ..Default::default()
+        };
+        let id = doc
+            .apply_edits(
+                "輪郭",
+                vec![Edit::Insert {
+                    type_id: GEAR.into(),
+                    name: "輪郭".into(),
+                    data: serde_json::to_value(g).unwrap(),
+                }],
+            )
+            .unwrap()[0];
+        let report = doc.recompute(&reg, &NullKernel);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+            panic!("{kind:?}: {report:?}")
+        };
+        let profile = Profile::from_value(&outputs["profile"]).unwrap();
+        let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
+        if kind == GearKind::External {
+            assert_eq!(parts.rim.plane, profile.plane);
+            assert_eq!(parts.rim.regions[0].outer, profile.regions[0].outer);
+            assert!(
+                !parts.rim.regions[0].holes.is_empty(),
+                "リムの内側は腕に渡す"
+            );
+            let web = parts.web.as_ref().expect("平歯車の腕の領域");
+            assert_eq!(web.plane, profile.plane);
+            assert!(parts.boss.is_none());
+        } else {
+            assert_eq!(
+                parts.rim, profile,
+                "分割しない種類は全profileを渡す: {kind:?}"
+            );
+            assert!(parts.web.is_none() && parts.boss.is_none());
+        }
+        for placed in std::iter::once(&profile)
+            .chain(std::iter::once(&parts.rim))
+            .chain(parts.web.iter())
+            .chain(parts.boss.iter())
+        {
+            for edge in placed
+                .regions
+                .iter()
+                .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
+                .flat_map(|r| &r.edges)
+            {
+                assert!(
+                    edge.from_point()
+                        .into_iter()
+                        .chain(edge.to_point())
+                        .all(f64::is_finite),
+                    "{kind:?}"
+                );
+            }
+            assert!(
+                placed
+                    .plane
+                    .origin
+                    .into_iter()
+                    .chain(placed.plane.x_axis)
+                    .chain(placed.plane.y_axis)
+                    .all(f64::is_finite)
+            );
         }
     }
 }

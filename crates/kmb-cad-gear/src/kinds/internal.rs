@@ -163,6 +163,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
         e.name = format!("t{i}:{part}");
     }
     Ok(Outline {
+        axial: false,
         edges,
         reference: vec![
             ("pitch", [0.0, 0.0], r),

@@ -2,7 +2,9 @@
 //! `kinds/` に 1 ファイルを足す。形を作れない種類は「まだ作れない」誤りにする(黙って別の形にしない)。
 
 mod internal;
+pub mod pulley;
 pub mod rack;
+pub mod sheave;
 pub mod sprocket;
 mod spur;
 
@@ -13,6 +15,8 @@ use kmb_interchange::GearKind;
 /// 歯の形を決める値(長さは mm、角度はラジアン、係数はモジュールに対する割合)。
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Params {
+    pub pulley: Option<pulley::Pulley>,
+    pub sheave: Option<sheave::Sheave>,
     pub module: f64,
     pub teeth: u32,
     pub pressure_angle: f64,
@@ -32,6 +36,8 @@ pub struct Params {
 impl Default for Params {
     fn default() -> Self {
         Params {
+            pulley: None,
+            sheave: None,
             module: 1.0,
             teeth: 20,
             pressure_angle: 20f64.to_radians(),
@@ -53,6 +59,8 @@ pub const ROOT_ROUND: f64 = 0.38;
 /// 内歯は穴の境界で、機能が外径の円と組み合わせる。
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outline {
+    /// 軸を含む断面。ボディは押し出しでなく軸のまわりに回す。
+    pub axial: bool,
     pub edges: Vec<ProfileEdge>,
     pub reference: Vec<(&'static str, P2, f64)>,
     pub warnings: Vec<String>,
@@ -64,16 +72,22 @@ pub struct Outline {
 pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
     match kind {
         GearKind::External => spur::outline(p),
+        GearKind::FlatPulley => pulley::outline(p, false),
+        GearKind::VPulley => pulley::outline(p, true),
+        GearKind::RopeSheave => sheave::outline(p),
         GearKind::Sprocket => sprocket::outline(p),
         GearKind::Internal => internal::outline(p),
         GearKind::Rack => rack::outline(p),
         other => Err(format!(
-            "「{}」の形はまだ作れません(今作れるのは「{}」と「{}」と「{}」と「{}」です)",
+            "「{}」の形はまだ作れません(今作れるのは「{}」と「{}」と「{}」と「{}」と「{}」と「{}」と「{}」です)",
             other.label(),
             GearKind::External.label(),
             GearKind::Internal.label(),
             GearKind::Rack.label(),
-            GearKind::Sprocket.label()
+            GearKind::Sprocket.label(),
+            GearKind::FlatPulley.label(),
+            GearKind::VPulley.label(),
+            GearKind::RopeSheave.label()
         )),
     }
 }
@@ -82,6 +96,12 @@ pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
 pub fn available(kind: GearKind) -> bool {
     matches!(
         kind,
-        GearKind::External | GearKind::Internal | GearKind::Rack | GearKind::Sprocket
+        GearKind::External
+            | GearKind::Internal
+            | GearKind::Rack
+            | GearKind::Sprocket
+            | GearKind::FlatPulley
+            | GearKind::VPulley
+            | GearKind::RopeSheave
     )
 }

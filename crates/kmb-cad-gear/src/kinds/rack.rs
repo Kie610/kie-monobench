@@ -217,6 +217,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
         e.reversed = !e.reversed;
     }
     Ok(Outline {
+        axial: false,
         edges,
         reference: Vec::new(),
         reference_lines: vec![edge(
