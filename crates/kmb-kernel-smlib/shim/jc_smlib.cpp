@@ -1409,6 +1409,8 @@ int jc_face_distance(const JcBrep* brep, size_t face, const double p[3], double*
     });
 }
 
+static bool face_normal_at(SmFace* f, const SmPoint3d& p, SmVector3d& n);
+
 int jc_arc_edges(const JcBrep* brep, JcArcEdge** out, size_t* count)
 {
     *out = nullptr;
@@ -1501,9 +1503,21 @@ int jc_arc_edges(const JcBrep* brep, JcArcEdge** out, size_t* count)
             if (down == up)
                 continue;
             const SmVector3d rad = unit(sub3(mid, ctr));
-            const bool inside = on(fa, along(mid, rad, -d));
-            if (inside == on(fa, along(mid, rad, d)))
-                continue;
+            // 平面が円の内側か外側か。平面に垂直な曲面の外向きの法線は半径の向き(外か中心か)を向き、
+            // 出っ張りなら平面は法線と逆の側、引っ込みなら法線の側にある。平面の面は歯車では輪郭の辺を
+            // 全部縁に持ち、点が面の上かを聞くと縁を全部たどるので、法線で決まる時は聞かない
+            // (歯車のボディで円の辺の判定が debug で 6 秒かかっていた)。決まらない時だけ面に聞く
+            SmVector3d nr;
+            const double toward = face_normal_at(fb, mid, nr) ? dot(unit(nr), rad) : 0;
+            bool inside;
+            if (std::fabs(toward) > 0.5)
+                inside = down ? toward > 0 : toward < 0;
+            else
+            {
+                inside = on(fa, along(mid, rad, -d));
+                if (inside == on(fa, along(mid, rad, d)))
+                    continue;
+            }
             JcArcEdge o;
             o.f0 = uint32_t(face_index(faces, fa));
             o.f1 = uint32_t(face_index(faces, fb));

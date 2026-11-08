@@ -841,3 +841,29 @@ fn mass_is_computed_once_per_shape() {
         "2 回目は覚えた値を返す(1 回目 {once:?}、2 回目 {twice:?})"
     );
 }
+
+/// 画面は辺の当たり判定に、まっすぐな辺・円の辺・曲がった辺の順に聞く。曲がった辺は円の辺を除いて
+/// 求めるが、円の辺は形ごとに 1 度だけ数え、何度聞いても同じ辺を返す。
+#[test]
+fn arc_edges_are_counted_once_per_shape() {
+    let k = kernel();
+    let b = box_with_round_corner(&k, 3.0);
+    let before = k.arc_edge_passes();
+    let arcs = k.arc_edges(b).unwrap();
+    let curves = k.curve_edges(b).unwrap();
+    assert_eq!(
+        k.arc_edge_passes(),
+        before + 1,
+        "曲がった辺は円の辺の控えを使う"
+    );
+    assert_eq!(arcs.len(), 2, "丸めた角の上下の縁");
+    assert_eq!(k.arc_edges(b).unwrap().len(), arcs.len());
+    assert_eq!(k.curve_edges(b).unwrap().len(), curves.len());
+    assert_eq!(k.arc_edge_passes(), before + 1, "2 回目は数え直さない");
+    // 曲がった辺に円の辺は入らない(同じ辺を 2 本と数えない)
+    assert!(
+        curves
+            .iter()
+            .all(|c| !arcs.iter().any(|a| a.faces == c.faces))
+    );
+}
