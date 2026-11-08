@@ -67,6 +67,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
         line("bore", [b, p.width], [b, 0.0]),
     ]);
     Ok(Outline {
+        reference_lines: Vec::new(),
         edges,
         reference: vec![
             ("pitch", [0.0, 0.0], r),

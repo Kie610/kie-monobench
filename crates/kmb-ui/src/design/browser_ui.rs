@@ -870,10 +870,9 @@ impl Workspace {
             } else {
                 String::new()
             };
-            let worst = crate::timeline_ui::worst_health(
-                list.iter()
-                    .map(|f| Health::of(self.cur.work.report().feature(f.id))),
-            );
+            let worst = crate::timeline_ui::worst_health(list.iter().map(|f| {
+                Health::with_words(&self.win.words(), self.cur.work.report().feature(f.id))
+            }));
             // スケッチとボディのまとまりには、中をまとめて隠す目(中の行の目はそのまま残す)。
             // そのほかの機能(途中の形)は 3D のビューに出ないので目を付けない
             let folder_eye = matches!(kind, Kind::Sketch | Kind::Body);

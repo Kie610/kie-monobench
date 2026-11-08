@@ -278,7 +278,13 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setup": setup.0, "operations": ids.iter().map(|i| i.0).collect::<Vec<_>>()}),
+            {
+                let mut info = json!({"setup": setup.0, "operations": ids.iter().map(|i| i.0).collect::<Vec<_>>()});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &[&s]));
+                info
+            },
         ))
     }
 
@@ -300,7 +306,13 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setups": setups}),
+            {
+                let mut info = json!({"setups": setups});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &all.iter().collect::<Vec<_>>()));
+                info
+            },
         ))
     }
 
@@ -322,7 +334,13 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setup": setup.0, "tool_changes_before": before, "tool_changes_after": after}),
+            {
+                let mut info = json!({"setup": setup.0, "tool_changes_before": before, "tool_changes_after": after});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &[&s]));
+                info
+            },
         ))
     }
 

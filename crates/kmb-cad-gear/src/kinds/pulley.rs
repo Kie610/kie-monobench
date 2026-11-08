@@ -184,6 +184,7 @@ pub fn outline(p: &Params, v_groove: bool) -> Result<Outline, String> {
             at = to;
         }
         Ok(Outline {
+            reference_lines: Vec::new(),
             edges,
             reference: vec![
                 ("pitch", [0.0, 0.0], r),
@@ -228,6 +229,7 @@ pub fn outline(p: &Params, v_groove: bool) -> Result<Outline, String> {
         edges.push(line("end_finish", [r, p.width], [b, p.width]));
         edges.push(line("bore", [b, p.width], [b, 0.0]));
         Ok(Outline {
+            reference_lines: Vec::new(),
             edges,
             reference: vec![
                 ("pitch", [0.0, 0.0], r),
