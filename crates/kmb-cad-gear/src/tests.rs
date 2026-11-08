@@ -103,8 +103,15 @@ fn sprocket_outputs_chain_pitch_and_its_default_body_width() {
         assert!(spec.face_width.is_none());
         let profile = Profile::from_value(&outputs["profile"]).unwrap();
         let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
-        assert_eq!(parts.rim, profile);
-        assert!(parts.web.is_none() && parts.boss.is_none());
+        if spec.kind == GearKind::Sprocket {
+            assert_eq!(parts.rim, profile);
+            assert!(parts.web.is_none() && parts.boss.is_none());
+        } else {
+            assert_eq!(spec.kind, GearKind::External);
+            assert_eq!(parts.rim.regions[0].outer, profile.regions[0].outer);
+            assert_eq!(parts.rim.regions[0].holes.len(), 1);
+            assert!(parts.web.is_some() && parts.boss.is_none());
+        }
         if want_pitch == 12.7 {
             assert_eq!(profile.regions[0].holes.len(), 1);
             assert_eq!(profile.regions[0].holes[0].edges[0].name, "bore");
