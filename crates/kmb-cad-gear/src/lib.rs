@@ -19,7 +19,7 @@ pub mod hub;
 pub mod kinds;
 pub mod tooth;
 
-pub use body::{GEAR_BODY, GearBody};
+pub use body::{GEAR_BODY, GearBody, SpokeSection};
 pub use commands::{GEAR_ADD, GEAR_OUTLINE_ADD, GearCommands};
 pub use kinds::pulley::VSection;
 pub use kinds::sprocket::ChainSize;
@@ -53,6 +53,24 @@ pub enum RackSize {
     Teeth,
     /// 指定した全長に入るだけの歯
     Length,
+}
+
+/// ウェブの形。円板は軽くする穴、腕はリムとボスをつなぐ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WebForm {
+    #[default]
+    Disk,
+    Spokes,
+}
+
+/// 腕の中心線。曲がりは一つの円弧で指定する。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpokeCurve {
+    #[default]
+    Straight,
+    Curved,
 }
 
 /// 歯車の輪郭の機能のデータ。例: `{"plane": {"kind": "xy"}, "module": "2 mm", "teeth": "20"}`
@@ -135,6 +153,22 @@ pub struct Gear {
     pub key_width: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_depth: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub web_form: WebForm,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoke_count: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoke_root_width: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoke_tip_width: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub spoke_curve: SpokeCurve,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoke_curve_angle: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spoke_root_round: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rim_width: Option<String>,
     /// 内歯車の輪の外径(内歯車では必須)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outer_diameter: Option<String>,
@@ -210,6 +244,14 @@ impl Default for Gear {
             keyway: false,
             key_width: None,
             key_depth: None,
+            web_form: WebForm::Disk,
+            spoke_count: None,
+            spoke_root_width: None,
+            spoke_tip_width: None,
+            spoke_curve: SpokeCurve::Straight,
+            spoke_curve_angle: None,
+            spoke_root_round: None,
+            rim_width: None,
             outer_diameter: None,
             x: zero(),
             y: zero(),
@@ -243,6 +285,12 @@ impl Exprs for Gear {
                 &mut self.boss_diameter,
                 &mut self.key_width,
                 &mut self.key_depth,
+                &mut self.spoke_count,
+                &mut self.spoke_root_width,
+                &mut self.spoke_tip_width,
+                &mut self.spoke_curve_angle,
+                &mut self.spoke_root_round,
+                &mut self.rim_width,
                 &mut self.outer_diameter,
                 &mut self.phase,
                 &mut self.pulley_diameter,
@@ -462,7 +510,20 @@ impl Feature for Gear {
             Some(s) => vec![output(s, "points")],
             None => self.plane.inputs(),
         };
-        for i in expr_refs(self)? {
+        let mut active = self.clone();
+        if self.kind != GearKind::External {
+            active.rim_width = None;
+        }
+        if self.kind != GearKind::External || self.web_form != WebForm::Spokes {
+            active.spoke_count = None;
+            active.spoke_root_width = None;
+            active.spoke_tip_width = None;
+            active.spoke_curve_angle = None;
+            active.spoke_root_round = None;
+        } else if self.spoke_curve == SpokeCurve::Straight {
+            active.spoke_curve_angle = None;
+        }
+        for i in expr_refs(&active)? {
             if !out.contains(&i) {
                 out.push(i);
             }
@@ -522,6 +583,36 @@ impl Feature for Gear {
         }
         let optional_length =
             |src: &Option<String>, what| given(src).map(|s| length(ctx, s, what)).transpose();
+        let spokes = if self.kind == GearKind::External && self.web_form == WebForm::Spokes {
+            let count = ratio(ctx, &self.spoke_count, "腕の数", 5.0)?;
+            if !count.is_finite()
+                || !(3.0..=12.0).contains(&count)
+                || (count - count.round()).abs() > 1e-9
+            {
+                return Err(EvalError::InvalidData(
+                    "腕の数は 3 から 12 までの整数にしてください".into(),
+                ));
+            }
+            let boss_radius =
+                optional_length(&self.boss_diameter, "ボスの外径")?.unwrap_or(0.0) / 2.0;
+            let root_width = optional_length(&self.spoke_root_width, "付け根の幅")?
+                .unwrap_or(0.9 * boss_radius * (std::f64::consts::PI / count).sin());
+            Some(hub::spokes::Params {
+                count: count.round() as u32,
+                root_width,
+                tip_width: optional_length(&self.spoke_tip_width, "先の幅")?
+                    .unwrap_or(0.75 * root_width),
+                angle: if self.spoke_curve == SpokeCurve::Curved {
+                    given(&self.spoke_curve_angle)
+                        .map_or(Ok(30f64.to_radians()), |s| angle(ctx, s, "曲がりの角"))?
+                } else {
+                    0.0
+                },
+                round: optional_length(&self.spoke_root_round, "付け根の丸み")?.unwrap_or(0.0),
+            })
+        } else {
+            None
+        };
         let hub_params = hub::Params {
             count: hole_count.round() as u32,
             hole_diameter: optional_length(&self.lightening_diameter, "軽くする穴の径")?
@@ -532,6 +623,12 @@ impl Feature for Gear {
             keyway: self.keyway,
             key_width: optional_length(&self.key_width, "キー溝の幅")?,
             key_depth: optional_length(&self.key_depth, "キー溝の深さ")?,
+            rim_width: if self.kind == GearKind::External {
+                optional_length(&self.rim_width, "リムの縁の幅")?.unwrap_or(0.0)
+            } else {
+                0.0
+            },
+            spokes,
         };
         let layout = if shape.axial {
             if hub_params != hub::Params::default() {
@@ -556,6 +653,7 @@ impl Feature for Gear {
                     rim: profile.clone(),
                     web: None,
                     boss: None,
+                    spokes: None,
                 },
                 profile,
             }
@@ -589,7 +687,7 @@ impl Feature for Gear {
             }
             // 内歯の穴とラック・鎖車の有限な輪郭を、分割せずボディへ渡す。
             let profile = Profile { plane: Plane::XY, regions: vec![Region { outer, holes }] };
-            hub::Layout { parts: hub::Parts { rim: profile.clone(), web: None, boss: None }, profile }
+            hub::Layout { parts: hub::Parts { rim: profile.clone(), web: None, boss: None, spokes: None }, profile }
         }.placed(plane, phase, center)
         };
         let segments: Vec<Segment> = if shape.axial {
@@ -720,9 +818,17 @@ pub fn register(reg: &mut Registry) {
             .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38").only("kind", "external|internal|rack", "external"))
             .field(Field::opt_expr("bore", "軸の穴の径").length().only("kind", "external|sprocket|flat_pulley|v_pulley|rope_sheave", "external").help("空か 0 なら穴なし"))
             .field(Field::expr("outer_diameter", "輪の外径").length().only("kind", "internal", "external").help("内歯車で必須。歯底円の径 + モジュールの 2 倍以上"))
-            .field(Field::opt_expr("lightening_count", "軽くする穴の数").unitless().step(1.0, 0.0).help("空か 0 なら穴なし").only("kind", "external", "external"))
-            .field(Field::opt_expr("lightening_diameter", "軽くする穴の径").length().only("kind", "external", "external"))
-            .field(Field::opt_expr("lightening_circle", "穴を並べる円の径").length().only("kind", "external", "external"))
+            .field(Field::choice("web_form", "ウェブの形", &[("disk", "円板"), ("spokes", "腕")]).only("kind", "external", "external").help("腕は正のボスの外径が必要。軽くする穴とは同時に使わない"))
+            .field(Field::opt_expr("spoke_count", "腕の数").unitless().step(1.0,3.0).only("kind","external","external").and_only("web_form","spokes","disk").help("空なら 5。3〜12 の整数"))
+            .field(Field::opt_expr("spoke_root_width", "付け根の幅").length().only("kind","external","external").and_only("web_form","spokes","disk").help("空ならボスの外径と腕の数から決める。腕の中心線の始点で測る"))
+            .field(Field::opt_expr("spoke_tip_width", "先の幅").length().only("kind","external","external").and_only("web_form","spokes","disk").help("空なら付け根の幅の 0.75 倍。中心線の終点で測る"))
+            .field(Field::choice("spoke_curve", "腕の曲がり", &[("straight","まっすぐ"),("curved","曲がり")]).only("kind","external","external").and_only("web_form","spokes","disk"))
+            .field(Field::opt_expr("spoke_curve_angle", "曲がりの角").angle().only("kind","external","external").and_only("web_form","spokes","disk").and_only("spoke_curve","curved","straight").help("中心線の円弧の角。空なら 30 deg、0 ならまっすぐ。符号で曲がる側を選ぶ"))
+            .field(Field::opt_expr("spoke_root_round", "付け根の丸み").length().only("kind","external","external").and_only("web_form","spokes","disk").help("空か 0 なら無し。平面の輪郭で付け根をふくらませる半径"))
+            .field(Field::opt_expr("rim_width", "リムの縁の幅").length().only("kind","external","external").help("空か 0 は追加補強無しで既存のモジュール 1 個分の帯を残す。正の値は歯底円から測る全帯幅で、そのまま使う"))
+            .field(Field::opt_expr("lightening_count", "軽くする穴の数").unitless().step(1.0, 0.0).help("空か 0 なら穴なし").only("kind", "external", "external").and_only("web_form", "disk", "disk"))
+            .field(Field::opt_expr("lightening_diameter", "軽くする穴の径").length().only("kind", "external", "external").and_only("web_form", "disk", "disk"))
+            .field(Field::opt_expr("lightening_circle", "穴を並べる円の径").length().only("kind", "external", "external").and_only("web_form", "disk", "disk"))
             .field(Field::opt_expr("boss_diameter", "ボスの外径").length().help("空か 0 ならボスなし").only("kind", "external", "external"))
             .field(Field::bool("keyway", "キー溝").only("kind", "external", "external"))
             .field(Field::opt_expr("key_width", "キー溝の幅").length().help("空なら軸の穴の径で表から選ぶ").only("kind", "external", "external"))

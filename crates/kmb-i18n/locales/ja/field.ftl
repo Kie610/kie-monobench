@@ -2386,3 +2386,22 @@ field-cad-gear-rope-diameter-help = 空なら 10 mm
 field-cad-gear-flange-height = 縁の高さ
 
 field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ
+
+# Spoke outline and body section
+field-cad-gear-web-form = ウェブの形
+field-cad-gear-web-form-help = 腕は正のボスの外径が必要。軽くする穴とは同時に使わない
+field-cad-gear-spoke-count = 腕の数
+field-cad-gear-spoke-count-help = 空なら 5。3〜12 の整数
+field-cad-gear-spoke-root-width = 付け根の幅
+field-cad-gear-spoke-root-width-help = 空ならボスの外径と腕の数から決める。腕の中心線の始点で測る
+field-cad-gear-spoke-tip-width = 先の幅
+field-cad-gear-spoke-tip-width-help = 空なら付け根の幅の 0.75 倍。中心線の終点で測る
+field-cad-gear-spoke-curve = 腕の曲がり
+field-cad-gear-spoke-curve-angle = 曲がりの角
+field-cad-gear-spoke-curve-angle-help = 中心線の円弧の角。空なら 30 deg、0 ならまっすぐ。符号で曲がる側を選ぶ
+field-cad-gear-spoke-root-round = 付け根の丸み
+field-cad-gear-spoke-root-round-help = 空か 0 なら無し。平面の輪郭で付け根をふくらませる半径
+field-cad-gear-rim-width = リムの縁の幅
+field-cad-gear-rim-width-help = 空か 0 は追加補強無しで既存のモジュール 1 個分の帯を残す。正の値は歯底円から測る全帯幅で、そのまま使う
+field-cad-gear-body-spoke-section = 腕の断面
+field-cad-gear-body-spoke-section-help = 腕用。長方形は厚さ一定。楕円と十字は幅と厚さを同じ比で変え、先の厚さは腕の厚さ × 先の幅 / 付け根の幅。腕のある輪郭を選ぶ。楕円と十字の交差には未対応。新しいボディとして作る

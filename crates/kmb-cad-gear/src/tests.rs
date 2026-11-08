@@ -598,3 +598,87 @@ fn every_integrated_outline_exports_finite_parts_in_the_same_placement() {
         }
     }
 }
+
+#[test]
+fn old_data_keeps_default_disk_and_rectangle_without_new_serialized_keys() {
+    let g: Gear = serde_json::from_value(json!({"module":"2 mm","teeth":"24"})).unwrap();
+    let value = serde_json::to_value(g).unwrap();
+    for key in [
+        "web_form",
+        "spoke_count",
+        "spoke_root_width",
+        "spoke_tip_width",
+        "spoke_curve",
+        "spoke_curve_angle",
+        "spoke_root_round",
+        "rim_width",
+    ] {
+        assert!(value.get(key).is_none(), "{key}");
+    }
+    let body: GearBody = serde_json::from_value(json!({"gear":3})).unwrap();
+    assert_eq!(body.spoke_section, SpokeSection::Rectangle);
+    assert!(
+        serde_json::to_value(body)
+            .unwrap()
+            .get("spoke_section")
+            .is_none()
+    );
+    // Inactive arm expressions must not change any of the seven outline kinds.
+    for kind in GearKind::ALL
+        .into_iter()
+        .filter(|kind| kinds::available(*kind))
+    {
+        let mut legacy = Gear {
+            kind,
+            ..Default::default()
+        };
+        if kind == GearKind::Internal {
+            legacy.outer_diameter = Some("40 mm".into());
+        }
+        let mut inactive = legacy.clone();
+        inactive.spoke_count = Some("hidden_count".into());
+        inactive.spoke_root_width = Some("hidden_width".into());
+        inactive.spoke_tip_width = Some("hidden_tip".into());
+        inactive.spoke_curve = SpokeCurve::Curved;
+        inactive.spoke_curve_angle = Some("hidden_angle".into());
+        inactive.spoke_root_round = Some("hidden_round".into());
+        let evaluate = |gear: Gear| {
+            let mut doc = kmb_core::Document::new();
+            let mut reg = Registry::new();
+            register(&mut reg);
+            let id = doc
+                .apply_edits(
+                    "輪郭",
+                    vec![kmb_core::Edit::Insert {
+                        type_id: GEAR.into(),
+                        name: "輪郭".into(),
+                        data: serde_json::to_value(gear).unwrap(),
+                    }],
+                )
+                .unwrap()[0];
+            let report = doc.recompute(&reg, &kmb_core::NullKernel);
+            assert_eq!(report.error_count(), 0, "{kind:?}: {report:?}");
+            let kmb_core::FeatureStatus::Ok { outputs, .. } = report.feature(id).unwrap() else {
+                unreachable!()
+            };
+            let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
+            assert!(parts.spokes.is_none());
+            outputs.clone()
+        };
+        assert_eq!(evaluate(legacy), evaluate(inactive), "{kind:?}");
+    }
+}
+
+#[test]
+fn hidden_spoke_expressions_do_not_create_inputs_but_remain_renameable() {
+    let mut gear = Gear {
+        spoke_root_width: Some("not_defined".into()),
+        spoke_curve_angle: Some("also_missing".into()),
+        ..Default::default()
+    };
+    assert!(gear.inputs().unwrap().is_empty());
+    let changed = gear.rename_param("not_defined", "width").unwrap().unwrap();
+    assert_eq!(changed["spoke_root_width"], "width");
+    gear.web_form = WebForm::Spokes;
+    assert!(!gear.inputs().unwrap().is_empty());
+}

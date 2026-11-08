@@ -650,3 +650,401 @@ fn an_axial_pulley_section_keeps_the_world_axis_when_parts_are_also_exported() {
         "{mass:?}"
     );
 }
+
+/// Actual-kernel coverage for the new arms; geometry is generated through the normal features.
+fn spoke_volume(section: kmb_cad_gear::SpokeSection, angle: f64, round: f64) -> f64 {
+    let k = TestKernel::new();
+    assert!(!k.is_truck(), "SMLib actual-shape helper");
+    let mut b = DocBuilder::new();
+    let g = b.feature(
+        kmb_cad_gear::GEAR,
+        "腕の歯車",
+        kmb_cad_gear::Gear {
+            module: "2 mm".into(),
+            teeth: "24".into(),
+            bore: Some("6 mm".into()),
+            boss_diameter: Some("16 mm".into()),
+            web_form: kmb_cad_gear::WebForm::Spokes,
+            spoke_count: Some("5".into()),
+            spoke_root_width: Some("2 mm".into()),
+            spoke_tip_width: Some("1.5 mm".into()),
+            spoke_curve: kmb_cad_gear::SpokeCurve::Curved,
+            spoke_curve_angle: Some(format!("{angle} deg")),
+            spoke_root_round: Some(format!("{round} mm")),
+            ..Default::default()
+        },
+    );
+    let e = b.feature(
+        kmb_cad_gear::GEAR_BODY,
+        "腕の立体",
+        kmb_cad_gear::GearBody {
+            width: "6 mm".into(),
+            web: Some("3 mm".into()),
+            boss: Some("10 mm".into()),
+            spoke_section: section,
+            ..kmb_cad_gear::GearBody::new(g)
+        },
+    );
+    let mut doc = b.finish("腕の断面");
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let mass = final_mass(&mut doc, &k);
+    assert!(mass.volume.is_finite() && mass.volume > 0.0);
+    let FeatureStatus::Ok { outputs, .. } = report.feature(e).unwrap() else {
+        unreachable!()
+    };
+    let recipe = kmb_cad::Recipe::from_value(&outputs["recipe"]).unwrap();
+    let expected = independent_spoke_union_volume(&k, &recipe, section);
+    assert!(
+        close(mass.volume, expected, 2e-3),
+        "{section:?}/{angle}/{round}: assembled {} vs independently summed/overlap-subtracted {expected}",
+        mass.volume
+    );
+    mass.volume
+}
+#[test]
+fn rectangular_elliptic_and_cross_spokes_have_distinct_positive_actual_volumes() {
+    if TestKernel::new().is_truck() {
+        assert_truck_spoke_sweep_is_unsupported();
+        kmb_contract::skip!("truck は断面を相似に変える腕の Sweep に未対応");
+    }
+    use kmb_cad_gear::SpokeSection::{Cross, Ellipse, Rectangle};
+    assert_swept_spoke_volume_and_connected_overlap();
+    for angle in [0.0, 30.0] {
+        let rectangle = spoke_volume(Rectangle, angle, 0.0);
+        let ellipse = spoke_volume(Ellipse, angle, 0.0);
+        let cross = spoke_volume(Cross, angle, 0.0);
+        assert!(
+            cross < ellipse && ellipse < rectangle,
+            "cross {cross}, ellipse {ellipse}, rectangle {rectangle}"
+        );
+        if angle == 0.0 {
+            for (section, volume) in [(Rectangle, rectangle), (Ellipse, ellipse), (Cross, cross)] {
+                assert_spoke_target_operations(section, volume);
+            }
+        }
+    }
+}
+#[test]
+fn root_rounding_increases_actual_volume_for_all_three_sections() {
+    if TestKernel::new().is_truck() {
+        assert_truck_spoke_sweep_is_unsupported();
+        kmb_contract::skip!("truck は断面を相似に変える腕の Sweep に未対応");
+    }
+    use kmb_cad_gear::SpokeSection::{Cross, Ellipse, Rectangle};
+    for section in [Rectangle, Ellipse, Cross] {
+        assert!(
+            spoke_volume(section, 30.0, 0.5) > spoke_volume(section, 30.0, 0.0),
+            "{section:?}"
+        );
+    }
+}
+
+fn assert_swept_spoke_volume_and_connected_overlap() {
+    use kmb_cad_gear::SpokeSection::{Cross, Ellipse};
+    let k = TestKernel::new();
+    for section in [Ellipse, Cross] {
+        for angle in [0.0, 30.0] {
+            let mut b = DocBuilder::new();
+            let g = b.feature(
+                kmb_cad_gear::GEAR,
+                "腕の輪郭",
+                kmb_cad_gear::Gear {
+                    module: "2 mm".into(),
+                    teeth: "24".into(),
+                    boss_diameter: Some("16 mm".into()),
+                    web_form: kmb_cad_gear::WebForm::Spokes,
+                    spoke_count: Some("5".into()),
+                    spoke_root_width: Some("2 mm".into()),
+                    spoke_tip_width: Some("1.5 mm".into()),
+                    spoke_curve: kmb_cad_gear::SpokeCurve::Curved,
+                    spoke_curve_angle: Some(format!("{angle} deg")),
+                    ..Default::default()
+                },
+            );
+            let e = b.feature(
+                kmb_cad_gear::GEAR_BODY,
+                "腕の立体",
+                kmb_cad_gear::GearBody {
+                    width: "6 mm".into(),
+                    web: Some("3 mm".into()),
+                    spoke_section: section,
+                    ..kmb_cad_gear::GearBody::new(g)
+                },
+            );
+            let mut doc = b.finish("断面積と体積");
+            let report = doc.recompute(&registry(), &*k);
+            assert_ok(&report);
+            let FeatureStatus::Ok { outputs, .. } = report.feature(e).unwrap() else {
+                unreachable!()
+            };
+            let kmb_cad::Recipe::Many { parts } =
+                kmb_cad::Recipe::from_value(&outputs["recipe"]).unwrap()
+            else {
+                panic!("compound")
+            };
+            let extruded: Vec<_> = parts
+                .iter()
+                .filter_map(|recipe| {
+                    if let kmb_cad::Recipe::Extrude {
+                        profile, from, to, ..
+                    } = recipe
+                    {
+                        Some(k.extrude(profile, *from, *to, "connection").unwrap())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            assert_eq!(extruded.len(), 2, "rim and boss");
+            let mut tested = 0;
+            for recipe in parts {
+                let kmb_cad::Recipe::Sweep {
+                    profile,
+                    path,
+                    twist,
+                    scale,
+                    ..
+                } = recipe
+                else {
+                    continue;
+                };
+                let length: f64 = path
+                    .edges
+                    .iter()
+                    .map(|e| match e.segment {
+                        kmb_core::Segment::Line { a, b } => (b[0] - a[0]).hypot(b[1] - a[1]),
+                        kmb_core::Segment::Arc {
+                            radius, start, end, ..
+                        } => radius * (end - start),
+                        _ => panic!("one line or arc"),
+                    })
+                    .sum();
+                let section_area = match section {
+                    Ellipse => std::f64::consts::PI * 2.0 * 3.0 / 4.0,
+                    Cross => 5.0 * 2.0 * 3.0 / 9.0,
+                    _ => unreachable!(),
+                };
+                let expected = section_area * length * (1.0 + 0.75 + 0.75 * 0.75) / 3.0;
+                assert_eq!(scale, 0.75);
+                assert_eq!(twist, 0.0);
+                let shape = k
+                    .sweep(&profile, &path, twist, scale, "section-volume")
+                    .unwrap();
+                let actual = k.mass(shape).unwrap().volume;
+                // Positive intersection with each independently extruded neighbor proves
+                // volumetric connection, rather than just one compound output handle.
+                for neighbor in &extruded {
+                    let overlap = k
+                        .boolean(kmb_core::BooleanOp::Intersect, shape, *neighbor)
+                        .unwrap();
+                    let overlap_volume = k.mass(overlap).unwrap().volume;
+                    assert!(
+                        overlap_volume.is_finite() && overlap_volume > 1e-6,
+                        "{section:?}/{angle}: arm must overlap rim and boss, got {overlap_volume}"
+                    );
+                }
+                assert!(
+                    close(actual, expected, 2e-3),
+                    "{section:?}/{angle}: {actual} vs {expected}"
+                );
+                tested += 1;
+            }
+            assert_eq!(tested, 5);
+        }
+    }
+}
+
+fn assert_truck_spoke_sweep_is_unsupported() {
+    let k = TestKernel::new();
+    assert!(k.is_truck());
+    let profile = Profile {
+        plane: kmb_core::Plane::YZ,
+        regions: vec![kmb_core::Region {
+            outer: kmb_core::ProfileLoop {
+                edges: vec![kmb_core::ProfileEdge {
+                    name: "section".into(),
+                    segment: kmb_core::Segment::Circle {
+                        center: [0.0; 2],
+                        radius: 1.0,
+                    },
+                    reversed: false,
+                }],
+            },
+            holes: vec![],
+        }],
+    };
+    let path = kmb_core::PlanarPath {
+        plane: kmb_core::Plane::XY,
+        edges: vec![kmb_core::ProfileEdge {
+            name: "path".into(),
+            segment: kmb_core::Segment::Line {
+                a: [0.0; 2],
+                b: [10.0, 0.0],
+            },
+            reversed: false,
+        }],
+    };
+    assert!(matches!(
+        k.sweep(&profile, &path, 0.0, 0.75, "spoke-backend"),
+        Err(kmb_core::KernelError::Unsupported(_))
+    ));
+}
+
+/// The ring, boss and root pads have disjoint interiors. Distinct arms occupy
+/// disjoint angular sectors. Pads are outside the boss and inside the rim's hole,
+/// so there are no triple intersections. Only sweep/extrusion pairs overlap.
+/// This uses intersection, not union, to subtract the shared volume.
+fn independent_spoke_union_volume(
+    k: &TestKernel,
+    recipe: &kmb_cad::Recipe,
+    section: kmb_cad_gear::SpokeSection,
+) -> f64 {
+    let kmb_cad::Recipe::Many { parts } = recipe else {
+        panic!("different-thickness parts")
+    };
+    let mut expected = 0.0;
+    let mut extrusions = Vec::new();
+    let mut sweeps = Vec::new();
+    for part in parts {
+        match part {
+            kmb_cad::Recipe::Extrude {
+                profile, from, to, ..
+            } => {
+                expected += area(profile) * (to - from);
+                extrusions.push(
+                    k.extrude(profile, *from, *to, "union-oracle-extrusion")
+                        .unwrap(),
+                );
+            }
+            kmb_cad::Recipe::Sweep {
+                profile,
+                path,
+                twist,
+                scale,
+                ..
+            } => {
+                let length: f64 = path
+                    .edges
+                    .iter()
+                    .map(|e| match e.segment {
+                        kmb_core::Segment::Line { a, b } => (b[0] - a[0]).hypot(b[1] - a[1]),
+                        kmb_core::Segment::Arc {
+                            radius, start, end, ..
+                        } => radius * (end - start),
+                        _ => panic!("one line or arc"),
+                    })
+                    .sum();
+                let root_area = match section {
+                    kmb_cad_gear::SpokeSection::Ellipse => std::f64::consts::PI * 2.0 * 3.0 / 4.0,
+                    kmb_cad_gear::SpokeSection::Cross => 5.0 * 2.0 * 3.0 / 9.0,
+                    _ => panic!("swept section"),
+                };
+                expected += root_area * length * (1.0 + scale + scale * scale) / 3.0;
+                sweeps.push(
+                    k.sweep(profile, path, *twist, *scale, "union-oracle-arm")
+                        .unwrap(),
+                );
+            }
+            _ => panic!("extrusion or sweep"),
+        }
+    }
+    for arm in sweeps {
+        for neighbor in &extrusions {
+            let overlap = k
+                .boolean(kmb_core::BooleanOp::Intersect, arm, *neighbor)
+                .unwrap();
+            let volume = k.mass(overlap).unwrap().volume;
+            assert!(
+                volume.is_finite() && volume > 1e-6,
+                "positive-volume arm connection: {volume}"
+            );
+            expected -= volume;
+        }
+    }
+    assert!(expected.is_finite() && expected > 0.0);
+    expected
+}
+
+fn assert_spoke_target_operations(section: kmb_cad_gear::SpokeSection, new_volume: f64) {
+    use super::tests::rect_sketch;
+    use super::{Direction, EXTRUDE, Extrude, Operation};
+    for operation in [Operation::Join, Operation::Cut, Operation::Intersect] {
+        let k = TestKernel::new();
+        let mut b = DocBuilder::new();
+        let sk = rect_sketch(
+            &mut b,
+            kmb_sketch::SketchPlane::Xy,
+            -40.0,
+            -40.0,
+            80.0,
+            80.0,
+        );
+        let stock = b.feature(
+            EXTRUDE,
+            "材料",
+            Extrude {
+                profile: Some(sk),
+                distance: "30 mm".into(),
+                direction: Direction::Symmetric,
+                ..Default::default()
+            },
+        );
+        let g = b.feature(
+            kmb_cad_gear::GEAR,
+            "腕の輪郭",
+            kmb_cad_gear::Gear {
+                module: "2 mm".into(),
+                teeth: "24".into(),
+                bore: Some("6 mm".into()),
+                boss_diameter: Some("16 mm".into()),
+                web_form: kmb_cad_gear::WebForm::Spokes,
+                spoke_count: Some("5".into()),
+                spoke_root_width: Some("2 mm".into()),
+                spoke_tip_width: Some("1.5 mm".into()),
+                ..Default::default()
+            },
+        );
+        let intersection = operation == Operation::Intersect;
+        let e = b.feature(
+            kmb_cad_gear::GEAR_BODY,
+            "材料との演算",
+            kmb_cad_gear::GearBody {
+                width: "6 mm".into(),
+                web: (!intersection).then(|| "3 mm".into()),
+                boss: (!intersection).then(|| "10 mm".into()),
+                spoke_section: section,
+                operation,
+                target: Some(stock),
+                ..kmb_cad_gear::GearBody::new(g)
+            },
+        );
+        let mut doc = b.finish("腕と材料");
+        let report = doc.recompute(&registry(), &*k);
+        if intersection && section != kmb_cad_gear::SpokeSection::Rectangle {
+            let status = &report.feature(e).unwrap();
+            assert!(matches!(status, FeatureStatus::Error { .. }), "{status:?}");
+            assert!(format!("{status:?}").contains("新しいボディ"));
+            continue;
+        }
+        assert_ok(&report);
+        let expected = match operation {
+            Operation::Join => 80.0 * 80.0 * 30.0,
+            Operation::Cut => 80.0 * 80.0 * 30.0 - new_volume,
+            Operation::Intersect => {
+                let FeatureStatus::Ok { outputs, .. } = report.feature(g).unwrap() else {
+                    unreachable!()
+                };
+                area(&Profile::from_value(&outputs["profile"]).unwrap()) * 6.0
+            }
+            _ => unreachable!(),
+        };
+        let mass = final_mass(&mut doc, &k);
+        assert!(
+            close(mass.volume, expected, 2e-3),
+            "{section:?}/{operation:?}: {} vs {expected}",
+            mass.volume
+        );
+    }
+}
