@@ -168,7 +168,7 @@ fn analytic_intersections_reject_crossing_lines_and_arcs_but_not_separated_arcs(
                 let a = TAU * i as f64 / 4.0;
                 let b = TAU * (i + 1) as f64 / 4.0;
                 ProfileEdge {
-                curve: None,
+                    curve: None,
                     name: format!("quarter:{i}"),
                     segment: Segment::Arc {
                         center,
