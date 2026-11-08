@@ -38,7 +38,7 @@ fn args(body: bool) -> Vec<Arg> {
     v.extend([
         Arg::vector("point", "中心(世界座標の mm。省くと平面の原点か面の代表点)"),
         Arg::choice("kind", "歯車の種類", &kinds).default(GearKind::External.key()),
-        Arg::length("module", "モジュール(ピッチ円の径 = モジュール × 歯数)").default(1.0),
+        Arg::length("module", "モジュール。外歯・内歯は歯直角の値で、ピッチ円の径 = モジュール × 歯数 / cos(ねじれ角)").default(1.0),
         Arg::integer("teeth", "歯数(平歯車は 3 以上、ラックは 1 以上)").default(20),
         Arg::choice(
             "rack_size",
@@ -49,7 +49,7 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::length("rack_length", "ラックの全長(長さ指定の時に必須)"),
         Arg::length("rack_back", "ラックの背の厚さ(省くとモジュールの 2 倍)"),
         Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
-        Arg::angle("pressure_angle", "圧力角").default(20.0),
+        Arg::angle("pressure_angle", "圧力角(外歯・内歯は歯直角の値)").default(20.0),
         Arg::angle("helix_angle", "ねじれ角(省くと平歯車)"),
         Arg::choice("hand", "ねじれの向き", &[("right", "右"), ("left", "左")]).default("right"),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
