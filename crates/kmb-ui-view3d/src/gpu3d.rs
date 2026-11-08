@@ -29,6 +29,9 @@ const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 const AO_RADIUS: f32 = 0.065;
 const AO_STRENGTH: f32 = 1.0;
 const AO_SAMPLES: f32 = 32.0;
+/// 回す・動かす間の入り隅の陰の標本の数(描画の設定の「動かす間は軽く」が入っている時。止まると
+/// [`AO_SAMPLES`] へ戻す。数だけを替え、描く先は作り直さない(作り直すとちらつく))
+const AO_SAMPLES_MOVING: f32 = 8.0;
 const AO_BIAS: f32 = 0.05;
 /// GPU の描画の道具一式。egui の文脈に 1 つだけ置く([`install`])。
 pub struct Gpu {
@@ -513,6 +516,7 @@ impl Gpu {
         guides: Guides,
         ghosts: &[Ghost],
         behind: &Behind,
+        moving: bool,
     ) -> egui::TextureId {
         let size = [size[0].max(1) as u32, size[1].max(1) as u32];
         let settings = crate::render::current();
@@ -552,6 +556,9 @@ impl Gpu {
         let ao = settings.ao && shading.faces() && self.ao_pos.is_some();
         if ao {
             u.ao[1] = AO_STRENGTH;
+            if moving && settings.dynamic {
+                u.ao[2] = AO_SAMPLES_MOVING;
+            }
         }
         self.env
             .decal_keys
@@ -2025,6 +2032,9 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+#[path = "ao_bench_tests.rs"]
+mod ao_bench_tests;
 #[cfg(test)]
 #[path = "section_gpu_tests.rs"]
 mod section_gpu_tests;
