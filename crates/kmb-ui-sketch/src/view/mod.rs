@@ -255,7 +255,10 @@ pub(crate) fn sketch_view(
     let shift = ui.input(|i| i.modifiers.shift);
     let mut wants = snap_wants(editor.tool);
     wants.crossings &= !ctrl;
-    let mut aug = crate::snap::augment(sketch, sol, refs, wants);
+    let crossings = wants
+        .crossings
+        .then(|| editor.infer.crossings.get(sketch, sol));
+    let mut aug = crate::snap::augment_with_crossings(sketch, sol, refs, wants, crossings);
     if editor.tool == Tool::Line
         && !ctrl
         && !editor.hud.pinned()
@@ -589,12 +592,13 @@ pub(crate) fn sketch_view(
         .hover_pos()
         .filter(|_| editor.tool == Tool::Select && !busy)
         .and_then(|p| crate::marks::at(&state.marks, p));
-    let lit: Vec<EntityId> = [mark_hover, editor.picked_constraint]
+    let mut lit: Vec<EntityId> = [mark_hover, editor.picked_constraint]
         .into_iter()
         .flatten()
         .filter_map(|id| base_sketch.constraints.iter().find(|c| c.id == id))
         .flat_map(|c| crate::marks::members(base_sketch, &c.kind))
         .collect();
+    lit.extend(editor.freedom.highlights());
     let hovered = if mark_hover.is_some() { None } else { hovered };
     if editor.tool == Tool::Select {
         let icon = match &editor.drag {

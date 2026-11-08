@@ -73,8 +73,42 @@ impl Session {
     }
 
     /// 許したフォルダの中のパスにする。外を指すもの(`..` やリンクで出るものも)は断る。
-    fn resolve(&self, path: &str) -> Result<PathBuf, String> {
-        self.roots.resolve(path)
+    /// 許しの外でも、人が画面で開いている文書のフォルダの中なら、そのフォルダを許して通す
+    /// ([`Self::with_screen_folder`])。
+    fn resolve(&mut self, path: &str) -> Result<PathBuf, String> {
+        self.roots
+            .resolve(path)
+            .or_else(|e| self.with_screen_folder(e, |r| r.resolve(path)))
+    }
+
+    /// 許しの外で断る前に、人が画面の今のタブで開いている文書のフォルダを足して `f` をやり直す。
+    /// 通ればそのフォルダを AI をつないでいる間だけ許す(その回だけ自動で許す)。通らなければ
+    /// 許しを変えず、初めの誤り `refused` を返す(フォルダが広すぎて許せない時は、そのわけも添える)。
+    fn with_screen_folder<T>(
+        &mut self,
+        refused: String,
+        f: impl FnOnce(&Roots) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let Some(file) = self
+            .data_dir
+            .as_deref()
+            .and_then(kmb_session::live::open_document)
+        else {
+            return Err(refused);
+        };
+        let mut r = self.roots.clone();
+        if let Err(why) = r.allow_document_folder(&file) {
+            return Err(format!("{refused}。{why}"));
+        }
+        let out = f(&r).map_err(|_| refused)?;
+        if r != self.roots {
+            log::info!(
+                "画面で開いた文書 {} のフォルダを、AI をつないでいる間だけ許した",
+                file.display()
+            );
+            self.roots = r;
+        }
+        Ok(out)
     }
 
     /// クラッシュ報告。`name` を省くと一覧(新しい順)、指すとその報告の中身。
@@ -100,8 +134,8 @@ impl Session {
 
     pub fn open(&mut self, path: &str) -> Reply {
         let p = self.resolve(path)?;
-        let doc = kmb_session::load(&p)?;
-        self.work.replace(doc, Some(p));
+        let opened = kmb_session::load_design(&p)?;
+        self.work.replace(opened.document, opened.path);
         Ok(self.status())
     }
 
@@ -584,13 +618,18 @@ impl Session {
         let out = out.map(|o| self.resolve(o)).transpose()?;
         // ファイルを読む引数も許したフォルダの中に限る(絵を貼る・フォントを読むなど)
         let mut args = args.clone();
-        if let Some(a) = self
+        let action = self
             .work
             .actions(selected.map(FeatureId))
-            .iter()
-            .find(|a| a.id == id)
+            .into_iter()
+            .find(|a| a.id == id);
+        if let Some(a) = action
+            && let Err(e) = self.roots.confine_args(&a, &mut args)
         {
-            self.roots.confine_args(a, &mut args)?;
+            args = self.with_screen_folder(e, |r| {
+                let mut v = args.clone();
+                r.confine_args(&a, &mut v).map(|()| v)
+            })?;
         }
         self.run_action(id, selected, file.as_deref(), &args, out.as_deref())
     }
@@ -619,7 +658,7 @@ impl Session {
     }
 
     /// 残ったボディの絵(PNG)と説明。`out` があれば PNG をそこへも書く。
-    pub fn screenshot(&self, a: &ScreenshotArg) -> Result<(Vec<u8>, Json), String> {
+    pub fn screenshot(&mut self, a: &ScreenshotArg) -> Result<(Vec<u8>, Json), String> {
         let angles = match (a.named_view, a.yaw, a.pitch) {
             (Some(id), _, _) => {
                 let v = self
@@ -666,6 +705,13 @@ impl Session {
     /// 見えているボディを書き出す。拡張子で形式を決める([`Headless::save_action_for`]。`action` で
     /// 操作を指定もできる)。`each` が真ならボディごとに別のファイルにする(`path` の名前の後ろに
     /// `-<ボディの名前>` を付ける)。
+    pub fn pack(&mut self, path: &str, options: kmb_session::PackOptions) -> Reply {
+        let out = self.resolve(path)?;
+        let packed = self.work.pack(options, Some(&self.roots))?;
+        kmb_session::write_output(&out, &packed.contents)?;
+        Ok(json!({"written":out,"included":packed.included,"skipped":packed.skipped}))
+    }
+
     pub fn export(
         &mut self,
         path: &str,

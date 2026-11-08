@@ -14,9 +14,35 @@ pub(super) struct Notes {
     pub(super) open_lines: bool,
     pub(super) on_unused: bool,
     pub(super) entry_far: bool,
+    pub(super) unreachable: usize,
+    pub(super) fitting_diameter: Option<f64>,
 }
 
 impl Notes {
+    pub(super) fn messages(&self, out: &mut kmb_core::Outputs) {
+        if self.unreachable == 0 {
+            return;
+        }
+        let diameter = (self.fitting_diameter.unwrap_or(0.0) * 100.0).floor() / 100.0;
+        kmb_core::add_warning_messages(
+            out,
+            vec![kmb_core::WarningMessage {
+                id: "feature-tool-clearance-warning".into(),
+                args: [
+                    (
+                        "count".into(),
+                        kmb_core::WarningArg::Number(self.unreachable as f64),
+                    ),
+                    ("diameter".into(), kmb_core::WarningArg::Number(diameter)),
+                ]
+                .into(),
+                fallback: format!(
+                    "工具が届かない所が {} か所あります。入る工具径の目安は {diameter:.2} mm 以下です。小さい工具で取残し加工をしてください",
+                    self.unreachable
+                ),
+            }],
+        );
+    }
     pub(super) fn report(&self, w: &mut Vec<String>, kind: EntryKind) {
         if self.lead_missing {
             w.push(
@@ -122,6 +148,18 @@ impl Cut<'_> {
         if rough.is_empty() {
             n.too_small = true;
             return false;
+        }
+        if !on {
+            // 仕上げ代ではなく、指定された削り残しの壁への到達を確かめる。
+            for wall in shift(self.leave) {
+                if let Some(check) = clearance::check(&wall, tool_out, p.r()) {
+                    n.unreachable += check.regions;
+                    n.fitting_diameter = Some(
+                        n.fitting_diameter
+                            .map_or(check.diameter, |d| d.min(check.diameter)),
+                    );
+                }
+            }
         }
         let free_inside = !tool_out;
         // 工具の中心が入ってよい側(線の上をなぞる時は、どちらも削る所ではないので使わない)
@@ -533,18 +571,7 @@ impl Cut<'_> {
                 });
             }
         }
-        // 手で置いたタブは、この経路の近く(工具の半径まで)の物を経路の上へ寄せて使う
-        let tabs = if c.tab_points.is_empty() {
-            tab_centers(path, c.tabs)
-        } else {
-            c.tab_points
-                .iter()
-                .filter_map(|q| {
-                    let (d, at) = nearest_on(&pts, *q)?;
-                    (d <= self.p.r() + 1e-6).then_some(at)
-                })
-                .collect()
-        };
+        let tabs = tab_positions(c, path, self.p.r());
         if tabs.is_empty() {
             return;
         }
@@ -563,6 +590,28 @@ impl Cut<'_> {
         );
         tp.remap_spans(&starts);
     }
+}
+
+/// 通常の輪郭と取残しで、等間隔・手動のタブを同じ輪郭上の位置にそろえる。
+pub(super) fn tab_positions(c: &Contour, path: &Loop, radius: f64) -> Vec<P2> {
+    positions_on_path(path, radius, c.tabs, &c.tab_points)
+}
+
+pub(super) fn positions_on_path(path: &Loop, radius: f64, count: u32, points: &[P2]) -> Vec<P2> {
+    if points.is_empty() {
+        return tab_centers(path, count);
+    }
+    let mut pts = path.flatten(0.05);
+    if let Some(q) = pts.first().copied() {
+        pts.push(q);
+    }
+    points
+        .iter()
+        .filter_map(|q| {
+            let (d, at) = nearest_on(&pts, *q)?;
+            (d <= radius + 1e-6).then_some(at)
+        })
+        .collect()
 }
 
 /// 折れ線 `pts` の上で `q` に最も近い点と、その距離。

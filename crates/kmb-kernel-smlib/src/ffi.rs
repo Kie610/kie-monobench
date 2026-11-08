@@ -2,11 +2,18 @@
 //!
 //! SMLib は 1 つの文脈を全体で共有するので、ここの関数はすべて [`lock`] を取った状態で呼ぶ。
 //! [`Brep`] の後始末(`Drop`)も錠を取らずに SMLib を呼ぶので、錠を持っている間に捨てること。
+//!
+//! 錠はすべての文書(タブごとのカーネル)で 1 つ。SMLib の中には糸ごとに分かれていない作業用の
+//! 値(曲線の当てはめの誤差の表・らせんの近似の値・誤りの入れ子の深さなど)が残っており、2 つの
+//! 糸から同時に呼ぶと黙って形が狂うおそれがあるため。錠を待たない糸(画面。
+//! [`kmb_core::kernel::set_kernel_wait`])は、ほかの計算が錠を持っていれば待たずに
+//! [`KernelError::Busy`] で戻る。
 #![allow(unsafe_code)]
 
+use kmb_core::KernelError;
 use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, TryLockError};
 
 #[repr(C)]
 pub struct JcBrep {
@@ -14,7 +21,7 @@ pub struct JcBrep {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct JcSegment {
     pub kind: i32,
     pub a: [f64; 2],
@@ -23,11 +30,37 @@ pub struct JcSegment {
     pub radius: f64,
     pub start: f64,
     pub end: f64,
+    /// 有理 B スプライン(`SEG_NURBS`)の次数と制御点の数
+    pub degree: u32,
+    pub count: u32,
+    /// 節点(`count + degree + 1` 個)。呼び出しの間だけ生きていればよい
+    pub knots: *const f64,
+    /// x, y, 重み を `count` 組
+    pub points: *const f64,
+}
+
+impl Default for JcSegment {
+    fn default() -> Self {
+        JcSegment {
+            kind: SEG_LINE,
+            a: [0.0; 2],
+            b: [0.0; 2],
+            center: [0.0; 2],
+            radius: 0.0,
+            start: 0.0,
+            end: 0.0,
+            degree: 0,
+            count: 0,
+            knots: std::ptr::null(),
+            points: std::ptr::null(),
+        }
+    }
 }
 
 pub const SEG_LINE: i32 = 0;
 pub const SEG_ARC: i32 = 1;
 pub const SEG_CIRCLE: i32 = 2;
+pub const SEG_NURBS: i32 = 3;
 
 /// 面積も求める
 pub const FACE_AREA: i32 = 1;
@@ -130,6 +163,9 @@ pub struct JcMassProps {
     pub max: [f64; 3],
     pub centroid: [f64; 3],
     pub has_centroid: i32,
+    pub inertia_origin: [f64; 3],
+    pub moments: [f64; 3],
+    pub products: [f64; 3],
 }
 
 #[repr(C)]
@@ -270,6 +306,15 @@ unsafe extern "C" {
         failed: *mut i32,
         out: *mut *mut JcBrep,
     ) -> i32;
+    fn jc_iges_face(face: *const JcStepFace, uv: i32, tolerance: f64, out: *mut *mut JcBrep)
+    -> i32;
+    fn jc_iges_stitch(
+        faces: *const *const JcBrep,
+        count: usize,
+        tolerance: f64,
+        mode: i32,
+        out: *mut *mut JcBrep,
+    ) -> i32;
     fn jc_brep_copy(brep: *const JcBrep, out: *mut *mut JcBrep) -> i32;
     fn jc_brep_free(brep: *mut JcBrep);
     fn jc_boolean(target: *mut JcBrep, tool: *mut JcBrep, op: i32) -> i32;
@@ -308,6 +353,7 @@ unsafe extern "C" {
     fn jc_set_face_tags(brep: *mut JcBrep, tags: *const i64, count: usize) -> i32;
     fn jc_edges(brep: *const JcBrep, out: *mut *mut JcEdge, count: *mut usize) -> i32;
     fn jc_free_buffer(p: *mut std::ffi::c_void);
+    fn jc_face_normal(brep: *const JcBrep, face: usize, p: *const f64, out: *mut f64) -> i32;
     fn jc_face_distance(brep: *const JcBrep, face: usize, p: *const f64, out: *mut f64) -> i32;
     fn jc_arc_edges(brep: *const JcBrep, out: *mut *mut JcArcEdge, count: *mut usize) -> i32;
     fn jc_mass(brep: *const JcBrep, relative_accuracy: f64, out: *mut JcMassProps) -> i32;
@@ -327,8 +373,20 @@ unsafe extern "C" {
 
 static SMLIB: Mutex<()> = Mutex::new(());
 
-/// SMLib を呼ぶための錠。
-pub fn lock() -> MutexGuard<'static, ()> {
+/// SMLib を呼ぶための錠。錠を待たない糸では、ほかの計算が持っていれば [`KernelError::Busy`]。
+pub fn lock() -> Result<MutexGuard<'static, ()>, KernelError> {
+    if kmb_core::kernel::kernel_waits() {
+        return Ok(lock_wait());
+    }
+    match SMLIB.try_lock() {
+        Ok(g) => Ok(g),
+        Err(TryLockError::Poisoned(e)) => Ok(e.into_inner()),
+        Err(TryLockError::WouldBlock) => Err(kmb_core::kernel::note_kernel_busy()),
+    }
+}
+
+/// SMLib を呼ぶための錠を、空くまで待って取る(後始末など、やめられない所)。
+pub fn lock_wait() -> MutexGuard<'static, ()> {
     SMLIB.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -513,6 +571,17 @@ pub struct StepFace {
 
 /// STEP の面を切り抜いて縫い、閉じた立体にする(jc_step_solid)。失敗した面があればその添字も返す。
 pub fn step_solid(faces: &[StepFace], tolerance: f64) -> Result<Brep, (Option<usize>, String)> {
+    with_step_faces(faces, |raw| {
+        let mut out = std::ptr::null_mut();
+        let mut failed = -1i32;
+        // SAFETY: 面・輪・曲線の配列は faces と上の Vec が持ち、この呼び出しの間は生きている
+        let code =
+            unsafe { jc_step_solid(raw.as_ptr(), raw.len(), tolerance, &mut failed, &mut out) };
+        take(code, out).map_err(|e| ((failed >= 0).then_some(failed as usize), e))
+    })
+}
+
+fn with_step_faces<T>(faces: &[StepFace], f: impl FnOnce(&[JcStepFace]) -> T) -> T {
     let empty = Patch {
         degree_u: 0,
         degree_v: 0,
@@ -582,11 +651,26 @@ pub fn step_solid(faces: &[StepFace], tolerance: f64) -> Result<Brep, (Option<us
             }
         })
         .collect();
+    f(&raw)
+}
+
+/// IGES の面を1枚ずつ作り、失敗を面ごとに報告できるようにする。
+pub fn iges_face(face: &StepFace, uv: bool, tolerance: f64) -> Result<Brep, String> {
+    with_step_faces(std::slice::from_ref(face), |raw| {
+        let mut out = std::ptr::null_mut();
+        // SAFETY: 曲面・曲線の配列は with_step_faces と face が呼び出し中保持する。
+        let code = unsafe { jc_iges_face(raw.as_ptr(), i32::from(uv), tolerance, &mut out) };
+        take(code, out)
+    })
+}
+
+/// 全面を複製して縫う。入力の面は変更しない。
+pub fn iges_stitch(faces: &[Brep], tolerance: f64, mode: i32) -> Result<Brep, String> {
+    let raw: Vec<_> = faces.iter().map(Brep::raw).collect();
     let mut out = std::ptr::null_mut();
-    let mut failed = -1i32;
-    // SAFETY: 面・輪・曲線の配列は faces と上の Vec が持ち、この呼び出しの間は生きている
-    let code = unsafe { jc_step_solid(raw.as_ptr(), raw.len(), tolerance, &mut failed, &mut out) };
-    take(code, out).map_err(|e| ((failed >= 0).then_some(failed as usize), e))
+    // SAFETY: 入力の B-rep とポインタの配列は呼び出し中保持し、出力は独立に所有する。
+    let code = unsafe { jc_iges_stitch(raw.as_ptr(), raw.len(), tolerance, mode, &mut out) };
+    take(code, out)
 }
 
 fn p_count(knots: &[f64], degree: u32) -> u32 {
@@ -678,7 +762,7 @@ impl Brep {
         take(code, out)
     }
 
-    /// [`Brep::shell`] の SMLib の指定(`flags`: 1 = 凸の辺を延ばす、2 = 自己交差を扱う)を選べる版。
+    /// [`Brep::shell`] の SMLib の指定(`flags`: 1 = 凸の辺を延ばす、2 = 自己交差を扱う、4 = 面の縁を閉じて立体にする、8 = 両側)を選べる版。
     pub fn shell_with(&self, open: &[usize], offset: f64, flags: i32) -> Result<Brep, String> {
         let mut out = std::ptr::null_mut();
         // SAFETY: self.0 は生きている形状、open は open.len() 個の添字
@@ -716,6 +800,13 @@ impl Brep {
     }
 
     /// 面 `face`(`faces` の添字)から点 `p` までの距離。
+    pub fn face_normal(&self, face: usize, p: [f64; 3]) -> Result<[f64; 3], String> {
+        let mut n = [0.; 3];
+        // SAFETY: 生きている形と、それぞれ3座標の読み書き可能な配列。
+        status(unsafe { jc_face_normal(self.0, face, p.as_ptr(), n.as_mut_ptr()) })?;
+        Ok(n)
+    }
+
     pub fn face_distance(&self, face: usize, p: [f64; 3]) -> Result<f64, String> {
         let mut d = 0.0;
         // SAFETY: 3 要素の配列を読み、出力へ書くだけ
@@ -877,4 +968,15 @@ pub fn export_step(breps: &[&Brep], names: &[&str], product: &str) -> Result<Str
         .into_owned();
     unsafe { jc_free_buffer(out.cast()) };
     Ok(text)
+}
+
+#[cfg(test)]
+pub fn test_curved_sheet(kind: i32, radius: f64) -> Result<Brep, String> {
+    unsafe extern "C" {
+        fn jc_test_curved_sheet(kind: i32, radius: f64, out: *mut *mut JcBrep) -> i32;
+    }
+    let mut out = std::ptr::null_mut();
+    // SAFETY: 固定の解析曲面の種類と半径、書き込み可能な結果の場所。
+    let code = unsafe { jc_test_curved_sheet(kind, radius, &mut out) };
+    take(code, out)
 }

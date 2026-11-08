@@ -22,6 +22,7 @@ mod recompute;
 mod refs;
 pub mod section;
 mod transaction;
+mod warning_messages;
 
 pub use args::{Arg, ArgKind};
 pub use bodies::{BodyId, BodyLine, BodyState, BodyTable};
@@ -50,10 +51,11 @@ pub use feature::{
 };
 pub use ids::{FeatureId, ParamId};
 pub use kernel::{
-    ArcEdge, BlendLaw, BooleanOp, CURVES_TYPE, Curves, EdgeBlend, EdgeInfo, FaceInfo, Kernel,
-    KernelError, MassProps, Mesh, NullKernel, PROFILE_FACES_TYPE, PROFILE_TYPE, PlanarFace,
-    PlanarPath, Plane, Profile, ProfileEdge, ProfileFace, ProfileFaces, ProfileLoop, Region, Seam,
-    Segment, ShapeHandle, canonical_loop, merge_regions, natural_key, point_in_polygon,
+    ArcEdge, BlendLaw, BooleanOp, CURVES_TYPE, Curves, EdgeBlend, EdgeCurve, EdgeInfo, FaceInfo,
+    InertiaTensor, Kernel, KernelError, LoopPiece, MassProps, Mesh, NullKernel, Nurbs2,
+    PROFILE_FACES_TYPE, PROFILE_TYPE, PlanarFace, PlanarPath, Plane, PrincipalInertia, Profile,
+    ProfileEdge, ProfileFace, ProfileFaces, ProfileLoop, Region, Seam, Segment, ShapeHandle,
+    canonical_loop, knot_span, merge_regions, natural_key, point_in_polygon,
 };
 pub use modules::{Module, Modules, registry_of};
 pub use names::unique_name;
@@ -89,3 +91,8 @@ mod bodies_tests;
 mod tests;
 #[cfg(test)]
 mod text_param_tests;
+
+pub use warning_messages::{
+    WARNING_MESSAGES, WarningArg, WarningMessage, WarningMessages, add_warning_messages,
+    legacy_warnings_of, warning_info, warning_messages_of, warnings_from_info_with, warnings_with,
+};

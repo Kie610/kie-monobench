@@ -635,3 +635,6 @@ fn drawing_commands_build_edit_export_and_delete_without_changing_the_model() {
             .any(|s| s.id == "commands")
     );
 }
+
+mod annotations;
+mod exports;

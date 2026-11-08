@@ -58,10 +58,16 @@ field-asm-joint-link-flip = 連動する向きを反転
 field-asm-joint-link-flip-help = 連動元と逆の向きに動かす
 field-asm-joint-link-follow = この動き
 field-asm-joint-link-follow-help = このジョイントがこれだけ動く(空なら 360 deg か 10 mm)
+field-asm-joint-link-follow2 = 2 つ目の分の動き
+field-asm-joint-link-follow2-help = 2 つ目の連動元の分で、このジョイントがこれだけ動く(逆向きは負の値。空なら 360 deg か 10 mm)
 field-asm-joint-link-joint = 連動元のジョイント
 field-asm-joint-link-joint-help = タイムラインで前にある、回転かスライダのジョイント
+field-asm-joint-link-joint2 = 2 つ目の連動元
+field-asm-joint-link-joint2-help = 遊星歯車・差動のように 2 つの動きから決まる時の、タイムラインで前にあるもう 1 つのジョイント。値は 2 つの連動元から決まる分の和
 field-asm-joint-link-lead = 連動元の動き
 field-asm-joint-link-lead-help = 連動元がこれだけ動く時に(回転なら角度、スライダなら距離。空なら 360 deg か 10 mm)
+field-asm-joint-link-lead2 = 2 つ目の連動元の動き
+field-asm-joint-link-lead2-help = 2 つ目の連動元がこれだけ動く時に(空なら 360 deg か 10 mm)
 field-asm-joint-offset-x = X のずらし
 field-asm-joint-offset-x-help = 部品 2 の原点の X の向きにずらす
 field-asm-joint-offset-y = Y のずらし
@@ -104,12 +110,18 @@ field-asm-link-file = 元のファイル
 field-asm-link-pinned = この版に固定
 field-asm-link-pinned-help = 元のファイルが変わっても知らせず、最新にもしない(固定を外すと、また知らせる)
 field-asm-occurrence-of = 元のボディ
+field-asm-position-rx = X 回転角
+field-asm-position-rx-help = 部品の外形の箱の中心で、世界の X 軸の向きに回す角度(X → Y → Z の順)
+field-asm-position-ry = Y 回転角
+field-asm-position-ry-help = 部品の外形の箱の中心で、世界の Y 軸の向きに回す角度(X → Y → Z の順)
+field-asm-position-rz = Z 回転角
+field-asm-position-rz-help = 部品の外形の箱の中心で、世界の Z 軸の向きに回す角度(X → Y → Z の順)
 field-asm-position-x = X 距離
-field-asm-position-x-help = 引く前の位置からの距離
+field-asm-position-x-help = 回した後に、世界の X 向きへ動かす距離
 field-asm-position-y = Y 距離
-field-asm-position-y-help = 引く前の位置からの距離
+field-asm-position-y-help = 回した後に、世界の Y 向きへ動かす距離
 field-asm-position-z = Z 距離
-field-asm-position-z-help = 引く前の位置からの距離
+field-asm-position-z-help = 回した後に、世界の Z 向きへ動かす距離
 field-cad-canvas-angle = 角度
 field-cad-canvas-file = ファイル
 field-cad-canvas-flip-h = 水平方向に反転
@@ -138,6 +150,38 @@ field-cad-datum-plane-other-face = 2 つ目の面
 field-cad-datum-plane-points = 3 点
 field-cad-datum-point-point-at = 座標
 field-cad-datum-point-point-kind = 作り方
+field-cad-gear-anchor = 中心の点のスケッチ
+field-cad-gear-anchor-help = スケッチの単独の点に中心を合わせる。点は拘束で動かせる
+field-cad-gear-body-boss = ボスの長さ
+field-cad-gear-body-boss-help = 空なら歯の幅
+field-cad-gear-body-direction = 方向
+field-cad-gear-body-gear = 歯車の輪郭
+field-cad-gear-body-operation = 演算
+field-cad-gear-body-target = 対象
+field-cad-gear-body-web = 腕の厚さ
+field-cad-gear-body-web-help = 空なら歯の幅
+field-cad-gear-body-width = 歯の幅
+field-cad-gear-bore = 軸の穴の径
+field-cad-gear-bore-help = 空か 0 なら穴なし
+field-cad-gear-kind = 種類
+field-cad-gear-module = モジュール
+field-cad-gear-module-help = 歯の大きさ。ピッチ円の径 = モジュール × 歯数
+field-cad-gear-outer-diameter = 輪の外径
+field-cad-gear-outer-diameter-help = 内歯車で必須。歯底円の径 + モジュールの 2 倍以上
+field-cad-gear-phase = 回す角
+field-cad-gear-phase-help = 1 枚目の歯の向き。ラックは進む向き。空なら 0
+field-cad-gear-pressure-angle = 圧力角
+field-cad-gear-pressure-angle-help = ふつうは 20 deg
+field-cad-gear-profile-shift = 転位係数
+field-cad-gear-profile-shift-help = 空なら 0。正で外歯は厚く、内歯は薄くなり、歯先円と歯底円が外へ広がる
+field-cad-gear-root-round = 歯底の丸み
+field-cad-gear-root-round-help = 丸みの半径をモジュールに対する割合で。空なら 0.38
+field-cad-gear-teeth = 歯数
+field-cad-gear-tip-round = 歯先の丸み
+field-cad-gear-tip-round-help = 丸みの半径をモジュールに対する割合で。空なら 0
+field-cad-gear-x = 中心 x
+field-cad-gear-x-help = 中心の点があれば、そこからのずれ。ラックはピッチ線の始点
+field-cad-gear-y = 中心 y
 field-cad-text-align = 横の揃え
 field-cad-text-anchor = 基準の点のスケッチ
 field-cad-text-anchor-help = スケッチの単独の点に合わせる。点は拘束で動かせる
@@ -402,7 +446,7 @@ field-cam-contour2d-rest-corner-help = 例: 0.5 mm。空なら 0(平の工具)
 field-cam-contour2d-rest-diameter = 取残し加工: 前の工具の直径
 field-cam-contour2d-rest-diameter-help = 例: 6.35 mm。工具ライブラリに無い工具の後を削る時に打つ。前の工具の番号があれば、そちらを使う
 field-cam-contour2d-rest-tool = 取残し加工: 前の工具の番号
-field-cam-contour2d-rest-tool-help = 前に同じ輪郭を削った太い工具。その工具が届かなかった内側の隅や細い溝だけを、今の工具で削る。今の工具は平・ブルノーズ・V・テーパー。タブ・仕上げ・横の荒取り・入りと抜けの円弧は使わない
+field-cam-contour2d-rest-tool-help = 前に同じ輪郭を削った太い工具。その工具が届かなかった内側の隅や細い溝だけを、今の工具で削る。今の工具は平・ブルノーズ・V・テーパー。タブに掛かる低い区間は削らず、上げて移る。仕上げ・横の荒取り・入りと抜けの円弧は使わない
 field-cam-contour2d-retract = 退避方法
 field-cam-contour2d-retract-help = 通り道に合わせる: 通り道の材料のいちばん高い所 + 安全高さの余裕まで上げる(ストックの上面 + 1 mm より下げない)。削った所の上を移る時に上げ下げが短くなる
 field-cam-contour2d-rough-passes = 粗取りパスの数
@@ -1365,6 +1409,19 @@ field-cam-setup-leveling-ny = 格子の点の数 Y
 field-cam-setup-leveling-ny-help = 空なら 5。2〜20
 field-cam-setup-machine = 機械
 field-cam-setup-machine-help = 作業範囲・回転数・G-code の書き方・付属品(レーザー・プローブ)が機械で決まる。新しいセットアップは設定の「機械」で選んだ機械と、その時の設定の値を文書に持つ(後で設定を直しても、今あるセットアップの経路と G-code は変わらない)。ここで機械を替えると、その機械の初めの値になる
+field-cam-setup-nest-edge = 縁の余白
+field-cam-setup-nest-grid = 格子の目
+field-cam-setup-nest-grid-help = 形どおりに並べる時に使う。外形の箱に切り替えても値を残す
+field-cam-setup-nest-max-sheets = 板の枚数の上限
+field-cam-setup-nest-method = 並べ方
+field-cam-setup-nest-output = 区画の書き出し
+field-cam-setup-nest-parts = 配置する部品
+field-cam-setup-nest-parts-body = ボディ
+field-cam-setup-nest-parts-count = 個数
+field-cam-setup-nest-parts-rotate = 回してよい向き
+field-cam-setup-nest-parts-up = 上に向ける面
+field-cam-setup-nest-sheet = 板の大きさの取り方
+field-cam-setup-nest-spacing = 部品の間
 field-cam-setup-origin = 原点(XY)
 field-cam-setup-origin-help = 「原点を 3D で選ぶ」で点を選ぶと、この欄の代わりにその点を使う
 field-cam-setup-origin-note = 3D で選んだ原点
@@ -2036,6 +2093,8 @@ field-solid-hole-countersink-diameter = 皿の径
 field-solid-hole-countersink-diameter-help = 空ならネジの表(なければ穴の径の 2 倍)
 field-solid-hole-depth = 深さ
 field-solid-hole-depth-help = 空なら貫通
+field-solid-hole-thread-depth = ねじ部の長さ
+field-solid-hole-thread-depth-help = 空なら穴の深さ全体。先端の円すいは含めない
 field-solid-hole-diameter = 直径
 field-solid-hole-extent = 範囲
 field-solid-hole-extent-help = 「対象まで」にすると、穴を止める平らな面か頂点をクリックする手順に入る。斜めの面なら底が面に沿う
@@ -2046,7 +2105,7 @@ field-solid-hole-size = サイズ
 field-solid-hole-size-help = 呼びを選ぶか、M6x0.75・1/4-20 UNC・G1/4・Rp1/4 のように打つ。通し穴はメートル並目の表の呼びだけ
 field-solid-hole-sketch = 点のスケッチ
 field-solid-hole-tap = ねじ穴のタイプ
-field-solid-hole-tap-help = ネジ山の形は作らない。径を表から決め、ネジの属性として残す
+field-solid-hole-tap-help = 径を表から決める。ねじ穴はねじ山を属性のみか形を作るか選べる
 field-solid-hole-target = 対象
 field-solid-hole-tip = 先端
 field-solid-hole-tip-angle = 先端の角度
@@ -2127,13 +2186,17 @@ field-solid-move-body = ボディ
 field-solid-move-body-help = 動かすボディ。3D のビューでボディの面をクリックして選ぶ
 field-solid-move-copy = コピーを作成
 field-solid-move-copy-help = 入れると元のボディを残し、動かした写しを新しいボディにする
-field-solid-move-from-point = 元の点
+field-solid-move-from-point = 元の点の座標
 field-solid-move-from-point-help = 動かすボディの上の点の座標
+field-solid-move-from-ref-kind = 元の点
+field-solid-move-from-ref-kind-help = 動かすボディの上の点。クリックで選ぶと、元の形を変えても同じ点を追う
 field-solid-move-mode = 移動タイプ
 field-solid-move-origin = 軸の通る点
 field-solid-move-origin-help = 空ならボディの外形の中心
-field-solid-move-to-point = 先の点
+field-solid-move-to-point = 先の点の座標
 field-solid-move-to-point-help = 元の点が来る所の座標
+field-solid-move-to-ref-kind = 先の点
+field-solid-move-to-ref-kind-help = 元の点が来る所。クリックで選ぶと、相手の形やスケッチを変えても付いて来る
 field-solid-move-x = X 距離
 field-solid-move-y = Y 距離
 field-solid-move-z = Z 距離
@@ -2215,10 +2278,118 @@ field-solid-sweep-twist-help = 終わりまでに輪郭を経路のまわりに�
 field-solid-thread-face = 円筒の面
 field-solid-thread-hand = 方向
 field-solid-thread-length = 長さ
-field-solid-thread-length-help = 空なら面の全長
+field-solid-thread-length-help = 空なら面の全長。形を作る時は端の余裕を残した最大長さ(突き抜ける時は全長)
 field-solid-thread-size = 呼び
-field-solid-thread-size-help = 空なら面の径に近い呼び。一覧は面の径に近い順(おねじは呼び径、めねじは下穴の径か呼び径で比べる)
+field-solid-thread-size-help = 空ならメートルの呼びを優先。インチ・管用は呼び径(めねじは下穴も)と面の径の差が 0.001 mm 未満の時だけ選ぶ。一覧は面の径に近い順
 field-solid-thread-target = 対象
+
+field-cad-sketch-freedom = 自由度
+field-cad-sketch-freedom-help = 全体の自由度と、自由な要素の番号・自由度を表示します。行にかざすと光り、クリックすると強調が残ります。同じ動きを共有する要素があるので、各行の数は合計できません。
+field-solid-import-mesh-file = ファイル
+field-solid-import-mesh-object = 物の名前
+field-solid-import-mesh-triangles = 三角形の数
+field-solid-import-mesh-unit = 単位
+field-solid-import-mesh-crease-angle = 折れ目の角度
+field-solid-import-mesh-crease-angle-help = 隣り合う三角形の角度がこの値以下なら、なめらかに見せる
+field-solid-import-mesh-notes = 注記
+field-solid-hole-clearance = すき間
+field-solid-hole-clearance-help = 径で指定するすき間。空なら 0 mm
+field-solid-hole-end = 奥の端
+field-solid-hole-flip = 反対の端から始める
+field-solid-hole-form = ねじ山
+field-solid-thread-clearance = すき間
+field-solid-thread-clearance-help = 径で指定するすき間。空なら 0 mm
+field-solid-thread-end = 奥の端
+field-solid-thread-flip = 反対の端から始める
+field-solid-thread-form = ねじ山
+
+field-cam-spiral3d-levels = 段に分けて上から削る
+field-cam-spiral3d-direction = 削る向き
+field-cam-spiral3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+field-cam-radial3d-levels = 段に分けて上から削る
+field-cam-radial3d-direction = 削る向き
+field-cam-radial3d-direction-help = 渦巻きは回る向きを選ぶ。放射の一方向は、どの線も同じ向きに削り、線の終わりで上げて次の線の始まりへ戻る
+
+field-cam-setup-stock-cost-material-price = 費用: 材料の値段
+field-cam-setup-stock-cost-material-price-help = ストック 1 枚の値段。空なら材料費を含めない。0 以上
+field-cam-setup-stock-cost-pieces = 費用: 取れる個数
+field-cam-setup-stock-cost-pieces-help = このセットアップでストック 1 枚から削る個数。合計の加工時間をこの個数で割る。1 以上
+field-cam-setup-stock-cost-electricity-price = 費用: 電気の単価
+field-cam-setup-stock-cost-electricity-price-help = 1 kWh あたりの値段。空なら電気代を含めない。0 以上
+field-cam-setup-stock-cost-currency = 費用: 通貨
+field-cam-setup-stock-cost-currency-help = 値段に添える記号や名前。為替の換算はしない
+
+field-solid-thicken-body = ボディ
+field-solid-thicken-body-help = 厚みの無い面のボディを選ぶ
+field-solid-thicken-thickness = 厚み
+field-solid-thicken-side = 向き
+
+field-solid-import-iges-file = ファイル
+field-solid-import-iges-stand-up = Y が上の形を立てる
+field-solid-import-iges-stand-up-help = Y が上で作られた形を、X 軸のまわりに 90 度回して Z が上に立てる
+
+field-cad-gear-chain = 鎖の呼び
+field-cad-gear-chain-pitch = 鎖のピッチ
+field-cad-gear-roller-diameter = ローラーの径
+field-cad-gear-chain-inner-width = 鎖の内幅
+field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す
+field-cad-gear-body-alignment = 腕とボスの位置
+field-cad-gear-boss-diameter = ボスの外径
+field-cad-gear-boss-diameter-help = 空か 0 ならボスなし
+field-cad-gear-key-depth = キー溝の深さ
+field-cad-gear-key-depth-help = 空なら軸の穴の径で表から選ぶ
+field-cad-gear-key-width = キー溝の幅
+field-cad-gear-key-width-help = 空なら軸の穴の径で表から選ぶ
+field-cad-gear-keyway = キー溝
+field-cad-gear-lightening-circle = 穴を並べる円の径
+field-cad-gear-lightening-count = 軽くする穴の数
+field-cad-gear-lightening-count-help = 空か 0 なら穴なし
+field-cad-gear-lightening-diameter = 軽くする穴の径
+field-cad-gear-rack-size = ラックの長さの指定
+field-cad-gear-rack-length = ラックの長さ
+field-cad-gear-rack-length-help = 歯を含む全長。円ピッチごとに入るだけの歯を並べる
+field-cad-gear-rack-back = 背の厚さ
+field-cad-gear-rack-back-help = 歯底から背の面まで。空ならモジュールの 2 倍
+field-cad-gear-teeth-help = ラックでは長さの指定が「歯数」の時だけ使う
+field-cad-gear-y-help = ラックはピッチ線の始点
+
+field-cad-gear-pulley-diameter = ピッチ円の径
+
+field-cad-gear-pulley-diameter-help = 空なら 100 mm
+
+field-cad-gear-pulley-width = 幅
+
+field-cad-gear-pulley-width-help = 空なら 30 mm。ベルト車とロープ車の軸方向の幅
+
+field-cad-gear-crown-height = 中高の高さ
+
+field-cad-gear-crown-height-help = 空なら 0 mm
+
+field-cad-gear-groove-count = 溝の数
+
+field-cad-gear-groove-count-help = 空なら 1
+
+field-cad-gear-v-section = 溝の型
+
+field-cad-gear-groove-angle = 溝の角
+
+field-cad-gear-groove-angle-help = 空なら型とピッチ円の径から選ぶ
+
+field-cad-gear-groove-top-width = 溝の上の幅
+
+field-cad-gear-groove-top-width-help = 空なら型のピッチの位置の幅から求める
+
+field-cad-gear-groove-depth = 溝の深さ
+
+field-cad-gear-groove-depth-help = 溝の上端から底まで。空なら型の寸法から求める
+
+field-cad-gear-rope-diameter = ロープの径
+
+field-cad-gear-rope-diameter-help = 空なら 10 mm
+
+field-cad-gear-flange-height = 縁の高さ
+
+field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ
 
 field-flow-section-arrows = 矢印の間隔
 field-flow-section-arrows-help = 空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない

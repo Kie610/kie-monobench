@@ -8,6 +8,7 @@
 pub mod cam;
 mod drawing;
 mod edges;
+mod nest;
 pub use drawing::{
     drawing_assembly_document, drawing_box_document, drawing_cylinder_document,
     drawing_hole_document,
@@ -15,6 +16,7 @@ pub use drawing::{
 #[cfg(test)]
 mod drawing_tests;
 pub mod sample;
+pub use nest::{nesting_boxes_document, nesting_shapes_document};
 mod sketch;
 mod sweep;
 
@@ -50,6 +52,8 @@ mod cam_2d_tests;
 #[cfg(test)]
 mod cam_3d_tests;
 #[cfg(test)]
+mod cam_gear_clearance_tests;
+#[cfg(test)]
 mod cam_pick_tests;
 #[cfg(test)]
 mod cam_program_tests;
@@ -70,4 +74,9 @@ mod machine_tests;
 #[cfg(test)]
 mod matrix_tests;
 #[cfg(test)]
+mod nest_tests;
+#[cfg(test)]
 mod trace_thread_tests;
+
+#[cfg(test)]
+mod wide_actions_tests;

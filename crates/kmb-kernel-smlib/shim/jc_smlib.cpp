@@ -264,6 +264,37 @@ void add_segment(Curves& out, const JcSegment& s)
         out.items.push_back(c);
         break;
     }
+    case JC_SEG_NURBS: {
+        if (s.degree < 1 || s.count <= s.degree || !s.knots || !s.points)
+            throw Failure{"曲線の区間の数が不正です"};
+        SmTArray<double> knots;
+        SmTArray<ULONG> mults;
+        for (size_t i = 0; i < size_t(s.count) + s.degree + 1; ++i)
+        {
+            const ULONG last = knots.GetSize();
+            if (last > 0 && std::fabs(s.knots[i] - knots[last - 1]) < 1e-12)
+                mults[last - 1] += 1;
+            else
+            {
+                knots.Add(s.knots[i]);
+                mults.Add(1);
+            }
+        }
+        SmTArray<SmPoint3d> pts;
+        SmTArray<double> weights;
+        for (uint32_t k = 0; k < s.count; ++k)
+        {
+            const double* q = s.points + size_t(k) * 3;
+            pts.Add(SmPoint3d(q[0], q[1], 0));
+            weights.Add(q[2]);
+        }
+        SmBSplineCurve* curve = nullptr;
+        check(SmBSplineCurve::CreateCanonical(*SmApiGetOrCreateContext(), 3, s.degree, pts, SM_CF_UNSPECIFIED, mults,
+                                              knots, SM_KT_UNSPECIFIED, &weights, nullptr, curve),
+              "曲線");
+        out.items.push_back(curve);
+        break;
+    }
     default:
         throw Failure{"区間の種類が不正です"};
     }
@@ -866,6 +897,119 @@ static SmSurface* step_surface(const SmContext& ctx, const JcStepFace& f)
     }
 }
 
+// 解析式で厚みの体積を確かめる、単体試験用の円筒・球の面。
+extern "C" int jc_test_curved_sheet(int32_t kind, double radius, JcBrep** out)
+{
+    *out = nullptr;
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        JcStepFace f{};
+        f.kind = kind; f.r1 = radius;
+        f.frame[3] = f.frame[7] = f.frame[11] = 1;
+        SmSurface* surface = step_surface(ctx, f);
+        BrepPtr brep(new (ctx) SmBrep());
+        SmTArray<SmFace*> faces;
+        const double degrees = 180. / std::acos(-1.);
+        const SmExtent2d domain(0.2 * degrees, kind == 3 ? -0.4 * degrees : 0.,
+                                1.4 * degrees, kind == 3 ? 0.4 * degrees : 10.);
+        check(surface->AdjustSTEPUVDomain(domain), "試験の曲面の範囲");
+        check(brep->CreateFacesFromSurface(surface, surface->GetNaturalUVDomain(), SM_CT_C0, faces), "試験の曲面");
+        *out = J(brep.release());
+    });
+}
+
+// 曲面と境の曲線から面を作る。輪の解釈は呼ぶ側が宣言する。
+static void trimmed_face(const SmContext& ctx, SmBrep* brep, const JcStepFace& f, double tolerance, bool uv, bool importing_iges)
+{
+    std::unique_ptr<SmSurface> ownedSurface(step_surface(ctx, f));
+    SmSurface* srf = ownedSurface.get();
+    std::vector<std::unique_ptr<SmBSplineCurve>> ownedCurves;
+    SmTArray<ULONG> loops;
+    SmTArray<SmCurve*> curves;
+    SmTArray<SmOrientType> orients;
+    size_t at = 0;
+    for (uint32_t l = 0; l < f.loop_count; ++l)
+    {
+        loops.Add(f.loop_sizes[l]);
+        for (uint32_t c = 0; c < f.loop_sizes[l]; ++c)
+        {
+            ownedCurves.emplace_back(step_curve(ctx, f.curves[at++]));
+            curves.Add(ownedCurves.back().get());
+            orients.Add(SM_OT_SAME);
+        }
+    }
+    SmTArray<SmPoint3d> points;
+    for (uint32_t k = 0; k < f.point_count; ++k)
+        points.Add(SmPoint3d(f.points[k * 3], f.points[k * 3 + 1], f.points[k * 3 + 2]));
+    if (importing_iges && !uv)
+    {
+        // 切り抜きは境を曲面へ投影するため、離れた境を黙って別の位置へ移さない。
+        for (size_t i = 0; i < at; ++i)
+        {
+            const JcCurve& c = f.curves[i];
+            const SmExtent1d interval(c.knots[c.degree], c.knots[c.count]);
+            double needed = tolerance, gap = 0;
+            check(SmApiStatus(srf->CurveMaxDistanceBetween(srf->GetNaturalUVDomain(), *curves[ULONG(i)], interval,
+                                                        0, &needed, gap)), "境と曲面の距離の検査");
+            if (!std::isfinite(gap) || gap > tolerance)
+                throw Failure{"境が曲面から離れています(距離 " + std::to_string(gap) + " mm)。境と曲面が一致する形で保存してください"};
+        }
+        for (ULONG i = 0; i < points.GetSize(); ++i)
+        {
+            SmPoint3d closest;
+            SmTArray<SmPoint2d> parameters;
+            double gap = 0;
+            check(SmApiSurfaceClosestPoint(srf, points[i], closest, parameters, gap), "境の点と曲面の距離の検査");
+            if (!std::isfinite(gap) || gap > tolerance)
+                throw Failure{"境の点が曲面から離れています。曲面の上の点で保存してください"};
+        }
+    }
+    // 曲面と曲線は、切り抜き・面の作成に渡す時点で所有を移す。
+    ownedSurface.release();
+    for (auto& curve : ownedCurves)
+        curve.release();
+    SmTArray<SmFace*> made;
+    if (importing_iges && f.loop_count == 0 && f.point_count == 0 && (f.kind == 3 || f.kind == 4))
+    {
+        check(SmApiStatus(brep->CreateFacesFromSurface(srf, srf->GetNaturalUVDomain(), SM_CT_C0, made)), "閉じた曲面から面を作る処理");
+        if (!f.same_sense)
+            for (ULONG i = 0; i < made.GetSize(); ++i)
+                check(SmApiStatus(made[i]->FlipFaceOrientation()), "面の向き");
+    }
+    else if (uv)
+    {
+        SmTArray<SmBSplineCurve*> parameterCurves;
+        for (ULONG i = 0; i < curves.GetSize(); ++i)
+            parameterCurves.Add(static_cast<SmBSplineCurve*>(curves[i]));
+        check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithParameterSpaceCurves(
+                  ctx, brep->GetInfiniteRegion(), tolerance, loops, parameterCurves, orients, points,
+                  srf, srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, FALSE)),
+              "パラメータの境で面の切り抜き");
+        brep->GetFaces(made);
+    }
+    else
+    {
+        check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
+                  ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
+                  srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
+                  &made)),
+              "面の切り抜き");
+    }
+    if (made.GetSize() == 0)
+        throw Failure{"面の切り抜き: 面ができませんでした"};
+    for (ULONG k = 0; k < made.GetSize(); ++k)
+    {
+        // 面の範囲を切り抜いた輪の範囲にする(平面や円筒の曲面そのものは無限に広いので、
+        // そのままだと面の内側の点を探す処理などが面を見つけられない)
+        SmExtent2d dom;
+        if (made[k]->CalculateUVDomainFromUVTrimCurves(dom, TRUE) == SM_SUCCESS)
+            made[k]->SetUVDomain(dom);
+        if (SmAttribute* old = made[k]->FindAttribute(kTagAttribute))
+            made[k]->RemoveAttribute(old);
+        made[k]->AddAttribute(new (ctx) SmLongAttribute(kTagAttribute, long(f.tag), SM_AB_COPY));
+    }
+}
+
 int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32_t* failed, JcBrep** out)
 {
     *failed = -1;
@@ -878,42 +1022,7 @@ int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32
         {
             *failed = int32_t(i);
             const JcStepFace& f = faces[i];
-            SmSurface* srf = step_surface(ctx, f);
-            SmTArray<ULONG> loops;
-            SmTArray<SmCurve*> curves;
-            SmTArray<SmOrientType> orients;
-            size_t at = 0;
-            for (uint32_t l = 0; l < f.loop_count; ++l)
-            {
-                loops.Add(f.loop_sizes[l]);
-                for (uint32_t c = 0; c < f.loop_sizes[l]; ++c)
-                {
-                    curves.Add(step_curve(ctx, f.curves[at++]));
-                    orients.Add(SM_OT_SAME);
-                }
-            }
-            SmTArray<SmPoint3d> points;
-            for (uint32_t k = 0; k < f.point_count; ++k)
-                points.Add(SmPoint3d(f.points[k * 3], f.points[k * 3 + 1], f.points[k * 3 + 2]));
-            SmTArray<SmFace*> made;
-            check(SmApiStatus(SmTrimmingTools::TrimSurfaceWithModelSpaceCurves(
-                      ctx, brep->GetInfiniteRegion(), tolerance, loops, curves, orients, points, srf,
-                      srf->GetNaturalUVDomain(), f.same_sense ? SM_OT_SAME : SM_OT_OPPOSITE, TRUE, TRUE, TRUE,
-                      &made)),
-                  "面の切り抜き");
-            if (made.GetSize() == 0)
-                throw Failure{"面の切り抜き: 面ができませんでした"};
-            for (ULONG k = 0; k < made.GetSize(); ++k)
-            {
-                // 面の範囲を切り抜いた輪の範囲にする(平面や円筒の曲面そのものは無限に広いので、
-                // そのままだと面の内側の点を探す処理などが面を見つけられない)
-                SmExtent2d dom;
-                if (made[k]->CalculateUVDomainFromUVTrimCurves(dom, TRUE) == SM_SUCCESS)
-                    made[k]->SetUVDomain(dom);
-                if (SmAttribute* old = made[k]->FindAttribute(kTagAttribute))
-                    made[k]->RemoveAttribute(old);
-                made[k]->AddAttribute(new (ctx) SmLongAttribute(kTagAttribute, long(f.tag), SM_AB_COPY));
-            }
+            trimmed_face(ctx, brep.get(), f, tolerance, false, false);
         }
         *failed = -1;
         // 縫う。SmApiStitchIntoSolid と同じく許容差を倍にしながら縫うが、辺を頂点で分ける
@@ -946,6 +1055,41 @@ int jc_step_solid(const JcStepFace* faces, size_t count, double tolerance, int32
         const bool solid = lamina == 0 && regions.GetSize() > 1;
         if (!solid)
             throw Failure{"面を縫っても閉じた立体になりませんでした(隙間 " + std::to_string(std::max(vgap, egap)) + ")"};
+        *out = J(brep.release());
+    });
+}
+
+int jc_iges_face(const JcStepFace* face, int32_t uv, double tolerance, JcBrep** out)
+{
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        BrepPtr brep(new (ctx) SmBrep());
+        brep->m_bEditingEnabled = TRUE;
+        SmTemporaryChangeValue<SmBoolean> doing(SM_CONST_CAST(SmContext*, &ctx)->GetDoingBooleanRef(), TRUE);
+        trimmed_face(ctx, brep.get(), *face, tolerance, uv != 0, true);
+        *out = J(brep.release());
+    });
+}
+
+int jc_iges_stitch(const JcBrep* const* faces, size_t count, double tolerance, int32_t mode, JcBrep** out)
+{
+    return guarded([&] {
+        const SmContext& ctx = *SmApiGetOrCreateContext();
+        BrepPtr brep(new (ctx) SmBrep());
+        brep->m_bEditingEnabled = TRUE;
+        for (size_t i = 0; i < count; ++i)
+            check(SmApiStatus(brep->MergeBrep(*B(faces[i]))), "面を集める処理");
+        if (mode >= 0)
+        {
+            SmStitchCallback cb;
+            SmStitch st(cb, tolerance, TRUE, FALSE);
+            st.m_bFastEdgeCompare = TRUE;
+            st.m_bSplitEdgesWithVertices = TRUE;
+            st.m_bMakingManifoldSolid = mode ? TRUE : FALSE;
+            ULONG stitched = 0, lamina = 0;
+            double vertexGap = 0, edgeGap = 0;
+            check(SmApiStatus(st.DoStitching(brep.get(), NULL, NULL, stitched, lamina, vertexGap, edgeGap)), "面を縫う処理");
+        }
         *out = J(brep.release());
     });
 }
@@ -1066,19 +1210,56 @@ int jc_shell_with(const JcBrep* brep, const size_t* open, size_t open_count, dou
             sel.Add(faces[ULONG(open[i])]);
         }
         SmBrep* r = nullptr;
-        const SmApiStatus st = SmApiShellBrepFull(B(brep), offset, (flags & 1) ? TRUE : FALSE,
-                                                  (flags & 2) ? TRUE : FALSE, FALSE, sel, r);
-        // SM_ERR(1001)は SMLib の一般の失敗で、理由は返らない(SmMessages.h)。実測では、厚みが角の丸めや
-        // 円柱の半径以上の時(半径 1 の丸めで厚み 1 以上、半径 3 の円柱で 3 以上)と、厚みが形の厚さを
-        // 超える時(高さ 10 の箱で 11)にこれになった(2026-10-21)。ほかの理由もありうるので断定しない。
-        // 状態の番号は括弧に数字だけで書く(画面の知らせは、この形の括弧を外す。kmb-ui の plain_error)
+        const bool solid = (flags & 4) != 0;
+        const auto thicken_failure = [&]() {
+            std::string message = "厚みが面の曲がりの半径以上の所があるかもしれません(SMLib の状態 1001)";
+            double radius = 0.;
+            for (ULONG i = 0; i < faces.GetSize(); ++i)
+            {
+                const SmSurface* surface = faces[i]->GetSurface();
+                if (!surface) continue;
+                SmAxis2Placement axes;
+                double r = 0.;
+                SmStatus status = SM_ERR;
+                if (surface->GetType() == SmCylinder_TYPE)
+                    status = static_cast<const SmCylinder*>(surface)->GetCanonical(axes, r);
+                else if (surface->GetType() == SmSphere_TYPE)
+                    status = static_cast<const SmSphere*>(surface)->GetCanonical(axes, r);
+                if (status == SM_SUCCESS && std::isfinite(r) && r > 0. && (radius == 0. || r < radius)) radius = r;
+            }
+            if (radius > 0.) message += "。半径 " + std::to_string(radius) + " mm より小さくしてください";
+            else message += "。厚みを小さくするか、面を張り直してください";
+            return message;
+        };
+        const SmBrep* input = B(brep);
+        BrepPtr shifted;
+        if (flags & 8)
+        {
+            SmBrep* copied = nullptr;
+            check(SmApiBrepCopy(input, copied), "面の複製");
+            BrepPtr copy(copied);
+            SmBrep* moved = nullptr;
+            const SmApiStatus status = SmApiOffsetBrepFull(copy.get(), -offset / 2, FALSE, FALSE, moved);
+            shifted.reset(moved);
+            if (status == SM_ERR) throw Failure{thicken_failure()};
+            check(status, "両側の厚みの基準面を動かす");
+            if (!shifted || !shifted->IsSheet())
+                throw Failure{"両側の厚みの基準面を作れません。片側を選ぶか厚みを小さくしてください"};
+            input = shifted.get();
+        }
+        const SmApiStatus st = SmApiShellBrepFull(input, offset, (flags & 1) ? TRUE : FALSE,
+                                                  (flags & 2) ? TRUE : FALSE, solid ? TRUE : FALSE, sel, r);
+        BrepPtr result(r);
+        // 状態 1001 は一般の失敗。曲率半径や形の厚さを超える場合もあるが、原因を断定しない。
         if (st == SM_ERR)
-            throw Failure{"厚みが角の丸めや曲面の半径以上の所か、形の厚さを超える所があるかもしれません"
-                          "(SMLib の状態 1001)"};
-        check(st, "シェル");
-        if (!r)
-            throw Failure{"シェルの結果がありません"};
-        *out = J(r);
+            throw Failure{solid ? thicken_failure()
+                                : "厚みが角の丸めや曲面の半径以上の所か、形の厚さを超える所があるかもしれません(SMLib の状態 1001)"};
+        check(st, solid ? "厚みを付ける" : "シェル");
+        if (!result)
+            throw Failure{solid ? "厚みを付けた結果がありません" : "シェルの結果がありません"};
+        if (solid && !result->IsManifoldSolid())
+            throw Failure{"厚みを付けた形が閉じていません。厚みを小さくするか、縁を閉じ直してください"};
+        *out = J(result.release());
     });
 }
 
@@ -1401,6 +1582,19 @@ static bool face_normal_at(SmFace* f, const SmPoint3d& p, SmVector3d& n)
     return true;
 }
 
+int jc_face_normal(const JcBrep* brep, size_t face, const double p[3], double out[3])
+{
+    return guarded([&] {
+        const SmTArray<SmFace*> faces = faces_of(B(brep));
+        if (face >= faces.GetSize())
+            throw Failure{"面の番号が範囲の外です"};
+        SmVector3d n;
+        if (!face_normal_at(faces[ULONG(face)], SmPoint3d(p[0], p[1], p[2]), n))
+            throw Failure{"面の向きを求められません。面を張り直してください"};
+        out[0] = n.x; out[1] = n.y; out[2] = n.z;
+    });
+}
+
 int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** points, size_t* point_count)
 {
     *out = nullptr;
@@ -1420,6 +1614,9 @@ int jc_all_edges(const JcBrep* brep, JcAnyEdge** out, size_t* count, double** po
             SmTArray<SmFace*> ef;
             e->GetFaces(ef);
             if ((ef.GetSize() != 2 && ef.GetSize() != 1) || (ef.GetSize() == 2 && (ef[0] == ef[1] || splits_one_surface(e))))
+                continue;
+            // 同じ面の両側を縫った周期の継ぎ目は、片側だけの開いた縁ではない。
+            if (ef.GetSize() == 1 && e->IsManifold())
                 continue;
             const SmCurve* c = e->GetCurve();
             double t0 = 0, t1 = 0;
@@ -1625,23 +1822,33 @@ int jc_mass(const JcBrep* brep, double relative_accuracy, JcMassProps* out)
         SmBrep* b = const_cast<SmBrep*>(B(brep));
         out->has_centroid = 0;
         check(SmApiBrepComputeVolume(b, relative_accuracy, out->volume), "体積の計算");
-        // 重心は閉じた立体だけ(精度は [1e-4, 1e-1] に丸められる。体積は上の細かい方を使う)
-        {
-            double area = 0, volume = 0, mass = 0;
-            SmPoint3d c;
-            SmVector3d moments, products;
-            if (SmApiBrepComputeMassProperties(b, std::max(relative_accuracy, 1e-4), 1.0, SmPoint3d(0, 0, 0), area,
-                                               volume, mass, c, moments, products) == SM_SUCCESS)
-            {
-                put(out->centroid, c);
-                out->has_centroid = 1;
-            }
-        }
-        check(SmApiBrepComputeArea(b, std::max(relative_accuracy, 1e-4), out->area), "表面積の計算");
         SmPoint3d lo, hi;
         check(SmApiBrepBoundingBox(b, TRUE, lo, hi), "外形の箱");
         put(out->min, lo);
         put(out->max, hi);
+        // 重心と慣性は閉じた立体だけ(精度は [1e-4, 1e-1] に丸められる。体積は上の細かい方を使う)。
+        // 慣性は外形の箱の中心のまわりで積分する。原点から遠い小さな部品を原点のまわりで積分して
+        // 重心へ移すと、大きな値どうしの引き算で桁が落ちるため
+        {
+            double area = 0, volume = 0, mass = 0;
+            SmPoint3d c;
+            SmVector3d moments, products;
+            SmPoint3d o((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2);
+            if (SmApiBrepComputeMassProperties(b, std::max(relative_accuracy, 1e-4), 1.0, o, area, volume, mass, c,
+                                               moments, products) == SM_SUCCESS)
+            {
+                put(out->centroid, c);
+                put(out->inertia_origin, o);
+                out->moments[0] = moments.x;
+                out->moments[1] = moments.y;
+                out->moments[2] = moments.z;
+                out->products[0] = products.x;
+                out->products[1] = products.y;
+                out->products[2] = products.z;
+                out->has_centroid = 1;
+            }
+        }
+        check(SmApiBrepComputeArea(b, std::max(relative_accuracy, 1e-4), out->area), "表面積の計算");
     });
 }
 

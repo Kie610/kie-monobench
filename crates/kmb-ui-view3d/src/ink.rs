@@ -23,6 +23,8 @@ const fn gray(v: u8) -> Color32 {
 pub struct Inks {
     /// ボディの面(色味のない白・灰色。スケッチの水色、選んだ色と見分ける)
     pub body: Color32,
+    /// 部品ごとの仮の色(番号順に 8 色で繰り返す)。
+    pub part_hue: [Color32; 8],
     /// 軸(X 赤・Y 緑・Z 青)。軸の玉、原点の軸、格子の軸、測る道具の成分
     pub axis: [Color32; 3],
     /// 軸の玉の文字
@@ -105,10 +107,33 @@ const HEIGHTS: [Color32; 4] = [
 const STEEL: Color32 = rgb(160, 160, 160);
 const TOOL_PARTS: [Color32; 3] = [rgb(215, 215, 225), rgb(160, 160, 172), rgb(95, 95, 108)];
 
+// 仮の色。灰色の基準面、水色のスケッチ、青緑の選択と分け、稜線が読める明るさで色相を離す。
+const PART_LIGHT: [Color32; 8] = [
+    rgb(190, 105, 45),
+    rgb(128, 92, 184),
+    rgb(170, 150, 35),
+    rgb(184, 70, 87),
+    rgb(83, 133, 65),
+    rgb(179, 90, 157),
+    rgb(72, 91, 165),
+    rgb(133, 104, 74),
+];
+const PART_DARK: [Color32; 8] = [
+    rgb(224, 150, 79),
+    rgb(165, 127, 219),
+    rgb(215, 192, 80),
+    rgb(225, 119, 135),
+    rgb(129, 185, 106),
+    rgb(220, 132, 197),
+    rgb(117, 139, 212),
+    rgb(187, 155, 115),
+];
+
 impl Inks {
     /// 明るい画面(今までの色)。
     pub const LIGHT: Inks = Inks {
         body: STEEL,
+        part_hue: PART_LIGHT,
         axis: AXIS,
         axis_text: rgb(25, 25, 25),
         origin_axis: ORIGIN_AXIS,
@@ -153,6 +178,7 @@ impl Inks {
     /// 暗い画面(今までの色)。
     pub const DARK: Inks = Inks {
         body: STEEL,
+        part_hue: PART_DARK,
         sketch_line: crate::view3d::sketch_ink(true),
         path_entry: crate::view3d::path_ink(true).0,
         path_lead: crate::view3d::path_ink(true).1,
@@ -186,6 +212,12 @@ impl Inks {
             }
         }
         f("body", &mut self.body);
+        list(
+            f,
+            "part_hue",
+            &mut self.part_hue,
+            &["1", "2", "3", "4", "5", "6", "7", "8"],
+        );
         list(f, "axis", &mut self.axis, &XYZ);
         f("axis_text", &mut self.axis_text);
         list(f, "origin_axis", &mut self.origin_axis, &XYZ);
@@ -371,6 +403,23 @@ pub fn motion(secs: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn provisional_component_hues_are_distinct_in_both_backgrounds() {
+        for inks in [Inks::LIGHT, Inks::DARK] {
+            for i in 0..8 {
+                let a = inks.part_hue[i];
+                let b = inks.part_hue[(i + 1) % 8];
+                let distance: i32 = [a.r(), a.g(), a.b()]
+                    .into_iter()
+                    .zip([b.r(), b.g(), b.b()])
+                    .map(|(a, b)| (i32::from(a) - i32::from(b)).pow(2))
+                    .sum();
+                assert!(distance > 40 * 40, "隣り合う色を見分ける: {a:?}, {b:?}");
+                assert_ne!(a, inks.body);
+            }
+        }
+    }
 
     #[test]
     fn the_default_body_color_is_the_default_material() {

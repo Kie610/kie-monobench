@@ -50,6 +50,7 @@ pub fn chain(paths: &[(u32, Segment)], entity: Option<u32>) -> Result<Vec<Profil
         None => 0,
     };
     let edge = |i: usize, reversed: bool| ProfileEdge {
+        curve: None,
         name: format!("e{}", paths[i].0),
         segment: paths[i].1.clone(),
         reversed,
@@ -370,14 +371,8 @@ impl Feature for Loft {
         self.sections
             .iter()
             .filter(|s| s.kind == SectionKind::Point)
-            .filter_map(|s| match s.point.as_ref()? {
-                PointRef::Vertex { feature, .. }
-                    if self.operation == Operation::New || self.target != Some(*feature) =>
-                {
-                    Some(*feature)
-                }
-                _ => None,
-            })
+            .filter_map(|s| s.point.as_ref()?.body())
+            .filter(|feature| self.operation == Operation::New || self.target != Some(*feature))
             .collect()
     }
 

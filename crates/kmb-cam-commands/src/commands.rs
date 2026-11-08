@@ -251,6 +251,8 @@ fn machine_fields(choices: &[(&str, &str)]) -> Vec<Field> {
         Field::number("min_rpm", "主軸の最低回転数(rpm)").plain("rpm"),
         Field::number("max_rpm", "主軸の最高回転数(rpm)").plain("rpm"),
         Field::number("rapid_feed", "早送り(mm/min)").plain("mm/min").help(speed),
+        Field::number("power_w", "加工中の消費電力(W)").plain("W")
+            .help("段取り表の電気代に使う。0 は不明。新しいセットアップに値を写して持つ"),
         Field::number("acceleration", "加速度(mm/s²)").plain("mm/s²")
             .help("加工時間の目安に使う。0 なら加減速を見込まない"),
         Field::number("junction_deviation", "角の回りやすさ(mm)").plain("mm")
@@ -287,6 +289,7 @@ fn machine_value(m: &MachineProfile) -> serde_json::Value {
         "max_rpm": m.max_rpm,
         "rapid_feed": m.rapid_feed,
         "acceleration": m.acceleration,
+        "power_w": m.power_w,
         "junction_deviation": m.junction_deviation,
         "max_rate_x": m.max_rate[0],
         "max_rate_y": m.max_rate[1],
@@ -354,6 +357,7 @@ fn machine_with(m: &MachineProfile, v: &serde_json::Value) -> Result<MachineProf
         ));
     }
     out.acceleration = num("acceleration", m.acceleration)?;
+    out.power_w = num("power_w", m.power_w)?;
     out.junction_deviation = num("junction_deviation", m.junction_deviation)?;
     out.measure_after_tool_change = flag("measure_after_tool_change", m.measure_after_tool_change)?;
     out.air = flag("air", m.air)?;
@@ -601,7 +605,7 @@ fn rest_tool_for(cx: &Context<'_>, rest: &[ToolKind], id: FeatureId) -> Option<u
     let now = lib.tools.iter().find(|t| t.number == p.tool)?;
     lib.tools
         .iter()
-        .filter(|t| rest.contains(&t.kind) && t.tip_radius() < now.tip_radius() - 1e-6)
+        .filter(|t| kmb_cam_setup::can_follow_tool(t, now, rest))
         .max_by(|a, b| a.tip_radius().total_cmp(&b.tip_radius()))
         .map(|t| t.number)
 }
@@ -753,6 +757,7 @@ fn add_rest_pocket(
     cx: &Context<'_>,
     rest: &[ToolKind],
     id: FeatureId,
+    strategies: &[Strategy],
 ) -> Result<Outcome, kmb_core::Problem> {
     let tool = rest_tool_for(cx, rest, id).ok_or("今の工具より先の細い工具がありません")?;
     let f = cx.data.feature(id).ok_or("機能がありません")?;
@@ -763,7 +768,7 @@ fn add_rest_pocket(
         .ok_or("工具がありません")?;
     let mut d = f.data.clone();
     // 「工具の順番に足す」と同じく、前の工具の切削条件の上書き・仕上げ・入る位置は写さない
-    crate::tool_order::make_rest(&mut d, prev as u32, tool);
+    crate::tool_order::make_rest(strategies, &f.type_id, f.id, &mut d, prev as u32, tool)?;
     Ok(Outcome::insert(
         "残り削りを追加",
         &f.type_id,
@@ -802,12 +807,12 @@ impl CamCommands {
 
     /// ポスト(`gcode_text` と同じ選び方)と機械 `machine`(セットアップの機械の ID)で `f` を呼び、
     /// 結果とポストの名前を返す。
-    pub(crate) fn with_post(
+    pub(crate) fn with_post<T>(
         &self,
         cx: &Context<'_>,
         m: &MachineProfile,
-        f: impl FnOnce(&dyn Post, &MachineProfile) -> Result<String, String>,
-    ) -> Result<(String, String), String> {
+        f: impl FnOnce(&dyn Post, &MachineProfile) -> Result<T, String>,
+    ) -> Result<(T, String), String> {
         let chosen = self.post_plugin.read().expect("ポストの設定の鍵").clone();
         let plugin = cx
             .arg_str("post")
@@ -826,22 +831,49 @@ impl CamCommands {
         Ok((f(post, m)?, post.id().to_string()))
     }
 
+    /// 経路の持ち主の注意を、同じ持ち主を重ねずに補足へ運ぶ。
+    pub(crate) fn path_warnings(
+        &self,
+        cx: &Context<'_>,
+        paths: &[&crate::SetupPaths],
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut out = kmb_core::Outputs::new();
+        for source in paths.iter().flat_map(|p| &p.sources) {
+            if !seen.insert(source.id) {
+                continue;
+            }
+            if let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = cx.report.feature(source.id)
+            {
+                kmb_core::add_warnings(&mut out, kmb_core::legacy_warnings_of(outputs));
+                kmb_core::add_warning_messages(&mut out, kmb_core::warning_messages_of(outputs));
+            }
+        }
+        kmb_core::warning_info(&out)
+    }
+
     /// G-code の書き出し。
     fn gcode(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         let (g, post) = self.gcode_text(cx, &s)?;
         let minutes: f64 = s
             .paths
             .iter()
             .map(|p| p.minutes(&self.machine_for(&s.info).motion()))
             .sum();
-        let info = json!({
+        let mut info = json!({
             "setup": setup.0,
             "post": post,
             "lines": g.lines().count(),
             "tools": s.program().tools().iter().map(|t| t.number).collect::<Vec<_>>(),
             "minutes": (minutes * 10.0).round() / 10.0,
         });
+        info.as_object_mut()
+            .expect("書き出しの補足")
+            .extend(self.path_warnings(cx, &[&s]));
         Ok(Outcome::File {
             suffix: format!("{}.{}", file_part(&s.name), kmb_post::file_extension(&post)),
             contents: g.into_bytes(),
@@ -849,11 +881,52 @@ impl CamCommands {
         })
     }
 
+    pub(crate) fn section_files(
+        &self,
+        cx: &Context<'_>,
+        s: &crate::SetupPaths,
+    ) -> Result<Outcome, kmb_core::Problem> {
+        let (files, post) = self.with_post(cx, s.info.machine_profile(), |post, m| {
+            kmb_cam_program::gcode_files(s, post, m)
+        })?;
+        let mut info = json!({"setup":s.setup.0,"post":post,"sections":files.len()});
+        info.as_object_mut()
+            .expect("書き出しの補足")
+            .extend(self.path_warnings(cx, &[s]));
+        let mut files: Vec<_> = files
+            .into_iter()
+            .map(|(name, text)| (name, text.into_bytes()))
+            .collect();
+        if files.len() == 1 {
+            let (suffix, contents) = files.remove(0);
+            Ok(Outcome::File {
+                suffix,
+                contents,
+                info,
+            })
+        } else {
+            Ok(Outcome::Files { files, info })
+        }
+    }
+
     fn sheet(&self, cx: &Context<'_>, setup: FeatureId) -> Result<Outcome, kmb_core::Problem> {
         let s = self.setup_paths(cx, setup)?;
         Ok(Outcome::File {
-            suffix: format!("{}-段取り.md", file_part(&s.name)),
-            contents: crate::setup_sheet(&s, &self.machine_for(&s.info)).into_bytes(),
+            suffix: format!(
+                "{}-段取り.{}",
+                file_part(&s.name),
+                if cx.arg_str("format") == Some("html") {
+                    "html"
+                } else {
+                    "md"
+                }
+            ),
+            contents: if cx.arg_str("format") == Some("html") {
+                crate::setup_sheet_html(&s, &self.machine_for(&s.info))
+            } else {
+                crate::setup_sheet(&s, &self.machine_for(&s.info))
+            }
+            .into_bytes(),
             info: json!({"setup": setup.0}),
         })
     }
@@ -913,8 +986,16 @@ impl CamCommands {
                 .take(i + 1)
                 .filter(|s| s.failed.is_empty() && !s.paths.is_empty())
             {
-                let (g, _) = self.gcode_text(cx, s)?;
-                *s = crate::with_gcode_paths(s, &g)?;
+                if s.info.sections.is_some() {
+                    *s = self
+                        .with_post(cx, s.info.machine_profile(), |post, m| {
+                            kmb_cam_program::with_section_gcode_paths(s, post, m)
+                        })?
+                        .0;
+                } else {
+                    let (g, _) = self.gcode_text(cx, s)?;
+                    *s = crate::with_gcode_paths(s, &g)?;
+                }
             }
         }
         // 加工ごとの格子の大きさ(結果の窓と info に出す)
@@ -1367,6 +1448,7 @@ impl Extension for CamCommands {
                 })
                 .disabled_if(need),
             Action::new(SETUP_SHEET, "加工指示書を書き出す", "cam")
+                .args(vec![kmb_core::Arg::choice("format", "加工指示書の形式", &[("md", "Markdown"), ("html", "HTML")]).default("md")])
                 .role(kmb_interchange::role::action::SETUP_SHEET)
                 .menu("出力")
                 .icon("sheet")
@@ -1410,6 +1492,7 @@ impl Extension for CamCommands {
         ]);
         let info = self.setup_of_selection(cx).map(|s| s.info.clone());
         v.extend(crate::fixtures::actions(cx, info.as_ref()));
+        v.extend(crate::nest::actions(cx));
         v.extend(crate::setup_ops::actions(cx, info.as_ref()));
         v.extend(crate::entry::actions(cx, info.as_ref(), &self.strategies));
         v.extend(crate::picks::actions(cx, &self.strategies));
@@ -1437,6 +1520,7 @@ impl Extension for CamCommands {
             None => self.machine().bed,
         };
         crate::fixtures::handles(id, cx, info.as_ref(), bed.as_ref())
+            .or_else(|| crate::nest::handles(id, cx))
             .or_else(|| crate::setup_ops::handles(id, cx, info.as_ref(), bed.as_ref()))
             .or_else(|| crate::entry::handles(id, cx, info.as_ref(), &self.strategies))
             .or_else(|| crate::chains::handles(id, cx, info.as_ref(), &self.strategies))
@@ -1461,6 +1545,9 @@ impl Extension for CamCommands {
                 .ok_or_else(|| unavailable("セットアップがありません")),
         };
         if let Some(r) = crate::picks::run(id, cx, &self.strategies) {
+            return Some(r);
+        }
+        if let Some(r) = crate::nest::run(id, cx, &self.machine()) {
             return Some(r);
         }
         if let Some(r) = crate::tool_order::run(id, cx, &self.strategies) {
@@ -1507,14 +1594,24 @@ impl Extension for CamCommands {
                         .data
                         .feature(s)
                         .map_or(&[][..], |f| self.rest_of(&f.type_id));
-                    add_rest_pocket(cx, rest, s)
+                    add_rest_pocket(cx, rest, s, &self.strategies)
                 }),
             EXPORT_GCODE => need_setup().and_then(|s| self.gcode(cx, s)),
             SETUP_SHEET => need_setup().and_then(|s| self.sheet(cx, s)),
             EXPORT_GCODE_AS => need_setup().and_then(|s| self.gcode(cx, s)),
             VIEW_GCODE => need_setup().and_then(|s| {
-                let name = self.setup_paths(cx, s)?.name.clone();
-                match self.gcode(cx, s)? {
+                let paths = self.setup_paths(cx, s)?;
+                let name = paths.name.clone();
+                let preview = if paths.info.sections.is_some() {
+                    let (body, _) = self.gcode_text(cx, &paths)?;
+                    Outcome::Text {
+                        title: format!("G-code: {name}"),
+                        body,
+                    }
+                } else {
+                    self.gcode(cx, s)?
+                };
+                match preview {
                     Outcome::File { contents, .. } => {
                         let body = String::from_utf8_lossy(&contents).into_owned();
                         Ok(Outcome::Text {
@@ -1591,6 +1688,17 @@ impl Extension for CamCommands {
             height_planes(&s.info, &h, &mut o.planes);
         }
         let i = &s.info;
+        if o.shape.is_none()
+            && i.sections.is_some()
+            && let Ok(mesh) = i.part_mesh(cx.kernel.as_ref())
+        {
+            o.shape = Some(Arc::new(kmb_core::OverlayShape {
+                key: crate::nest::overlay_key(i, s.print()),
+                label: "板への配置".into(),
+                mesh,
+                ..Default::default()
+            }));
+        }
         // 最後のシミュレーションの食い込みと削り残し(経路が変わっていなければ)。
         // 印は最後の形のものなので、途中の形を出している時は出さない
         if let Some(m) = self.sim.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
@@ -1612,13 +1720,22 @@ impl Extension for CamCommands {
             return out;
         }
         out.extend(later_design(cx, id));
+        out.extend(crate::nest::unplaced_notes(cx, id));
         let Ok(s) = self.setup_paths(cx, id) else {
             return out;
         };
         let m = &self.machine_for(&s.info);
         let i = &s.info;
         for (k, axis) in ["X", "Y", "Z"].iter().enumerate() {
-            let size = i.stock_max[k] - i.stock_min[k];
+            let size = i
+                .sections
+                .as_ref()
+                .map_or(i.stock_max[k] - i.stock_min[k], |s| {
+                    s.list
+                        .iter()
+                        .map(|s| s.stock_max[k] - s.stock_min[k])
+                        .fold(0.0, f64::max)
+                });
             if size > m.travel[k] {
                 out.push(format!(
                     "ストックの {axis} の大きさ {size:.1} mm が {} の作業範囲 {} mm を超えています",
@@ -1633,7 +1750,14 @@ impl Extension for CamCommands {
                 _ => Vec::new(),
             };
             let checks = match self.post_for(m) {
-                Ok(post) => post.check(&s.program(), m),
+                Ok(post) => match &s.info.sections {
+                    Some(sections) => sections
+                        .list
+                        .iter()
+                        .flat_map(|sec| post.check(&s.section(sec.index).program(), m))
+                        .collect(),
+                    None => post.check(&s.program(), m),
+                },
                 Err(e) => vec![kmb_post::Diagnostic {
                     severity: kmb_post::Severity::Error,
                     message: e,
@@ -1819,12 +1943,18 @@ fn frame_lines(machine: &MachineProfile, i: &crate::SetupInfo, o: &mut Overlay) 
             [0, 1, 2].map(|k| p[k].max(q[k])),
         )
     };
-    let (lo, hi) = box_of(i.stock_min, i.stock_max);
-    o.boxes.push((
-        lo,
-        hi,
-        BoxKind::new(kmb_interchange::ink::boxes::WORK, "ストック"),
-    ));
+    let stocks: Vec<_> = i.sections.as_ref().map_or_else(
+        || vec![(i.stock_min, i.stock_max)],
+        |s| s.list.iter().map(|s| (s.stock_min, s.stock_max)).collect(),
+    );
+    for (min, max) in stocks {
+        let (lo, hi) = box_of(min, max);
+        o.boxes.push((
+            lo,
+            hi,
+            BoxKind::new(kmb_interchange::ink::boxes::WORK, "ストック"),
+        ));
+    }
     o.points.push(i.to_world([0.0; 3]));
     // 置き方の回転の逆で、作業座標系の軸 k は世界座標で行列の k 行目の向き
     o.axes = Some(i.matrix());
@@ -1974,4 +2104,26 @@ fn sim_args() -> Vec<kmb_core::Arg> {
             "荒削りの格子の大きさ(0 は細かい格子と同じ、または 0.01〜2 mm)。省くと設定の値",
         ),
     ]
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::*;
+    #[test]
+    fn power_is_editable_and_old_machine_settings_keep_it_unknown() {
+        let m = kmb_post::machines::generic_grbl();
+        assert_eq!(m.power_w, 0.0);
+        assert_eq!(machine_with(&m, &json!({})).unwrap().power_w, 0.0);
+        let changed = machine_with(&m, &json!({"power_w":100.0})).unwrap();
+        assert_eq!(machine_value(&changed)["power_w"], 100.0);
+        assert!(machine_with(&m, &json!({"power_w":-1.0})).is_err());
+        let mut legacy = serde_json::to_value(changed).unwrap();
+        legacy.as_object_mut().unwrap().remove("power_w");
+        assert_eq!(
+            serde_json::from_value::<MachineProfile>(legacy)
+                .unwrap()
+                .power_w,
+            0.0
+        );
+    }
 }

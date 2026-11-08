@@ -2302,6 +2302,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-acoustics"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kmb-app"
 version = "0.2.0"
 dependencies = [
@@ -2332,7 +2342,9 @@ dependencies = [
 name = "kmb-asm"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-cad",
+ "kmb-contract",
  "kmb-core",
  "kmb-interchange",
  "kmb-look",
@@ -2346,12 +2358,14 @@ dependencies = [
 name = "kmb-bundle"
 version = "0.2.0"
 dependencies = [
+ "kmb-acoustics",
  "kmb-asm",
  "kmb-cad",
  "kmb-cad-boolean",
  "kmb-cad-datum",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",
@@ -2457,6 +2471,18 @@ dependencies = [
 
 [[package]]
 name = "kmb-cad-extrude"
+version = "0.2.0"
+dependencies = [
+ "kmb-cad",
+ "kmb-core",
+ "kmb-interchange",
+ "kmb-workspace-hack",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kmb-cad-gear"
 version = "0.2.0"
 dependencies = [
  "kmb-cad",
@@ -2718,8 +2744,12 @@ dependencies = [
 name = "kmb-drawing"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-core",
+ "kmb-format",
  "kmb-interchange",
+ "kmb-sketch",
+ "kmb-text",
  "kmb-view-lines",
  "kmb-workspace-hack",
  "log",
@@ -2868,6 +2898,7 @@ dependencies = [
 name = "kmb-io-stl"
 version = "0.2.0"
 dependencies = [
+ "kmb-bundle",
  "kmb-core",
  "kmb-format",
  "kmb-interchange",
@@ -3029,6 +3060,7 @@ dependencies = [
 name = "kmb-samples"
 version = "0.2.0"
 dependencies = [
+ "kmb-asm",
  "kmb-bundle",
  "kmb-cad",
  "kmb-cad-edge",
@@ -3045,6 +3077,8 @@ dependencies = [
  "kmb-fea",
  "kmb-flow",
  "kmb-interchange",
+ "kmb-io-dxf",
+ "kmb-io-svg",
  "kmb-look",
  "kmb-post",
  "kmb-post-carvera-air",
@@ -3093,6 +3127,7 @@ dependencies = [
  "kmb-bundle",
  "kmb-core",
  "kmb-format",
+ "kmb-i18n",
  "kmb-image",
  "kmb-interchange",
  "kmb-look",
@@ -3174,11 +3209,13 @@ name = "kmb-solid"
 version = "0.2.0"
 dependencies = [
  "kmb-asm",
+ "kmb-bundle",
  "kmb-cad",
  "kmb-cad-boolean",
  "kmb-cad-datum",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",
@@ -3450,6 +3487,7 @@ dependencies = [
  "kmb-cad-boolean",
  "kmb-cad-edge",
  "kmb-cad-extrude",
+ "kmb-cad-gear",
  "kmb-cad-hole",
  "kmb-cad-import-step",
  "kmb-cad-modify",
@@ -3476,6 +3514,7 @@ dependencies = [
  "kmb-strategy-pocket2d",
  "kmb-text",
  "kmb-ui-mouse3d",
+ "kmb-ui-sketch",
  "kmb-ui-view3d",
  "kmb-workspace-hack",
  "log",
@@ -3519,6 +3558,7 @@ dependencies = [
  "kmb-interchange",
  "kmb-io-dxf",
  "kmb-samples",
+ "kmb-session",
  "kmb-sketch",
  "kmb-sketch-3d",
  "kmb-ui",

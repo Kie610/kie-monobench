@@ -67,8 +67,14 @@ fn typed_numbers_are_read_in_the_document_unit_and_values_shown_in_it() {
     assert!((q.value - 12.7).abs() < 1e-9);
     assert_eq!(ws.shown(q), "0.5 in");
     assert_eq!(ws.shown(kmb_core::Quantity::deg(30.0)), "30 deg");
-    assert_eq!(ws.in_doc_unit("3"), "3 in");
-    assert_eq!(ws.in_doc_unit("w / 2"), "w / 2");
+    let length = kmb_core::ParamUnit::Length;
+    assert_eq!(ws.typed_param(length, "3").unwrap(), "3 in");
+    assert_eq!(ws.typed_param(length, "w / 2").unwrap(), "w / 2");
+    assert_eq!(ws.typed_param(length, "1 + 2").unwrap(), "(1 + 2) in");
+    assert!(
+        ws.typed_param(length, "1 + 2 mm").is_err(),
+        "単位の無い数と長さの足し引きは断る"
+    );
     assert_eq!(ws.param_unit_label(kmb_core::ParamUnit::Length), "in");
     // 単位を変えるのは取り消せる
     ws.undo();

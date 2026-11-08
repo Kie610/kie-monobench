@@ -310,9 +310,19 @@ pub struct Joint {
     /// このジョイントがこれだけ動く(例: `10 mm`)
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub link_follow: String,
-    /// 連動する向きを逆にする
+    /// 連動する向きを逆にする(2 つ目の連動元の項も)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub link_flip: bool,
+    /// 2 つ目の連動元のジョイント(遊星歯車・差動のように 2 つの動きから決まる時)。値は
+    /// 1 つ目の項と、2 つ目の連動元の値 × `link_follow2` ÷ `link_lead2` の和
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_joint2: Option<FeatureId>,
+    /// 2 つ目の連動元がこれだけ動く時に(空なら 360 deg か 10 mm)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub link_lead2: String,
+    /// このジョイントがこれだけ動く(2 つ目の連動元の分。空なら 360 deg か 10 mm)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub link_follow2: String,
 }
 
 impl Exprs for Joint {
@@ -350,6 +360,8 @@ impl Exprs for Joint {
             &mut self.twist_rest,
             &mut self.link_lead,
             &mut self.link_follow,
+            &mut self.link_lead2,
+            &mut self.link_follow2,
         ] {
             if !e.trim().is_empty() {
                 v.push(e);
@@ -522,7 +534,7 @@ impl Joint {
         let (l, h) = (one(d.min, "下限")?, one(d.max, "上限")?);
         let tag = d.tag;
         let mut v = match self.lead(ctx)? {
-            Some(l) if key == self.main_key() => self.leader_value(ctx, l)? * l.ratio,
+            Some(l) if key == self.main_key() => self.leader_value(ctx, l)?,
             _ => (d.read)(ctx, d.value, d.what)?,
         };
         if let Some(l) = l
@@ -568,7 +580,13 @@ impl Joint {
         self.link_joint.filter(|_| self.drive_by == DriveBy::Link)
     }
 
-    /// 連動元と比(この値 = 連動元の値 × 比、どちらも内部の単位)。連動しなければ `None`。
+    /// 2 つ目の連動元(連動する時だけ)。
+    pub fn linked2(&self) -> Option<FeatureId> {
+        self.link_joint2.filter(|_| self.linked().is_some())
+    }
+
+    /// 連動元と比(この値 = 連動元の値 × 比 + 2 つ目の連動元の値 × 比、どれも内部の単位)。
+    /// 連動しなければ `None`。
     fn lead(&self, ctx: &EvalCtx<'_>) -> Result<Option<anim::Lead>, EvalError> {
         let Some(joint) = self.linked() else {
             return Ok(None);
@@ -593,27 +611,55 @@ impl Joint {
                 angle(ctx, e, what)
             }
         };
-        let lead_default = if leader.slide { "10 mm" } else { "360 deg" };
         let follow_default = if self.kind.turns() {
             "360 deg"
         } else {
             "10 mm"
         };
-        let a = read(
-            leader.slide,
-            &or(&self.link_lead, lead_default),
-            "連動元の動き",
-        )?;
-        let b = read(
-            !self.kind.turns(),
-            &or(&self.link_follow, follow_default),
-            "連動する動き",
-        )?;
-        if a.abs() < 1e-12 {
-            return Err(EvalError::InvalidData("連動元の動きが 0 です".into()));
-        }
-        let ratio = if self.link_flip { -b / a } else { b / a };
-        Ok(Some(anim::Lead { joint, ratio }))
+        let sign = if self.link_flip { -1.0 } else { 1.0 };
+        let ratio = |leader: &Drive, lead: &str, follow: &str, what: &str| {
+            let lead_default = if leader.slide { "10 mm" } else { "360 deg" };
+            let a = read(
+                leader.slide,
+                &or(lead, lead_default),
+                &format!("{what}の動き"),
+            )?;
+            let b = read(
+                !self.kind.turns(),
+                &or(follow, follow_default),
+                "連動する動き",
+            )?;
+            if a.abs() < 1e-12 {
+                return Err(EvalError::InvalidData(format!("{what}の動きが 0 です")));
+            }
+            Ok(sign * b / a)
+        };
+        let first = ratio(&leader, &self.link_lead, &self.link_follow, "連動元")?;
+        let second = match self.linked2() {
+            None => None,
+            Some(j2) if j2 == joint => {
+                return Err(EvalError::InvalidData(
+                    "2 つ目の連動元が 1 つ目と同じジョイントです".into(),
+                ));
+            }
+            Some(j2) => {
+                let leader2 = self.leader(ctx, j2)?;
+                Some(anim::LeadTerm {
+                    joint: j2,
+                    ratio: ratio(
+                        &leader2,
+                        &self.link_lead2,
+                        &self.link_follow2,
+                        "2 つ目の連動元",
+                    )?,
+                })
+            }
+        };
+        Ok(Some(anim::Lead {
+            joint,
+            ratio: first,
+            second,
+        }))
     }
 
     /// 連動元のジョイントの今の様子。
@@ -629,8 +675,13 @@ impl Joint {
         }
     }
 
+    /// 連動元の今の値から決まるこの値(内部の単位)。
     fn leader_value(&self, ctx: &EvalCtx<'_>, l: anim::Lead) -> Result<f64, EvalError> {
-        Ok(self.leader(ctx, l.joint)?.value)
+        let mut v = self.leader(ctx, l.joint)?.value * l.ratio;
+        if let Some(t) = l.second {
+            v += self.leader(ctx, t.joint)?.value * t.ratio;
+        }
+        Ok(v)
     }
 
     /// 土台の今の置き場所(前のジョイントの動きを順に掛けた物)。
@@ -815,8 +866,10 @@ impl Feature for Joint {
         if self.kind != JointKind::Rigid || self.how == How::Snap {
             v.extend(self.follows.iter().map(|j| output(*j, "transform")));
         }
-        if let Some(j) = self.linked().filter(|_| self.kind != JointKind::Rigid) {
-            v.push(output(j, DRIVE_SLOT));
+        if self.kind != JointKind::Rigid {
+            for j in self.linked().into_iter().chain(self.linked2()) {
+                v.push(output(j, DRIVE_SLOT));
+            }
         }
         for i in expr_refs(self)? {
             if !v.contains(&i) {
@@ -976,6 +1029,9 @@ pub fn descriptor() -> Descriptor {
     .field(link(Field::opt_expr("link_lead", "連動元の動き").formula()).help("連動元がこれだけ動く時に(回転なら角度、スライダなら距離。空なら 360 deg か 10 mm)"))
     .field(link(Field::opt_expr("link_follow", "この動き").formula()).help("このジョイントがこれだけ動く(空なら 360 deg か 10 mm)"))
     .field(link(Field::bool("link_flip", "連動する向きを反転")).help("連動元と逆の向きに動かす"))
+    .field(link(Field::opt_output("link_joint2", "2 つ目の連動元", DRIVE_SLOT)).help("遊星歯車・差動のように 2 つの動きから決まる時の、タイムラインで前にあるもう 1 つのジョイント。値は 2 つの連動元から決まる分の和"))
+    .field(link(Field::opt_expr("link_lead2", "2 つ目の連動元の動き").formula()).help("2 つ目の連動元がこれだけ動く時に(空なら 360 deg か 10 mm)"))
+    .field(link(Field::opt_expr("link_follow2", "2 つ目の分の動き").formula()).help("2 つ目の連動元の分で、このジョイントがこれだけ動く(逆向きは負の値。空なら 360 deg か 10 mm)"))
     .no_raw_editor()
 }
 
@@ -1040,6 +1096,9 @@ pub fn new_joint(moving: Part, base: Option<Part>, bodies: Vec<FeatureId>, o: &O
         link_lead: String::new(),
         link_follow: String::new(),
         link_flip: false,
+        link_joint2: None,
+        link_lead2: String::new(),
+        link_follow2: String::new(),
     }
 }
 

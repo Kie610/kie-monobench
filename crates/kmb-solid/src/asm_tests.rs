@@ -5,7 +5,7 @@ use super::*;
 use kmb_asm::{
     AsmCommands, BOM, DRAG_POSITION, INTERFERENCE, JOINT, Joint, JointKind, MOVE_PART,
     NEW_COMPONENT, NEW_JOINT, NEW_SNAP_JOINT, Origin, POSITION, SnapPick, bom_rows, interferences,
-    interferences_with,
+    interferences_with, mass_rows,
 };
 use kmb_cad_modify::MOVE;
 use kmb_core::{
@@ -634,6 +634,73 @@ fn an_unknown_material_name_gives_no_mass_anywhere() {
     assert_eq!(rows[0].mass, None, "{rows:?}");
 }
 
+/// Claude 011-2: 質量特性の表は、組立全体・部品「柱」・部品に入っていない台(ブラウザの名前「ボディ1」)の行を出す。台と柱は
+/// 材料が無いので鋼で数え、全体の慣性は直方体の式を平行軸の定理で全体の重心へ移した和と合う。
+#[test]
+fn mass_rows_combine_the_plate_and_the_post_by_the_parallel_axis_theorem() {
+    let (t, _, _) = plate_and_post();
+    let rows = mass_rows(&t.cx());
+    let kinds: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|r| (r.name.as_str(), r.kind.as_str()))
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            ("組立全体", "組立全体"),
+            ("柱", "部品"),
+            ("ボディ1", "ボディ")
+        ],
+        "{rows:?}"
+    );
+    let rho = kmb_look::material::phys_material(kmb_look::material::DEFAULT_MATERIAL)
+        .unwrap()
+        .density;
+    // 直方体 (外形の幅 w・奥行き d・高さ h、重心 c)。質量 g、慣性 kg·mm²
+    let boxes = [
+        ([40.0, 30.0, 5.0], [20.0, 15.0, 2.5]),
+        ([4.0, 4.0, 10.0], [102.0, 2.0, 5.0]),
+    ];
+    let m: Vec<f64> = boxes
+        .iter()
+        .map(|(s, _)| s[0] * s[1] * s[2] * rho / 1000.0)
+        .collect();
+    let total: f64 = m.iter().sum();
+    let mut c = [0.0; 3];
+    for ((_, bc), mi) in boxes.iter().zip(&m) {
+        for i in 0..3 {
+            c[i] += bc[i] * mi / total;
+        }
+    }
+    let all = &rows[0].value;
+    assert!((all.mass - total).abs() < 1e-6 * total, "{all:?}");
+    assert!(near(all.centroid, c), "{all:?} {c:?}");
+    let t3 = all.inertia.expect("SMLib は慣性を出す");
+    // 軸 a のまわり: 残りの 2 辺 (b, c) と重心からのずれ
+    for (a, row) in t3.iter().enumerate() {
+        let (b, e) = ((a + 1) % 3, (a + 2) % 3);
+        let want: f64 = boxes
+            .iter()
+            .zip(&m)
+            .map(|((s, bc), mi)| {
+                let kg = mi / 1000.0;
+                let d2 = (bc[b] - c[b]).powi(2) + (bc[e] - c[e]).powi(2);
+                kg * (s[b] * s[b] + s[e] * s[e]) / 12.0 + kg * d2
+            })
+            .sum();
+        assert!(
+            (row[a] - want).abs() < 1e-6 * want,
+            "{a}: {} {want}",
+            row[a]
+        );
+    }
+    // 柱の行は柱だけの値
+    let post = &rows[1].value;
+    assert!((post.mass - m[1]).abs() < 1e-6 * m[1]);
+    assert!(near(post.centroid, boxes[1].1), "{post:?}");
+    assert_eq!(rows[0].skipped, 0);
+}
+
 /// 台(40×30×5)と、離れた所に置いた柱(4×4×10、x = 100)。柱は部品「柱」。
 /// (台, ボディの最初の機能 [台, 柱], 形の最後の機能 [台, 柱])。
 fn plate_and_post() -> (Bench, Vec<FeatureId>, [FeatureId; 2]) {
@@ -1123,7 +1190,7 @@ fn interference_lists_a_shape_only_body_as_unchecked_with_the_reason() {
     let (clashes, unchecked) = interferences(&t.cx());
     assert!(clashes.is_empty(), "{clashes:?}");
     assert_eq!(unchecked.len(), 1, "{unchecked:?}");
-    assert!(unchecked[0].reason.contains("STEP"), "{unchecked:?}");
+    assert!(unchecked[0].reason.contains("網のボディ"), "{unchecked:?}");
     let Some(Ok(Outcome::Table { table, .. })) = AsmCommands.run(INTERFERENCE, &t.cx()) else {
         panic!()
     };

@@ -261,6 +261,9 @@ impl CamCommands {
             .into());
         }
         let s = self.setup_paths(cx, setup)?.only(&ids)?;
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         let (g, post) = self.gcode_text(cx, &s)?;
         let names: Vec<String> = s.paths.iter().map(|p| file_part(&p.name)).collect();
         let tools = s.program().tools().iter().map(|t| t.number).collect();
@@ -275,7 +278,13 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setup": setup.0, "operations": ids.iter().map(|i| i.0).collect::<Vec<_>>()}),
+            {
+                let mut info = json!({"setup": setup.0, "operations": ids.iter().map(|i| i.0).collect::<Vec<_>>()});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &[&s]));
+                info
+            },
         ))
     }
 
@@ -297,13 +306,22 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setups": setups}),
+            {
+                let mut info = json!({"setups": setups});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &all.iter().collect::<Vec<_>>()));
+                info
+            },
         ))
     }
 
     fn export_by_tool(&self, cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
         let setup = self.target_setup(cx)?;
         let (mut s, before, after) = self.setup_paths(cx, setup)?.by_tool()?;
+        if s.info.sections.is_some() {
+            return self.section_files(cx, &s);
+        }
         s.name = format!("{}。工具交換 {before} → {after} 回", s.name);
         let (g, post) = self.gcode_text(cx, &s)?;
         let tools = s.program().tools().iter().map(|t| t.number).collect();
@@ -316,7 +334,13 @@ impl CamCommands {
             g,
             post,
             tools,
-            json!({"setup": setup.0, "tool_changes_before": before, "tool_changes_after": after}),
+            {
+                let mut info = json!({"setup": setup.0, "tool_changes_before": before, "tool_changes_after": after});
+                info.as_object_mut()
+                    .expect("書き出しの補足")
+                    .extend(self.path_warnings(cx, &[&s]));
+                info
+            },
         ))
     }
 

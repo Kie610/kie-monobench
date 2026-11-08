@@ -1,7 +1,8 @@
 //! 文字(`cad.text@1`)。平面の上に、1 本線のフォント(Hershey)か輪郭のフォント(TrueType・
 //! OpenType)で文字を置き、線(`curves`)と閉じた領域(`profile`)を出す。
-//! 既定は 1 本線: 彫刻の加工は、この線を深さでなぞる。輪郭のフォントと違い、線は 1 本なので
-//! 二重にならない。輪郭のフォント(日本語も)は、領域を押し出し・ポケット・V 彫りで加工する。
+//! 機能のデータの既定は 1 本線。新しく置く操作では PC の日本語のゴシック体を選ぶ。
+//! 彫刻の加工は 1 本線を深さでなぞり、線は二重にならない。
+//! 輪郭のフォント(日本語も)は、領域を押し出し・ポケット・V 彫りで加工する。
 //!
 //! 1 本線のフォントのデータは `fonts/` の Hershey フォント(許諾は `fonts/HERSHEY-LICENSE.txt`)。
 //! 英数字と記号(ASCII の 32〜126)だけで、それ以外の文字は「?」に置き換えて知らせる。
@@ -548,6 +549,7 @@ fn align(
                 for (seg, back) in r.iter_mut() {
                     *seg = glyph::rigid(seg, &shift, 0.0);
                     let e = ProfileEdge {
+                        curve: None,
                         name: String::new(),
                         segment: seg.clone(),
                         reversed: *back,
@@ -998,6 +1000,7 @@ pub fn thicken(segments: &[Segment], width: f64) -> Vec<kmb_core::Region> {
         let mut l = ProfileLoop {
             edges: (0..n)
                 .map(|i| ProfileEdge {
+                    curve: None,
                     name: format!("t{k}.{i}"),
                     segment: Segment::Line {
                         a: c[i],
@@ -1126,3 +1129,6 @@ mod outline_tests;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod test_fonts;

@@ -1,4 +1,4 @@
-//! 測る道具の画面。M・「検査」タブ・右クリックで開き、3D のビューで点(頂点・円の中心)・辺・面を
+//! 測る道具の画面。I・「検査」タブ・右クリックで開き、3D のビューで点(頂点・円の中心)・辺・面を
 //! クリックで選ぶ。1 つなら座標・長さ・径・面積、2 つなら最短の距離・ΔX/ΔY/ΔZ・角度を
 //! ビューの右上の小さな窓に出し、ビューには最短の 2 点を結ぶ寸法の線を描く。
 //! 何を測るかは選んだ物の組み合わせで決める(先に測る種類を選ばせない)。
@@ -9,6 +9,9 @@ use crate::Workspace;
 use crate::measure::{self, Basis, Report, Target};
 use crate::view3d::{self, Pick};
 use egui::{Color32, Pos2, Rect};
+
+mod job;
+pub(crate) use job::BodyReadTask;
 
 /// 測る道具の状態。
 #[derive(Default)]
@@ -25,8 +28,11 @@ pub struct Measure {
     copied: Option<f64>,
     /// 丸い物が入っている時の測り方(中心・最短・最長)。選び直しても覚えておく
     basis: Basis,
-    /// 値を書いた時の文書の長さの単位(変わったら書き直す。候補 19)
+    /// 値を書いた時の文書の長さの単位(変わったら書き直す)
     unit: kmb_core::LengthUnit,
+    body_key: Option<job::BodyKey>,
+    body: Option<measure::BodyFacts>,
+    body_done: bool,
 }
 
 impl Workspace {
@@ -38,6 +44,7 @@ impl Workspace {
     /// 測る道具を開く・閉じる。開く時に選んでいた面は、そのまま測る物にする。
     pub fn toggle_measure(&mut self) {
         if self.cur.measure.take().is_some() {
+            self.cancel_measure_read();
             return;
         }
         self.cur.gesture = None;
@@ -73,15 +80,19 @@ impl Workspace {
             }
             _ => None,
         };
-        let body = face.and_then(|feature| {
-            let h = self.cur.scene.key().iter().find(|(f, _)| *f == feature)?.1;
-            measure::BodyFacts::of(
-                self.cur.work.kernel().as_ref(),
-                h,
-                kmb_session::body_material(self.cur.work.doc().data(), self.body_root(feature)),
-            )
-            .ok()
-        });
+        let body = if self.win.background {
+            self.measure_body_request(face)
+        } else {
+            face.and_then(|feature| {
+                let h = self.cur.scene.key().iter().find(|(f, _)| *f == feature)?.1;
+                measure::BodyFacts::of(
+                    self.cur.work.kernel().as_ref(),
+                    h,
+                    kmb_session::body_material(self.cur.work.doc().data(), self.body_root(feature)),
+                )
+                .ok()
+            })
+        };
         let Some(m) = &mut self.cur.measure else {
             return;
         };
@@ -382,6 +393,8 @@ impl Workspace {
         let l = self.win.look;
         let mut close = false;
         let mut clear = false;
+        let waiting = self.measure_is_waiting();
+        let words = crate::window_state::Words::of(ui.ctx());
         let mut copy: Option<String> = None;
         // ビューの右下(下の帯の上)。部品はふつう真ん中にあるので、隅の方が形を隠しにくい
         let w = 300.0;
@@ -401,6 +414,16 @@ impl Workspace {
                     .inner_margin(egui::Margin::same(10))
                     .show(ui, |ui| {
                         ui.set_width(w - 20.0);
+                        if waiting {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.spinner();
+                                ui.label(words.t("view-measure-job-running"));
+                                if ui.button(words.t("view-measure-job-cancel")).clicked() {
+                                    clear = true;
+                                }
+                            });
+                        }
+
                         ui.horizontal(|ui| {
                             ui.label(egui::RichText::new("計測").strong().color(l.ws()));
                             ui.with_layout(
@@ -533,6 +556,7 @@ impl Workspace {
             self.measure_refresh();
         }
         if close {
+            self.cancel_measure_read();
             self.cur.measure = None;
         }
     }

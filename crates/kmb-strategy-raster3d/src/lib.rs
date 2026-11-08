@@ -708,7 +708,7 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
                 .icon("spiral3d")
                 .not_front()
                 .aliases("うずまき spiral 3d まるい")
-                .hint("部品の中心のまわりの渦巻きを外から内へなぞって仕上げる(ボールエンドミルがあればそれを使う)")
+                .hint("中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる(ボールエンドミルがあればそれを使う)")
                 .no_reuse(),
             Strategy::new(RADIAL3D, "cam.add.radial3d", "放射状(3D)", |p| circular(p, Pattern::Radial))
                 .order(28)
@@ -716,7 +716,7 @@ pub fn module() -> kmb_cam_setup::StrategyModule {
                 .icon("radial3d")
                 .not_front()
                 .aliases("ほうしゃ radial 3d まるい")
-                .hint("部品の中心から放射の線を外へ・内へとなぞって仕上げる(ボールエンドミルがあればそれを使う)")
+                .hint("部品の中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる(ボールエンドミルがあればそれを使う)")
                 .no_reuse(),
             Strategy::new(MORPH3D, "cam.add.morph3d", "モーフィング スパイラル(3D)", |p| {
                 to_data(Morph::new(fitted(p.with_tool(ToolKind::BallEnd))))

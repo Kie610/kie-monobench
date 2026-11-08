@@ -188,6 +188,7 @@ pub(super) fn ball_corner(
     let half = ProfileLoop {
         edges: vec![
             ProfileEdge {
+                curve: None,
                 name: "ball".into(),
                 segment: Segment::Arc {
                     center: [0.0, 0.0],

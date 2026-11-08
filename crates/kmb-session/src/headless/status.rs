@@ -24,7 +24,8 @@ impl Headless {
         Ok(b)
     }
 
-    /// 残ったボディごとの体積(mm³)、表面積(mm²)、外形(mm)、重心と質量(g。材料の無いボディは既定の材料の鋼)。
+    /// 残ったボディごとの体積(mm³)、表面積(mm²)、外形(mm)、重心と質量(g。材料の無いボディは既定の材料の鋼)、
+    /// 求められれば重心のまわりの慣性(kg·mm²)と主軸。
     pub fn mass(&self) -> Result<Vec<BodyMass>, String> {
         self.bodies()?;
         let data = self.doc.data();
@@ -52,6 +53,14 @@ impl Headless {
                     .as_deref()
                     .and_then(kmb_look::material::phys_material)
                     .map(|m| m.density);
+                // 密度 g/cm³ → kg/mm³(1e-6)。慣性は密度 1 の値に掛ける
+                let mass_inertia = props
+                    .and_then(|p| p.inertia)
+                    .zip(density)
+                    .map(|(t, d)| t.map(|r| r.map(|v| v * d * 1e-6)));
+                let principal = mass_inertia
+                    .as_ref()
+                    .map(kmb_core::kernel::principal_inertia);
                 Ok(BodyMass {
                     name,
                     root,
@@ -61,6 +70,9 @@ impl Headless {
                         .and_then(|p| density.map(|d| kmb_look::material::mass_of(p.volume, d))),
                     material,
                     density,
+                    mass_inertia,
+                    principal_moments: principal.map(|p| p.moments),
+                    principal_axes: principal.map(|p| p.axes),
                 })
             })
             .collect()
@@ -134,6 +146,9 @@ impl Headless {
                 let mut o = json!({"id": f.id.0, "name": f.name, "type": f.type_id});
                 let (state, detail) = match self.report.feature(f.id) {
                     Some(FeatureStatus::Ok { outputs, .. }) => {
+                        o.as_object_mut()
+                            .expect("機能の状態")
+                            .extend(kmb_core::warning_info(outputs));
                         let scalars: serde_json::Map<String, Json> = outputs
                             .iter()
                             .filter_map(|(k, v)| match v {

@@ -760,6 +760,13 @@ impl Document {
                     components = list.clone();
                     vec![Op::SetComponents { components: list }]
                 }
+                crate::Edit::NameBodies { bodies } => bodies
+                    .into_iter()
+                    .map(|(k, name)| Op::RenameBody {
+                        root: added.get(k).copied().unwrap_or(FeatureId(0)),
+                        name: Some(name),
+                    })
+                    .collect(),
                 crate::Edit::AddBodies {
                     component,
                     name,

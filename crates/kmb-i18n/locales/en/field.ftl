@@ -58,10 +58,16 @@ field-asm-joint-link-flip = Reverse Linked Motion
 field-asm-joint-link-flip-help = Moves opposite to the driving joint.
 field-asm-joint-link-follow = Driven Motion
 field-asm-joint-link-follow-help = Motion of this joint; blank means 360 deg or 10 mm.
+field-asm-joint-link-follow2 = Second Driven Motion
+field-asm-joint-link-follow2-help = Motion of this joint from the second driving joint; negative for the opposite direction. Blank means 360 deg or 10 mm.
 field-asm-joint-link-joint = Driving Joint
 field-asm-joint-link-joint-help = A rotary or slider joint earlier in the timeline.
+field-asm-joint-link-joint2 = Second Driving Joint
+field-asm-joint-link-joint2-help = Another joint earlier in the timeline, for motion set by two others (planetary gears, differentials). The value is the sum of the parts from both driving joints.
 field-asm-joint-link-lead = Driving Motion
 field-asm-joint-link-lead-help = Driving motion for the ratio: angle for rotary joints or distance for sliders. Blank means 360 deg or 10 mm.
+field-asm-joint-link-lead2 = Second Driving Motion
+field-asm-joint-link-lead2-help = Motion of the second driving joint for its ratio. Blank means 360 deg or 10 mm.
 field-asm-joint-offset-x = X Offset
 field-asm-joint-offset-x-help = Offsets along component 2's origin X direction.
 field-asm-joint-offset-y = Y Offset
@@ -104,12 +110,18 @@ field-asm-link-file = Source File
 field-asm-link-pinned = Pin This Version
 field-asm-link-pinned-help = Does not notify or update when the source file changes. Unpin to enable notifications again.
 field-asm-occurrence-of = Original Body
+field-asm-position-rx = X Rotation
+field-asm-position-rx-help = Angle about world X at the center of the component bounds (X → Y → Z order).
+field-asm-position-ry = Y Rotation
+field-asm-position-ry-help = Angle about world Y at the center of the component bounds (X → Y → Z order).
+field-asm-position-rz = Z Rotation
+field-asm-position-rz-help = Angle about world Z at the center of the component bounds (X → Y → Z order).
 field-asm-position-x = X Distance
-field-asm-position-x-help = Distance from the position before dragging.
+field-asm-position-x-help = Distance along world X after rotation.
 field-asm-position-y = Y Distance
-field-asm-position-y-help = Distance from the position before dragging.
+field-asm-position-y-help = Distance along world Y after rotation.
 field-asm-position-z = Z Distance
-field-asm-position-z-help = Distance from the position before dragging.
+field-asm-position-z-help = Distance along world Z after rotation.
 field-cad-canvas-angle = Angle
 field-cad-canvas-file = File
 field-cad-canvas-flip-h = Flip Horizontally
@@ -138,6 +150,38 @@ field-cad-datum-plane-other-face = Second Face
 field-cad-datum-plane-points = Three Points
 field-cad-datum-point-point-at = Coordinates
 field-cad-datum-point-point-kind = Construction Method
+field-cad-gear-anchor = Center Point Sketch
+field-cad-gear-anchor-help = Centers the gear on a standalone sketch point. Constraints can move the point.
+field-cad-gear-body-boss = Boss Length
+field-cad-gear-body-boss-help = Empty for the face width.
+field-cad-gear-body-direction = Direction
+field-cad-gear-body-gear = Gear Profile
+field-cad-gear-body-operation = Operation
+field-cad-gear-body-target = Target
+field-cad-gear-body-web = Web Thickness
+field-cad-gear-body-web-help = Empty for the face width.
+field-cad-gear-body-width = Face Width
+field-cad-gear-bore = Bore Diameter
+field-cad-gear-bore-help = Empty or 0 for no bore.
+field-cad-gear-kind = Type
+field-cad-gear-module = Module
+field-cad-gear-module-help = Tooth size. Pitch diameter = module × number of teeth.
+field-cad-gear-outer-diameter = Ring Outer Diameter
+field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
+field-cad-gear-phase = Rotation
+field-cad-gear-phase-help = Direction of the first tooth, or the travel direction of a rack. Empty for 0.
+field-cad-gear-pressure-angle = Pressure Angle
+field-cad-gear-pressure-angle-help = Usually 20 deg.
+field-cad-gear-profile-shift = Profile Shift Coefficient
+field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken external teeth, thin internal teeth, and move the tip and root circles outward.
+field-cad-gear-root-round = Root Fillet
+field-cad-gear-root-round-help = Fillet radius as a ratio of the module. Empty for 0.38.
+field-cad-gear-teeth = Number of Teeth
+field-cad-gear-tip-round = Tip Round
+field-cad-gear-tip-round-help = Round radius as a ratio of the module. Empty for 0.
+field-cad-gear-x = Center X
+field-cad-gear-x-help = Offset from the center point, if present. For a rack, the start of the pitch line.
+field-cad-gear-y = Center Y
 field-cad-text-align = Horizontal Alignment
 field-cad-text-anchor = Anchor Point Sketch
 field-cad-text-anchor-help = Aligns to a standalone sketch point. Constraints can move the point.
@@ -402,7 +446,7 @@ field-cam-contour2d-rest-corner-help = For example 0.5 mm. Blank means 0 for a f
 field-cam-contour2d-rest-diameter = Rest Machining: Previous Tool Diameter
 field-cam-contour2d-rest-diameter-help = For example 6.35 mm. Enter this when the previous tool is not in the tool library. A previous tool number takes precedence.
 field-cam-contour2d-rest-tool = Rest Machining: Previous Tool Number
-field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Tabs, finishing, lateral roughing and lead-in/out arcs are unavailable.
+field-cam-contour2d-rest-tool-help = Larger tool used on the same contour earlier. Machines only internal corners and narrow grooves it could not reach. The current tool may be flat, bull-nose, V-bit or tapered. Low sections crossing tabs are skipped, and the tool retracts to travel between sections. Finishing, lateral roughing and lead-in/out arcs are unavailable.
 field-cam-contour2d-retract = Retract Mode
 field-cam-contour2d-retract-help = Minimum Retract rises above the highest material along the move by the clearance allowance, never below stock top + 1 mm. Reduces vertical travel across cleared areas.
 field-cam-contour2d-rough-passes = Roughing Passes
@@ -1365,6 +1409,19 @@ field-cam-setup-leveling-ny = Grid Points Y
 field-cam-setup-leveling-ny-help = 2–20. Blank means 5.
 field-cam-setup-machine = Machine
 field-cam-setup-machine-help = The machine determines travel, spindle limits, G-code and accessories. A new setup stores the selected machine and settings in the document, so later preference changes do not affect its toolpaths or G-code. Changing the machine here resets its machine values to defaults.
+field-cam-setup-nest-edge = Edge Margin
+field-cam-setup-nest-grid = Grid Spacing
+field-cam-setup-nest-grid-help = Used for shape-based nesting. The value is retained when switching to bounding-box nesting.
+field-cam-setup-nest-max-sheets = Maximum Number of Sheets
+field-cam-setup-nest-method = Layout Method
+field-cam-setup-nest-output = Section Export
+field-cam-setup-nest-parts = Parts to Place
+field-cam-setup-nest-parts-body = Body
+field-cam-setup-nest-parts-count = Quantity
+field-cam-setup-nest-parts-rotate = Allowed Rotation
+field-cam-setup-nest-parts-up = Upward Face
+field-cam-setup-nest-sheet = Sheet Size Source
+field-cam-setup-nest-spacing = Part Spacing
 field-cam-setup-origin = Origin (XY)
 field-cam-setup-origin-help = Picking a point with Pick Origin in 3D uses that point instead of this field.
 field-cam-setup-origin-note = Picked Origin
@@ -2036,6 +2093,8 @@ field-solid-hole-countersink-diameter = Countersink Diameter
 field-solid-hole-countersink-diameter-help = Blank uses the thread table, or twice the hole diameter when unavailable.
 field-solid-hole-depth = Depth
 field-solid-hole-depth-help = Blank makes a through hole.
+field-solid-hole-thread-depth = Thread length
+field-solid-hole-thread-depth-help = Blank uses the full hole depth, excluding the conical drill point.
 field-solid-hole-diameter = Diameter
 field-solid-hole-extent = Extent
 field-solid-hole-extent-help = To Object starts picking a planar face or vertex to stop the hole. An inclined face produces an inclined bottom.
@@ -2046,7 +2105,7 @@ field-solid-hole-size = Size
 field-solid-hole-size-help = Select a nominal size or enter M6x0.75, 1/4-20 UNC, G1/4 or Rp1/4. Clearance holes only accept the listed metric coarse-pitch sizes.
 field-solid-hole-sketch = Point Sketch
 field-solid-hole-tap = Thread Type
-field-solid-hole-tap-help = Does not model thread geometry. Uses the table diameter and stores thread attributes.
+field-solid-hole-tap-help = Use the thread table to set the diameter. Tapped holes can have cosmetic or modeled threads.
 field-solid-hole-target = Target
 field-solid-hole-tip = Tip
 field-solid-hole-tip-angle = Tip Angle
@@ -2127,13 +2186,17 @@ field-solid-move-body = Body
 field-solid-move-body-help = Body to move. Click one of its faces in the 3D view.
 field-solid-move-copy = Create Copy
 field-solid-move-copy-help = Preserves the original body and makes the moved copy a new body.
-field-solid-move-from-point = Source Point
+field-solid-move-from-point = Source Point Coordinates
 field-solid-move-from-point-help = Coordinates of a point on the body to move.
+field-solid-move-from-ref-kind = Source Point
+field-solid-move-from-ref-kind-help = Point on the body to move. When picked by clicking, it follows the same point after the shape changes.
 field-solid-move-mode = Move Type
 field-solid-move-origin = Point on Axis
 field-solid-move-origin-help = Blank uses the center of the body's bounding box.
-field-solid-move-to-point = Destination Point
+field-solid-move-to-point = Destination Point Coordinates
 field-solid-move-to-point-help = Coordinates where the source point will be placed.
+field-solid-move-to-ref-kind = Destination Point
+field-solid-move-to-ref-kind-help = Where the source point goes. When picked by clicking, the body follows changes to the other shape or sketch.
 field-solid-move-x = X Distance
 field-solid-move-y = Y Distance
 field-solid-move-z = Z Distance
@@ -2215,10 +2278,118 @@ field-solid-sweep-twist-help = Total profile twist around the path. A circle off
 field-solid-thread-face = Cylindrical Face
 field-solid-thread-hand = Direction
 field-solid-thread-length = Length
-field-solid-thread-length-help = Blank uses the full face length.
+field-solid-thread-length-help = Leave empty for the full face length. Modeled threads use the maximum length that leaves room at the ends, or the full length for a through thread.
 field-solid-thread-size = Nominal Size
-field-solid-thread-size-help = Blank chooses a nominal size close to the face diameter. Lists nearest sizes first, comparing major diameters for external threads and pilot or major diameters for internal threads.
+field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 field-solid-thread-target = Target
+
+field-cad-sketch-freedom = Degrees of freedom
+field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
+field-solid-import-mesh-file = File
+field-solid-import-mesh-object = Object name
+field-solid-import-mesh-triangles = Triangles
+field-solid-import-mesh-unit = Unit
+field-solid-import-mesh-crease-angle = Crease angle
+field-solid-import-mesh-crease-angle-help = Smooth the shading between adjacent triangles whose angle is at most this value
+field-solid-import-mesh-notes = Notes
+field-solid-hole-clearance = Clearance
+field-solid-hole-clearance-help = Diametral clearance. Leave empty for 0 mm.
+field-solid-hole-end = Far end
+field-solid-hole-flip = Start at the opposite end
+field-solid-hole-form = Thread form
+field-solid-thread-clearance = Clearance
+field-solid-thread-clearance-help = Diametral clearance. Leave empty for 0 mm.
+field-solid-thread-end = Far end
+field-solid-thread-flip = Start at the opposite end
+field-solid-thread-form = Thread form
+
+field-cam-spiral3d-levels = Cut in depth levels from the top
+field-cam-spiral3d-direction = Cutting direction
+field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+field-cam-radial3d-levels = Cut in depth levels from the top
+field-cam-radial3d-direction = Cutting direction
+field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+
+field-cam-setup-stock-cost-material-price = Cost: Stock price
+field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+field-cam-setup-stock-cost-currency = Cost: Currency
+field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
+
+field-solid-thicken-body = Body
+field-solid-thicken-body-help = Select a sheet body without thickness
+field-solid-thicken-thickness = Thickness
+field-solid-thicken-side = Side
+
+field-solid-import-iges-file = File
+field-solid-import-iges-stand-up = Convert Y-up to Z-up
+field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+field-cad-gear-chain = Chain Size
+field-cad-gear-chain-pitch = Chain Pitch
+field-cad-gear-roller-diameter = Roller Diameter
+field-cad-gear-chain-inner-width = Chain Inner Width
+field-cad-gear-body-width-help = Empty uses 0.93 or 0.95 times the chain inner width for sprockets, or 10 mm for other gears. Belt pulleys and rope sheaves use the profile width and show a warning when the value differs.
+field-cad-gear-body-alignment = Web and Boss Alignment
+field-cad-gear-boss-diameter = Boss Outside Diameter
+field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+field-cad-gear-key-depth = Keyway Depth
+field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+field-cad-gear-key-width = Keyway Width
+field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+field-cad-gear-keyway = Keyway
+field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+field-cad-gear-lightening-count = Number of Lightening Holes
+field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+field-cad-gear-lightening-diameter = Lightening Hole Diameter
+field-cad-gear-rack-size = Rack Size By
+field-cad-gear-rack-length = Rack Length
+field-cad-gear-rack-length-help = Overall length including the teeth. Fits as many complete circular pitches as possible.
+field-cad-gear-rack-back = Back Thickness
+field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
+field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
+field-cad-gear-y-help = For a rack, the start of the pitch line.
+
+field-cad-gear-pulley-diameter = Pitch Diameter
+
+field-cad-gear-pulley-diameter-help = Empty uses 100 mm.
+
+field-cad-gear-pulley-width = Width
+
+field-cad-gear-pulley-width-help = Empty uses 30 mm. Axial width of the belt or rope pulley.
+
+field-cad-gear-crown-height = Crown Height
+
+field-cad-gear-crown-height-help = Empty uses 0 mm.
+
+field-cad-gear-groove-count = Number of Grooves
+
+field-cad-gear-groove-count-help = Empty uses 1.
+
+field-cad-gear-v-section = Groove Section
+
+field-cad-gear-groove-angle = Groove Angle
+
+field-cad-gear-groove-angle-help = Empty selects the angle from the section and pitch diameter.
+
+field-cad-gear-groove-top-width = Groove Opening Width
+
+field-cad-gear-groove-top-width-help = Empty derives the opening from the section width at the pitch position.
+
+field-cad-gear-groove-depth = Groove Depth
+
+field-cad-gear-groove-depth-help = From the opening to the bottom. Empty derives it from the section dimensions.
+
+field-cad-gear-rope-diameter = Rope Diameter
+
+field-cad-gear-rope-diameter-help = Empty uses 10 mm.
+
+field-cad-gear-flange-height = Flange Height
+
+field-cad-gear-flange-height-help = Empty uses 3 mm above the rope center.
 
 field-flow-section-arrows = Arrow spacing
 field-flow-section-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.

@@ -26,6 +26,7 @@
 //!
 //! 加工の機能はタイムラインで形状の後に並び、形状の寸法を変えると経路も作り直される。
 
+pub use kmb_cam_setup::nest::{Nest, NestMethod, NestPart, NestRotate, SheetFrom};
 pub use kmb_cam_setup::{
     AirCuts, Fixture, Flip, HeightFrom, HeightsOutput, MANUAL_NC, ManualKind, ManualNc, MirrorAxis,
     OpBase, Origin, OriginZ, PATTERN, Pattern, PatternKind, SETUP, Setup, SetupInfo, Stock,
@@ -41,6 +42,7 @@ mod commands;
 mod entry;
 mod fixtures;
 mod nc_program;
+mod nest;
 mod paths_cache;
 mod picks;
 mod playback;
@@ -141,6 +143,7 @@ mod tests {
             clearance_z: 20.0,
             wcs: 1,
             material: String::new(),
+            cost: Default::default(),
             flip,
             flip_center: [5.0, 5.0, 2.5],
             tolerance: kmb_cam_setup::MESH_TOLERANCE,
@@ -157,6 +160,10 @@ mod tests {
             machine: kmb_post_carvera_air::ID.into(),
             machine_values: kmb_post_carvera_air::profile(),
             leveling: None,
+            sections: None,
         }
     }
 }
+
+#[cfg(test)]
+mod warning_tests;

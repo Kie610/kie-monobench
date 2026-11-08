@@ -382,3 +382,133 @@ fn a_snap_joint_between_touching_faces_keeps_the_part_where_it_is() {
     };
     assert_eq!(touching_alignment(&apart, &to), None);
 }
+
+fn batch_mouth(diameter: f64, x: f64) -> serde_json::Value {
+    serde_json::json!({"center":[x,0,0],"normal":[0,0,1],"diameter":diameter,"hole":true,"depth":8})
+}
+
+#[test]
+fn batch_fasteners_reject_an_incompatible_hole_instead_of_inserting_another_size() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let args = serde_json::json!({"holes":[batch_mouth(3.4,0.0),batch_mouth(6.6,20.0)]});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    let result = AsmCommands.run(NEW_FASTENER, &cx).unwrap();
+    let Err(problem) = result else {
+        panic!("合わない穴を含む変更は作らない")
+    };
+    assert_eq!(problem.kind, kmb_core::ProblemKind::Input);
+    assert!(
+        problem.to_string().contains("穴2") && problem.to_string().contains("M3"),
+        "{problem}"
+    );
+}
+
+#[test]
+fn batch_fasteners_do_not_silently_drop_a_malformed_hole() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let args = serde_json::json!({"holes":[batch_mouth(3.4,0.0),{"bad":true}]});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    let result = AsmCommands.run(NEW_FASTENER, &cx).unwrap();
+    assert!(
+        matches!(result,Err(ref p) if p.kind==kmb_core::ProblemKind::Input),
+        "読めない穴を飛ばして挿さない"
+    );
+}
+
+#[test]
+fn batch_fasteners_choose_a_flat_head_from_the_countersink_instead_of_a_thicker_shank() {
+    let mut mouth = batch_mouth(6.8, 0.0);
+    mouth["countersink"] = serde_json::json!(true);
+    let mouth: fastener::HoleMouth = serde_json::from_value(mouth).unwrap();
+    let f = fastener::new_fastener(fastener::Kind::FlatHead, &[mouth]);
+    assert_eq!(f.size, "M3", "皿の径は頭の寸法で選ぶ");
+}
+
+#[test]
+fn batch_fasteners_reject_a_shank_that_only_matches_the_countersink_opening() {
+    let data = DocumentData::default();
+    let report = kmb_core::RecomputeReport::default();
+    let reg = Registry::new();
+    let kernel: std::sync::Arc<dyn kmb_core::Kernel> = std::sync::Arc::new(kmb_core::NullKernel);
+    let mut mouth = batch_mouth(6.8, 0.0);
+    mouth["countersink"] = serde_json::json!(true);
+    let args = serde_json::json!({"holes":[mouth],"kind":"flat_head","size":"M6"});
+    let cx = Context {
+        args: &args,
+        ..Context::new(&data, &report, &reg, &kernel)
+    };
+    assert!(
+        matches!(AsmCommands.run(NEW_FASTENER,&cx).unwrap(),Err(p) if p.kind==kmb_core::ProblemKind::Input),
+        "皿の口の径だけに合う太い軸を挿さない"
+    );
+}
+
+/// 1 kg の立方体(辺 10 mm)の重心まわりの慣性(kg·mm²)。
+fn cube(x: f64) -> Mass {
+    let i = 1.0 * (100.0 + 100.0) / 12.0;
+    Mass {
+        mass: 1000.0,
+        centroid: [x, 0.0, 0.0],
+        inertia: Some([[i, 0.0, 0.0], [0.0, i, 0.0], [0.0, 0.0, i]]),
+    }
+}
+
+/// 確かめること: 離した 2 つの立方体を合わせると、質量は和、重心は真ん中、慣性は平行軸の
+/// 定理の式(Iyy = Izz = 2·I + 2·m·d²、Ixx = 2·I)と合う。慣性の無い物を含む組は慣性を出さない。
+#[test]
+fn combining_two_cubes_follows_the_parallel_axis_theorem() {
+    let both = combine(&[cube(0.0), cube(20.0)]).unwrap();
+    assert!((both.mass - 2000.0).abs() < 1e-9);
+    assert!((both.centroid[0] - 10.0).abs() < 1e-12);
+    let i = 200.0 / 12.0;
+    let t = both.inertia.unwrap();
+    assert!((t[0][0] - 2.0 * i).abs() < 1e-9, "{t:?}");
+    assert!((t[1][1] - (2.0 * i + 2.0 * 100.0)).abs() < 1e-9, "{t:?}");
+    assert!((t[2][2] - t[1][1]).abs() < 1e-9, "{t:?}");
+    assert_eq!(t[0][1], 0.0);
+    let p = both.principal().unwrap();
+    assert!((p.moments[0] - 2.0 * i).abs() < 1e-9);
+    let mut bare = cube(5.0);
+    bare.inertia = None;
+    let mixed = combine(&[cube(0.0), bare]).unwrap();
+    assert!(mixed.inertia.is_none());
+    assert!((mixed.centroid[0] - 2.5).abs() < 1e-12);
+    assert!(combine(&[]).is_none());
+}
+
+/// 確かめること: カーネルの値(密度 1、mm⁵)に密度を掛けると g と kg·mm² になる。
+#[test]
+fn a_body_mass_takes_the_density() {
+    // 10 mm の立方体(体積 1000 mm³、慣性 1000·200/12 mm⁵)を密度 8 g/cm³ で
+    let i = 1000.0 * 200.0 / 12.0;
+    let props = kmb_core::MassProps {
+        volume: 1000.0,
+        area: 600.0,
+        min: [0.0; 3],
+        max: [10.0; 3],
+        centroid: Some([5.0; 3]),
+        inertia: Some([[i, 0.0, 0.0], [0.0, i, 0.0], [0.0, 0.0, i]]),
+    };
+    let m = Mass::of_body(&props, 8.0).unwrap();
+    assert!((m.mass - 8.0).abs() < 1e-12);
+    // 0.008 kg × 200 mm² / 12
+    let want = 0.008 * 200.0 / 12.0;
+    assert!((m.inertia.unwrap()[2][2] - want).abs() < 1e-12);
+    let sheet = kmb_core::MassProps {
+        centroid: None,
+        ..props
+    };
+    assert!(Mass::of_body(&sheet, 8.0).is_none());
+}

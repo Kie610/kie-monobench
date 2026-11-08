@@ -30,6 +30,7 @@ pub mod layout;
 mod live_ui;
 mod menus_ui;
 mod mouse3d;
+mod named_parameter_text;
 mod outer_ui;
 mod plain_error;
 pub mod ribbon;
@@ -39,6 +40,7 @@ pub mod theme;
 pub mod themes;
 mod titlebar_ui;
 mod window_state;
+pub use named_parameter_text::named_parameter_error;
 use window_state::Tone;
 mod workspace;
 
@@ -83,6 +85,11 @@ pub use live_ui::LiveState;
 pub use tabs_ui::KernelFactory;
 pub use versions_ui::paint_fit;
 pub use view3d::Pick;
+
+#[cfg(test)]
+mod named_parameter_tests;
+#[cfg(test)]
+mod unitless_number_tests;
 
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;
@@ -230,6 +237,9 @@ impl PickFilter {
     }
 }
 
+/// ほかの文書の計算がカーネルを使っていて待たずに戻った時、問い合わせ直すまでの間(ms)。
+const BUSY_RETRY_MS: u64 = 150;
+
 /// 3D のビューの右クリックのメニューの種類。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum MenuKind {
@@ -362,8 +372,10 @@ impl Workspace {
                 context_others: (egui::Pos2::ZERO, Vec::new()),
             },
             home: home::HomeState {
+                pack_options: Default::default(),
                 start: false,
                 recoveries: Vec::new(),
+                discard_recoveries: None,
                 projects: Default::default(),
                 recent: kmb_session::Recent::default(),
                 recent_missing: Default::default(),
@@ -525,15 +537,15 @@ impl Workspace {
         self.length_unit().show(q)
     }
 
-    /// 長さの欄に数だけを打った時、文書の単位を付ける(mm の文書はそのまま。計算では数だけは mm)。
-    pub(crate) fn in_doc_unit(&self, expr: &str) -> String {
-        let u = self.length_unit();
-        let t = expr.trim();
-        if !u.is_mm() && t.parse::<f64>().is_ok() {
-            format!("{t} {}", u.name())
-        } else {
-            expr.to_string()
-        }
+    /// 単位 `unit` のパラメータに打った式を、入れる式にする(数だけの長さの式は文書の単位を付け、
+    /// mm でない文書で単位の無い数を長さと足し引きする式は断る。規則は
+    /// [`kmb_session::params::typed_param_expr`] で、CLI・MCP の set_param と同じ)。
+    pub(crate) fn typed_param(
+        &self,
+        unit: kmb_core::ParamUnit,
+        expr: &str,
+    ) -> Result<String, String> {
+        kmb_session::params::typed_param_expr(self.report(), unit, expr, self.length_unit())
     }
 
     /// パラメータの単位の名前(長さは文書の単位)。
@@ -599,7 +611,14 @@ impl Workspace {
     /// 画面を描く。毎フレーム呼ぶ。
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.win.perf.begin(std::time::Instant::now());
+        let busy = kmb_core::kernel::kernel_busy_count();
         self.frame(ui);
+        if kmb_core::kernel::kernel_busy_count() != busy {
+            // ほかの文書の計算がカーネルを使っていて、待たずに戻った問い合わせがある: 前の絵のまま
+            // 描き、少し後で問い合わせ直す(画面の糸は錠を待たない。kmb_core::kernel::set_kernel_wait)
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(BUSY_RETRY_MS));
+        }
         self.win.perf.end(std::time::Instant::now());
     }
 
@@ -629,6 +648,8 @@ impl Workspace {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         self.poll_job();
+        self.cur.scene.retry(self.cur.work.kernel().as_ref());
+        self.measure_tick(ui.ctx());
         self.poll_task();
         self.follow_editing_for_hidden();
         // 画面の部品を名前で操作する差し込み口(コマンド欄・AI の接続・バッチの e2e が使う)。
@@ -700,7 +721,11 @@ impl Workspace {
                             self.start_action_with(&a, args["args"].clone());
                         }
                         Some(a) => {
-                            self.run_action(&a);
+                            if args["args"].is_object() {
+                                self.run_action_args(&a, args["args"].clone());
+                            } else {
+                                self.run_action(&a);
+                            }
                         }
                         None => {}
                     }
@@ -899,6 +924,8 @@ mod screen_fixes_tests;
 #[cfg(test)]
 mod appearance_tests;
 #[cfg(test)]
+mod busy_kernel_tests;
+#[cfg(test)]
 mod cmdline_tests;
 #[cfg(test)]
 mod doc_tests;
@@ -918,3 +945,14 @@ mod settings_tests;
 mod tabs_tests;
 #[cfg(test)]
 mod units_tests;
+
+#[cfg(test)]
+mod component_colors_tests;
+#[cfg(test)]
+mod wide_toolbar_tests;
+
+#[cfg(test)]
+mod mass_progress_tests;
+
+#[cfg(test)]
+mod mass_progress_live_tests;

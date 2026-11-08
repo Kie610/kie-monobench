@@ -718,3 +718,118 @@ fn rigid_group_moves_its_parts_together() {
         1
     );
 }
+
+/// 遊星の組をつなぐ(段 G、歯車の動き 1): 太陽・腕・外輪を地面に、遊星を腕に回転のジョイントで
+/// つなぎ、歯数 24・72・24 で結ぶ。タイムラインで後ろの外輪が太陽と腕に、遊星の自転が腕と太陽に
+/// 連動し、値は zs θs + zr θr = (zs + zr) θc と θp = −(zs / zp)(θs − θc) を満たす。アニメーション・
+/// スタディの動き(`joint_poses`)では、値を決めない連動元は今の値のまま。歯数が無い・遊星の
+/// 歯数が無い時は誤り。モーション リンクで結び直すと 2 つ目の連動元は外れる。
+#[test]
+fn planetary_link_drives_the_ring_and_planet_from_the_sun_and_carrier() {
+    let mut b = DocBuilder::new();
+    let sun = block(&mut b, "太陽", [-3.0, -3.0, 6.0, 6.0], 2.0, 0.0);
+    let arm = block(&mut b, "腕", [-2.0, -2.0, 14.0, 4.0], 1.0, 3.0);
+    let ring = block(&mut b, "外輪", [-15.0, -15.0, 30.0, 3.0], 2.0, 8.0);
+    let planet = block(&mut b, "遊星", [8.0, -2.0, 4.0, 4.0], 2.0, 5.0);
+    let mut t = Bench::new(b.finish("遊星"));
+    t.recompute();
+    let z_axis = |feature: FeatureId, point: [f64; 3]| Origin {
+        feature,
+        point,
+        axis: [0.0, 0.0, 1.0],
+    };
+    let j_sun = t.joint(z_axis(sun, [0.0, 0.0, 0.0]), None);
+    let j_arm = t.joint(z_axis(arm, [0.0, 0.0, 3.0]), None);
+    let j_ring = t.joint(z_axis(ring, [0.0, 0.0, 8.0]), None);
+    let j_planet = t.joint(z_axis(planet, [10.0, 0.0, 5.0]), Some(arm));
+    let run = |t: &mut Bench, args: serde_json::Value| -> Result<String, String> {
+        let cx = Context {
+            args: &args,
+            ..t.cx()
+        };
+        match AsmCommands
+            .run(kmb_asm::planetary::PLANETARY_LINK, &cx)
+            .expect("ある操作")
+        {
+            Ok(Outcome::Change { label, edits }) => {
+                t.doc
+                    .apply_edits(&label, edits)
+                    .map_err(|e| e.to_string())?;
+                t.recompute();
+                Ok(label)
+            }
+            Ok(o) => Err(format!("{o:?}")),
+            Err(e) => Err(e.into()),
+        }
+    };
+    let set = json!({"sun": j_sun.0, "carrier": j_arm.0, "ring": j_ring.0, "planet": j_planet.0});
+    let with = |extra: serde_json::Value| {
+        let mut a = set.clone();
+        a.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        a
+    };
+    assert!(run(&mut t, set.clone()).unwrap_err().contains("sun_teeth"));
+    assert!(
+        run(&mut t, with(json!({"sun_teeth": 24, "ring_teeth": 72})))
+            .unwrap_err()
+            .contains("planet_teeth")
+    );
+    run(
+        &mut t,
+        with(json!({"sun_teeth": 24, "ring_teeth": 72, "planet_teeth": 24})),
+    )
+    .unwrap();
+    assert_eq!(t.joint_data(j_ring).linked(), Some(j_sun));
+    assert_eq!(t.joint_data(j_ring).linked2(), Some(j_arm));
+    assert_eq!(t.joint_data(j_planet).linked(), Some(j_arm));
+    assert_eq!(t.joint_data(j_planet).linked2(), Some(j_sun));
+    let deg = |t: &Bench, id: FeatureId| {
+        animation::drive_of(&t.report, id)
+            .unwrap()
+            .value
+            .to_degrees()
+    };
+    let check = |t: &Bench, s: f64, c: f64| {
+        let (r, p) = (deg(t, j_ring), deg(t, j_planet));
+        assert!((24.0 * s + 72.0 * r - 96.0 * c).abs() < 1e-6, "外輪 {r}");
+        assert!((p + (s - c)).abs() < 1e-6, "遊星 {p}");
+    };
+    t.set_joint(j_sun, |j| j.angle = "90 deg".into());
+    check(&t, 90.0, 0.0);
+    assert!((deg(&t, j_ring) + 30.0).abs() < 1e-6);
+    t.set_joint(j_sun, |j| j.angle = "0 deg".into());
+    t.set_joint(j_arm, |j| j.angle = "30 deg".into());
+    check(&t, 0.0, 30.0);
+    assert!((deg(&t, j_ring) - 40.0).abs() < 1e-6);
+    // 太陽だけを 90 度にする動き: 腕は 30 度のまま、外輪は 40 度から 10 度へ(-30 度)
+    let values = [(j_sun, 90.0)].into_iter().collect();
+    let data = t.doc.data();
+    let poses = animation::joint_poses(data, &t.reg, &t.report, &values);
+    let m = poses
+        .get(&body_root(data, &t.reg, ring))
+        .expect("外輪が動く");
+    let p = kmb_core::kernel::transform_point(m, [10.0, 0.0, 8.0]);
+    let a = (-30f64).to_radians();
+    assert!(near_mm(p, [10.0 * a.cos(), 10.0 * a.sin(), 8.0]), "{p:?}");
+    // モーション リンクで結び直すと 2 つ目の連動元は外れる
+    let args = json!({"joint": j_sun.0, "other": j_ring.0});
+    let cx = Context {
+        args: &args,
+        ..t.cx()
+    };
+    let Some(Ok(Outcome::Change { label, edits })) =
+        AsmCommands.run(kmb_asm::motion_link::MOTION_LINK, &cx)
+    else {
+        panic!("つなげない");
+    };
+    t.doc.apply_edits(&label, edits).unwrap();
+    t.recompute();
+    assert_eq!(t.joint_data(j_ring).linked2(), None);
+    // 保存して読み直しても遊星の 2 つの連動元は残る
+    let back = Document::from_json(&t.doc.to_json()).unwrap();
+    let j: Joint =
+        serde_json::from_value(back.data().feature(j_planet).unwrap().data.clone()).unwrap();
+    assert_eq!((j.linked(), j.linked2()), (Some(j_arm), Some(j_sun)));
+}

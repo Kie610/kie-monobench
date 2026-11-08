@@ -83,3 +83,6 @@ settings-key-name-sketch-trim = Sketch: Trim
 settings-key-name-sketch-offset = Sketch: Offset
 settings-key-name-sketch-dimension = Sketch: Dimension (dimension selected lines in a 3D sketch)
 settings-key-name-sketch-construction = Sketch: Toggle construction geometry; while drawing, use construction geometry for the next line
+
+settings-import-upright = Ask whether to rotate imported STEP and IGES geometry upright
+settings-import-upright-tip = Ask once whether to rotate Y-up geometry to Z-up. This can also be changed in the feature fields.

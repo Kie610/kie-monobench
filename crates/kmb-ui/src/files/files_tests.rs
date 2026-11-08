@@ -238,3 +238,375 @@ fn bodies_are_exported_one_file_each_with_their_names_and_hidden_ones_are_not() 
     assert!(d.join("b-ふた.step").exists(), "{:?}", ws.message());
     std::fs::remove_dir_all(&d).ok();
 }
+
+#[test]
+fn a_pack_opens_in_a_new_unsaved_tab_and_a_broken_zip_leaves_no_tab() {
+    let dir = temp_dir("pack-open");
+    let path = dir.join("delivery.zip");
+    let mut headless =
+        kmb_session::Headless::with_document(kmb_bundle::modules(), sample_document(), None);
+    let packed = headless
+        .pack(kmb_session::PackOptions::default(), None)
+        .unwrap();
+    kmb_session::write_output(&path, &packed.contents).unwrap();
+    let mut ws = Workspace::new(sample_document(), None, reg());
+    let count = ws.tab_count();
+    assert!(ws.open_in_tab(&path));
+    ws.wait();
+    assert_eq!(ws.tab_count(), count + 1);
+    assert!(ws.path().is_none());
+    assert!(!ws.is_modified());
+    assert_eq!(ws.document().to_json(), headless.doc().to_json());
+    let count = ws.tab_count();
+    kmb_session::write_output(&dir.join("bad.zip"), b"bad").unwrap();
+    assert!(!ws.open_in_tab(&dir.join("bad.zip")));
+    assert_eq!(ws.tab_count(), count);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn the_file_menu_packages_the_checked_items() {
+    let dir = temp_dir("pack-menu");
+    let path = dir.join("delivery.zip");
+    let ws = Workspace::new(sample_document(), None, reg()).with_dialogs(Box::new(FakeDialogs {
+        open: None,
+        save: Some(path.clone()),
+        unsaved: Unsaved::Cancel,
+    }));
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.get_by_label("ファイル").click();
+    h.run();
+    h.get_by_label_contains("まとめて渡す…").click();
+    h.run();
+    h.get_by_label("G-codeを入れる").click();
+    h.run();
+    h.get_by_label("加工指示書を入れる").click();
+    h.run();
+    h.get_by_label("zipに書き出す").click();
+    h.run();
+    let packed = kmb_session::load_design(&path).unwrap();
+    assert_eq!(packed.document.to_json(), h.state().document().to_json());
+    assert!(h.state().message().is_some_and(|m| m.contains("(2)")));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+fn bulk_recovery_fixture(count: usize) -> (Workspace, std::path::PathBuf) {
+    // 試験は並んで走るので、呼ぶたびに別の場所にする(同じ場所だと、ほかの試験の始めと終わりの
+    // 片付けが写しを消してしまう)
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = temp_dir(&format!("bulk-recoveries-{n}"));
+    let mut ws = Workspace::new(Document::new(), None, reg()).show_start();
+    ws.win.layout.appearance.language = "ja".into();
+    for i in 0..count {
+        let file = dir.join(format!("copy-{i}.json"));
+        std::fs::write(&file, "試験の写し").unwrap();
+        ws.home.recoveries.push(kmb_session::Recovery {
+            file,
+            original: Some(dir.join(format!("部品{i}.json"))),
+            saved_at: std::time::SystemTime::UNIX_EPOCH,
+        });
+    }
+    (ws, dir)
+}
+
+fn bulk_recovery_tool(h: &mut Harness<'_, Workspace>, tool: &str, args: serde_json::Value) {
+    let crate::live_ui::Answer::AfterScript(batch) =
+        h.state_mut().live_request(tool, &args).unwrap()
+    else {
+        panic!("画面の台本で操作する");
+    };
+    let started = std::time::Instant::now();
+    loop {
+        h.step();
+        if let Some(result) = h.state_mut().script_result(batch) {
+            assert!(result.ok, "{}", result.report());
+            break;
+        }
+        assert!(started.elapsed().as_secs() < 60, "復旧の操作が終わりません");
+    }
+}
+
+#[test]
+fn bulk_recovery_discard_confirms_then_removes_three_copies_through_ui_tools() {
+    let (ws, dir) = bulk_recovery_fixture(3);
+    let paths: Vec<_> = ws.home.recoveries.iter().map(|r| r.file.clone()).collect();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.get_by_label("全部捨てる");
+    bulk_recovery_tool(
+        &mut h,
+        "ui_click",
+        serde_json::json!({"target":"全部捨てる"}),
+    );
+    h.get_by_label("3 個の写しを捨てます。元に戻せません");
+    assert!(paths.iter().all(|p| p.is_file()), "1回目は捨てない");
+    bulk_recovery_tool(&mut h, "ui_key", serde_json::json!({"keys":"Escape"}));
+    assert!(
+        h.query_by_label("3 個の写しを捨てます。元に戻せません")
+            .is_none()
+    );
+    assert!(paths.iter().all(|p| p.is_file()));
+    for _ in 0..2 {
+        bulk_recovery_tool(
+            &mut h,
+            "ui_click",
+            serde_json::json!({"target":"全部捨てる"}),
+        );
+    }
+    assert!(h.state().home.recoveries.is_empty());
+    assert!(paths.iter().all(|p| !p.exists()));
+    assert!(h.query_by_label("全部捨てる").is_none());
+    assert!(!h.state().is_modified());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn bulk_recovery_discard_keeps_an_undeletable_copy_and_its_reason() {
+    let (mut ws, dir) = bulk_recovery_fixture(1);
+    let file = ws.home.recoveries[0].file.clone();
+    std::fs::remove_file(&file).unwrap();
+    std::fs::create_dir(&file).unwrap();
+    let problem = ws.discard_recovery_at(0).unwrap_err();
+    assert_eq!(problem.kind, kmb_core::ProblemKind::File);
+    ws.discard_recovery(0);
+    assert_eq!(ws.home.recoveries.len(), 1, "捨てられなかった写しは残す");
+    assert!(file.is_dir());
+    assert!(
+        ws.message()
+            .is_some_and(|message| message.contains("捨てられません"))
+    );
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn bulk_recovery_discard_finishes_other_copies_and_keeps_failures_in_both_languages() {
+    for (lang, discard, error) in [
+        ("ja", "全部捨てる", "捨てられません"),
+        ("en", "Discard all", "Could not discard"),
+    ] {
+        let (mut ws, dir) = bulk_recovery_fixture(3);
+        ws.win.layout.appearance.language = lang.into();
+        let files: Vec<_> = ws.home.recoveries.iter().map(|r| r.file.clone()).collect();
+        std::fs::remove_file(&files[1]).unwrap();
+        std::fs::create_dir(&files[1]).unwrap();
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        for _ in 0..2 {
+            bulk_recovery_tool(&mut h, "ui_click", serde_json::json!({"target":discard}));
+        }
+        assert_eq!(h.state().home.recoveries.len(), 1);
+        assert_eq!(h.state().home.recoveries[0].file, files[1]);
+        assert!(files[1].is_dir());
+        assert!(!files[0].exists() && !files[2].exists());
+        assert!(
+            h.state()
+                .message()
+                .is_some_and(|message| message.contains(error) && message.contains("部品1"))
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[test]
+fn bulk_recovery_discard_is_hidden_for_fewer_than_two_copies() {
+    for count in [0, 1] {
+        let (ws, dir) = bulk_recovery_fixture(count);
+        let mut h = Harness::builder()
+            .with_size(egui::vec2(1280.0, 800.0))
+            .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+        h.run();
+        assert!(h.query_by_label("全部捨てる").is_none());
+        assert_eq!(h.state().home.recoveries.len(), count);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[test]
+fn bulk_recovery_discard_reconfirms_when_the_copy_list_changes() {
+    let (ws, dir) = bulk_recovery_fixture(3);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    bulk_recovery_tool(
+        &mut h,
+        "ui_click",
+        serde_json::json!({"target":"全部捨てる"}),
+    );
+    // 確かめている間に別の自動保存の写しが到着した場合。
+    let mut arrived = h.state().home.recoveries[0].clone();
+    arrived.file = dir.join("arrived.json");
+    std::fs::write(&arrived.file, "届いた写し").unwrap();
+    h.state_mut().home.recoveries.push(arrived);
+    h.run();
+    assert!(h.state().home.discard_recoveries.is_none());
+    bulk_recovery_tool(
+        &mut h,
+        "ui_click",
+        serde_json::json!({"target":"全部捨てる"}),
+    );
+    h.get_by_label("4 個の写しを捨てます。元に戻せません");
+    assert!(h.state().home.recoveries.iter().all(|r| r.file.is_file()));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+fn small_dxf(path: &std::path::Path) {
+    std::fs::write(path, b"0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n10\n21\n0\n0\nLINE\n8\n0\n10\n0\n20\n5\n11\n10\n21\n5\n0\nENDSEC\n0\nEOF\n").unwrap();
+}
+
+/// 確かめること: DXF は別の未保存タブとなり、1 回の取り消しとやり直しで空/読んだ形へ戻る。
+#[test]
+fn a_dxf_opens_in_a_new_unsaved_tab_with_one_undo_step() {
+    let d = temp_dir("open-dxf");
+    let file = d.join("外の 図.DXF");
+    small_dxf(&file);
+    let mut ws = Workspace::new(kmb_samples::reference_document(), None, reg()).with_dialogs(
+        Box::new(FakeDialogs {
+            open: None,
+            save: Some(d.join("保存した設計")),
+            unsaved: Unsaved::Cancel,
+        }),
+    );
+    ws.add_param("extra", "1 mm");
+    let original = ws.document().data().clone();
+    let undo: Vec<String> = ws
+        .document()
+        .undo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let volumes: Vec<_> = ws
+        .visible_bodies()
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    assert!(ws.open_in_tab(&file));
+    assert_eq!((ws.tab_count(), ws.active_tab()), (2, 1));
+    assert_eq!(ws.tab_titles()[1], ("外の 図".into(), true));
+    assert!(ws.path().is_none());
+    assert_eq!(ws.document().data().features.len(), 1);
+    let sketch: kmb_sketch::Sketch =
+        serde_json::from_value(ws.document().data().features[0].data.clone()).unwrap();
+    assert_eq!(
+        sketch
+            .entities
+            .iter()
+            .filter(|e| matches!(e, kmb_sketch::Entity::Line { .. }))
+            .count(),
+        2
+    );
+    assert_eq!(ws.document().undo_labels().len(), 1);
+    let imported = ws.document().data().clone();
+    ws.undo();
+    assert!(ws.document().data().features.is_empty());
+    assert!(!ws.is_modified());
+    ws.redo();
+    assert_eq!(ws.document().data(), &imported);
+    assert!(ws.is_modified());
+    let source = std::fs::read(&file).unwrap();
+    assert_eq!(ws.document_name(), "外の 図");
+    ws.save();
+    let saved = d.join(format!("保存した設計.{}", kmb_core::DOCUMENT_EXTENSION));
+    assert_eq!(ws.path(), Some(saved.as_path()));
+    assert!(!ws.is_modified());
+    assert_eq!(
+        std::fs::read(&file).unwrap(),
+        source,
+        "元の DXF は保存先にしない"
+    );
+    assert_eq!(kmb_session::load(&saved).unwrap().data().features.len(), 1);
+    ws.switch_tab(0);
+    assert_eq!(ws.document().data(), &original);
+    assert_eq!(ws.document().undo_labels(), undo);
+    assert!(ws.is_modified());
+    let now: Vec<_> = ws
+        .visible_bodies()
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    assert_eq!(now, volumes);
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+/// 確かめること: 読めない・空の DXF は、新しいタブも元の文書の形の破棄も起こさない。
+#[test]
+fn a_failed_dxf_open_preserves_the_document_tabs_history_and_shapes() {
+    let d = temp_dir("bad-dxf");
+    let mut ws = Workspace::new(kmb_samples::reference_document(), None, reg());
+    ws.add_param("extra", "1 mm");
+    ws.add_param("redo", "2 mm");
+    ws.undo();
+    let before = ws.document().data().clone();
+    let undo: Vec<String> = ws
+        .document()
+        .undo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let redo: Vec<String> = ws
+        .document()
+        .redo_labels()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    let tab_seq = ws.win.tab_seq;
+    let bodies = ws.visible_bodies();
+    let volumes: Vec<_> = bodies
+        .iter()
+        .map(|(_, h)| ws.cur.work.kernel().volume(*h).unwrap())
+        .collect();
+    for (name, bytes) in [
+        ("壊れた.dxf", "壊れた図面"),
+        ("空.dxf", "0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n"),
+    ] {
+        let path = d.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        assert!(!ws.open_in_tab(&path));
+        assert_eq!(
+            (ws.tab_count(), ws.active_tab(), ws.win.tab_seq),
+            (1, 0, tab_seq)
+        );
+        assert_eq!(ws.document().data(), &before);
+        assert_eq!(ws.document().undo_labels(), undo);
+        assert_eq!(ws.document().redo_labels(), redo);
+        assert!(ws.is_modified());
+        for ((_, h), volume) in bodies.iter().zip(&volumes) {
+            assert_eq!(ws.cur.work.kernel().volume(*h).unwrap(), *volume);
+        }
+    }
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_dxf_is_opened_from_the_start_screen_as_an_unsaved_design() {
+    let d = temp_dir("start-dxf");
+    let file = d.join("輪郭.dxf");
+    small_dxf(&file);
+    let ws = Workspace::new(Document::new(), None, reg())
+        .with_dialogs(Box::new(FakeDialogs {
+            open: Some(file),
+            save: None,
+            unsaved: Unsaved::Cancel,
+        }))
+        .show_start();
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1000., 700.))
+        .build_ui_state(|ui, ws: &mut Workspace| ws.ui(ui), ws);
+    h.run();
+    h.get_by_label("開く…").click();
+    h.run();
+    assert!(!h.state().is_start_screen());
+    assert_eq!(h.state().tab_count(), 1);
+    assert_eq!(h.state().tab_titles(), [("輪郭".to_string(), true)]);
+    assert!(h.state().path().is_none());
+    assert_eq!(h.state().document().data().features.len(), 1);
+    std::fs::remove_dir_all(&d).unwrap();
+}

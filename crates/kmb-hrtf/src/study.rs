@@ -299,6 +299,7 @@ impl Feature for HeadStudy {
         let key = job.key();
         let plan = Plan {
             key,
+            checks: Vec::new(),
             steps: STEPS.iter().map(|s| s.to_string()).collect(),
             section: None,
             keeps_partial: true,

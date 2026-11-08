@@ -221,6 +221,27 @@ impl Catalog {
         self.format(lang, id, Some(&a))
     }
 
+    /// 差し込みも成功した訳だけを返す。未知の鍵や欠けた引数は呼ぶ側の説明へ戻せる。
+    pub fn find_with(&self, lang: Lang, id: &str, args: &[(&str, Arg)]) -> Option<String> {
+        let mut values = FluentArgs::new();
+        for (key, value) in args {
+            match value {
+                Arg::Text(s) => values.set(*key, FluentValue::from(s.as_str())),
+                Arg::Number(n) if n.is_finite() => values.set(*key, FluentValue::from(*n)),
+                Arg::Number(_) => return None,
+            }
+        }
+        for lang in [lang, Lang::En, Lang::Ja] {
+            let bundle = self.bundle(lang);
+            if let Some(pattern) = bundle.get_message(id).and_then(|m| m.value()) {
+                let mut errors = vec![];
+                let text = bundle.format_pattern(pattern, Some(&values), &mut errors);
+                return (errors.is_empty() && !text.trim().is_empty()).then(|| text.into_owned());
+            }
+        }
+        None
+    }
+
     /// 文言があれば、その文(探す順は [`Catalog::text`] と同じ)。無ければ `None`(モジュールが付けた
     /// 名前のように、訳の無い時の字を呼ぶ側が持つ時)。
     pub fn find(&self, lang: Lang, id: &str) -> Option<String> {

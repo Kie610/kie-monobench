@@ -11,7 +11,7 @@
 //! | `solid.sweep@1` / `solid.loft@1` | kmb-cad-sweep | 輪郭を経路に沿って動かす、断面をつなぐ |
 //! | `solid.boolean@1` | kmb-cad-boolean | 2 つのボディの結合、切り取り、交差 |
 //! | `solid.hole@1` | kmb-cad-hole | スケッチの点に、指定の径と深さ(または貫通)の穴をあける |
-//! | `solid.thread@1` | kmb-cad-hole | 円筒の面にメートルねじの属性を付ける(形は変えない) |
+//! | `solid.thread@1` | kmb-cad-hole | 円筒の面にねじの属性か山の形を付ける |
 //! | `solid.linear_pattern@1` / `solid.circular_pattern@1` / `solid.mirror@1` | kmb-cad-pattern | 機能の道具(押し出しや穴の形)を動かして同じ演算をくり返す |
 //! | `solid.fillet@1` / `solid.chamfer@1` | kmb-cad-edge | 2 つの平面の境目のまっすぐな辺(出っ張りもへこみも)を丸める、面取りする |
 //! | `solid.import_step@1` | kmb-cad-import-step | STEP の形を読み込む(中身は文書に入れて持つ) |
@@ -68,6 +68,7 @@ mod adopted_reference_tests;
 mod adopted_shape_tests;
 mod adopted_sketch_tests;
 mod asm_tests;
+mod curve_extrude_tests;
 mod datum_tests;
 mod edge_tests;
 mod extrude_revolve_hole_tests;
@@ -78,10 +79,14 @@ mod face_revolve_tests;
 mod fastener_tests;
 mod fillet_material_tests;
 mod fillet_rows_tests;
+mod gear_tests;
 mod hole_tests;
+mod iges_tests;
 #[cfg(test)]
 mod link_tests;
+mod mesh_import_tests;
 mod modify_tests;
+mod move_point_tests;
 mod multi_pick_tests;
 mod occurrence_tests;
 mod origin_tests;
@@ -94,6 +99,7 @@ mod sweep_loft_tests;
 mod tests;
 mod text_outline_tests;
 mod text_tests;
+mod thread_tests;
 
 #[cfg(test)]
 mod duplicate_profile_tests;

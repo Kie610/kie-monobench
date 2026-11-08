@@ -288,6 +288,7 @@ impl Feature for Study {
             section,
             keeps_partial: self.kind != Kind::Wing,
             arrows,
+            ..Plan::default()
         };
         kmb_study::prepare(ctx, key, Arc::new(job));
         Ok([(PLAN.to_string(), plan.to_value())].into())

@@ -53,6 +53,9 @@ fn label_world(h: &Harness<'static, Workspace>, id: ConstraintId) -> [f64; 2] {
 #[test]
 fn typing_name_equals_value_makes_a_parameter_and_uses_it() {
     let mut h = sketch_with_rectangle();
+    h.get_by_label_contains("拘束不足(自由度").click();
+    h.run();
+    assert!(editor(h.state_mut()).editor.freedom.open);
     press_key(&mut h, egui::Key::D);
     click_at(&mut h, [6.4, 16.36]);
     move_to(&mut h, [6.4, 19.49]);
@@ -79,6 +82,8 @@ fn typing_name_equals_value_makes_a_parameter_and_uses_it() {
         .expect("長さの寸法");
     assert_eq!(c.kind.value(), Some("w"));
     assert_eq!(h.state().report().error_count(), 0);
+    assert!(editor(h.state_mut()).editor.freedom.open);
+    assert!(h.query_by_label("自由度").is_some());
     // 同じ名前をもう一度作ろうとすると断る(寸法は置かない)。パネルの寸法ボタンから
     let before = current_sketch(h.state()).constraints.len();
     press_key(&mut h, egui::Key::Escape);

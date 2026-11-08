@@ -9,8 +9,14 @@ use std::collections::HashSet;
 mod camera;
 #[cfg(test)]
 mod fit_tests;
+#[cfg(test)]
+mod grid_shots_tests;
+#[cfg(test)]
+mod grid_tests;
 mod hit;
 mod look;
+#[cfg(test)]
+mod overlay_tests;
 #[cfg(test)]
 mod pick_wait_tests;
 mod raster;
@@ -28,6 +34,47 @@ pub use threads::{THREAD_TILT, thread_bands};
 
 /// 選んだ面。
 pub type Pick = kmb_core::FacePick;
+
+/// マウスの下で強調する物。選択する面の参照とは別に、ボディ全体も表せる。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hover {
+    Face(Pick),
+    Body(FeatureId),
+}
+
+impl std::hash::Hash for Hover {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Self::Face(p) => (p.feature, &p.face).hash(state),
+            Self::Body(id) => id.hash(state),
+        }
+    }
+}
+
+impl Hover {
+    pub(crate) fn matches_face(&self, feature: FeatureId, face: &str) -> bool {
+        match self {
+            Self::Face(p) => p.feature == feature && p.face == face,
+            Self::Body(id) => *id == feature,
+        }
+    }
+}
+
+/// ボディ全体のホバーは稜線も同じ役の色にする。面のホバーは稜線を変えない。
+pub(crate) fn hover_edge_color(
+    hover: Option<&Hover>,
+    feature: FeatureId,
+    body: Color32,
+    colors: &Colors,
+) -> Color32 {
+    let tint = if matches!(hover, Some(Hover::Body(id)) if *id == feature) {
+        colors.hover
+    } else {
+        body
+    };
+    line_color(tint, colors.dark)
+}
 
 /// 設定の回し方(拘束オービットかフリーオービット)で回す。
 fn orbit(cam: &mut Camera, controls: Controls, d: Vec2) {
@@ -242,7 +289,14 @@ pub fn view3d(
     let hover = ev
         .hover
         .filter(|_| !controls.no_face_hover)
-        .and_then(|p| pick_at(scene, cam, rect, p));
+        .and_then(|p| pick_at(scene, cam, rect, p))
+        .map(|p| {
+            if controls.body_hover {
+                Hover::Body(p.feature)
+            } else {
+                Hover::Face(p)
+            }
+        });
 
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, crate::corner(0.0), colors.background);
@@ -320,8 +374,9 @@ pub fn view3d(
             ));
         }
     }
-    let stock = boxes(kmb_interchange::ink::boxes::WORK).next();
-    if let Some((lo, hi)) = stock {
+    let mut stocks = boxes(kmb_interchange::ink::boxes::WORK).peekable();
+    let stock = stocks.peek().copied();
+    for (lo, hi) in stocks {
         let color = colors.stock;
         for (a, b) in edges(lo, hi) {
             if let Some((a, b)) = cam.segment(a, b, rect) {
@@ -538,7 +593,7 @@ fn paint_scene(
     cam: &Camera,
     scene: &Scene,
     picked: &[Pick],
-    hover: &Option<Pick>,
+    hover: &Option<Hover>,
     overlay: &kmb_core::Overlay,
     ghosts: &[Ghost],
     behind: &Behind,
@@ -613,6 +668,8 @@ fn paint_scene(
                 .for_each(|l| l.as_ref().map(look_key).hash(&mut h));
         });
         scene.faded().hash(&mut h);
+        scene.part_hues().hash(&mut h);
+        colors.inks.part_hue.map(|c| c.to_array()).hash(&mut h);
         scene.lamps.iter().for_each(|l| {
             [l.pos, l.dir, l.power]
                 .map(|v| v.map(f32::to_bits))
@@ -629,10 +686,7 @@ fn paint_scene(
             .iter()
             .map(|p| (p.feature, p.face.clone()))
             .for_each(|k| k.hash(&mut h));
-        hover
-            .as_ref()
-            .map(|p| (p.feature, p.face.clone()))
-            .hash(&mut h);
+        hover.hash(&mut h);
         [
             colors.background,
             colors.background_low,
@@ -656,6 +710,8 @@ fn paint_scene(
             settings.edge_px.to_bits(),
         )
             .hash(&mut h);
+        // GPU で回す・動かす間は入り隅の陰を軽くする(止まった時に描き直す)
+        (gpu.is_some() && settings.dynamic && settings.ao && moving).hash(&mut h);
         h.finish()
     };
     let id = base.with("render");
@@ -689,6 +745,7 @@ fn paint_scene(
                                 guides,
                                 &[],
                                 behind,
+                                moving,
                             )
                         }
                         None => g.render(
@@ -705,6 +762,7 @@ fn paint_scene(
                             guides,
                             ghosts,
                             behind,
+                            moving,
                         ),
                     };
                     ui.ctx().data_mut(|d| d.insert_temp(gid, (key, t)));

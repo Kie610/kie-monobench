@@ -16,7 +16,7 @@ pub struct Server {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ImportArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
     /// 真なら、Y が上で作られた形を X 軸のまわりに 90 度回して Z が上に立てる(他の CAD の多くは Y が上)
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct MaterialArg {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct PathArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
 }
 
@@ -264,6 +264,19 @@ pub struct GroupArg {
     /// 選んだ機能が続いていない時: "exact"(断る、既定)、"gaps"(間も含める)、"gather"(寄せてからまとめる)
     #[serde(default)]
     pub mode: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PackArg {
+    /// 書き出すzipの場所
+    pub path: String,
+    /// G-codeを入れる(省くと真)
+    pub gcode: Option<bool>,
+    /// HTMLの段取り表を入れる(省くと真)
+    pub sheet: Option<bool>,
+    /// ボディごとのSTEPを入れる(省くと偽)
+    pub models: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -734,7 +747,7 @@ tools! {
     fn actions(s, a: ActionsArg) edit => Ok(s.actions(a.selected));
     "モジュールの操作を実行する(actions の id)。文書を変える操作は status と added を返す"
     fn run_action(s, a: RunActionArg) edit => s.run_action_at(&a.id, a.selected, a.file.as_deref(), &a.args, a.out.as_deref());
-    "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)も"
+    "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)と、重心のまわりの慣性 mass_inertia(kg·mm²)・主慣性 principal_moments・主軸 principal_axes も。組立全体・部品ごと・剛性グループごとの合成は actions の「質量特性」の操作"
     fn mass(s) edit => s.mass();
     "ボディに物理材料を付ける(取り消せる)。質量(mass)と外観の既定の色に使い、加工のセットアップの材料の既定にもなる"
     fn set_material(s, a: MaterialArg) edit => s.set_material(a.body, &a.material);
@@ -744,6 +757,11 @@ tools! {
     fn measure(s, a: MeasureArg) edit => s.measure(&a.targets, a.basis.as_deref());
     "残ったボディの絵(PNG)。画面の 3D のビューの明るい見た目で、平行投影で全体が入るように描く(格子・寸法・スケッチは描かない)。view で向き、faces・edges で topology の面と辺を目立たせる。説明に 1 mm の画素数(px_per_mm)。out で PNG を書き出す"
     fn screenshot(s, a: ScreenshotArg) picture => s.screenshot(&a);
+    "文書・セットアップごとのG-code・HTMLの段取り表をzipにまとめて渡す。modelsが真ならボディごとのSTEPも入れる。入れられなかった物は理由の一覧で返す"
+    fn pack(s, a: PackArg) edit => {
+        let defaults = kmb_session::PackOptions::default();
+        s.pack(&a.path, kmb_session::PackOptions { gcode: a.gcode.unwrap_or(defaults.gcode), sheet: a.sheet.unwrap_or(defaults.sheet), models: a.models.unwrap_or(defaults.models) })
+    };
     "見えているボディを書き出す。拡張子で形式を決める(STL・STEP・3MF・OBJ の .obj・glTF の .glb・今の視点の DXF と SVG・レンダリングの .png と動画)。each が真ならボディごとに別のファイル(部品.stl → 部品-ボディ1.stl)。ほかの書き出し(隠れ線つきの DXF など)は action に操作の ID"
     fn export(s, a: ExportArg) edit => s.export(&a.path, a.action.as_deref(), a.view.as_ref(), a.tolerance, a.each);
     "セットアップの G-code を作る(既定は Carvera Air、post で WASM のポストのプラグインも使える)"
