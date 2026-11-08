@@ -255,3 +255,19 @@ fn helix_fields_apply_to_external_and_internal_but_not_to_racks() {
     let renamed = gear.rename_param("slope", "angle").unwrap().unwrap();
     assert_eq!(renamed["helix_angle"], "angle");
 }
+
+#[test]
+fn the_center_groove_field_is_available_when_herringbone_is_enabled() {
+    let mut reg = Registry::new();
+    body::register(&mut reg);
+    let descriptor = reg.descriptor(GEAR_BODY).unwrap();
+    let groove = descriptor
+        .fields
+        .iter()
+        .find(|f| f.key == "groove")
+        .unwrap();
+    assert!(
+        groove.applies(&json!({"herringbone":true})),
+        "やまばを入れた時に中央の溝の幅を指定できる"
+    );
+}
