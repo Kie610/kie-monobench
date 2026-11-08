@@ -217,11 +217,25 @@ fn dimensions_and_a_field_of_the_same_feature_accumulate_and_evaluate_geometry_o
     wrong[2].expr = "30 deg".into();
     assert!(h.set_param_batch(&wrong).is_err());
     assert_eq!(h.doc().to_json(), before);
-    h.set_model_param("da", "30 deg").unwrap();
+    let runs = h.recomputes();
+    assert!(h.set_model_param("da", "30 deg").is_err());
+    assert_eq!(h.doc().to_json(), before);
+    assert_eq!(h.recomputes(), runs);
+    // 以前の文書に残った不正な単位を、通常の読み込みと同じJSONの口から用意する。
+    let mut existing = h.doc().data().clone();
+    existing
+        .features
+        .iter_mut()
+        .find(|f| f.id == feature)
+        .unwrap()
+        .data["a"] = serde_json::json!("30 deg");
+    let loaded = Document::from_json(&serde_json::to_string(&existing).unwrap()).unwrap();
+    let _ = h.replace(loaded, None);
     assert!(matches!(
         h.report().feature(feature),
         Some(kmb_core::FeatureStatus::Error { .. })
     ));
+    let runs = h.recomputes();
     h.set_param_batch(&[Change {
         row: ParamKey::Model {
             feature,
@@ -230,6 +244,7 @@ fn dimensions_and_a_field_of_the_same_feature_accumulate_and_evaluate_geometry_o
         expr: "8 mm".into(),
     }])
     .unwrap();
+    assert_eq!(h.recomputes(), runs + 1);
     assert!(matches!(
         h.report().feature(feature),
         Some(kmb_core::FeatureStatus::Ok { .. })
