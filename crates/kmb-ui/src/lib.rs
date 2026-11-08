@@ -235,6 +235,9 @@ impl PickFilter {
     }
 }
 
+/// ほかの文書の計算がカーネルを使っていて待たずに戻った時、問い合わせ直すまでの間(ms)。
+const BUSY_RETRY_MS: u64 = 150;
+
 /// 3D のビューの右クリックのメニューの種類。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum MenuKind {
@@ -606,7 +609,14 @@ impl Workspace {
     /// 画面を描く。毎フレーム呼ぶ。
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.win.perf.begin(std::time::Instant::now());
+        let busy = kmb_core::kernel::kernel_busy_count();
         self.frame(ui);
+        if kmb_core::kernel::kernel_busy_count() != busy {
+            // ほかの文書の計算がカーネルを使っていて、待たずに戻った問い合わせがある: 前の絵のまま
+            // 描き、少し後で問い合わせ直す(画面の糸は錠を待たない。kmb_core::kernel::set_kernel_wait)
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(BUSY_RETRY_MS));
+        }
         self.win.perf.end(std::time::Instant::now());
     }
 
@@ -636,6 +646,7 @@ impl Workspace {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         self.poll_job();
+        self.cur.scene.retry(self.cur.work.kernel().as_ref());
         self.measure_tick(ui.ctx());
         self.poll_task();
         self.follow_editing_for_hidden();
@@ -910,6 +921,8 @@ mod screen_fixes_tests;
 
 #[cfg(test)]
 mod appearance_tests;
+#[cfg(test)]
+mod busy_kernel_tests;
 #[cfg(test)]
 mod cmdline_tests;
 #[cfg(test)]
