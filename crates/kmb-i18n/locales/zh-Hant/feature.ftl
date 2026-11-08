@@ -14,6 +14,8 @@
 # feature-solid-import-iges = IGES import
 # feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.
 
+# TODO: feature-tool-clearance-warning
+
 # feature-mech-cam = Cam
 # feature-mech-cam-tip = Build cam and follower profiles from a displacement diagram and extrude them as separate bodies
 # feature-mech-cam-follower = Cam Follower

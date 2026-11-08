@@ -22,6 +22,7 @@ mod recompute;
 mod refs;
 pub mod section;
 mod transaction;
+mod warning_messages;
 
 pub use args::{Arg, ArgKind};
 pub use bodies::{BodyId, BodyLine, BodyState, BodyTable};
@@ -89,3 +90,8 @@ mod bodies_tests;
 mod tests;
 #[cfg(test)]
 mod text_param_tests;
+
+pub use warning_messages::{
+    WARNING_MESSAGES, WarningArg, WarningMessage, WarningMessages, add_warning_messages,
+    legacy_warnings_of, warning_info, warning_messages_of, warnings_from_info_with, warnings_with,
+};
