@@ -26,8 +26,9 @@ fn plate(b: &mut DocBuilder, x: f64, height: &str) -> FeatureId {
     )
 }
 
-/// 見えているボディの、機能 `id` の外形の箱。
-fn bounds(doc: &mut kmb_core::Document, k: &TestKernel, id: FeatureId) -> ([f64; 3], [f64; 3]) {
+/// 見えているボディの、機能 `id` のいちばん小さい角(x・y・z ごとの最小)。外形の箱はカーネルによって
+/// 許容差だけ広がる(truck は 0.05)ので、角の座標で比べる。
+fn low_corner(doc: &mut kmb_core::Document, k: &TestKernel, id: FeatureId) -> [f64; 3] {
     let reg = registry();
     let report = doc.recompute(&reg, &**k);
     assert_ok(&report);
@@ -35,7 +36,9 @@ fn bounds(doc: &mut kmb_core::Document, k: &TestKernel, id: FeatureId) -> ([f64;
         .into_iter()
         .find(|(f, _)| *f == id)
         .unwrap_or_else(|| panic!("機能 {id} のボディが見えていない"));
-    k.bounds(h).unwrap()
+    kmb_core::vertices(&**k, h)
+        .iter()
+        .fold([f64::MAX; 3], |lo, v| [0, 1, 2].map(|i| lo[i].min(v.at[i])))
 }
 
 /// 機能 `before` の前に見えているボディ `id` の、位置 `at` にある角の名前。
@@ -58,9 +61,8 @@ fn corner(
         .name
 }
 
-/// 外形の箱はカーネルの許容差だけ外へ広がるので、1e-4 まで同じと見る。
 fn near(a: [f64; 3], b: [f64; 3]) -> bool {
-    (0..3).all(|i| (a[i] - b[i]).abs() < 1e-4)
+    (0..3).all(|i| (a[i] - b[i]).abs() < 1e-6)
 }
 
 /// 確かめること: 板 B の角を板 A の上の角へ動かすと、A の高さを変えた時に B も付いて来る。
@@ -83,7 +85,7 @@ fn a_point_to_point_move_follows_the_other_body_when_its_size_changes() {
     let mut with_coords = data.clone();
     with_coords["to_point"] = json!([0, 0, 0]);
     doc.apply(set(m, with_coords)).unwrap();
-    let lo = bounds(&mut doc, &k, m).0;
+    let lo = low_corner(&mut doc, &k, m);
     assert!(near(lo, [30.0, 20.0, 10.0]), "{lo:?}");
     // 点を借りた A も見えるボディに残る
     let reg = registry();
@@ -103,7 +105,7 @@ fn a_point_to_point_move_follows_the_other_body_when_its_size_changes() {
         }],
     ))
     .unwrap();
-    let lo = bounds(&mut doc, &k, m).0;
+    let lo = low_corner(&mut doc, &k, m);
     assert!(near(lo, [30.0, 20.0, 25.0]), "A の高さに付いて来る: {lo:?}");
 
     // 先の点を A の上の面と y = 0 の側面の境目の中点にする(高さ 25 の時は (15, 0, 25))
@@ -123,7 +125,7 @@ fn a_point_to_point_move_follows_the_other_body_when_its_size_changes() {
     let mut mid = data;
     mid["to_ref"] = json!({"kind": "midpoint", "feature": a.0, "faces": faces});
     doc.apply(set(m, mid)).unwrap();
-    let lo = bounds(&mut doc, &k, m).0;
+    let lo = low_corner(&mut doc, &k, m);
     assert!(near(lo, [15.0, 0.0, 25.0]), "{lo:?}");
 }
 
@@ -150,7 +152,7 @@ fn a_point_to_point_move_follows_a_sketch_point() {
             "to_ref": {"kind": "sketch", "sketch": sk.0, "point": p.0}}),
     ))
     .unwrap();
-    let lo = bounds(&mut doc, &k, m).0;
+    let lo = low_corner(&mut doc, &k, m);
     assert!(near(lo, [40.0, 10.0, 0.0]), "{lo:?}");
     let id = doc.data().param_by_name("gap").unwrap().id;
     doc.apply(Transaction::new(
@@ -161,7 +163,7 @@ fn a_point_to_point_move_follows_a_sketch_point() {
         }],
     ))
     .unwrap();
-    let lo = bounds(&mut doc, &k, m).0;
+    let lo = low_corner(&mut doc, &k, m);
     assert!(
         near(lo, [70.0, 10.0, 0.0]),
         "スケッチの寸法に付いて来る: {lo:?}"
