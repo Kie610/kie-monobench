@@ -83,6 +83,9 @@ cad.measure	kmb-cad
 cad.mirror_on_face	kmb-cad-pattern
 cad.mirror_plane	kmb-cad-pattern
 cad.move_axis	kmb-cad-modify
+cad.move_from	kmb-cad-modify
+cad.move_points	kmb-cad-modify
+cad.move_to	kmb-cad-modify
 cad.pattern_axis	kmb-cad-pattern
 cad.pattern_axis2	kmb-cad-pattern
 cad.pattern_split_copies	kmb-cad-pattern

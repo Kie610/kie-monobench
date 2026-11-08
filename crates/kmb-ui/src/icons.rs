@@ -563,6 +563,11 @@ const PATHS: &[(&str, &str)] = &[
         "mechPulley",
         "M7 3h3l2 4 2-4h3v18h-3l-2-4-2 4H7zM2 12h5M17 12h5",
     ),
+    // 平ベルト車(縁の中ほどが少し高い平らな車)
+    (
+        "mechFlatPulley",
+        "M7 4Q12 2.4 17 4V20Q12 21.6 7 20zM2 12h5M17 12h5",
+    ),
     // ロープ車
     (
         "mechSheave",
@@ -1448,7 +1453,7 @@ mod tests {
     #[test]
     fn gear_and_mechanism_pictures_are_distinct() {
         const TOOLS: [&str; 3] = ["gears", "mechanism", "wrap"];
-        const KINDS: [&str; 19] = [
+        const KINDS: [&str; 20] = [
             "gearSpur",
             "gearInternal",
             "gearRack",
@@ -1464,6 +1469,7 @@ mod tests {
             "gearFace",
             "mechCam",
             "mechPulley",
+            "mechFlatPulley",
             "mechSheave",
             "mechChain",
             "mechUJoint",
@@ -1486,6 +1492,46 @@ mod tests {
         }
         for name in KINDS {
             assert!(source(name).unwrap().1.is_none(), "{name} は 1 層");
+        }
+    }
+
+    /// 組み込みの機能が選ぶ欄の選択肢に書いた絵の名前([`kmb_core::Choice::icon`])は、どれも表にあって
+    /// 描ける(名前を書き間違えると、一覧に頭の 1 文字が出る)。種類を足す作業が絵の名前を書けば、
+    /// ここで確かめられる。
+    #[test]
+    fn every_choice_picture_is_drawn() {
+        fn walk(fields: &[kmb_core::Field], out: &mut Vec<(String, String)>) {
+            for f in fields {
+                match &f.kind {
+                    kmb_core::FieldKind::Choice { choices } => out.extend(
+                        choices
+                            .iter()
+                            .filter(|c| !c.icon.is_empty())
+                            .map(|c| (format!("{}={}", f.key, c.value), c.icon.clone())),
+                    ),
+                    kmb_core::FieldKind::Rows { fields } => walk(fields, out),
+                    _ => {}
+                }
+            }
+        }
+        let mut pictures = Vec::new();
+        for d in kmb_bundle::modules().registry.descriptors() {
+            let mut found = Vec::new();
+            walk(&d.fields, &mut found);
+            pictures.extend(
+                found
+                    .into_iter()
+                    .map(|(at, icon)| (d.type_id.clone(), at, icon)),
+            );
+        }
+        assert!(!pictures.is_empty(), "絵のある選択肢が 1 つも無い");
+        for (type_id, at, icon) in &pictures {
+            source(icon).unwrap_or_else(|| panic!("{type_id} の {at} の絵 {icon} が表に無い"));
+            let s = parse(source(icon).unwrap().0);
+            assert!(
+                !s.lines.is_empty() || !s.dots.is_empty(),
+                "{type_id} の {at} の絵 {icon} が描けない"
+            );
         }
     }
 
