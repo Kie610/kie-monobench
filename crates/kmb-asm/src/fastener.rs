@@ -453,6 +453,7 @@ impl Fastener {
             BEARINGS
                 .iter()
                 .map(|b| Choice {
+                    icon: String::new(),
                     value: b.name.into(),
                     label: format!(
                         "{}(内径 {} × 外径 {} × 幅 {})",
@@ -470,11 +471,13 @@ impl Fastener {
                 .filter(|m| !self.kind.is_screw() || screw(m.name).is_some())
             {
                 v.push(Choice {
+                    icon: String::new(),
                     value: m.name.into(),
                     label: format!("{}(並目 ピッチ {})", m.name, mm(m.pitch)),
                 });
                 if self.kind.has_fine() {
                     v.extend(m.fine.iter().map(|p| Choice {
+                        icon: String::new(),
                         value: format!("{}×{}", m.name, mm(*p)),
                         label: format!("{}×{}(細目)", m.name, mm(*p)),
                     }));

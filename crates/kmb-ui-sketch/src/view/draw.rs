@@ -333,14 +333,19 @@ pub(super) fn draw(
             continue;
         }
         let c = t.to_screen(*p);
-        if let Some(h) = halo(*id) {
+        let selected = editor.selection.contains(id);
+        if selected {
+            // 選んだ点は、背景色のすき間をあけた輪で囲む(線の交わる所でも、カーソルが離れても
+            // どの点を選んだか分かるように)。カーソルの下ならさらに外を淡く光らせる
+            if hovered == Some(*id) || lit.contains(id) {
+                painter.circle_filled(c, 12.0, pick_color.gamma_multiply(0.45));
+            }
+            painter.circle_filled(c, 9.0, l.pal.canvas);
+            painter.circle_stroke(c, 8.0, Stroke::new(2.0, pick_color));
+        } else if let Some(h) = halo(*id) {
             painter.circle_filled(c, 8.0, h.color);
         }
-        let r = if editor.selection.contains(id) {
-            4.5
-        } else {
-            3.5
-        };
+        let r = if selected { 4.5 } else { 3.5 };
         painter.circle_filled(c, r, color_of(*id, false));
         if centers.contains(id) {
             let k = Stroke::new(1.0, color_of(*id, false));
