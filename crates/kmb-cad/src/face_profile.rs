@@ -219,6 +219,7 @@ fn fill_missing(
         exact.push(if round {
             ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: mesh_name("c", mesh_tolerance, k),
                     segment: Segment::Circle {
                         center: c,
@@ -325,6 +326,7 @@ fn edge_loops(edges: &[EdgeInfo], face: &str, plane: &Plane) -> Option<Vec<Profi
             }
         };
         segs.push(ProfileEdge {
+            curve: None,
             name: format!("e{k}"),
             segment,
             reversed: false,
@@ -416,6 +418,7 @@ fn mesh_loops(
         .into_iter()
         .enumerate()
         .map(|(k, (a, b, _))| ProfileEdge {
+            curve: None,
             name: mesh_name("m", mesh_tolerance, k),
             segment: Segment::Line {
                 a: plane.to_local(a),

@@ -6,6 +6,7 @@ use std::f64::consts::{PI, TAU};
 
 fn edge(name: &str, segment: Segment) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment,
         reversed: false,

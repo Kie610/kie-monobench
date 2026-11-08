@@ -6,6 +6,7 @@ use std::f64::consts::PI;
 
 fn line(name: &str, a: [f64; 2], b: [f64; 2]) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Line { a, b },
         reversed: false,
@@ -31,6 +32,7 @@ fn rect(x0: f64, y0: f64, w: f64, h: f64) -> Profile {
 fn rounded_rect(x0: f64, y0: f64, w: f64, h: f64, r: f64) -> Profile {
     let (x1, y1) = (x0 + w, y0 + h);
     let arc = |name: &str, c: [f64; 2], start: f64| ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Arc {
             center: c,
@@ -177,6 +179,7 @@ fn rounding_the_top_rim_of_a_cylinder() {
         regions: vec![Region {
             outer: ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "e1".into(),
                     segment: Segment::Circle {
                         center: [0.0, 0.0],

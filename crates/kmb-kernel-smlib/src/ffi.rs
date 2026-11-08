@@ -21,7 +21,7 @@ pub struct JcBrep {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct JcSegment {
     pub kind: i32,
     pub a: [f64; 2],
@@ -30,11 +30,37 @@ pub struct JcSegment {
     pub radius: f64,
     pub start: f64,
     pub end: f64,
+    /// 有理 B スプライン(`SEG_NURBS`)の次数と制御点の数
+    pub degree: u32,
+    pub count: u32,
+    /// 節点(`count + degree + 1` 個)。呼び出しの間だけ生きていればよい
+    pub knots: *const f64,
+    /// x, y, 重み を `count` 組
+    pub points: *const f64,
+}
+
+impl Default for JcSegment {
+    fn default() -> Self {
+        JcSegment {
+            kind: SEG_LINE,
+            a: [0.0; 2],
+            b: [0.0; 2],
+            center: [0.0; 2],
+            radius: 0.0,
+            start: 0.0,
+            end: 0.0,
+            degree: 0,
+            count: 0,
+            knots: std::ptr::null(),
+            points: std::ptr::null(),
+        }
+    }
 }
 
 pub const SEG_LINE: i32 = 0;
 pub const SEG_ARC: i32 = 1;
 pub const SEG_CIRCLE: i32 = 2;
+pub const SEG_NURBS: i32 = 3;
 
 /// 面積も求める
 pub const FACE_AREA: i32 = 1;

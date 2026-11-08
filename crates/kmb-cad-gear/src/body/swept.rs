@@ -151,6 +151,7 @@ mod tests {
     fn parts() -> Parts {
         let outer = ProfileLoop {
             edges: vec![ProfileEdge {
+                curve: None,
                 name: "outside".into(),
                 segment: Segment::Circle {
                     center: [0.0; 2],

@@ -29,6 +29,7 @@ pub fn edge(name: impl Into<String>, seg: Segment, from: P2) -> ProfileEdge {
         _ => dist(seg.end_point(), from) < dist(seg.start_point(), from),
     };
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: seg,
         reversed,
@@ -45,6 +46,7 @@ pub fn arc(name: impl Into<String>, c: P2, r: f64, from: P2, to: P2, ccw: bool) 
         (b, b + (a - b).rem_euclid(std::f64::consts::TAU), true)
     };
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Arc {
             center: c,
@@ -106,6 +108,7 @@ pub fn mirror(e: &ProfileEdge, name: impl Into<String>) -> ProfileEdge {
         },
     };
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment,
         reversed: e.reversed,
