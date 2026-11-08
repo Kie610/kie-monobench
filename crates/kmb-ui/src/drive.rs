@@ -10,6 +10,20 @@
 use egui::accesskit::{Role, Toggled, TreeUpdate};
 use egui::{Event, Key, Modifiers, PointerButton, Pos2, Rect};
 
+/// 描画済みの図の印を名前で探せるようにする。入力は受けず、通常の図のクリックへ通す。
+/// 呼び出し側は、実際に描いた位置と Canvas 内の小領域だけを渡す。
+pub fn named_canvas_marker(ui: &egui::Ui, rect: Rect, id: egui::Id, label_key: &str, suffix: &str) {
+    if !rect.is_finite() || !ui.clip_rect().contains_rect(rect) {
+        return;
+    }
+    let name = format!(
+        "{}{suffix}",
+        crate::window_state::Words::of(ui.ctx()).t(label_key)
+    );
+    ui.interact(rect, id, egui::Sense::hover())
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name));
+}
+
 /// 画面の部品 1 つ(木から写した物。位置は egui の論理の座標)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiNode {
@@ -776,3 +790,7 @@ mod widget_glow_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "drive_marker_tests.rs"]
+mod marker_tests;
