@@ -130,6 +130,9 @@ pub struct JcMassProps {
     pub max: [f64; 3],
     pub centroid: [f64; 3],
     pub has_centroid: i32,
+    pub inertia_origin: [f64; 3],
+    pub moments: [f64; 3],
+    pub products: [f64; 3],
 }
 
 #[repr(C)]

@@ -1661,6 +1661,10 @@ impl Kernel for SmlibKernel {
             min: m.min,
             max: m.max,
             centroid: (m.has_centroid != 0).then_some(m.centroid),
+            inertia: (m.has_centroid != 0).then(|| {
+                let about = k::inertia_from_integrals(m.moments, m.products);
+                k::inertia_at_centroid(about, m.volume, m.centroid, m.inertia_origin)
+            }),
         };
         s.masses.insert(shape.0, props);
         Ok(props)

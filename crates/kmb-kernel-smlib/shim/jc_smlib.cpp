@@ -1791,23 +1791,33 @@ int jc_mass(const JcBrep* brep, double relative_accuracy, JcMassProps* out)
         SmBrep* b = const_cast<SmBrep*>(B(brep));
         out->has_centroid = 0;
         check(SmApiBrepComputeVolume(b, relative_accuracy, out->volume), "体積の計算");
-        // 重心は閉じた立体だけ(精度は [1e-4, 1e-1] に丸められる。体積は上の細かい方を使う)
-        {
-            double area = 0, volume = 0, mass = 0;
-            SmPoint3d c;
-            SmVector3d moments, products;
-            if (SmApiBrepComputeMassProperties(b, std::max(relative_accuracy, 1e-4), 1.0, SmPoint3d(0, 0, 0), area,
-                                               volume, mass, c, moments, products) == SM_SUCCESS)
-            {
-                put(out->centroid, c);
-                out->has_centroid = 1;
-            }
-        }
-        check(SmApiBrepComputeArea(b, std::max(relative_accuracy, 1e-4), out->area), "表面積の計算");
         SmPoint3d lo, hi;
         check(SmApiBrepBoundingBox(b, TRUE, lo, hi), "外形の箱");
         put(out->min, lo);
         put(out->max, hi);
+        // 重心と慣性は閉じた立体だけ(精度は [1e-4, 1e-1] に丸められる。体積は上の細かい方を使う)。
+        // 慣性は外形の箱の中心のまわりで積分する。原点から遠い小さな部品を原点のまわりで積分して
+        // 重心へ移すと、大きな値どうしの引き算で桁が落ちるため
+        {
+            double area = 0, volume = 0, mass = 0;
+            SmPoint3d c;
+            SmVector3d moments, products;
+            SmPoint3d o((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2);
+            if (SmApiBrepComputeMassProperties(b, std::max(relative_accuracy, 1e-4), 1.0, o, area, volume, mass, c,
+                                               moments, products) == SM_SUCCESS)
+            {
+                put(out->centroid, c);
+                put(out->inertia_origin, o);
+                out->moments[0] = moments.x;
+                out->moments[1] = moments.y;
+                out->moments[2] = moments.z;
+                out->products[0] = products.x;
+                out->products[1] = products.y;
+                out->products[2] = products.z;
+                out->has_centroid = 1;
+            }
+        }
+        check(SmApiBrepComputeArea(b, std::max(relative_accuracy, 1e-4), out->area), "表面積の計算");
     });
 }
 
