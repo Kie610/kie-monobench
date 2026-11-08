@@ -379,8 +379,8 @@ pub fn register(reg: &mut Registry) {
                     ("symmetric", "対称"),
                 ],
             ))
-            .field(Field::bool("herringbone", "やまば").help("はすばは腕とボスも歯の幅にそろえ、穴とキー溝を含む円板全体をねじる").only_reference("gear","kind","external|internal","external"))
-            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする。軽くする穴やキー溝があれば 0 mm にする").only_reference("gear","kind","external|internal","external"))
+            .field(Field::bool("herringbone", "やまば").help("はすばは腕とボスも歯の幅にそろえ、穴とキー溝を含む円板全体をねじる").only_reference_of_type("gear",crate::GEAR,"kind","external|internal","external"))
+            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする。軽くする穴やキー溝があれば 0 mm にする").only_reference_of_type("gear",crate::GEAR,"kind","external|internal","external"))
             .fields(operation_fields()),
         |d| {
             let g: GearBody = serde_json::from_value(d.clone())

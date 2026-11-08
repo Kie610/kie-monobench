@@ -2261,6 +2261,18 @@ fn referenced_field_conditions_use_declared_defaults_and_follow_document_changes
         "supported|also",
         "supported",
     );
+    doc.apply(Transaction::new(
+        "既定へ戻す",
+        vec![Op::SetFeatureData {
+            id,
+            data: json!({}),
+        }],
+    ))
+    .unwrap();
+    assert!(
+        typed.applies_in(&input, doc.data()),
+        "正しい型の省略値は宣言の既定に戻る"
+    );
     let wrong_input = json!({"source":wrong.0,"enabled":"yes"});
     assert!(
         !typed.applies_in(&wrong_input, doc.data()),
