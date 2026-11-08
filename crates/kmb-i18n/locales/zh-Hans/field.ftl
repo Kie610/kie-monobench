@@ -2229,6 +2229,11 @@
 # field-solid-import-iges-stand-up = Convert Y-up to Z-up
 # field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
 
+# field-cad-gear-chain = 鎖の呼び
+# field-cad-gear-chain-pitch = 鎖のピッチ
+# field-cad-gear-roller-diameter = ローラーの径
+# field-cad-gear-chain-inner-width = 鎖の内幅
+# field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm
 # field-cad-gear-body-alignment = Web and Boss Alignment
 # field-cad-gear-boss-diameter = Boss Outside Diameter
 # field-cad-gear-boss-diameter-help = Empty or 0 for no boss.

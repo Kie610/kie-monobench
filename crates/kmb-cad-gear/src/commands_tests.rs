@@ -155,6 +155,32 @@ fn the_added_outline_evaluates_around_the_given_center() {
 }
 
 #[test]
+fn sprocket_actions_preserve_manual_dimensions_and_leave_default_width_automatic() {
+    let added = inserts(run(GEAR_ADD, json!({"kind":"sprocket","chain":"manual","chain_pitch":12.71234567,"roller_diameter":7.9,"chain_inner_width":8.1234567,"teeth":17})).unwrap());
+    assert_eq!(added.len(), 2);
+    assert_eq!(added[0].1["chain_pitch"], json!("12.71234567 mm"));
+    assert!(added[1].1.get("width").is_none());
+    let external = inserts(run(GEAR_ADD, json!({})).unwrap());
+    assert!(external[1].1.get("width").is_none());
+    let explicit = inserts(
+        run(
+            GEAR_ADD,
+            json!({"kind":"sprocket","chain":"35","teeth":17,"width":3.5}),
+        )
+        .unwrap(),
+    );
+    assert_eq!(explicit[1].1["width"], json!("3.5 mm"));
+    for args in [
+        json!({"kind":"sprocket","chain":"manual"}),
+        json!({"kind":"sprocket","chain":"manual","chain_pitch":12.7,"roller_diameter":13.0,"chain_inner_width":8.0}),
+        json!({"kind":"sprocket","bore":-1.0}),
+        json!({"kind":"sprocket","chain_pitch":12.7}),
+    ] {
+        assert!(run(GEAR_ADD, args.clone()).is_err(), "{args}");
+    }
+}
+
+#[test]
 fn holes_boss_and_keyway_arguments_reach_the_same_feature_fields() {
     let out = inserts(
         run(
