@@ -549,6 +549,7 @@ fn align(
                 for (seg, back) in r.iter_mut() {
                     *seg = glyph::rigid(seg, &shift, 0.0);
                     let e = ProfileEdge {
+                        curve: None,
                         name: String::new(),
                         segment: seg.clone(),
                         reversed: *back,
@@ -999,6 +1000,7 @@ pub fn thicken(segments: &[Segment], width: f64) -> Vec<kmb_core::Region> {
         let mut l = ProfileLoop {
             edges: (0..n)
                 .map(|i| ProfileEdge {
+                    curve: None,
                     name: format!("t{k}.{i}"),
                     segment: Segment::Line {
                         a: c[i],

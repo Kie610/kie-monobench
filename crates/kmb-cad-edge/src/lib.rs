@@ -820,6 +820,7 @@ fn section(e: &EdgeInfo, na: P3, nb: P3) -> Result<Section, EvalError> {
 
 fn line(name: &str, a: [f64; 2], b: [f64; 2]) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Line { a, b },
         reversed: false,
@@ -854,6 +855,7 @@ fn cutter(c: &Section, shape: Shape, offset: f64, name: &str) -> Profile {
             // 角に近い側の短い弧
             let arc = if k::arc_sweep(sa, sb) < std::f64::consts::PI {
                 ProfileEdge {
+                    curve: None,
                     name: name.into(),
                     segment: Segment::Arc {
                         center,
@@ -865,6 +867,7 @@ fn cutter(c: &Section, shape: Shape, offset: f64, name: &str) -> Profile {
                 }
             } else {
                 ProfileEdge {
+                    curve: None,
                     name: name.into(),
                     segment: Segment::Arc {
                         center,
@@ -890,6 +893,7 @@ fn cutter(c: &Section, shape: Shape, offset: f64, name: &str) -> Profile {
             let ang_b = nb[1].atan2(nb[0]);
             let arc = if ang_b > 0.0 {
                 ProfileEdge {
+                    curve: None,
                     name: name.into(),
                     segment: Segment::Arc {
                         center,
@@ -901,6 +905,7 @@ fn cutter(c: &Section, shape: Shape, offset: f64, name: &str) -> Profile {
                 }
             } else {
                 ProfileEdge {
+                    curve: None,
                     name: name.into(),
                     segment: Segment::Arc {
                         center,
