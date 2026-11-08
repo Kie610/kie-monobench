@@ -337,7 +337,7 @@ fn helical_internal_actions_check_the_transverse_ring_limit_and_keep_precision()
     let module = 1.0000001;
     let beta = 25.0f64;
     let mt = module / beta.to_radians().cos();
-    let minimum = mt * 24.5;
+    let minimum = 2.0 * (mt * 20.0 / 2.0 + 1.25 * mt) + 2.0 * mt;
     let added = inserts(
         run(
             GEAR_OUTLINE_ADD,

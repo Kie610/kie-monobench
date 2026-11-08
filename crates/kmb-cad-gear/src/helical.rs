@@ -394,7 +394,7 @@ mod tests {
         assert_eq!(a.plane.origin, [0.0, 0.0, -10.0]);
         assert_eq!(b.plane.origin, [0.0, 0.0, 0.0]);
         assert_eq!(p.plane.origin, [0.0; 3]);
-        assert!(recipe(&p, &s, 0.0, 20.0, true, 20.0, Operation::New).is_err());
-        assert!(recipe(&p, &s, 0.0, 20.0, true, 0.0, Operation::Intersect).is_err());
+        assert!(recipe(p, &s, 0.0, 20.0, true, 20.0, Operation::New).is_err());
+        assert!(recipe(p, &s, 0.0, 20.0, true, 0.0, Operation::Intersect).is_err());
     }
 }
