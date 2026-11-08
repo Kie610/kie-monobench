@@ -864,6 +864,7 @@ fn assert_truck_spoke_sweep_is_unsupported() {
         regions: vec![kmb_core::Region {
             outer: kmb_core::ProfileLoop {
                 edges: vec![kmb_core::ProfileEdge {
+                    curve: None,
                     name: "section".into(),
                     segment: kmb_core::Segment::Circle {
                         center: [0.0; 2],
@@ -878,6 +879,7 @@ fn assert_truck_spoke_sweep_is_unsupported() {
     let path = kmb_core::PlanarPath {
         plane: kmb_core::Plane::XY,
         edges: vec![kmb_core::ProfileEdge {
+            curve: None,
             name: "path".into(),
             segment: kmb_core::Segment::Line {
                 a: [0.0; 2],
