@@ -560,7 +560,7 @@ impl Feature for Gear {
                 profile,
             }
         } else {
-            let layout = if self.kind == GearKind::External {
+            if self.kind == GearKind::External {
             hub::layout(ProfileLoop { edges: shape.edges }, root, params.module, bore / 2.0, &hub_params)
                 .map_err(EvalError::InvalidData)?
         } else {
@@ -590,8 +590,7 @@ impl Feature for Gear {
             // 内歯の穴とラック・鎖車の有限な輪郭を、分割せずボディへ渡す。
             let profile = Profile { plane: Plane::XY, regions: vec![Region { outer, holes }] };
             hub::Layout { parts: hub::Parts { rim: profile.clone(), web: None, boss: None }, profile }
-        }.placed(plane, phase, center);
-            layout
+        }.placed(plane, phase, center)
         };
         let segments: Vec<Segment> = if shape.axial {
             let radius = shape
