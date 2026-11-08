@@ -3,6 +3,7 @@
 
 use super::*;
 use kmb_cad::Exprs;
+use kmb_core::Profile;
 use serde_json::json;
 
 #[test]
@@ -25,12 +26,18 @@ fn every_expression_field_is_listed_for_renaming() {
         root_round: Some("s".into()),
         bore: Some("s".into()),
         phase: Some("s".into()),
+        lightening_count: Some("s".into()),
+        lightening_diameter: Some("s".into()),
+        lightening_circle: Some("s".into()),
+        boss_diameter: Some("s".into()),
+        key_width: Some("s".into()),
+        key_depth: Some("s".into()),
         rack_length: Some("s".into()),
         rack_back: Some("s".into()),
         outer_diameter: Some("s".into()),
         ..Gear::default()
     };
-    assert_eq!(g.exprs_mut().len(), 13);
+    assert_eq!(g.exprs_mut().len(), 19);
 }
 
 #[test]
@@ -54,6 +61,68 @@ fn the_body_reads_its_gear_and_takes_the_default_width() {
     assert_eq!(v, json!({"gear": 3, "width": "10 mm"}));
 }
 
+#[test]
+fn default_hub_fields_do_not_change_saved_gear_data() {
+    let gear = Gear::default();
+    let saved = serde_json::to_value(&gear).unwrap();
+    for key in [
+        "lightening_count",
+        "lightening_diameter",
+        "lightening_circle",
+        "boss_diameter",
+        "keyway",
+        "key_width",
+        "key_depth",
+    ] {
+        assert!(saved.get(key).is_none(), "{key}: {saved}");
+    }
+    assert_eq!(body::Alignment::default(), body::Alignment::Centered);
+}
+
+#[test]
+fn a_count_expression_rounded_to_an_integer_keeps_every_hole() {
+    let mut doc = kmb_core::Document::new();
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let gear = Gear {
+        module: "2 mm".into(),
+        teeth: "24".into(),
+        lightening_count: Some("0.3 / 0.1".into()),
+        lightening_diameter: Some("2 mm".into()),
+        lightening_circle: Some("20 mm".into()),
+        ..Default::default()
+    };
+    let id = doc
+        .apply_edits(
+            "穴の数",
+            vec![kmb_core::Edit::Insert {
+                type_id: GEAR.into(),
+                name: "歯車".into(),
+                data: serde_json::to_value(gear).unwrap(),
+            }],
+        )
+        .unwrap()[0];
+    let report = doc.recompute(&reg, &kmb_core::NullKernel);
+    assert_eq!(report.error_count(), 0, "{report:?}");
+    let Some(kmb_core::FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+        panic!("輪郭を計算できる");
+    };
+    let profile = kmb_core::Profile::from_value(&outputs["profile"]).unwrap();
+    assert_eq!(profile.regions[0].holes.len(), 3);
+}
+
+#[test]
+fn keyway_size_fields_are_available_with_the_boolean_enabled() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let descriptor = reg.descriptor(GEAR).unwrap();
+    let data = json!({"keyway": true});
+    for key in ["key_width", "key_depth"] {
+        let field = descriptor.fields.iter().find(|f| f.key == key).unwrap();
+        assert!(field.applies(&data));
+    }
+}
+
 fn internal_profile(data: serde_json::Value) -> Result<(Profile, GearSpec), String> {
     let mut doc = kmb_core::Document::new();
     let mut reg = Registry::new();
@@ -70,10 +139,16 @@ fn internal_profile(data: serde_json::Value) -> Result<(Profile, GearSpec), Stri
         .unwrap()[0];
     let report = doc.recompute(&reg, &kmb_core::NullKernel);
     match report.feature(id).unwrap() {
-        kmb_core::FeatureStatus::Ok { outputs, .. } => Ok((
-            Profile::from_value(&outputs["profile"]).unwrap(),
-            GearSpec::from_value(&outputs[GEAR_OUTPUT]).unwrap(),
-        )),
+        kmb_core::FeatureStatus::Ok { outputs, .. } => {
+            let profile = Profile::from_value(&outputs["profile"]).unwrap();
+            let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
+            assert_eq!(parts.rim, profile);
+            assert!(parts.web.is_none() && parts.boss.is_none());
+            Ok((
+                profile,
+                GearSpec::from_value(&outputs[GEAR_OUTPUT]).unwrap(),
+            ))
+        }
         kmb_core::FeatureStatus::Error { message } => Err(message.clone()),
         other => panic!("{other:?}"),
     }
@@ -181,5 +256,45 @@ fn internal_and_rack_fields_remain_available_for_their_own_kinds() {
             .find(|field| field.key == key)
             .unwrap();
         assert_eq!(field.applies(&length), expected, "{key}");
+    }
+}
+
+#[test]
+fn default_rack_parts_keep_the_finite_placed_profile() {
+    let (profile, spec) = internal_profile(json!({
+        "kind":"rack", "module":"2 mm", "teeth":"12", "rack_back":"5 mm",
+        "phase":"30 deg", "x":"7 mm", "y":"11 mm"
+    }))
+    .unwrap();
+    assert_eq!(spec.kind, GearKind::Rack);
+    assert_eq!(spec.pitch_radius, 0.0);
+    assert!(profile.regions[0].holes.is_empty());
+    assert!(profile.regions[0].outer.signed_area().is_finite());
+}
+
+#[test]
+fn hub_options_are_external_only_and_do_not_replace_other_profiles() {
+    for kind in ["internal", "rack"] {
+        let data = json!({"kind":kind, "outer_diameter":"60 mm", "boss_diameter":"6 mm"});
+        assert!(internal_profile(data).unwrap_err().contains("平歯車で指定"));
+    }
+    let mut reg = Registry::new();
+    register(&mut reg);
+    for field in &reg.descriptor(GEAR).unwrap().fields {
+        if [
+            "lightening_count",
+            "lightening_diameter",
+            "lightening_circle",
+            "boss_diameter",
+            "keyway",
+            "key_width",
+            "key_depth",
+        ]
+        .contains(&field.key.as_str())
+        {
+            assert!(field.applies(&json!({"kind":"external"})), "{}", field.key);
+            assert!(!field.applies(&json!({"kind":"internal"})), "{}", field.key);
+            assert!(!field.applies(&json!({"kind":"rack"})), "{}", field.key);
+        }
     }
 }

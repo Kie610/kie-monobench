@@ -51,10 +51,26 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
         Arg::angle("pressure_angle", "圧力角").default(20.0),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
+        Arg::integer("lightening_count", "軽くする穴の数(0 なら穴なし)"),
+        Arg::length("lightening_diameter", "軽くする穴の径"),
+        Arg::length("lightening_circle", "穴を並べる円の径"),
+        Arg::length("boss_diameter", "ボスの外径(0 ならボスなし)"),
+        Arg::flag("keyway", "軸の穴にキー溝を付ける"),
+        Arg::length("key_width", "キー溝の幅(省くと軸の穴の径で表から選ぶ)"),
+        Arg::length("key_depth", "キー溝の深さ(省くと軸の穴の径で表から選ぶ)"),
         Arg::length("outer_diameter", "輪の外径(内歯車で必須)"),
     ]);
     if body {
-        v.push(Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0));
+        v.extend([
+            Arg::length("width", "歯の幅(ボディの厚さ)").default(10.0),
+            Arg::length("web", "腕の厚さ(省くと歯の幅)"),
+            Arg::length("boss", "ボスの長さ(省くと歯の幅)"),
+            Arg::choice(
+                "alignment",
+                "腕とボスの位置",
+                &[("centered", "中央にそろえる"), ("start", "片側にそろえる")],
+            ),
+        ]);
     }
     v
 }
@@ -158,6 +174,27 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     if let Some(b) = bore.filter(|b| *b > 0.0) {
         gear["bore"] = json!(mm(b));
     }
+    if let Some(value) = cx.arg("lightening_count") {
+        let count = value
+            .as_u64()
+            .filter(|n| *n <= 1000)
+            .ok_or("軽くする穴の数は 0 から 1000 までの整数にしてください")?;
+        gear["lightening_count"] = json!(count.to_string());
+    }
+    for key in [
+        "lightening_diameter",
+        "lightening_circle",
+        "boss_diameter",
+        "key_width",
+        "key_depth",
+    ] {
+        if let Some(value) = cx.arg_f64(key)? {
+            gear[key] = json!(mm(value));
+        }
+    }
+    if let Some(value) = cx.arg("keyway") {
+        gear["keyway"] = value.clone();
+    }
     if let Some(phase) = cx.arg_f64("phase")? {
         gear["phase"] = json!(format!("{phase} deg"));
     }
@@ -211,10 +248,19 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         if width <= 0.0 {
             return Err("歯の幅は 0 より大きくしてください".into());
         }
+        let mut data = json!({"gear": {"$new": 0}, "width": mm(width)});
+        for key in ["web", "boss"] {
+            if let Some(value) = cx.arg_f64(key)? {
+                data[key] = json!(mm(value));
+            }
+        }
+        if let Some(value) = cx.arg("alignment") {
+            data["alignment"] = value.clone();
+        }
         edits.push(Edit::Insert {
             type_id: GEAR_BODY.into(),
             name: format!("歯車のボディ{}", cx.count_of(GEAR_BODY) + 1),
-            data: json!({"gear": {"$new": 0}, "width": mm(width)}),
+            data,
         });
     }
     Ok(Outcome::Change {
