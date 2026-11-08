@@ -886,6 +886,25 @@ impl Workspace {
     /// 設定を変え、データフォルダがあれば書く。文書ごとに持つ設定(レンダリングのシーン)は今の
     /// 文書にも書く(取り消せる)。正しくない値なら何も変えずに知らせる。
     pub fn change_settings(&mut self, id: &str, value: &serde_json::Value) -> bool {
+        let handled = self
+            .cur
+            .editors
+            .iter_mut()
+            .find_map(|e| e.change_settings(id, value, !self.win.safe_mode));
+        if let Some(result) = handled {
+            return match result {
+                Ok(()) => {
+                    self.win.message = self.win.safe_mode.then(|| {
+                        "安全モードなので、設定は今回だけ使い、ファイルには書きません".into()
+                    });
+                    true
+                }
+                Err(error) => {
+                    self.win.fail(error);
+                    false
+                }
+            };
+        }
         // AI が画面の欄に打った値なら、ファイルの欄(ポストのプラグインなど)を AI に許したフォルダに限る
         let r = match self.ai_roots_now() {
             Some(roots) => self.cur.work.set_settings_in(id, value, &roots),
@@ -915,7 +934,7 @@ impl Workspace {
     /// 戻した設定の id を返す(画面の台本の試験が、台本ごとに初めの値から始めるのにも使う)。
     pub fn reset_module_settings(&mut self) -> Vec<String> {
         let mut reset = Vec::new();
-        for g in self.cur.work.settings() {
+        for g in self.all_settings() {
             if g.value != g.default && self.change_settings(&g.id, &g.default) {
                 reset.push(g.id);
             }
