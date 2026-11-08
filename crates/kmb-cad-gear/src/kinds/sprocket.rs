@@ -201,6 +201,7 @@ pub fn outline(p: &Params) -> Result<Outline, String> {
         }
     }
     Ok(Outline {
+        axial: false,
         edges,
         reference: vec![
             ("pitch", [0.0, 0.0], d.pitch_radius),

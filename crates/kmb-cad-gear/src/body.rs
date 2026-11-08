@@ -125,11 +125,11 @@ impl Feature for GearBody {
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let not_gear =
             || EvalError::InvalidData(format!("{} は歯車の輪郭ではありません", self.gear));
-        let profile =
+        let mut profile =
             Profile::from_value(ctx.output(self.gear, "profile")?).ok_or_else(not_gear)?;
         let mut spec =
             GearSpec::from_value(ctx.output(self.gear, GEAR_OUTPUT)?).ok_or_else(not_gear)?;
-        let width = if self.width.trim().is_empty() {
+        let specified_width = if self.width.trim().is_empty() {
             let kmb_core::Value::Scalar(q) = ctx.output(self.gear, crate::DEFAULT_WIDTH_OUTPUT)?
             else {
                 return Err(EvalError::InvalidData("歯の幅の既定値がありません".into()));
@@ -143,36 +143,75 @@ impl Feature for GearBody {
         } else {
             length(ctx, &self.width, "歯の幅")?
         };
-        if !width.is_finite() || width <= 0.0 {
+        if !specified_width.is_finite() || specified_width <= 0.0 {
             return Err(EvalError::InvalidData(
                 "歯の幅は 0 より大きくしてください".into(),
             ));
         }
+        let width = if spec.kind.is_pulley() {
+            let values: Vec<_> = profile
+                .regions
+                .iter()
+                .flat_map(|r| &r.outer.edges)
+                .flat_map(|e| [e.from_point()[1], e.to_point()[1]])
+                .collect();
+            let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
+            let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let width = hi - lo;
+            if !width.is_finite() || width <= 0.0 {
+                return Err(EvalError::InvalidData(
+                    "ベルト車かロープ車の軸断面に幅がありません".into(),
+                ));
+            }
+            width
+        } else {
+            specified_width
+        };
         let parts = Parts::from_value(ctx.output(self.gear, PARTS_OUTPUT)?).ok_or_else(not_gear)?;
         let mut warnings = Vec::new();
-        let thickness = |src: &Option<String>, what: &str| {
-            let value = src
-                .as_deref()
-                .filter(|s| !s.trim().is_empty())
-                .map_or(Ok(width), |s| length(ctx, s, what))?;
-            if !value.is_finite() || value <= 0.0 {
-                return Err(EvalError::InvalidData(format!(
-                    "{what}は 0 より大きくしてください"
-                )));
+        let (web, boss) = if spec.kind.is_pulley() {
+            if (specified_width - width).abs() > 1e-9 {
+                warnings.push(format!(
+                    "ベルト車とロープ車の歯の幅は使いません。輪郭の幅 {width:.3} mm で作りました"
+                ));
             }
-            Ok(value)
+            for (src, what) in [(&self.web, "腕の厚さ"), (&self.boss, "ボスの長さ")] {
+                if let Some(s) = src.as_ref().filter(|s| !s.trim().is_empty()) {
+                    let v = length(ctx, s, what)?;
+                    if (v - width).abs() > 1e-9 {
+                        warnings.push(format!(
+                            "{what}はベルト車とロープ車では使いません(輪郭の幅で作りました)"
+                        ));
+                    }
+                }
+            }
+            (width, width)
+        } else {
+            let thickness = |src: &Option<String>, what: &str| {
+                let value = src
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .map_or(Ok(width), |s| length(ctx, s, what))?;
+                if !value.is_finite() || value <= 0.0 {
+                    return Err(EvalError::InvalidData(format!(
+                        "{what}は 0 より大きくしてください"
+                    )));
+                }
+                Ok(value)
+            };
+            let mut web = thickness(&self.web, "腕の厚さ")?;
+            let mut boss = thickness(&self.boss, "ボスの長さ")?;
+            for (present, value, what) in [
+                (parts.web.is_some(), &mut web, "腕の厚さ"),
+                (parts.boss.is_some(), &mut boss, "ボスの長さ"),
+            ] {
+                if !present && (*value - width).abs() > 1e-9 {
+                    warnings.push(format!("{what}は、その領域がないため使いません"));
+                    *value = width;
+                }
+            }
+            (web, boss)
         };
-        let mut web = thickness(&self.web, "腕の厚さ")?;
-        let mut boss = thickness(&self.boss, "ボスの長さ")?;
-        for (present, value, what) in [
-            (parts.web.is_some(), &mut web, "腕の厚さ"),
-            (parts.boss.is_some(), &mut boss, "ボスの長さ"),
-        ] {
-            if !present && (*value - width).abs() > 1e-9 {
-                warnings.push(format!("{what}は、その領域がないため使いません"));
-                *value = width;
-            }
-        }
         let (from, to) = match self.direction {
             Side::Normal => (0.0, width),
             Side::Reverse => (-width, 0.0),
@@ -187,7 +226,17 @@ impl Feature for GearBody {
             stop: None,
             taper: 0.0,
         };
-        let recipe = if (web - width).abs() < 1e-9 && (boss - width).abs() < 1e-9 {
+        let recipe = if spec.kind.is_pulley() {
+            let direction = spec.axis.direction;
+            profile.plane.origin = [0, 1, 2].map(|i| profile.plane.origin[i] + direction[i] * from);
+            Recipe::Revolve {
+                operation: self.operation,
+                profile,
+                origin: spec.axis.origin,
+                dir: direction,
+                angle: std::f64::consts::TAU,
+            }
+        } else if (web - width).abs() < 1e-9 && (boss - width).abs() < 1e-9 {
             // 同じ厚さなら分割する前の輪郭を一度押し出し、余分な面を作らない。
             extrude(profile, from, to)
         } else {
@@ -238,7 +287,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::opt_expr("width", "歯の幅")
                     .length()
-                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm"),
+                    .help("空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す"),
             )
             .field(
                 Field::opt_expr("web", "腕の厚さ")
