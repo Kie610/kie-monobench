@@ -398,6 +398,45 @@ fn herringbone_gears_join_the_two_halves_and_fill_only_the_root_in_the_groove() 
         };
         assert!(close(k.mass(shape).unwrap().volume, expected, 0.01));
         let mesh = k.mesh(shape, 0.04).unwrap();
+        // 断面の歯と歯溝を実際の閉じた網で調べる。位相は半幅とねじれ角から独立に求める。
+        let half_width = (8.0 - gap) / 2.0;
+        let central_phase = half_width * spec.helix_angle.tan() / spec.pitch_radius;
+        let flank_offset = 0.3 * std::f64::consts::PI / f64::from(spec.teeth);
+        for z in [0.05, 4.0 - gap / 2.0 - 0.05, 4.0 + gap / 2.0 + 0.05, 7.95] {
+            let phase = if z < 4.0 {
+                z * spec.helix_angle.tan() / spec.pitch_radius
+            } else {
+                (8.0 - z) * spec.helix_angle.tan() / spec.pitch_radius
+            };
+            if (z - 4.0).abs() < 1.0 {
+                assert!((phase - central_phase).abs() < 0.01);
+            }
+            for offset in [-flank_offset, flank_offset] {
+                let angle = phase + offset;
+                let p = [
+                    spec.pitch_radius * angle.cos(),
+                    spec.pitch_radius * angle.sin(),
+                    z,
+                ];
+                assert!(mesh.contains(p), "歯の中 {gap} {z} {angle}");
+            }
+            let gap_angle = phase + std::f64::consts::PI / f64::from(spec.teeth);
+            let p = [
+                spec.pitch_radius * gap_angle.cos(),
+                spec.pitch_radius * gap_angle.sin(),
+                z,
+            ];
+            assert!(!mesh.contains(p), "歯溝 {gap} {z} {gap_angle}");
+        }
+        if gap == 0.0 {
+            let p = [
+                spec.pitch_radius * central_phase.cos(),
+                spec.pitch_radius * central_phase.sin(),
+                4.0,
+            ];
+            assert!(mesh.contains(p), "中央の歯は両半分でつながる");
+        }
+
         for z in [0.0, 8.0] {
             let mut count = 0;
             for q in mesh
