@@ -507,7 +507,7 @@ pub fn register(reg: &mut Registry) {
                         f.hide_choice(k.key())
                     }),
             )
-            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。外歯と内歯のねじれ角があれば歯直角のモジュール"))
+            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ねじれ角があれば歯直角のモジュール。ピッチ円の径 = モジュール × 歯数 / cos(ねじれ角)"))
             .field(Field::choice("rack_size", "ラックの長さの指定", &[("teeth", "歯数"), ("length", "長さ")]).only("kind", "rack", "external"))
             .field(Field::expr("teeth", "歯数").unitless().step(1.0, 1.0).help("ラックでは長さの指定が「歯数」の時だけ使う").only("rack_size", "teeth", "teeth"))
             .field(Field::opt_expr("rack_length", "ラックの長さ").length().help("歯を含む全長。円ピッチごとに入るだけの歯を並べる").only("kind", "rack", "external").and_only("rack_size", "length", "teeth"))
