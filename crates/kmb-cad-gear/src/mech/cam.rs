@@ -979,30 +979,35 @@ pub fn register(reg: &mut Registry) {
                 ],
             ))
             .field(
-                Field::expr("roller_radius", "ローラーの半径")
+                Field::opt_expr("roller_radius", "ローラーの半径")
                     .length()
+                    .help("空なら 2 mm")
                     .only("tip", "roller", "roller"),
             )
-            .field(Field::expr("offset", "ずれ").length().only(
-                "follower",
-                "translating",
-                "translating",
-            ))
-            .field(Field::expr("arm_length", "腕の長さ").length().only(
-                "follower",
-                "oscillating",
-                "translating",
-            ))
-            .field(Field::expr("pivot_x", "支点 x").length().only(
-                "follower",
-                "oscillating",
-                "translating",
-            ))
-            .field(Field::expr("pivot_y", "支点 y").length().only(
-                "follower",
-                "oscillating",
-                "translating",
-            ))
+            .field(
+                Field::opt_expr("offset", "ずれ")
+                    .length()
+                    .help("空なら 0 mm")
+                    .only("follower", "translating", "translating"),
+            )
+            .field(
+                Field::opt_expr("arm_length", "腕の長さ")
+                    .length()
+                    .help("空なら 30 mm")
+                    .only("follower", "oscillating", "translating"),
+            )
+            .field(
+                Field::opt_expr("pivot_x", "支点 x")
+                    .length()
+                    .help("空なら 40 mm")
+                    .only("follower", "oscillating", "translating"),
+            )
+            .field(
+                Field::opt_expr("pivot_y", "支点 y")
+                    .length()
+                    .help("空なら 0 mm")
+                    .only("follower", "oscillating", "translating"),
+            )
             .field(Field::text("diagram", "変位の線図").help(
                 "角度と変位は数と単位を空白で区切る。直動は mm、揺動は deg。区間の角の和は360 deg",
             ))

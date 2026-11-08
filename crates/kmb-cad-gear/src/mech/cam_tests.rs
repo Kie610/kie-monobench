@@ -263,3 +263,73 @@ fn cam_action_refuses_unknown_arguments_and_nonpositive_dimensions() {
         assert!(ext.run(CAM_ADD, &cx).is_err(), "{args}");
     }
 }
+
+#[test]
+fn conditional_dimension_fields_allow_omission_and_keep_length_units() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let desc = reg.descriptor(CAM).unwrap();
+    for key in [
+        "roller_radius",
+        "offset",
+        "arm_length",
+        "pivot_x",
+        "pivot_y",
+    ] {
+        let field = desc.fields.iter().find(|field| field.key == key).unwrap();
+        assert!(
+            matches!(field.kind, kmb_core::FieldKind::Expr { optional: true }),
+            "{key}"
+        );
+        assert_eq!(field.unit, Some(kmb_core::FieldUnit::Length), "{key}");
+        assert!(field.when.is_some(), "{key}");
+        assert!(!field.help.is_empty(), "{key}");
+    }
+}
+
+#[test]
+fn omitted_conditional_dimensions_use_defaults_and_explicit_unit_expressions_survive() {
+    fn dimensions(cam: &Cam) -> [&str; 5] {
+        [
+            &cam.roller_radius,
+            &cam.offset,
+            &cam.arm_length,
+            &cam.pivot_x,
+            &cam.pivot_y,
+        ]
+    }
+    let initial = Cam::default();
+    let mut data = serde_json::to_value(&initial).unwrap();
+    for key in [
+        "roller_radius",
+        "offset",
+        "arm_length",
+        "pivot_x",
+        "pivot_y",
+    ] {
+        data.as_object_mut().unwrap().remove(key);
+    }
+    let omitted: Cam = serde_json::from_value(data.clone()).unwrap();
+    assert_eq!(
+        dimensions(&omitted),
+        ["2 mm", "0 mm", "30 mm", "40 mm", "0 mm"]
+    );
+    assert_eq!(dimensions(&omitted), dimensions(&initial));
+    let explicit = ["0.1 in", "1 mm", "35 mm", "45 mm", "2 mm"];
+    for (key, value) in [
+        "roller_radius",
+        "offset",
+        "arm_length",
+        "pivot_x",
+        "pivot_y",
+    ]
+    .into_iter()
+    .zip(explicit)
+    {
+        data[key] = serde_json::json!(value);
+    }
+    let specified: Cam = serde_json::from_value(data).unwrap();
+    assert_eq!(dimensions(&specified), explicit);
+    let roundtrip: Cam = serde_json::from_value(serde_json::to_value(&specified).unwrap()).unwrap();
+    assert_eq!(dimensions(&roundtrip), explicit);
+}
