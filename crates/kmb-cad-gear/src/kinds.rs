@@ -3,6 +3,7 @@
 
 mod internal;
 pub mod rack;
+pub mod sprocket;
 mod spur;
 
 use crate::tooth::P2;
@@ -20,6 +21,8 @@ pub struct Params {
     pub tip_round: f64,
     /// 歯底の丸みの半径の係数
     pub root_round: f64,
+    /// ローラーチェーンの寸法。鎖車だけで使う。
+    pub chain: Option<sprocket::Chain>,
     /// ラックの全長(空なら歯数 × 円ピッチ)
     pub rack_length: Option<f64>,
     /// ラックの歯底から背までの厚さ(空なら 2 × モジュール)
@@ -35,6 +38,7 @@ impl Default for Params {
             profile_shift: 0.0,
             tip_round: 0.0,
             root_round: ROOT_ROUND,
+            chain: None,
             rack_length: None,
             rack_back: None,
         }
@@ -60,14 +64,16 @@ pub struct Outline {
 pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
     match kind {
         GearKind::External => spur::outline(p),
+        GearKind::Sprocket => sprocket::outline(p),
         GearKind::Internal => internal::outline(p),
         GearKind::Rack => rack::outline(p),
         other => Err(format!(
-            "「{}」の形はまだ作れません(今作れるのは「{}」と「{}」と「{}」です)",
+            "「{}」の形はまだ作れません(今作れるのは「{}」と「{}」と「{}」と「{}」です)",
             other.label(),
             GearKind::External.label(),
             GearKind::Internal.label(),
-            GearKind::Rack.label()
+            GearKind::Rack.label(),
+            GearKind::Sprocket.label()
         )),
     }
 }
@@ -76,6 +82,6 @@ pub fn outline(kind: GearKind, p: &Params) -> Result<Outline, String> {
 pub fn available(kind: GearKind) -> bool {
     matches!(
         kind,
-        GearKind::External | GearKind::Internal | GearKind::Rack
+        GearKind::External | GearKind::Internal | GearKind::Rack | GearKind::Sprocket
     )
 }
