@@ -498,7 +498,7 @@ fn the_seven_integrated_kinds_keep_their_own_fields() {
         );
         assert_eq!(on("boss_diameter"), kind == GearKind::External, "{kind:?}");
         assert_eq!(on("chain"), kind == GearKind::Sprocket, "{kind:?}");
-        assert_eq!(on("rack_length"), false, "歯数で指定するラックの長さは隠す");
+        assert!(!on("rack_length"), "歯数で指定するラックの長さは隠す");
         assert_eq!(on("pulley_diameter"), kind.is_pulley(), "{kind:?}");
         assert_eq!(on("groove_count"), kind == GearKind::VPulley, "{kind:?}");
         assert_eq!(
