@@ -453,6 +453,7 @@ impl Fastener {
             BEARINGS
                 .iter()
                 .map(|b| Choice {
+                    icon: String::new(),
                     value: b.name.into(),
                     label: format!(
                         "{}(内径 {} × 外径 {} × 幅 {})",
@@ -470,11 +471,13 @@ impl Fastener {
                 .filter(|m| !self.kind.is_screw() || screw(m.name).is_some())
             {
                 v.push(Choice {
+                    icon: String::new(),
                     value: m.name.into(),
                     label: format!("{}(並目 ピッチ {})", m.name, mm(m.pitch)),
                 });
                 if self.kind.has_fine() {
                     v.extend(m.fine.iter().map(|p| Choice {
+                        icon: String::new(),
                         value: format!("{}×{}", m.name, mm(*p)),
                         label: format!("{}×{}(細目)", m.name, mm(*p)),
                     }));
@@ -498,6 +501,7 @@ fn frame(n: P3) -> (P3, P3) {
 
 fn line(name: String, a: P2, b: P2) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name,
         segment: Segment::Line { a, b },
         reversed: false,
@@ -532,6 +536,7 @@ fn hexagon(s: f64) -> Vec<P2> {
 fn circle(name: &str, r: f64) -> ProfileLoop {
     ProfileLoop {
         edges: vec![ProfileEdge {
+            curve: None,
             name: name.into(),
             segment: Segment::Circle {
                 center: [0.0, 0.0],

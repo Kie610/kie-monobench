@@ -3,19 +3,25 @@
 //! 機能)ならどれにも効く(強度と熱の kmb-fea、流れの kmb-flow)。
 
 use crate::result::{Geometry, Role, SimResult, fmt};
-use crate::run::{PLAN, Plan, Runner, Status, clock, prepared};
+use crate::run::{Done, Mode, PLAN, Plan, Runner, Status, clock, prepared};
 use crate::view::{self, Look};
 use kmb_core::{
-    Action, Context, Extension, FeatureId, FeatureStatus, FrameBar, Outcome, Overlay, OverlayShape,
-    Payload, Place, RunState, RunTone, StepMark, Value,
+    Action, Arg, Context, Extension, FeatureId, FeatureStatus, FieldUnit, FrameBar, Outcome,
+    Overlay, OverlayShape, Payload, Place, RunState, RunTone, StepMark, Value,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+mod phase_tests;
+
 pub const RUN: &str = "study.run";
 pub const CANCEL: &str = "study.cancel";
+pub const CONVERGE: &str = "study.converge";
+pub const CHECK: &str = "study.check";
 pub const VIEW_QUANTITY: &str = "study.view.quantity.";
 pub const VIEW_FRAME: &str = "study.view.frame.";
+const VIEW_PHASE: &str = "study.view.phase.";
 pub const VIEW_SURFACE: &str = "study.view.surface";
 pub const VIEW_SECTION: &str = "study.view.section";
 pub const VIEW_STREAM: &str = "study.view.streamlines";
@@ -26,7 +32,7 @@ pub const VIEW_HIDE: &str = "study.view.hide";
 pub const VIEW_NUMBERS: &str = "study.view.numbers";
 
 /// 研究ごとの見せ方(結果が来た時に、結果の勧める見せ方で埋める)。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 struct Show {
     /// 埋めた結果の番号(違う結果が来たら埋め直す)
     from: u64,
@@ -40,6 +46,43 @@ struct Show {
     no_deform: bool,
     hidden: bool,
     frame: usize,
+    phase: Option<f64>,
+}
+
+/// 揺れを再生する操作の宛先。結果の更新は別の宛先になる。
+#[derive(Debug, PartialEq)]
+struct PhaseSeek {
+    study: u64,
+    key: u64,
+    stamp: u64,
+    frame: usize,
+}
+
+impl PhaseSeek {
+    fn parse(id: &str) -> Option<Self> {
+        let mut parts = id.strip_prefix(VIEW_PHASE)?.split('.');
+        let seek = Self {
+            study: parts.next()?.parse().ok()?,
+            key: parts.next()?.parse().ok()?,
+            stamp: parts.next()?.parse().ok()?,
+            frame: parts.next()?.parse().ok()?,
+        };
+        parts.next().is_none().then_some(seek)
+    }
+}
+
+fn has_phase(r: &SimResult) -> bool {
+    r.kind == "modal"
+        && !r.frames.is_empty()
+        && r.frames.iter().all(|f| f.time.is_none())
+        && r.quantities
+            .iter()
+            .any(|q| q.role == Role::Deform && q.comps == 3)
+}
+
+struct PhaseDrawn {
+    key: u64,
+    mesh: Option<view::PhaseMesh>,
 }
 
 /// 研究の実行と結果の見せ方。
@@ -49,6 +92,8 @@ pub struct StudyCommands {
     show: Mutex<HashMap<(u64, u64), Show>>,
     /// 描いた形の使い回し(鍵と形)
     drawn: Mutex<Option<(u64, Option<Arc<OverlayShape>>)>>,
+    /// 位相以外の見せ方が同じ時だけ使う、1コマ分の控え。
+    phase_drawn: Mutex<Option<PhaseDrawn>>,
 }
 
 fn is_study(cx: &Context<'_>, type_id: &str) -> bool {
@@ -125,11 +170,17 @@ impl StudyCommands {
         (cx.doc, id.0)
     }
 
+    /// 完了した仕事の鍵・結果・古さを同じ読み取りから得る。
+    fn finished(&self, cx: &Context<'_>, id: FeatureId) -> Option<(Done, bool)> {
+        let done = self.runner.done(Self::at(cx, id))?;
+        let stale = plan(cx, id).is_none_or(|p| p.key != done.key);
+        Some((done, stale))
+    }
+
     /// いちばん新しい結果と、それが古いか。
     pub fn result(&self, cx: &Context<'_>, id: FeatureId) -> Option<(Arc<SimResult>, bool)> {
-        let d = self.runner.done(Self::at(cx, id))?;
-        let stale = plan(cx, id).is_none_or(|p| p.key != d.key);
-        Some((d.result, stale))
+        self.finished(cx, id)
+            .map(|(done, stale)| (done.result, stale))
     }
 
     fn show_of(&self, cx: &Context<'_>, id: FeatureId, r: &SimResult) -> Show {
@@ -158,6 +209,7 @@ impl StudyCommands {
                 .unwrap_or(0);
             *s = Show {
                 from: stamp,
+                phase: None,
                 surface: (!on_grid && !r.quantities.is_empty()).then_some(q),
                 section: on_grid || r.start.section,
                 section_q: if on_grid { q } else { first_grid },
@@ -224,15 +276,21 @@ impl StudyCommands {
             streamlines: s.streamlines,
             smooth: !s.banded,
             deform: !s.no_deform,
+            phase: s.phase.unwrap_or(1.0),
             legend_all: !s.frame_only,
             stale,
         }
     }
 
     fn shape(&self, cx: &Context<'_>, id: FeatureId) -> Option<Arc<OverlayShape>> {
-        let (r, stale) = self.result(cx, id)?;
+        let (done, stale) = self.finished(cx, id)?;
+        let job_key = done.key;
+        let r = done.result;
         let s = self.show_of(cx, id, &r);
         if s.hidden {
+            if let Ok(mut cache) = self.phase_drawn.lock() {
+                *cache = None;
+            }
             return None;
         }
         let look = self.look(cx, id, &r, stale);
@@ -244,10 +302,12 @@ impl StudyCommands {
                 .filter(|(b, _)| !r.bodies.contains(&b.0))
                 .collect()
         };
-        let key = {
+        let draw_key = |look: &Look| {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             r.stamp().hash(&mut h);
+            // 点数や変位が同じでも、位置などの条件が違う仕事の網は使い回さない。
+            job_key.hash(&mut h);
             key_of(Self::at(cx, id)).hash(&mut h);
             format!("{look:?}").hash(&mut h);
             if !others.is_empty() {
@@ -256,13 +316,34 @@ impl StudyCommands {
             }
             h.finish()
         };
+        let key = draw_key(&look);
         if let Ok(d) = self.drawn.lock()
             && let Some((k, s)) = d.as_ref()
             && *k == key
         {
             return s.clone();
         }
-        let mut shape = view::draw(&r, &look, key);
+        let mut base = look.clone();
+        base.phase = 1.0;
+        let mut phase_shape = None;
+        if let Ok(mut cache) = self.phase_drawn.lock() {
+            if has_phase(&r) {
+                let cache_key = draw_key(&base);
+                if cache.as_ref().is_none_or(|c| c.key != cache_key) {
+                    *cache = Some(PhaseDrawn {
+                        key: cache_key,
+                        mesh: view::PhaseMesh::new(&r, &base),
+                    });
+                }
+                phase_shape = cache
+                    .as_ref()
+                    .and_then(|c| c.mesh.as_ref())
+                    .and_then(|m| m.draw(look.phase, key));
+            } else {
+                *cache = None;
+            }
+        }
+        let mut shape = phase_shape.unwrap_or_else(|| view::draw(&r, &look, key));
         for (_, h) in others {
             if let Ok(m) = cx.kernel.mesh(h, 0.2) {
                 add_backdrop(&mut shape, &m);
@@ -282,16 +363,37 @@ impl StudyCommands {
         id: FeatureId,
         wait: bool,
     ) -> Result<Option<Arc<SimResult>>, String> {
+        self.run_mode(cx, id, wait, Mode::Solve)
+    }
+
+    fn run_mode(
+        &self,
+        cx: &Context<'_>,
+        id: FeatureId,
+        wait: bool,
+        mode: Mode,
+    ) -> Result<Option<Arc<SimResult>>, String> {
         let Some(p) = plan(cx, id) else {
             return Err(problem(cx, id));
         };
         let task = prepared(cx.registry, p.key)
             .ok_or("条件を読み直してから実行してください(再計算すると読み直します)")?;
+        task.supports(&mode)?;
         let at = Self::at(cx, id);
         if wait {
-            self.runner.solve_now(at, p.key, task.as_ref()).map(Some)
+            self.runner
+                .solve_now(at, p.key, task.as_ref(), mode)
+                .map(Some)
         } else {
-            self.runner.start(at, p.key, p.steps.clone(), task);
+            let steps = match mode {
+                Mode::Solve => p.steps.clone(),
+                Mode::Converge { .. } => {
+                    ["粗い網で解く", "中の網で解く", "細かい網で解く", "比べる"]
+                        .map(str::to_string)
+                        .to_vec()
+                }
+            };
+            self.runner.start(at, p.key, steps, task, mode);
             Ok(None)
         }
     }
@@ -351,6 +453,18 @@ fn toggle(id: &str, on: bool, label_on: &str, label_off: &str, hint: &str) -> Ac
 }
 
 impl Extension for StudyCommands {
+    fn unlisted(&self, id: &str) -> Option<Vec<Arg>> {
+        PhaseSeek::parse(id)?;
+        Some(vec![
+            Arg::number(
+                "phase",
+                "揺れの変位に掛ける係数(-1〜1、1で最大)",
+                FieldUnit::Unitless,
+            )
+            .default(1.0),
+        ])
+    }
+
     fn actions(&self, cx: &Context<'_>) -> Vec<Action> {
         let sel = selected(cx);
         let mut out = Vec::new();
@@ -373,7 +487,41 @@ impl Extension for StudyCommands {
             .aliases("じっこう とく かいせき 実行 解く solve run")
             .at(&places);
         run.disabled = run_why;
+        let mut converge = Action::new(CONVERGE, "精度を確かめる", "fea")
+            .arg(kmb_core::Arg::flag(
+                "wait",
+                "解き終わるまで待って結果を返す(CLI・MCP)",
+            ))
+            .arg(
+                kmb_core::Arg::number(
+                    "ratio",
+                    "網の大きさの比(1.3〜2.0)",
+                    kmb_core::FieldUnit::Unitless,
+                )
+                .default(serde_json::json!(1.5)),
+            )
+            .menu("実行")
+            .icon("play")
+            .hint("3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる")
+            .at(&places);
+        converge.disabled = run.disabled.clone().or_else(|| {
+            sel.and_then(|id| {
+                let p = plan(cx, id)?;
+                prepared(cx.registry, p.key)?
+                    .supports(&Mode::Converge { ratio: 1.5 })
+                    .err()
+            })
+        });
         out.push(run);
+        out.push(converge);
+        let mut check = Action::new(CHECK, "点検", "fea")
+            .menu("実行")
+            .hint("解く前に足りない条件を一覧で示し、直し方を知らせる")
+            .at(&places);
+        if sel.is_none() {
+            check.disabled = Some("研究を選んでから点検します".into());
+        }
+        out.push(check);
         let mut cancel = Action::new(CANCEL, "中止", "fea")
             .menu("実行")
             .icon("x")
@@ -508,16 +656,67 @@ impl Extension for StudyCommands {
     }
 
     fn run(&self, id: &str, cx: &Context<'_>) -> Option<Result<Outcome, kmb_core::Problem>> {
-        if id != RUN && id != CANCEL && !id.starts_with("study.view.") {
+        if id != RUN
+            && id != CANCEL
+            && id != CONVERGE
+            && id != CHECK
+            && !id.starts_with("study.view.")
+        {
             return None;
         }
         let Some(fid) = selected(cx) else {
             return Some(Err("解析の研究を選んでから使う".into()));
         };
+        if id.starts_with(VIEW_PHASE) {
+            return Some((|| {
+                let seek = PhaseSeek::parse(id).ok_or("揺れの再生先が正しくありません")?;
+                let done = self
+                    .runner
+                    .done(Self::at(cx, fid))
+                    .ok_or("まだ結果がありません")?;
+                let r = &done.result;
+                if seek.study != fid.0 || seek.key != done.key || seek.stamp != r.stamp() {
+                    return Err("結果が変わりました。再生をやり直してください".into());
+                }
+                if !has_phase(r) || seek.frame >= r.frames.len() {
+                    return Err("この結果のコマは揺れを再生できません".into());
+                }
+                let phase = cx.arg("phase").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                if !phase.is_finite() || !(-1.0..=1.0).contains(&phase) {
+                    return Err("揺れの係数は-1から1の有限な数で指定します".into());
+                }
+                self.show_of(cx, fid, r);
+                self.set_show(cx, fid, |s| {
+                    s.frame = seek.frame;
+                    s.phase = Some(phase);
+                });
+                Ok(Outcome::Message(String::new()))
+            })());
+        }
         Some(match id {
-            RUN => {
+            CHECK => {
+                let checks = plan(cx, fid).map_or_else(
+                    || {
+                        vec![crate::Check {
+                            error: true,
+                            what: problem(cx, fid),
+                            fix: "研究の条件を直して再計算してください".into(),
+                        }]
+                    },
+                    |p| p.checks,
+                );
+                check_outcome(&checks)
+            }
+            RUN | CONVERGE => {
+                let mode = if id == CONVERGE {
+                    Mode::Converge {
+                        ratio: cx.arg("ratio").and_then(|v| v.as_f64()).unwrap_or(1.5),
+                    }
+                } else {
+                    Mode::Solve
+                };
                 let wait = cx.arg("wait").and_then(|v| v.as_bool()) == Some(true);
-                self.run_study(cx, fid, wait)
+                self.run_mode(cx, fid, wait, mode)
                     .map(|r| match r {
                         Some(r) => Outcome::Message(format!("解きました: {}", r.summary)),
                         None => {
@@ -581,7 +780,10 @@ impl Extension for StudyCommands {
                         s.hidden = false;
                     });
                 } else if let Some(f) = tail(VIEW_FRAME) {
-                    self.set_show(cx, fid, |s| s.frame = f.min(last));
+                    self.set_show(cx, fid, |s| {
+                        s.frame = f.min(last);
+                        s.phase = None;
+                    });
                 } else {
                     let first_surface = r.quantities.iter().position(|q| {
                         r.parts
@@ -621,11 +823,13 @@ impl Extension for StudyCommands {
 
     fn frames(&self, cx: &Context<'_>) -> Option<FrameBar> {
         let id = selected(cx)?;
-        let (r, _) = self.result(cx, id)?;
-        if r.frames.len() < 2 {
+        let done = self.runner.done(Self::at(cx, id))?;
+        let r = &done.result;
+        let phase = has_phase(r);
+        if r.frames.is_empty() || (r.frames.len() < 2 && !phase) {
             return None;
         }
-        let s = self.show_of(cx, id, &r);
+        let s = self.show_of(cx, id, r);
         if s.hidden {
             return None;
         }
@@ -634,9 +838,13 @@ impl Extension for StudyCommands {
             labels: r.frames.iter().map(|f| f.label.clone()).collect(),
             at: s.frame.min(r.frames.len() - 1),
             total: r.frames.last().map(|f| f.label.clone()).unwrap_or_default(),
-            playable,
-            fps: 12.0,
-            seek: VIEW_FRAME.into(),
+            playable: playable || phase,
+            fps: if phase { 30.0 } else { 12.0 },
+            seek: if phase {
+                format!("{VIEW_PHASE}{}.{}.{}.", id.0, done.key, r.stamp())
+            } else {
+                VIEW_FRAME.into()
+            },
         })
     }
 
@@ -794,4 +1002,54 @@ impl Extension for StudyCommands {
 /// 数を短く(結果の表と同じ)。
 pub fn short(v: f64) -> String {
     fmt(v)
+}
+
+/// 点検の結果は、注意だけなら読める文、誤りがあれば見つけた問題として返す。
+fn check_outcome(checks: &[crate::Check]) -> Result<Outcome, kmb_core::Problem> {
+    let body = if checks.is_empty() {
+        "足りない条件はありません".to_string()
+    } else {
+        checks
+            .iter()
+            .map(|c| {
+                format!(
+                    "{}: {}。{}",
+                    if c.error { "誤り" } else { "注意" },
+                    c.what,
+                    c.fix
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if checks.iter().any(|c| c.error) {
+        Err(kmb_core::Problem::new(kmb_core::ProblemKind::Found, body))
+    } else {
+        Ok(Outcome::Text {
+            title: "点検".into(),
+            body,
+        })
+    }
+}
+
+#[cfg(test)]
+mod check_tests {
+    use super::*;
+    #[test]
+    fn checks_have_the_found_exit_code_and_warning_only_is_readable() {
+        let mut c = crate::Check {
+            error: true,
+            what: "固定が無い".into(),
+            fix: "面を足す".into(),
+        };
+        let p = check_outcome(&[c.clone()]).unwrap_err();
+        assert_eq!(p.kind, kmb_core::ProblemKind::Found);
+        assert_eq!(p.kind.exit_code(), 3);
+        assert!(p.message.contains("面を足す"));
+        c.error = false;
+        assert!(matches!(check_outcome(&[c]).unwrap(), Outcome::Text { .. }));
+        assert!(
+            matches!(check_outcome(&[]).unwrap(), Outcome::Text { body, .. } if body == "足りない条件はありません")
+        );
+    }
 }

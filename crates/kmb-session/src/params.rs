@@ -13,6 +13,12 @@ use kmb_core::{
 };
 use std::collections::{BTreeSet, HashSet};
 
+mod named;
+pub(crate) use named::complete_named_parameter_change;
+pub use named::{
+    NamedParamError, NamedParameter, parse_named_parameter, validate_named_parameter_change,
+};
+
 /// 機能の値 1 つ(記述子の式の欄)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeatureValue {
@@ -99,17 +105,22 @@ pub fn feature_values(
     out
 }
 
-/// 欄に打った字 `typed` を、入れる式にする。数だけを打った時は、欄が宣言した既定の単位を補う:
-/// 長さは文書の長さの単位 `length`(インチの文書で「0.5」は 0.5 in)、角度は deg。割合の欄の
-/// 「30%」は 0.3、% の欄(残す体積など)の「40%」は 40 にする。式に単位を書けない量と単位の無い
-/// 数は数のまま。編集パネル・値の箱・パラメータの表・MCP とコマンドの set_value が同じ規則を使う。
+/// 欄に打った字 `typed` を、入れる式にする。単位も名前も無い数だけの式(`0.5`、`10 + 5`、`pi`)は、
+/// 欄が宣言した既定の単位で式全体を読む: 長さは文書の長さの単位 `length`(インチの文書で「0.5」は
+/// 0.5 in、「10 + 5」は 15 in)、角度は deg。割合の欄の「30%」は 0.3、% の欄(残す体積など)の
+/// 「40%」は 40 にする。式に単位を書けない量と単位の無い数の欄は打ったまま。単位や名前を含む式は
+/// 打ったまま入れ、計算が中の単位の無い数を読む(長さとの足し引きは mm。断るのは [`read_typed`])。
+/// 編集パネル・値の箱・パラメータの表・MCP とコマンドの set_value・set_param が同じ規則を使う。
 pub fn typed_expr(unit: Option<&FieldUnit>, typed: &str, length: LengthUnit) -> String {
     let t = typed.trim();
     let bare = t.parse::<f64>().is_ok();
+    let whole = || kmb_core::parse_expr(t).is_ok_and(|e| e.is_plain_number());
     let percent = || t.strip_suffix('%').map(|n| n.trim().parse::<f64>());
     match unit {
         Some(FieldUnit::Length) if bare => format!("{t} {}", length.name()),
+        Some(FieldUnit::Length) if whole() => format!("({t}) {}", length.name()),
         Some(FieldUnit::Angle) if bare => format!("{t} deg"),
+        Some(FieldUnit::Angle) if whole() => format!("({t}) deg"),
         Some(FieldUnit::Ratio) => match percent() {
             Some(Ok(n)) => format!("{}", n / 100.0),
             _ => t.to_string(),
@@ -119,6 +130,73 @@ pub fn typed_expr(unit: Option<&FieldUnit>, typed: &str, length: LengthUnit) -> 
             _ => t.to_string(),
         },
         _ => t.to_string(),
+    }
+}
+
+/// [`typed_expr`] と同じく入れる式にし、mm でない文書で単位の無い数を長さと足し引きする式
+/// (インチの文書の「10 + 5 mm」・長さの `w` での「w + 1」)を理由つきで断る。計算はその数を mm と
+/// 読むので、文書の単位のつもりで打った人には黙って違う値になるため。mm の文書では mm が文書の
+/// 単位なので断らない。保存済みの式は打ち直すまで今の読み方のまま。`lookup` はパラメータの値。
+pub fn read_typed(
+    unit: Option<&FieldUnit>,
+    typed: &str,
+    length: LengthUnit,
+    lookup: &dyn Fn(&str) -> Option<kmb_core::Quantity>,
+) -> Result<String, String> {
+    let expr = typed_expr(unit, typed, length);
+    if let Some(why) = unitless_added_to_length(&expr, length, lookup) {
+        return Err(why);
+    }
+    Ok(expr)
+}
+
+/// mm でない文書で、式 `expr` が単位の無い数を長さと足し引きしている時の理由(読めない式は
+/// ここでは断らず、計算の誤りに任せる)。
+pub fn unitless_added_to_length(
+    expr: &str,
+    length: LengthUnit,
+    lookup: &dyn Fn(&str) -> Option<kmb_core::Quantity>,
+) -> Option<String> {
+    if length.is_mm() {
+        return None;
+    }
+    let mixed = kmb_core::parse_expr(expr)
+        .ok()?
+        .adds_number_to_length(lookup)
+        .ok()?;
+    mixed.then(|| unitless_reason(length))
+}
+
+/// [`unitless_added_to_length`] が断る時の理由の文(画面は欄の横の印を選ぶのに比べる)。
+pub fn unitless_reason(length: LengthUnit) -> String {
+    let u = length.name();
+    format!("長さと足し引きする数に単位を付けてください(文書の単位は {u} です。例: 5 {u})")
+}
+
+/// 単位 `unit` のパラメータに打った式を、入れる式にする。長さ・角度のパラメータは欄と同じ
+/// [`read_typed`] で読み(数だけの式は文書の単位か deg)、ほかは打ったまま。画面のパラメータの表・
+/// 構成の表と、CLI・MCP・コマンド欄の set_param が同じ規則を使う。
+pub fn typed_param_expr(
+    report: &RecomputeReport,
+    unit: kmb_core::ParamUnit,
+    typed: &str,
+    length: LengthUnit,
+) -> Result<String, String> {
+    match param_field_unit(unit) {
+        Some(u) => {
+            let values = report.param_values();
+            read_typed(Some(&u), typed, length, &|n| values.get(n).copied())
+        }
+        None => Ok(typed.to_string()),
+    }
+}
+
+/// パラメータの単位を、打った数に補う欄の単位にする(長さと角度だけ)。
+pub fn param_field_unit(unit: kmb_core::ParamUnit) -> Option<FieldUnit> {
+    match unit {
+        kmb_core::ParamUnit::Length => Some(FieldUnit::Length),
+        kmb_core::ParamUnit::Angle => Some(FieldUnit::Angle),
+        _ => None,
     }
 }
 
@@ -140,7 +218,7 @@ pub fn unit_mismatch(unit: Option<&FieldUnit>, dim: kmb_core::Dim) -> Option<&'s
 /// 単位を宣言していない欄(外のモジュールの欄など)で数だけを打った時は、今の値を表に出す時の
 /// 単位(長さは文書の単位 `length`)を付ける。インチの文書で表の「0.5 in」を見て「0.5」と打てば
 /// 0.5 in になる。
-fn with_unit_of_value(new: &str, now: &ParamStatus, length: LengthUnit) -> String {
+pub(crate) fn with_unit_of_value(new: &str, now: &ParamStatus, length: LengthUnit) -> String {
     let new = new.trim();
     match now {
         ParamStatus::Ok { value } if new.parse::<f64>().is_ok() => {
@@ -168,41 +246,60 @@ pub fn set_feature_value(
     let f = data
         .feature(feature)
         .ok_or_else(|| format!("機能 {feature} がありません"))?;
-    let now = feature_values(data, registry, report)
-        .into_iter()
-        .find(|v| v.feature == feature && v.key == key)
-        .ok_or_else(|| {
-            format!(
-                "{} に値「{key}」がありません(パラメータの表の機能の値だけを直せます)",
-                f.name
-            )
-        })?;
     let d = registry
         .descriptor(&f.type_id)
         .ok_or_else(|| format!("{} は欄で直せません", f.name))?;
     let field = d
         .field_at(key)
         .ok_or_else(|| format!("{} に「{key}」の欄がありません", f.name))?;
-    let expr = match &field.unit {
-        Some(u) => typed_expr(Some(u), expr, data.properties.units),
-        None => with_unit_of_value(expr, &now.status, data.properties.units),
-    };
-    let refs = kmb_core::expr_inputs(&expr).map_err(|e| format!("式 `{expr}` の誤り: {e}"))?;
-    // 知らない名前は、機能を止めてしまうので入れる前に断る
-    for r in refs {
-        if let kmb_core::InputRef::Param { name } = r
-            && data.param_by_name(&name).is_none()
-            && !report.model_params.iter().any(|p| p.name == name)
-        {
-            return Err(format!(
-                "式 `{expr}` の {name} というパラメータはありません"
-            ));
-        }
+    if !matches!(field.kind, FieldKind::Expr { .. }) || !field.applies(&f.data) {
+        return Err(format!("{} の「{key}」は数の欄ではありません", f.name));
     }
+    let current = field
+        .get(&f.data)
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let status = match kmb_core::eval_str(current, &|n| report.param_values().get(n).copied()) {
+        Ok(value) => ParamStatus::Ok { value },
+        Err(e) => ParamStatus::Error {
+            message: e.to_string(),
+        },
+    };
+    let named = parse_named_parameter(
+        data,
+        report,
+        expr,
+        field.unit.as_ref(),
+        data.properties.units,
+    )
+    .map_err(|e| e.to_string())?;
+    let expr = if named.is_some() {
+        expr.trim().to_string()
+    } else {
+        let values = report.param_values();
+        let expr = match &field.unit {
+            Some(u) => read_typed(Some(u), expr, data.properties.units, &|n| {
+                values.get(n).copied()
+            })?,
+            None => with_unit_of_value(expr, &status, data.properties.units),
+        };
+        let refs = kmb_core::expr_inputs(&expr).map_err(|e| format!("式 `{expr}` の誤り: {e}"))?;
+        for r in refs {
+            if let InputRef::Param { name } = r
+                && data.param_by_name(&name).is_none()
+                && !report.model_params.iter().any(|p| p.name == name)
+            {
+                return Err(format!(
+                    "式 `{expr}` の {name} というパラメータはありません"
+                ));
+            }
+        }
+        expr
+    };
     let mut new = f.data.clone();
     field.set(&mut new, Some(serde_json::Value::String(expr.clone())));
     Ok(Transaction::new(
-        format!("{}の{}を {expr} に変更", f.name, now.label),
+        format!("{}の{}を {expr} に変更", f.name, field.label),
         vec![Op::SetFeatureData {
             id: feature,
             data: new,

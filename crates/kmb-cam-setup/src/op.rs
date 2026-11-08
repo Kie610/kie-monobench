@@ -363,6 +363,25 @@ impl kmb_toolpath_moves::Cutter for Prepared {
 }
 
 impl Prepared {
+    /// それぞれのボディの外形を解き、戦略へ渡す作業座標の輪郭と底の高さを返す。
+    pub fn body_outlines(&self, ctx: &EvalCtx<'_>) -> Result<Vec<(Loop, f64)>, EvalError> {
+        let mut outlines = Vec::new();
+        for body in std::iter::once(&self.info.body).chain(&self.info.more_bodies) {
+            let mesh = ctx
+                .kernel()
+                .mesh(*body, self.info.tolerance)
+                .map_err(|e| EvalError::Kernel(e.to_string()))?;
+            let model = MachiningModel::from_mesh(&self.info.placed_mesh(&mesh), self.info.origin);
+            outlines.push((
+                model
+                    .outline()
+                    .ok_or_else(|| invalid("部品の外形(下向きの平らな面)が見つかりません"))?,
+                model.min[2],
+            ));
+        }
+        Ok(outlines)
+    }
+
     /// 経路を検査して出力にし、警告を添える。
     /// 固定具の避ける範囲に入る所は、範囲の上を越える。
     pub fn finish(&self, setup: FeatureId, mut tp: Toolpath) -> Result<Outputs, EvalError> {

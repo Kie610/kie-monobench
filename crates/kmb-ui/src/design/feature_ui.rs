@@ -391,8 +391,28 @@ fn value_ui(
                 // 範囲のある欄(ジョイントの値と戻る位置)は、範囲の外の値を赤くして受け付けない
                 let range = range_slider(ws, entry, f);
                 let check = |t: &str| {
+                    let values = ws.report().param_values();
+                    let named = kmb_session::params::parse_named_parameter(
+                        ws.cur.work.doc().data(),
+                        ws.cur.work.report(),
+                        t,
+                        f.unit.as_ref(),
+                        ws.length_unit(),
+                    );
+                    // mm でない文書で単位の無い数を長さと足し引きする式は、入れずに理由を出す
+                    let typed = t.split_once('=').map_or(t, |(_, e)| e);
+                    let plain = match kmb_session::params::read_typed(
+                        f.unit.as_ref(),
+                        typed,
+                        ws.length_unit(),
+                        &|n| values.get(n).copied(),
+                    ) {
+                        Ok(e) => e,
+                        Err(why) => return Some(why),
+                    };
+                    let expression = named.ok().flatten().map_or(plain, |p| p.expr);
                     let s = range.as_ref()?;
-                    out_of_range(ws, s, data, &typed_expr(ws, f, &cur, t))
+                    out_of_range(ws, s, data, &expression)
                         .map(|why| format!("{} は{why}なので入れられません", t.trim()))
                 };
                 let beside = if f.step.is_some() { STEP_WIDTH } else { 0.0 };
@@ -453,10 +473,16 @@ fn value_ui(
                         f.set(data, Some(Json::String(v)));
                     }
                 }
-                // 範囲の外で受け付けなかった印(次に欄を触るまで)。欄の横は狭いので、理由は吹き出しに
+                // 範囲の外か、単位の無い数を長さと足し引きして受け付けなかった印(次に欄を触るまで)。
+                // 欄の横は狭いので、理由は吹き出しに
                 if let Some(why) = refused(ui.ctx(), key) {
+                    let mark = if why == kmb_session::params::unitless_reason(ws.length_unit()) {
+                        "単位が要る"
+                    } else {
+                        "範囲外"
+                    };
                     ui.label(
-                        egui::RichText::new("範囲外")
+                        egui::RichText::new(mark)
                             .color(ui.visuals().error_fg_color)
                             .small(),
                     )
@@ -593,31 +619,45 @@ fn value_ui(
                     .or(choices.first())
                     .map_or(String::new(), |c| c.label.clone())
             };
-            egui::ComboBox::from_id_salt(key)
-                .selected_text(shown)
-                .show_ui(ui, |ui| {
-                    // 前の版の値は、その値の時だけ一覧に出す
-                    for c in choices
-                        .iter()
-                        .filter(|c| !f.hidden.contains(&c.value) || cur.as_ref() == Some(&c.value))
-                    {
-                        let response =
-                            ui.selectable_label(cur.as_ref() == Some(&c.value), &c.label);
-                        if response.hovered()
-                            && let Some(draw) = f.illustration
-                        {
-                            let lines = (draw.0)(&ws.context(), data, &f.key, &c.value);
-                            if !lines.is_empty() {
-                                response
-                                    .clone()
-                                    .on_hover_ui(|ui| choice_illustration(ui, &lines));
+            let icon = choices
+                .iter()
+                .find(|c| Some(&c.value) == cur.as_ref())
+                .or(choices.first())
+                .map_or("", |c| c.icon.as_str());
+            // 絵のある選択肢は、選んでいる物の絵を一覧の前に並べる(表の欄の 1 つに収める)
+            let combo = |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(key)
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        // 前の版の値は、その値の時だけ一覧に出す
+                        for c in choices.iter().filter(|c| {
+                            !f.hidden.contains(&c.value) || cur.as_ref() == Some(&c.value)
+                        }) {
+                            let response = choice_row(ui, cur.as_ref() == Some(&c.value), c);
+                            if response.hovered()
+                                && let Some(draw) = f.illustration
+                            {
+                                let lines = (draw.0)(&ws.context(), data, &f.key, &c.value);
+                                if !lines.is_empty() {
+                                    response
+                                        .clone()
+                                        .on_hover_ui(|ui| choice_illustration(ui, &lines));
+                                }
+                            }
+                            if response.clicked() {
+                                f.set(data, Some(Json::String(c.value.clone())));
                             }
                         }
-                        if response.clicked() {
-                            f.set(data, Some(Json::String(c.value.clone())));
-                        }
-                    }
+                    });
+            };
+            if icon.is_empty() {
+                combo(ui);
+            } else {
+                ui.horizontal(|ui| {
+                    choice_icon(ui, icon);
+                    combo(ui);
                 });
+            }
         }
         FieldKind::Output { slot, optional } if slot == "body" && is_cam(ws, entry) => {
             if f.get(data).is_none()
@@ -972,6 +1012,63 @@ fn suggestions(
 
 /// 数だけを打った時は、今の値の単位を付ける(「1 mm」の欄に「3」と打てば「3 mm」。
 /// 単位を省ける)。今の値が単位つきの数でなければ(式、個数、空)、打ったまま。
+/// 選択肢の絵の一辺(倍率を掛ける前の px)と線の太さ。種類を見分けられる大きさにし、一覧の行の
+/// 高さは字の行より少しだけ高くする。
+const CHOICE_ICON: f32 = 20.0;
+const CHOICE_ICON_LINE: f32 = 1.4;
+
+/// 選ぶ欄の一覧の 1 行。絵のある選択肢([`kmb_core::Choice::icon`])は名前の前に絵を描き、無ければ
+/// 字だけの行。読み上げと `ui_*` の道具が探す名前は表示名のまま。
+pub(crate) fn choice_row(ui: &mut egui::Ui, on: bool, c: &kmb_core::Choice) -> egui::Response {
+    if c.icon.is_empty() {
+        return ui.selectable_label(on, &c.label);
+    }
+    let iw = crate::theme::icon_px(CHOICE_ICON);
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let galley = ui
+        .painter()
+        .layout_no_wrap(c.label.clone(), font, egui::Color32::PLACEHOLDER);
+    let pad = ui.spacing().button_padding;
+    let h = (iw + 4.0).max(galley.size().y + 2.0 * pad.y);
+    let w = (pad.x + iw + 6.0 + galley.size().x + pad.x).max(ui.available_width());
+    let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click());
+    r.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, &c.label)
+    });
+    if ui.is_rect_visible(rect) {
+        let vis = ui.style().interact_selectable(&r, on);
+        if on || r.hovered() || r.has_focus() {
+            ui.painter()
+                .rect_filled(rect, vis.corner_radius, vis.weak_bg_fill);
+        }
+        let color = vis.text_color();
+        let ic = egui::Rect::from_center_size(
+            egui::pos2(rect.left() + pad.x + iw / 2.0, rect.center().y),
+            egui::Vec2::splat(iw),
+        );
+        crate::icons::paint_exact(ui.painter(), ic, &c.icon, color, CHOICE_ICON_LINE);
+        ui.painter().galley(
+            egui::pos2(ic.right() + 6.0, rect.center().y - galley.size().y / 2.0),
+            galley,
+            color,
+        );
+    }
+    r
+}
+
+/// 選んでいる選択肢の絵を、閉じた一覧の前に描く(絵の名前が空なら何もしない)。
+pub(crate) fn choice_icon(ui: &mut egui::Ui, icon: &str) {
+    if icon.is_empty() {
+        return;
+    }
+    let iw = crate::theme::icon_px(CHOICE_ICON);
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(iw), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let color = ui.visuals().text_color();
+        crate::icons::paint_exact(ui.painter(), rect, icon, color, CHOICE_ICON_LINE);
+    }
+}
+
 pub fn with_unit_of(new: &str, cur: &str) -> String {
     let unit = cur
         .trim()
@@ -1524,7 +1621,7 @@ fn expr_field_reserving(
     }
     let refused = out.as_deref().and_then(check);
     if let Some(why) = refused.clone() {
-        log::info!("範囲の外の値を受け付けない: {why}");
+        log::info!("欄に入れられない値を受け付けない: {why}");
         ui.data_mut(|d| d.insert_temp(refused_id(), (key, why)));
         out = None;
     }

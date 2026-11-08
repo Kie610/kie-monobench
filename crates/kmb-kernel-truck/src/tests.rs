@@ -35,6 +35,17 @@ fn flush_cut_fails_with_a_clear_message() {
     assert!(err.to_string().contains("同じ平面"), "{err}");
 }
 
+/// 確かめること: truck は慣性を求めないので、質量の値の慣性と主軸は対応していない誤りになる
+/// (0 の慣性を返さない)。
+#[test]
+fn inertia_is_unsupported() {
+    let k = kernel();
+    let plate = k.extrude(&plate_profile(), 0.0, 10.0, "f1").unwrap();
+    let m = k.mass(plate).unwrap();
+    assert!(matches!(m.inertia(), Err(KernelError::Unsupported(_))));
+    assert!(matches!(m.principal(), Err(KernelError::Unsupported(_))));
+}
+
 // ---- 空洞(内側の殻)のあるブーリアン。体積を、軸に沿った箱の集合として厳密に数えた値と比べる。
 // truck の結果は殻の並び順(実行ごとに変わる)で揺れることがあるので、揺れた不具合の物は
 // 同じ操作を何回か繰り返す。
@@ -167,6 +178,7 @@ fn adopt_gives_a_void_to_the_shell_around_it() {
     let outer = ProfileLoop {
         edges: (0..6)
             .map(|i| ProfileEdge {
+                curve: None,
                 name: format!("e{i}"),
                 segment: Segment::Line {
                     a: pts[i],

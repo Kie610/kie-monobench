@@ -426,27 +426,48 @@ impl BodyFacts {
         shape: kmb_core::ShapeHandle,
         material: Option<(String, f64)>,
     ) -> Result<Self, kmb_core::KernelError> {
+        Ok(Self::of_cancellable(kernel, shape, material, || false)?
+            .expect("中止しない測定は値を返す"))
+    }
+
+    /// カーネルの呼び出しの区切りで中止を調べる。実行中の1呼び出しを強制終了はしない。
+    pub fn of_cancellable(
+        kernel: &dyn kmb_core::Kernel,
+        shape: kmb_core::ShapeHandle,
+        material: Option<(String, f64)>,
+        cancelled: impl Fn() -> bool,
+    ) -> Result<Option<Self>, kmb_core::KernelError> {
+        if cancelled() {
+            return Ok(None);
+        }
         let sheet = kernel.body_kind(shape)? == kmb_core::kernel::BodyKind::Sheet;
+        if cancelled() {
+            return Ok(None);
+        }
         let props = if sheet {
             let (min, max) = kernel.bounds(shape)?;
+            if cancelled() {
+                return Ok(None);
+            }
             MassProps {
                 volume: 0.0,
                 area: kernel.faces(shape)?.iter().map(|f| f.area).sum(),
                 min,
                 max,
                 centroid: None,
+                inertia: None,
             }
         } else {
             kernel.mass(shape)?
         };
-        Ok(Self {
+        Ok((!cancelled()).then_some(Self {
             props,
             sheet,
             material,
-        })
+        }))
     }
 
-    /// 行(体積・表面積・外形・重心、材料があれば材料と質量)。
+    /// 行(体積・表面積・外形・重心、材料があれば材料と質量と、求められれば主慣性モーメント)。
     pub fn rows(&self) -> Vec<(String, String)> {
         let b = &self.props;
         let mut rows = vec![
@@ -484,6 +505,18 @@ impl BodyFacts {
                         format!("{g:.3} g")
                     },
                 ));
+                // 慣性は重心のまわり。カーネルは密度 1(mm⁵)で返すので、密度(g/mm³)と g→kg を掛ける
+                if let Ok(p) = b.principal() {
+                    let k = density * 1e-6;
+                    let m = p.moments.map(|v| v * k);
+                    rows.push((
+                        "主慣性モーメント".into(),
+                        format!(
+                            "{:.3} / {:.3} / {:.3} kg·mm²(重心のまわり)",
+                            m[0], m[1], m[2]
+                        ),
+                    ));
+                }
             }
             None => rows.push((
                 "材料".into(),

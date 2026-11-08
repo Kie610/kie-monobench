@@ -45,12 +45,14 @@ pub fn all() -> Vec<Module> {
     let (cam, strategies) = kmb_cam_setup::split(strategy_modules());
     let machines = machines();
     let mut v = vec![
+        kmb_session::module(),
         // STEP の読み込みは設計の「挿入」の先頭(SVG の挿入より前。Kie 2026-10-21 の画板)。
         // 挿入の操作はスケッチのモジュールの中へ並べ直すので、スケッチより前に置く
         kmb_cad_import_step::module(),
         kmb_sketch::module(),
         kmb_sketch_3d::module(),
         kmb_text::module(),
+        kmb_cad_gear::module(),
         kmb_io_dxf::module(),
         kmb_io_svg::module(),
         kmb_cad_extrude::module(),
@@ -74,6 +76,7 @@ pub fn all() -> Vec<Module> {
         kmb_io_render::module(),
         kmb_fea::module(),
         kmb_flow::module(),
+        kmb_acoustics::module(),
         kmb_wave::module(),
         kmb_hrtf::module(),
         kmb_study::module(),
@@ -134,6 +137,25 @@ pub fn kernel_of(kind: KernelKind) -> Arc<dyn Kernel> {
         #[cfg(not(feature = "smlib"))]
         KernelKind::Smlib => Arc::new(kmb_kernel_truck::TruckKernel::new()),
         KernelKind::Truck => Arc::new(kmb_kernel_truck::TruckKernel::new()),
+    }
+}
+
+/// 試験用: ほかの文書の重い計算が形状カーネルを使っている間([`occupy_kernel`])。捨てるまで錠を持つ。
+#[cfg(feature = "smlib")]
+pub struct KernelHeld(kmb_kernel_smlib::Occupied);
+
+/// 試験用: ほかの文書の重い計算が形状カーネル(SMLib。錠はすべての文書で 1 つ)を使っている間を作る。
+/// 捨てるか `limit` が過ぎるまで錠を持つ。
+#[cfg(feature = "smlib")]
+pub fn occupy_kernel(limit: std::time::Duration) -> KernelHeld {
+    KernelHeld(kmb_kernel_smlib::occupy(limit))
+}
+
+#[cfg(feature = "smlib")]
+impl KernelHeld {
+    /// まだ錠を持っているか(待った呼び出しは錠が空いてから戻るので、戻った時に偽になる)。
+    pub fn still_held(&self) -> bool {
+        self.0.still_held()
     }
 }
 
@@ -256,3 +278,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod warning_tests;

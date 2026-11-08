@@ -97,7 +97,7 @@ impl<'a> Parser<'a> {
             }
             // 後ろから続く、数だけの部分(なければ最後の 1 つ)
             let mut k = items.len();
-            while k > 0 && is_numeric(&items[k - 1].1) {
+            while k > 0 && items[k - 1].1.is_plain_number() {
                 k -= 1;
             }
             let k = k.min(items.len() - 1);
@@ -255,17 +255,6 @@ impl<'a> Parser<'a> {
             }
             _ => Err(self.err("数値、名前、'(' のいずれかが必要です")),
         }
-    }
-}
-
-/// 単位も名前も含まない、数だけの式か(定数 `PI` などは数)。
-fn is_numeric(e: &Expr) -> bool {
-    match e {
-        Expr::Num(q) => q.dim.is_none(),
-        Expr::Ref(n) => crate::ast::constant(n).is_some(),
-        Expr::Neg(a) => is_numeric(a),
-        Expr::Bin(_, a, b) => is_numeric(a) && is_numeric(b),
-        Expr::Call(_, args) => args.iter().all(is_numeric),
     }
 }
 

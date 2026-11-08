@@ -40,9 +40,15 @@ fn diagram(
         }
         Ok(v)
     };
-    let length = |src: &str, _: &str| read(src, false);
-    let angle = |src: &str, _: &str| read(src, true);
-    let dia = hole.diameter_with(&length).ok()?;
+    let optional = |src: &Option<String>, angle: bool| {
+        src.as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|src| read(src, angle))
+            .transpose()
+    };
+    let length = |src: &Option<String>, _: &str| optional(src, false);
+    let angle = |src: &Option<String>, _: &str| optional(src, true);
+    let dia = hole.diameter_with(&|src, _| read(src, false)).ok()?;
     // 貫通・対象までは確定した底の深さを持たないので、径の 2 倍を説明図の奥行きにする。
     let depth = if hole.extent == HoleExtent::ToFace {
         dia * 2.0
@@ -55,7 +61,7 @@ fn diagram(
             .ok()?
             .unwrap_or(dia * 2.0)
     };
-    let mut section = hole.section_with(depth, &length, &angle).ok()?;
+    let mut section = hole.section_with(dia, depth, &length, &angle).ok()?;
     if hole.extent == HoleExtent::ToFace {
         section.tip = None;
     }

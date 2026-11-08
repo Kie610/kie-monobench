@@ -7,9 +7,9 @@
 action-anim-appearance = 外観
 action-anim-appearance-tip = 選んだ部品の外観を、段の長さをかけて替える段を足す(設計の外観は変えない)。外観は段の帯で選び直す
 action-anim-auto-explode-all = 自動分解: すべてのレベル
-action-anim-auto-explode-all-tip = 部品を組立の中心から自動で離し、部品の中の部品もその部品の中心から離す。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-all-tip = 選んだ部品の中を、前の段の後の位置から自動で離し、中の部品も順に分ける(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-auto-explode-one = 自動分解: 1 レベル
-action-anim-auto-explode-one-tip = 部品を組立の中心から自動で離す(直下の部品だけ。部品の中は動かさない)。ワンステップ(全部同時)か順次(部品ごとに 1 秒)、トレイルライン、分解の目盛を選んで OK
+action-anim-auto-explode-one-tip = 選んだ部品の直下を、前の段の後の位置から自動で離す(未選択なら設計の全体)。ワンステップか順次、トレイルライン、分解の目盛を選んで OK
 action-anim-drive = ジョイントの動き
 action-anim-drive-tip = ジョイントの値を下限から上限へ動かす段を足す(上下限が無ければ回転は 90 度、スライダは部品の長さ)。値と長さは段の帯で直す
 action-anim-explode = 分解の移動
@@ -25,6 +25,8 @@ action-asm-bom = 部品表
 action-asm-bom-tip = 部品ごとの数・材料・寸法(長さ×幅×厚さ)・体積・質量の表。出す列は表の「列」で選ぶ。同じ寸法と材料の物はまとめて数える
 action-asm-bom-csv = 部品表の書き出し…
 action-asm-bom-csv-tip = 部品表を CSV(表計算ソフトで開ける)に書き出す
+action-asm-mass-props = 質量特性
+action-asm-mass-props-tip = 組立全体・部品ごと・剛性グループごとの質量・重心・慣性モーメント(主慣性)の表。慣性は各行の重心のまわり
 action-asm-contact-reach = 当たるまでの値
 action-asm-contact-reach-tip = ジョイントを今の値から動かす先まで動かすと、接触セットの相手にどの値で当たるかと、あといくつ動けるかを答える(形は変えない)
 action-asm-contacts = 接触セットを有効にする
@@ -61,6 +63,8 @@ action-asm-new-contact-set = 新しい接触セット
 action-asm-new-contact-set-tip = 選んだボディ(2 つ以上)を接触セットにする。接触セットを有効にしている間、ジョイントの部品を引くと、同じセットの相手に食い込む手前で止まる
 action-asm-new-rigid-group = 剛性グループ
 action-asm-new-rigid-group-tip = 選んでいる部品(2 つ以上)を 1 つの塊にする。どの部品をジョイントや引く操作で動かしても、全部が一緒に動く
+action-asm-planetary-link = 遊星の組をつなぐ
+action-asm-planetary-link-tip = 遊星歯車の太陽・腕・外輪(と遊星の自転)の回転を、歯数から決まる式でつなぐ。タイムラインでいちばん後ろのジョイントが前の 2 つに連動する。差動は外輪の歯数を太陽と同じにする
 action-asm-snap-joint = ジョイント
 action-asm-snap-joint-tip = 部品 1 を動かして部品 2 に合わせてつなぐ: 部品 1 の面 → 原点 → 部品 2 の面 → 原点。種類・角度・ずらしは後で変える
 
@@ -94,6 +98,10 @@ action-cad-extrude-to-face = 対象の面までにする
 action-cad-extrude-to-face-tip = 選んでいる押し出しの範囲を、クリックした平らな面か頂点か作業平面までにする(斜めの面なら、道具の終わりをその面で切る)。押し出す先がボディの中を通れば切り取りに、通らなければ結合にする
 action-cad-fillet = フィレット
 action-cad-fillet-tip = 押してから辺か面をクリックすると、それに掛けて値を決める欄へ進む(面はそのまわりの辺すべて。いくつも選ぶ時は Ctrl を押しながらクリック)。先に辺や面を選んでいればそれに掛ける
+action-cad-gear = 歯車
+action-cad-gear-tip = 押してから、平面 → 中心の順にクリックすると歯車の輪郭とボディができる。種類・モジュール・歯数などは欄で直し、OK か Enter で決める。Esc でやめる
+action-cad-gear-outline = 歯車の輪郭
+action-cad-gear-outline-tip = 歯車の輪郭だけを置く(ボディは作らない)。レーザーや 2D 輪郭の加工、押し出しにそのまま使える
 action-cad-hole-add = 同じ穴を足す
 action-cad-hole-add-tip = 選んでいる穴と同じ面に、クリックした位置で同じ穴を足す。Enter で終える
 action-cad-hole-on-face = 穴
@@ -113,6 +121,12 @@ action-cad-mirror-plane = 対称の平面を選ぶ
 action-cad-mirror-plane-tip = 選んでいるミラーの対称の平面を、原点の XY・YZ・ZX 平面の四角か作業平面か、ボディの平らな面をクリックして決める
 action-cad-move-axis = 回転の軸を選ぶ
 action-cad-move-axis-tip = 選んでいる移動/コピーの回転の軸を、原点の X・Y・Z 軸・スケッチの線・ボディの辺(円の辺はその円の軸)をクリックして決める
+action-cad-move-from = 元の点を選ぶ
+action-cad-move-from-tip = 選んでいる移動/コピーの点から点の動かすボディの上の点を、ボディの角・円の中心・辺の中点・スケッチの点・作業点をクリックして決める。元の形を変えても同じ点を追う
+action-cad-move-to = 先の点を選ぶ
+action-cad-move-to-tip = 選んでいる移動/コピーの点から点の元の点が来る所を、ボディの角・円の中心・辺の中点・スケッチの点・作業点をクリックして決める。元の形を変えても同じ点を追う
+action-cad-move-points = 元の点と先の点を選ぶ
+action-cad-move-points-tip = 選んでいる移動/コピーの点から点の元の点と先の点を、ボディの角・円の中心・辺の中点・スケッチの点・作業点をクリックして決める。元の形を変えても同じ点を追う
 action-cad-pattern-split-copies = 写しを別のボディに分ける
 action-cad-pattern-split-copies-tip = 選んでいるボディのパターン・ミラー(「写しを別のボディにする」を入れた物)の写しを、1 つずつ別のボディにする。個数を増やした後にもう一度使うと、増えた写しも分ける
 action-cad-revolve = 回転
@@ -128,7 +142,7 @@ action-cad-sketch-auto-constrain-tip = 選んでいるスケッチの、今の�
 action-cad-sketch-export-dxf = DXF として保存…
 action-cad-sketch-export-dxf-tip = 選んでいるスケッチの線(補助線を除く)を DXF に書き出す
 action-cad-sketch-export-svg = SVG として保存…
-action-cad-sketch-export-svg-tip = 選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(LightBurn などのレーザー加工機のソフトで同じ大きさで開ける。つながる線は閉じた輪郭にまとめる)
+action-cad-sketch-export-svg-tip = 選んでいるスケッチの線(補助線を除く)を、1 mm = 1 単位の SVG に書き出す(つながる線は閉じた輪郭にまとめる)
 action-cad-sketch-find = スケッチの要素を探す
 action-cad-sketch-find-tip = 選んでいるスケッチの点・線・円などを、種類・補助線・拘束の決まり具合・長さ・半径・範囲で絞って表にする
 action-cad-sketch-insert-dxf = DXF を挿入…
@@ -199,7 +213,7 @@ action-cam-add-pocket-tip = 3D のビューで底の面を選んでから押す(
 action-cam-add-project3d = 投影(3D)
 action-cam-add-project3d-tip = スケッチの線を真上から部品の面へ落としてなぞる。残し量を負にすると面より下を彫る。スケッチを選ぶとその線、選ばなければ最後のスケッチ(ボールエンドミルがあればそれを使う)
 action-cam-add-radial3d = 放射状(3D)
-action-cam-add-radial3d-tip = 部品の中心から放射の線を外へ・内へとなぞって仕上げる(ボールエンドミルがあればそれを使う)
+action-cam-add-radial3d-tip = 部品の中心から放射の線をなぞって仕上げる。段分けと往復・一方向を選べる(ボールエンドミルがあればそれを使う)
 action-cam-add-ramp3d = ランプ(3D)
 action-cam-add-ramp3d-tip = 縦の壁や急な斜面を、1 周 0.5 mm ずつ斜めに下りながら途切れずに仕上げる(ボールエンドミルがあればそれを使う)
 action-cam-add-raster3d = 走査線(3D)
@@ -213,7 +227,7 @@ action-cam-add-setup-tip = 最後のボディを加工するセットアップ�
 action-cam-add-slot = スロット
 action-cam-add-slot-tip = スケッチの線を溝の中心にして、決めた幅と深さの溝を削る。スケッチを選ぶとその線、選ばなければ最後のスケッチ
 action-cam-add-spiral3d = 渦巻き(3D)
-action-cam-add-spiral3d-tip = 部品の中心のまわりの渦巻きを外から内へなぞって仕上げる(ボールエンドミルがあればそれを使う)
+action-cam-add-spiral3d-tip = 中心のまわりの渦巻きを外から内へなぞって仕上げる。段分けと削る向きを選べる(ボールエンドミルがあればそれを使う)
 action-cam-add-thread = ねじ切り
 action-cam-add-thread-tip = ねじ切りミルで、選んだ穴かボスの壁にねじを切る。工具ライブラリにねじ切りミルが要る
 action-cam-add-trace = トレース
@@ -353,14 +367,90 @@ action-drawing-move-view-tip = 用紙の上の位置か親からの距離を変�
 action-drawing-set-view = ビューを編集
 action-drawing-set-view-tip = ビューの尺度と隠れ線や接線の表示を変える
 action-drawing-delete = 図面を削除
-action-drawing-delete-tip = 用紙かビューを削除する。子のビューがある時は先に子を削除する
+action-drawing-delete-tip = 用紙・ビュー・注記を削除する。子のビューがある時は先に子を削除する
 action-drawing-picture = 図面の線を書き出す
 action-drawing-picture-tip = 用紙の線と問題を JSON に書き出す
 action-cad-surface-patch = 面を張る
 action-cad-surface-patch-tip = 閉じた縁をクリックで選び、Enter で厚みの無い面を張る
 action-io-export-obj = OBJ を書き出す…
 action-io-export-obj-tip = 見えているボディを OBJ にする。ボディの名前・頂点・法線・面を書き、色と材料は書かない
+action-cam-nest-create = 板への配置
+action-cam-nest-create-tip = 選んだボディを板へ並べるセットアップを作る
+action-cam-nest-add-part = 配置する部品を足す
+action-cam-nest-add-part-tip = 板への配置に、別のボディを部品として足す
+action-cam-nest-remove-part = 配置する部品を外す
+action-cam-nest-remove-part-tip = 板への配置から、指定した番号の部品を外す
+action-cam-nest-set-part = 配置する部品を直す
+action-cam-nest-set-part-tip = 部品の個数、回してよい向き、上に向ける面を直す
+
+action-study-converge = 精度を確かめる
+action-study-converge-tip = 3 段の網で解いて結果の落ち着きと誤差の見積もりを確かめる
+
+action-study-check = 点検
+action-study-check-tip = 解く前に足りない条件を一覧で示し、直し方を知らせる
+action-drawing-set-paper = 用紙を設定
+action-drawing-set-paper-tip = 図面の用紙の大きさ・向き・とじ代・ペンと画層の色を決める
+
+action-drawing-set-title = 表題欄を設定
+action-drawing-set-title-tip = 表題欄の固定の文字や文書から取る項目と、使う文字の書体を設定する
+
+action-drawing-export-pdf = 図面をPDFに書き出す
+action-drawing-export-pdf-tip = 選んだ用紙か全部の用紙を、実寸のページのPDFに書き出す
+
+action-drawing-export-dxf = 図面をDXFに書き出す
+action-drawing-export-dxf-tip = 選んだ用紙を、線の役ごとの画層と線種を持つDXFに書き出す
+
+action-drawing-export-svg = 図面をSVGに書き出す
+action-drawing-export-svg-tip = 選んだ用紙を、用紙の大きさと線の太さと線種を持つSVGに書き出す
+action-cad-import-mesh = STL・3MF を読み込む…
+action-cad-import-mesh-tip = STL・3MF の三角形の網を読み込み、表示・計測・加工に使う
+action-view-part-hues = 部品ごとに色を変える
+action-view-part-hues-tip = 外観や材料の無いボディを、部品ごとの色で見分ける。文書ごとに見え方を覚える
+action-cad-sketch-dxf-layers = DXF の画層を一覧
+action-cad-sketch-dxf-layers-tip = DXF の画層の名前と形の数を読む。設計は変えない
+action-cad-sketch-project-axis = 作業軸を投影
+action-cad-sketch-project-axis-tip = 作業軸をスケッチへ投影し、軸を動かすと線や点も付いてくる
 action-hrtf-process = HRTF の形式をそろえる
 action-hrtf-process-tip = 処理の手順(JSON)で、SOFA の HRTF を読み、サンプリング周波数・方向の格子・立ち上がり・位相をそろえて、SOFA や分けた表に書き出す
 action-hrtf-compute = 頭の網から HRTF を計算…
 action-hrtf-compute-tip = 頭の網の仕事の JSON を境界要素法で解き、全方向の HRIR を SOFA で書き出す
+action-cad-sketch-regions = スケッチの領域を一覧
+action-cad-sketch-regions-tip = スケッチの閉じた領域の名前を、押し出しなどで指定できる一覧として読む
+action-drawing-dimension = 寸法
+action-drawing-dimension-tip = ビューの辺を参照し、形の値を表示する寸法を置く
+
+action-drawing-dimension-set = 寸法をまとめて置く
+action-drawing-dimension-set-tip = 選んだ点の列から並列・直列・座標の寸法を一回だけ置く
+
+action-drawing-import-dimensions = モデルの寸法を取り込む
+action-drawing-import-dimensions-tip = 選んだスケッチの寸法を、ビューの見える辺を参照する寸法として一回だけ取り込む
+
+action-drawing-note = 注記
+action-drawing-note-tip = 用紙に文字か引出線付きの文字を置く
+
+action-drawing-center-mark = 中心の印
+action-drawing-center-mark-tip = 円や円弧の中心に十字の印を付ける
+
+action-drawing-center-line = 中心線
+action-drawing-center-line-tip = 平行な二本の辺の中間か、円筒の両端の円から中心線を引く
+
+action-drawing-balloon = 番号札
+action-drawing-balloon-tip = 部品表の行に対応する番号札を利用者が決めた位置に置く
+
+action-drawing-renumber-balloons = 番号札を振り直す
+action-drawing-renumber-balloons-tip = 番号札の番号を現在の部品表の行の順に合わせる
+
+action-drawing-align-balloons = 番号札をそろえる
+action-drawing-align-balloons-tip = 選んだ番号札を最初の札と同じ縦か横の位置にそろえる
+
+action-drawing-parts-table = 部品表
+action-drawing-parts-table-tip = 選んだ列の部品表を線と文字にして用紙に置く
+
+action-drawing-set-style = 寸法の様式
+action-drawing-set-style-tip = 文字・矢印・補助線・桁・単位・公差の様式を用紙ごとに決める
+action-cad-thicken = 厚みを付ける
+action-cad-thicken-tip = 面のボディに厚みを付けて、閉じたソリッドにする
+action-cad-import-iges = IGES を読み込む…
+action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す
+action-params-apply-batch = 式をまとめて適用
+action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する

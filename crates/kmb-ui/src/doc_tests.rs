@@ -444,3 +444,83 @@ fn opening_a_file_can_be_stopped_to_go_back_to_the_previous_document() {
     assert_eq!(ws.report().error_count(), 0, "{:?}", ws.report());
     std::fs::remove_dir_all(&d).ok();
 }
+
+#[test]
+fn an_iges_import_offers_the_upright_question_and_uses_the_declared_file_filter() {
+    let d = temp_dir("iges");
+    for own in [false, true] {
+        let record = |s: &str, c: char, n: usize| format!("{s:<72}{c}{n:7}");
+        let mut global = vec![String::new(); 20];
+        global[0] = "1H,".into();
+        global[1] = "1H;".into();
+        global[2] = if own { "12HkieMonoBench" } else { "4Htest" }.into();
+        global[12] = "1".into();
+        global[13] = "2".into();
+        global[14] = "2HMM".into();
+        global[18] = "1D-6".into();
+        let g = (global.join(",") + ";")
+            .as_bytes()
+            .chunks(72)
+            .enumerate()
+            .map(|(i, b)| record(std::str::from_utf8(b).unwrap(), 'G', i + 1))
+            .collect::<Vec<_>>();
+        let mut records = vec![record("test", 'S', 1)];
+        records.extend(g.iter().cloned());
+        for (i, kind) in [116, 196].into_iter().enumerate() {
+            records.push(record(
+                &format!(
+                    "{kind:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}00000000",
+                    i + 1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ),
+                'D',
+                i * 2 + 1,
+            ));
+            records.push(record(
+                &format!(
+                    "{kind:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}{:8}",
+                    0, 0, 1, 0, 0, 0, 0, 0
+                ),
+                'D',
+                i * 2 + 2,
+            ));
+        }
+        records.push(format!("{:<64}{:8}P{:7}", "116,0,0,0,0;", 1, 1));
+        records.push(format!("{:<64}{:8}P{:7}", "196,1,5;", 3, 2));
+        records.push(record(
+            &format!("S{:7}G{:7}D{:7}P{:7}", 1, g.len(), 4, 2),
+            'T',
+            1,
+        ));
+        let path = d.join("surface.IGES");
+        std::fs::write(&path, records.join("\n")).unwrap();
+        let mut ws = Workspace::new(Document::new(), None, reg());
+        let action = ws
+            .actions()
+            .into_iter()
+            .find(|a| a.role == Some(kmb_interchange::role::action::IMPORT_IGES))
+            .unwrap();
+        let kmb_core::Input::OpenFile { extensions, .. } = &action.input else {
+            panic!("ファイルを開く操作ではない")
+        };
+        assert!(extensions.iter().any(|s| s == "igs") && extensions.iter().any(|s| s == "IGES"));
+        let id = ws
+            .run_action_with(&action.id, Some(path.clone()))
+            .expect("IGESを読める");
+        assert_eq!(ws.report().error_count(), 0, "{:?}", ws.report());
+        assert_eq!(ws.step_up_question(), (!own).then_some(id));
+        if !own {
+            ws.answer_step_up(StepUp::StandUp);
+            assert_eq!(
+                ws.document().data().feature(id).unwrap().data["stand_up"],
+                serde_json::json!(true)
+            );
+        }
+    }
+    std::fs::remove_dir_all(d).unwrap();
+}

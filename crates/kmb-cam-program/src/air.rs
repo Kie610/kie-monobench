@@ -577,9 +577,8 @@ fn near_box(k: &(P3, P3), a: [f64; 2], b: [f64; 2], rad: f64) -> bool {
 /// セットアップ `s` の加工の空振りを、始めの形 `start`(なければストックの箱)から順に省く。
 /// 元の経路は `sources[k].original` に残す。終わりの形(次のセットアップへ引き継ぐ)を返す。
 pub fn apply(s: &mut SetupPaths, start: Option<ZMap>) -> ZMap {
-    let i = &s.info;
     let cell = cell_for(s);
-    let mut map = start.unwrap_or_else(|| ZMap::stock(i.stock_min, i.stock_max, cell));
+    let mut map = start.unwrap_or_else(|| crate::initial_stock(&s.info, cell));
     s.air_start = Some(Arc::new(map.clone()));
     let i = &s.info;
     let bottom = i.stock_min[2];

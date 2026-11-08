@@ -22,6 +22,8 @@ pub(crate) mod value_box_ui;
 pub(crate) mod view_ui;
 
 #[cfg(test)]
+mod body_hover_tests;
+#[cfg(test)]
 mod browser_regions_tests;
 #[cfg(test)]
 mod browser_tests;
@@ -41,6 +43,8 @@ mod hole_tests;
 mod material_tests;
 #[cfg(test)]
 mod modify_tests;
+#[cfg(test)]
+mod param_batch_tests;
 #[cfg(test)]
 mod param_table_tests;
 #[cfg(test)]

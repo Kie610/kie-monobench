@@ -686,6 +686,7 @@ impl Workspace {
             None,
             None,
             has_parts.then_some(root_active),
+            false,
         );
         if radio {
             self.activate_component(None);
@@ -869,10 +870,9 @@ impl Workspace {
             } else {
                 String::new()
             };
-            let worst = crate::timeline_ui::worst_health(
-                list.iter()
-                    .map(|f| Health::of(self.cur.work.report().feature(f.id))),
-            );
+            let worst = crate::timeline_ui::worst_health(list.iter().map(|f| {
+                Health::with_words(&self.win.words(), self.cur.work.report().feature(f.id))
+            }));
             // スケッチとボディのまとまりには、中をまとめて隠す目(中の行の目はそのまま残す)。
             // そのほかの機能(途中の形)は 3D のビューに出ないので目を付けない
             let folder_eye = matches!(kind, Kind::Sketch | Kind::Body);
@@ -1417,11 +1417,13 @@ pub(crate) fn folder_row(
         worst,
         eye,
         None,
+        false,
     );
     (open, r, eye)
 }
 
 /// [`folder_row`] に、目の左の丸いボタン `radio`(部品のアクティブ化。アクティブなら真)を足した物。
+/// `selected` は選んだ行の色。丸のアクティブ状態とは別に扱う。
 /// (開いているか、応答、目を押したか、丸を押したか)を返す。丸を押しても開け閉めしない。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn folder_row_radio(
@@ -1433,6 +1435,7 @@ pub(crate) fn folder_row_radio(
     worst: Option<Health>,
     eye: Option<bool>,
     radio: Option<bool>,
+    selected: bool,
 ) -> (bool, egui::Response, bool, bool) {
     let key = tree_key(key);
     let open = opened.get(&key).copied().unwrap_or(default_open);
@@ -1446,7 +1449,7 @@ pub(crate) fn folder_row_radio(
             meta,
             dot: None,
             health: if open { None } else { worst.clone() },
-            selected: false,
+            selected,
             weak: eye == Some(false),
             eye,
             badge: None,

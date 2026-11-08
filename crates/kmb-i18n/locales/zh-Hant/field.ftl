@@ -1371,6 +1371,19 @@
 # field-cam-setup-leveling-ny-help = 2–20. Blank means 5.
 # field-cam-setup-machine = Machine
 # field-cam-setup-machine-help = The machine determines travel, spindle limits, G-code and accessories. A new setup stores the selected machine and settings in the document, so later preference changes do not affect its toolpaths or G-code. Changing the machine here resets its machine values to defaults.
+# field-cam-setup-nest-edge = Edge Margin
+# field-cam-setup-nest-grid = Grid Spacing
+# field-cam-setup-nest-grid-help = Used for shape-based nesting. The value is retained when switching to bounding-box nesting.
+# field-cam-setup-nest-max-sheets = Maximum Number of Sheets
+# field-cam-setup-nest-method = Layout Method
+# field-cam-setup-nest-output = Section Export
+# field-cam-setup-nest-parts = Parts to Place
+# field-cam-setup-nest-parts-body = Body
+# field-cam-setup-nest-parts-count = Quantity
+# field-cam-setup-nest-parts-rotate = Allowed Rotation
+# field-cam-setup-nest-parts-up = Upward Face
+# field-cam-setup-nest-sheet = Sheet Size Source
+# field-cam-setup-nest-spacing = Part Spacing
 # field-cam-setup-origin = Origin (XY)
 # field-cam-setup-origin-help = Picking a point with Pick Origin in 3D uses that point instead of this field.
 # field-cam-setup-origin-note = Picked Origin
@@ -1985,6 +1998,8 @@
 # field-solid-hole-countersink-diameter-help = Blank uses the thread table, or twice the hole diameter when unavailable.
 # field-solid-hole-depth = Depth
 # field-solid-hole-depth-help = Blank makes a through hole.
+# field-solid-hole-thread-depth = Thread length
+# field-solid-hole-thread-depth-help = Blank uses the full hole depth, excluding the conical drill point.
 # field-solid-hole-diameter = Diameter
 # field-solid-hole-extent = Extent
 # field-solid-hole-extent-help = To Object starts picking a planar face or vertex to stop the hole. An inclined face produces an inclined bottom.
@@ -2076,13 +2091,17 @@
 # field-solid-move-body-help = Body to move. Click one of its faces in the 3D view.
 # field-solid-move-copy = Create Copy
 # field-solid-move-copy-help = Preserves the original body and makes the moved copy a new body.
-# field-solid-move-from-point = Source Point
+# field-solid-move-from-point = Source Point Coordinates
 # field-solid-move-from-point-help = Coordinates of a point on the body to move.
+# field-solid-move-from-ref-kind = Source Point
+# field-solid-move-from-ref-kind-help = Point on the body to move. When picked by clicking, it follows the same point after the shape changes.
 # field-solid-move-mode = Move Type
 # field-solid-move-origin = Point on Axis
 # field-solid-move-origin-help = Blank uses the center of the body's bounding box.
-# field-solid-move-to-point = Destination Point
+# field-solid-move-to-point = Destination Point Coordinates
 # field-solid-move-to-point-help = Coordinates where the source point will be placed.
+# field-solid-move-to-ref-kind = Destination Point
+# field-solid-move-to-ref-kind-help = Where the source point goes. When picked by clicking, the body follows changes to the other shape or sketch.
 # field-solid-move-x = X Distance
 # field-solid-move-y = Y Distance
 # field-solid-move-z = Z Distance
@@ -2168,6 +2187,16 @@
 # field-solid-thread-size = Nominal Size
 # field-solid-thread-size-help = Leave empty to prefer metric sizes. Inch and pipe sizes are selected only when the nominal diameter, or tap drill for an internal thread, differs from the face diameter by less than 0.001 mm. The list is ordered by distance from the face diameter.
 # field-solid-thread-target = Target
+
+# field-cad-sketch-freedom = Degrees of freedom
+# field-cad-sketch-freedom-help = Shows the total degrees of freedom and each free entity’s ID and degrees of freedom. Hover over a row to highlight it, or click to keep the highlight. Entities can share motion, so their counts cannot be added.
+# field-solid-import-mesh-file = File
+# field-solid-import-mesh-object = Object name
+# field-solid-import-mesh-triangles = Triangles
+# field-solid-import-mesh-unit = Unit
+# field-solid-import-mesh-crease-angle = Crease angle
+# field-solid-import-mesh-crease-angle-help = Smooth the shading between adjacent triangles whose angle is at most this value
+# field-solid-import-mesh-notes = Notes
 # field-solid-hole-clearance = Clearance
 # field-solid-hole-clearance-help = Diametral clearance. Leave empty for 0 mm.
 # field-solid-hole-end = Far end
@@ -2178,3 +2207,93 @@
 # field-solid-thread-end = Far end
 # field-solid-thread-flip = Start at the opposite end
 # field-solid-thread-form = Thread form
+
+# field-cam-spiral3d-levels = Cut in depth levels from the top
+# field-cam-spiral3d-direction = Cutting direction
+# field-cam-spiral3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+# field-cam-radial3d-levels = Cut in depth levels from the top
+# field-cam-radial3d-direction = Cutting direction
+# field-cam-radial3d-direction-help = Choose the winding direction for a spiral. One-way radial cutting traces every line in the same direction, then lifts and returns to the start of the next line
+
+# field-cam-setup-stock-cost-material-price = Cost: Stock price
+# field-cam-setup-stock-cost-material-price-help = Price of one stock sheet. Leave empty to exclude material cost. Nonnegative.
+# field-cam-setup-stock-cost-pieces = Cost: Pieces per stock
+# field-cam-setup-stock-cost-pieces-help = Number of pieces machined from one stock sheet by this setup. Divide the total machining time by this count. At least 1.
+# field-cam-setup-stock-cost-electricity-price = Cost: Electricity price
+# field-cam-setup-stock-cost-electricity-price-help = Price per kWh. Leave empty to exclude electricity cost. Nonnegative.
+# field-cam-setup-stock-cost-currency = Cost: Currency
+# field-cam-setup-stock-cost-currency-help = Currency symbol or name shown beside prices. No currency conversion.
+
+# field-solid-thicken-body = Body
+# field-solid-thicken-body-help = Select a sheet body without thickness
+# field-solid-thicken-thickness = Thickness
+# field-solid-thicken-side = Side
+
+# field-solid-import-iges-file = File
+# field-solid-import-iges-stand-up = Convert Y-up to Z-up
+# field-solid-import-iges-stand-up-help = Rotate Y-up geometry 90 degrees around X to make Z point upward.
+
+# field-cad-gear-chain = 鎖の呼び
+# field-cad-gear-chain-pitch = 鎖のピッチ
+# field-cad-gear-roller-diameter = ローラーの径
+# field-cad-gear-chain-inner-width = 鎖の内幅
+# field-cad-gear-body-width-help = 空なら鎖車は鎖の内幅の 0.93 倍か 0.95 倍、ほかの歯車は 10 mm / 歯車の幅。ベルト車とロープ車は輪郭の幅を使い、値が違う時は注意を出す
+# field-cad-gear-body-alignment = Web and Boss Alignment
+# field-cad-gear-boss-diameter = Boss Outside Diameter
+# field-cad-gear-boss-diameter-help = Empty or 0 for no boss.
+# field-cad-gear-key-depth = Keyway Depth
+# field-cad-gear-key-depth-help = Empty to select from the bore diameter table.
+# field-cad-gear-key-width = Keyway Width
+# field-cad-gear-key-width-help = Empty to select from the bore diameter table.
+# field-cad-gear-keyway = Keyway
+# field-cad-gear-lightening-circle = Lightening Hole Circle Diameter
+# field-cad-gear-lightening-count = Number of Lightening Holes
+# field-cad-gear-lightening-count-help = Empty or 0 for no holes.
+# field-cad-gear-lightening-diameter = Lightening Hole Diameter
+# field-cad-gear-rack-size = Rack Size By
+# field-cad-gear-rack-length = Rack Length
+# field-cad-gear-rack-length-help = Overall length including the teeth. Fits as many complete circular pitches as possible.
+# field-cad-gear-rack-back = Back Thickness
+# field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
+# field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
+# field-cad-gear-y-help = For a rack, the start of the pitch line.
+# field-cad-gear-outer-diameter = Ring Outer Diameter
+# field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
+
+# field-cad-gear-pulley-diameter = ピッチ円の径
+
+# field-cad-gear-pulley-diameter-help = 空なら 100 mm
+
+# field-cad-gear-pulley-width = 幅
+
+# field-cad-gear-pulley-width-help = 空なら 30 mm。ベルト車とロープ車の軸方向の幅
+
+# field-cad-gear-crown-height = 中高の高さ
+
+# field-cad-gear-crown-height-help = 空なら 0 mm
+
+# field-cad-gear-groove-count = 溝の数
+
+# field-cad-gear-groove-count-help = 空なら 1
+
+# field-cad-gear-v-section = 溝の型
+
+# field-cad-gear-groove-angle = 溝の角
+
+# field-cad-gear-groove-angle-help = 空なら型とピッチ円の径から選ぶ
+
+# field-cad-gear-groove-top-width = 溝の上の幅
+
+# field-cad-gear-groove-top-width-help = 空なら型のピッチの位置の幅から求める
+
+# field-cad-gear-groove-depth = 溝の深さ
+
+# field-cad-gear-groove-depth-help = 溝の上端から底まで。空なら型の寸法から求める
+
+# field-cad-gear-rope-diameter = ロープの径
+
+# field-cad-gear-rope-diameter-help = 空なら 10 mm
+
+# field-cad-gear-flange-height = 縁の高さ
+
+# field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ

@@ -36,10 +36,14 @@ impl From<ShapeHandle> for HandleRepr {
 pub type P2 = [f64; 2];
 pub type P3 = [f64; 3];
 
+mod curve;
+mod inertia;
 mod instances;
 mod math;
 mod profile;
 
+pub use curve::*;
+pub use inertia::*;
 pub use instances::*;
 pub use math::*;
 pub use profile::*;
@@ -328,6 +332,25 @@ pub struct MassProps {
     /// 重心(密度が一様な時。M47)。求められないカーネルは `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub centroid: Option<P3>,
+    /// 重心を通り世界の軸に平行な軸のまわりの慣性テンソル(密度 1 の時。長さの 5 乗)。
+    /// 質量の慣性は密度を掛ける。求められないカーネルは `None`([`MassProps::inertia`] が
+    /// 対応していない誤りにする)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inertia: Option<InertiaTensor>,
+}
+
+impl MassProps {
+    /// 重心まわりの慣性テンソル。カーネルが求めていなければ対応していない誤り
+    /// (0 の慣性を返して計算を続けない)。
+    pub fn inertia(&self) -> Result<InertiaTensor, KernelError> {
+        self.inertia
+            .ok_or_else(|| KernelError::Unsupported("慣性の計算".into()))
+    }
+
+    /// 重心まわりの主軸と主慣性モーメント(密度 1 の時)。
+    pub fn principal(&self) -> Result<PrincipalInertia, KernelError> {
+        Ok(principal_inertia(&self.inertia()?))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -335,6 +358,56 @@ pub enum KernelError {
     Unsupported(String),
     UnknownShape(ShapeHandle),
     Failed(String),
+    /// 錠を待たない糸([`set_kernel_wait`])が呼んだ時に、ほかの文書の計算がカーネルを使っていた。
+    /// 形は壊れていないので、後でもう一度呼べば答えが出る
+    Busy,
+}
+
+impl KernelError {
+    /// ほかの計算がカーネルを使っていて、待たずに戻ったか。
+    pub fn is_busy(&self) -> bool {
+        matches!(self, KernelError::Busy)
+    }
+}
+
+thread_local! {
+    /// この糸がカーネルの錠を待つか(既定は待つ)
+    static WAITS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// 待たずに戻った回数(この糸で数える)
+    static BUSY: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// この糸がカーネルの錠を待つかを決める。画面の糸は `false` にして、ほかの文書の重い計算が
+/// カーネルを使っている間も待たずに [`KernelError::Busy`] で戻る(糸ごとの設定で、前の値を返す)。
+/// 錠を持つカーネル(1 つの錠をすべての文書で分け合う物)が [`kernel_waits`] を見る。
+pub fn set_kernel_wait(wait: bool) -> bool {
+    WAITS.with(|w| w.replace(wait))
+}
+
+/// この糸がカーネルの錠を待つか([`set_kernel_wait`])。
+pub fn kernel_waits() -> bool {
+    WAITS.with(std::cell::Cell::get)
+}
+
+/// 錠を待たずに戻ったことを数える(カーネルが [`KernelError::Busy`] を返す時に呼ぶ)。
+pub fn note_kernel_busy() -> KernelError {
+    BUSY.with(|b| b.set(b.get() + 1));
+    KernelError::Busy
+}
+
+/// この糸で、待たずに戻った回数(画面は、こまの前後で比べ、増えていれば控えを作らずに描き直す)。
+pub fn kernel_busy_count() -> u64 {
+    BUSY.with(std::cell::Cell::get)
+}
+
+/// `f` を、カーネルの錠を待たずに呼ぶ(画面の控え・網づくりなど、後で作り直せる所)。待たずに
+/// 戻った呼び出しがあったかを結果と一緒に返す。あった時、呼ぶ側は控えを残さず、次のこまで作り直す。
+pub fn without_waiting<R>(f: impl FnOnce() -> R) -> (R, bool) {
+    let was = set_kernel_wait(false);
+    let before = kernel_busy_count();
+    let r = f();
+    set_kernel_wait(was);
+    (r, kernel_busy_count() != before)
 }
 
 impl fmt::Display for KernelError {
@@ -343,6 +416,10 @@ impl fmt::Display for KernelError {
             KernelError::Unsupported(op) => write!(f, "このカーネルは {op} に対応していません"),
             KernelError::UnknownShape(h) => write!(f, "形状 {} が見つかりません", h.0),
             KernelError::Failed(m) => write!(f, "{m}"),
+            KernelError::Busy => write!(
+                f,
+                "形状カーネルはほかの文書の計算に使われています。終わってからもう一度試してください"
+            ),
         }
     }
 }
@@ -395,12 +472,22 @@ fn order_by_position(mut idx: Vec<usize>, at: &dyn Fn(usize) -> P3, axis: usize)
     out
 }
 
-/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。
+/// ボディが囲む物。面のボディは厚みを持たず、体積や質量を求められない。網は閉じている時だけ体積を持つ。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BodyKind {
     Solid,
     Sheet,
+    Mesh,
+}
+
+/// 面の向きを基準に厚みを付ける側。両側は表裏へ半分ずつ。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThickenSide {
+    Front,
+    Back,
+    Both,
 }
 
 /// 面を張る縁の 1 区間(世界座標)。並びの端と端がつながって閉じる。
@@ -436,7 +523,13 @@ pub struct BoundarySegment {
 pub trait Kernel: Send + Sync {
     fn name(&self) -> &str;
 
-    /// 厚みのある立体か、厚みの無い面のボディか。
+    /// 三角形の網をそのまま預かる。面の名前は `{tag}:mesh`、辺は渡された物を使う。
+    fn import_mesh(&self, mesh: &Mesh, tag: &str) -> Result<ShapeHandle, KernelError> {
+        let _ = (mesh, tag);
+        Err(KernelError::Unsupported("網のボディ".into()))
+    }
+
+    /// 厚みのある立体・厚みの無い面・三角形の網のボディの区分。
     fn body_kind(&self, shape: ShapeHandle) -> Result<BodyKind, KernelError> {
         let _ = shape;
         Ok(BodyKind::Solid)
@@ -456,6 +549,18 @@ pub trait Kernel: Send + Sync {
     ) -> Result<ShapeHandle, KernelError> {
         let _ = (boundary, tag);
         Err(KernelError::Unsupported("面を張る".into()))
+    }
+
+    /// 面のボディを、正の厚みを持つ閉じた立体にする。
+    fn thicken(
+        &self,
+        sheet: ShapeHandle,
+        thickness: f64,
+        side: ThickenSide,
+        tag: &str,
+    ) -> Result<ShapeHandle, KernelError> {
+        let _ = (sheet, thickness, side, tag);
+        Err(KernelError::Unsupported("厚みを付ける".into()))
     }
 
     /// 輪郭を法線方向に `from` から `to` まで押し出す(`from < to`)。
@@ -636,6 +741,13 @@ pub trait Kernel: Send + Sync {
     fn import_step(&self, step: &str) -> Result<ShapeHandle, KernelError> {
         let _ = step;
         Err(KernelError::Unsupported("STEP の読み込み".into()))
+    }
+
+    /// IGES の面を読み、縫って閉じれば立体、開いていれば面のボディを返す。
+    /// 読めない要素と欠けた面・縫えない面の理由は警告に残す。
+    fn import_iges(&self, iges: &str) -> Result<(ShapeHandle, Vec<String>), KernelError> {
+        let _ = iges;
+        Err(KernelError::Unsupported("IGES の読み込み".into()))
     }
 
     /// 立体をくり抜いて殻にする(シェル)。面 `open`(名前)は取り除いて開ける(空なら閉じた空洞)。

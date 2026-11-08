@@ -49,9 +49,12 @@ impl Headless {
 
     /// 今の文書で使える操作(`selected` を選んでいるとした時)。
     pub fn actions(&self, selected: Option<FeatureId>) -> Vec<Action> {
-        self.modules
-            .extensions
-            .actions(&self.context(selected, None, &Json::Null))
+        let mut actions =
+            self.modules
+                .extensions
+                .actions(&self.context(selected, None, &Json::Null));
+        actions.extend(crate::doc_view::actions());
+        actions
     }
 
     /// 操作 `id` が引数 `key` を受け取るか([`Action::args`] の宣言。宣言に無い鍵を渡すと誤り)。
@@ -69,7 +72,21 @@ impl Headless {
 
     /// 役割の印 `role` を持つ操作の名前(CLI・MCP は機能の名前を書かず、役割で探す)。
     pub fn action_for_role(&self, role: &kmb_core::ActionRole) -> Result<String, String> {
-        self.actions(None)
+        self.action_for_role_with(role, None)
+    }
+
+    pub(super) fn action_for_role_with(
+        &self,
+        role: &kmb_core::ActionRole,
+        files: Option<&dyn kmb_core::FileGate>,
+    ) -> Result<String, String> {
+        let picks = Picks {
+            files,
+            ..Picks::default()
+        };
+        self.modules
+            .extensions
+            .actions(&self.context_with(&picks, None, &Json::Null))
             .into_iter()
             .find(|a| a.role.as_ref() == Some(role))
             .map(|a| a.id)
@@ -83,12 +100,28 @@ impl Headless {
     /// 役割を見ずに拡張子だけで選ぶと、組み立ての並びで先に来るスケッチの DXF・SVG や部品表の
     /// CSV を選んでしまう。
     pub fn save_action_for(&self, out: &Path, action: Option<&str>) -> Result<String, String> {
+        self.save_action_for_with(out, action, None)
+    }
+
+    pub(super) fn save_action_for_with(
+        &self,
+        out: &Path,
+        action: Option<&str>,
+        files: Option<&dyn kmb_core::FileGate>,
+    ) -> Result<String, String> {
         let ext = out
             .extension()
             .and_then(|e| e.to_str())
             .map(|e| e.to_ascii_lowercase())
             .unwrap_or_default();
-        let actions = self.actions(None);
+        let picks = Picks {
+            files,
+            ..Picks::default()
+        };
+        let actions =
+            self.modules
+                .extensions
+                .actions(&self.context_with(&picks, None, &Json::Null));
         let writes = |a: &Action| match &a.input {
             kmb_core::Input::SaveFile { extensions, .. } => {
                 extensions.iter().any(|e| e.eq_ignore_ascii_case(&ext))
@@ -177,6 +210,9 @@ impl Headless {
         file: Option<&Path>,
         args: &Json,
     ) -> Result<Handled, kmb_core::Problem> {
+        if crate::doc_view::is_action(id) {
+            return self.run_view(id, picks, args);
+        }
         let cx = self.context_with(picks, file, args);
         // 使えない操作はここで断る(画面のボタンを押せなくするだけでは、CLI・MCP から走ってしまう)
         if let Some(why) = self

@@ -124,6 +124,17 @@ enum Command {
         #[arg(long)]
         each: bool,
     },
+    /// 設計・G-code・段取り表をzipにまとめて渡す
+    Pack {
+        file: PathBuf,
+        out: PathBuf,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().gcode, action = clap::ArgAction::Set)]
+        gcode: bool,
+        #[arg(long, default_value_t = kmb_session::PackOptions::default().sheet, action = clap::ArgAction::Set)]
+        sheet: bool,
+        #[arg(long)]
+        models: bool,
+    },
     /// 文書を作らずに形式を変換する(STEP → STL・3MF・OBJ など、DXF → SVG など)
     Convert {
         input: PathBuf,
@@ -486,10 +497,8 @@ fn json_arg(s: &str) -> Result<serde_json::Value, String> {
 }
 
 fn show_output_warnings(info: &serde_json::Value) {
-    if let Some(warnings) = info.get("warnings").and_then(|w| w.as_array()) {
-        for warning in warnings.iter().filter_map(|w| w.as_str()) {
-            eprintln!("警告: {warning}");
-        }
+    for warning in kmb_core::warnings_from_info_with(info, |_| None) {
+        eprintln!("警告: {warning}");
     }
 }
 
@@ -873,6 +882,31 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
                 }
             }
         }
+        Command::Pack {
+            file,
+            out,
+            gcode,
+            sheet,
+            models,
+        } => {
+            let mut work = open(&file)?;
+            let packed = work.pack(
+                kmb_session::PackOptions {
+                    gcode,
+                    sheet,
+                    models,
+                },
+                None,
+            )?;
+            write(&out, &packed.contents)?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &json!({"written":out,"included":packed.included,"skipped":packed.skipped})
+                )
+                .unwrap()
+            );
+        }
         Command::Export {
             file,
             out,
@@ -959,6 +993,7 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             else {
                 return Err("G-code を作れませんでした".into());
             };
+            show_output_warnings(&info);
             match out {
                 Some(o) => {
                     write(&o, &contents)?;

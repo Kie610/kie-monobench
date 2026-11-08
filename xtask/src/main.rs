@@ -184,6 +184,9 @@ const TRUCK_TESTS: &[(&str, Option<&str>)] = &[
     ("kmb-cad-surface", None),
     // 穴の見分けと選び方は、カーネルが返す面(名前・円筒)から作る
     ("kmb-samples", Some("hole_tests::")),
+    ("kmb-samples", Some("nest_tests::")),
+    // 干渉の円筒の一致は、円の辺・面積・面の網を使う
+    ("kmb-asm", Some("inspect::cylinder_tests::")),
 ];
 
 /// truck の回で流す試験のうち、選んだ crate にあるもの。
@@ -1687,12 +1690,13 @@ mod tests {
                 ("kmb-drawing", None),
                 ("kmb-view-lines", None),
                 ("kmb-samples", Some("drawing_tests::")),
-                ("kmb-samples", Some("hole_tests::"))
+                ("kmb-samples", Some("hole_tests::")),
+                ("kmb-samples", Some("nest_tests::"))
             ]
         );
         assert_eq!(
             truck_filter(&all),
-            "package(kmb-solid) | package(kmb-drawing) | package(kmb-view-lines) | (package(kmb-samples) & test(/^drawing_tests::/)) | (package(kmb-samples) & test(/^hole_tests::/))"
+            "package(kmb-solid) | package(kmb-drawing) | package(kmb-view-lines) | (package(kmb-samples) & test(/^drawing_tests::/)) | (package(kmb-samples) & test(/^hole_tests::/)) | (package(kmb-samples) & test(/^nest_tests::/))"
         );
         // 選んだ crate に形の計算の試験がなければ流さない(画面や加工だけの変更)
         assert_eq!(

@@ -894,6 +894,7 @@ pub(crate) fn cut_modeled(
             outer: k::ProfileLoop {
                 edges: (0..4)
                     .map(|i| k::ProfileEdge {
+                        curve: None,
                         name: format!("e{i}"),
                         segment: k::Segment::Line {
                             a: vertices[i],
@@ -1033,6 +1034,7 @@ impl Feature for Thread {
             .iter()
             .enumerate()
             .map(|(i, s)| kmb_core::Choice {
+                icon: String::new(),
                 value: s.name(),
                 label: format!(
                     "{}(呼び径 {} mm・ピッチ {} mm・{}){}",

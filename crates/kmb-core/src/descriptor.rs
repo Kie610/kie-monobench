@@ -31,6 +31,21 @@ pub mod category {
 pub struct Choice {
     pub value: String,
     pub label: String,
+    /// 画面の一覧で名前の前に描く絵の名前(空なら字だけ)。絵そのものは画面の表が持ち、機能は
+    /// 名前だけを書く([`Field::choice_icons`])
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub icon: String,
+}
+
+impl Choice {
+    /// 絵の無い選択肢。
+    pub fn new(value: impl Into<String>, label: impl Into<String>) -> Self {
+        Choice {
+            value: value.into(),
+            label: label.into(),
+            icon: String::new(),
+        }
+    }
 }
 
 /// 候補の一覧の出力の型の名前([`Suggest::Output`] が読む)。
@@ -415,6 +430,19 @@ impl Field {
         self
     }
 
+    /// 選ぶ欄の選択肢に絵を付ける(`(値, 絵の名前)` の組。[`Choice::icon`])。画面は一覧の名前の前と、
+    /// 選んでいる値の横に描く。組に無い値と、選択肢に無い値は変えない。
+    pub fn choice_icons(mut self, icons: &[(&str, &str)]) -> Self {
+        if let FieldKind::Choice { choices } = &mut self.kind {
+            for c in choices.iter_mut() {
+                if let Some((_, icon)) = icons.iter().find(|(v, _)| *v == c.value) {
+                    c.icon = (*icon).into();
+                }
+            }
+        }
+        self
+    }
+
     /// 選ぶ欄の値 `value` を、画面の一覧に出さない([`Field::hidden`])。
     pub fn hide_choice(mut self, value: &str) -> Self {
         self.hidden.push(value.into());
@@ -506,13 +534,7 @@ impl Field {
             key,
             label,
             FieldKind::Choice {
-                choices: choices
-                    .iter()
-                    .map(|(v, l)| Choice {
-                        value: (*v).into(),
-                        label: (*l).into(),
-                    })
-                    .collect(),
+                choices: choices.iter().map(|(v, l)| Choice::new(*v, *l)).collect(),
             },
         );
         f.origin_planes = choices.iter().any(|(v, _)| ORIGIN_PLANE_VALUES.contains(v));
@@ -707,13 +729,7 @@ impl Field {
     /// 一覧から選べる決まった候補を付ける(`values` は欄に入れる値で、一覧にもそのまま出す)。
     pub fn suggest(mut self, values: &[&str]) -> Self {
         self.suggest = Some(Suggest::Values {
-            values: values
-                .iter()
-                .map(|v| Choice {
-                    value: (*v).into(),
-                    label: (*v).into(),
-                })
-                .collect(),
+            values: values.iter().map(|v| Choice::new(*v, *v)).collect(),
         });
         self
     }

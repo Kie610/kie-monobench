@@ -5,7 +5,7 @@
 //! 見えるかどうかは、線を短く刻んだ各区間の真ん中の点で、手前に三角形があるかで決める。
 //! 隠れ線は省くか、破線の画層 `HIDDEN` に分ける。
 //!
-//! 書き出しは DXF R12(AC1009)の最小の形(HEADER・TABLES・ENTITIES)。線は POLYLINE。
+//! 書き出しは DXF R12(AC1009)の最小の形(HEADER・TABLES・ENTITIES)。線分は LINE、つながる線は POLYLINE。
 
 #[cfg(test)]
 use kmb_core::kernel::dot;
@@ -16,7 +16,7 @@ use kmb_format::dxf;
 use kmb_view_lines::silhouettes;
 pub use kmb_view_lines::{View, runs_bounds, view_runs};
 
-/// 書き出しの結果(DXF の文字列と、見える線・隠れ線の本数)。
+/// 書き出しの結果(DXF の文字列と、見える線・隠れ線の LINE・POLYLINE の数)。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ViewDxf {
     pub dxf: String,
@@ -48,6 +48,7 @@ pub fn view_to_dxf(
 ) -> ViewDxf {
     let runs = view_runs(meshes, sketches, view, chord);
     let (lo, hi) = runs_bounds(&runs);
+    let tol = crate::polylines::tolerance(lo, hi);
 
     let mut o = dxf::R12::begin(
         num,
@@ -60,19 +61,22 @@ pub fn view_to_dxf(
         ],
     );
     let (mut visible, mut hid) = (0, 0);
-    for (poly, seen) in &runs {
+    for seen in [true, false] {
         if !seen && !hidden {
             continue;
         }
-        let layer = if *seen { "VISIBLE" } else { "HIDDEN" };
-        if *seen {
-            visible += 1;
+        let layer = if seen { "VISIBLE" } else { "HIDDEN" };
+        let polys = crate::polylines::clean(&runs, seen, tol);
+        if seen {
+            visible = polys.len();
         } else {
-            hid += 1;
+            hid = polys.len();
         }
-        match poly[..] {
-            [a, b] => o.line(layer, a, b),
-            _ => o.polyline(layer, poly),
+        for poly in polys {
+            match poly[..] {
+                [a, b] => o.line(layer, a, b),
+                _ => o.polyline(layer, &poly),
+            }
         }
     }
     ViewDxf {
@@ -85,6 +89,131 @@ pub fn view_to_dxf(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// DXF の各実体から、画層ごとの線分を取り出す。
+    fn written_segments(text: &str, layer: &str) -> Vec<[[f64; 2]; 2]> {
+        let lines: Vec<_> = text.lines().collect();
+        let (chunks, remainder) = lines.as_chunks::<2>();
+        assert!(remainder.is_empty(), "DXF の組は番号と値の 2 行");
+        let pairs: Vec<_> = chunks
+            .iter()
+            .map(|p| (p[0].trim().parse::<i32>().unwrap(), p[1]))
+            .collect();
+        let mut records = Vec::new();
+        let mut record = Vec::new();
+        for p in pairs {
+            if p.0 == 0 && !record.is_empty() {
+                records.push(std::mem::take(&mut record));
+            }
+            record.push(p);
+        }
+        if !record.is_empty() {
+            records.push(record);
+        }
+        let mut previous = None;
+        let mut segments = Vec::new();
+        for record in records {
+            let field = |code| record.iter().find(|p| p.0 == code).map(|p| p.1);
+            let at = |code| {
+                [
+                    field(code).unwrap().parse::<f64>().unwrap(),
+                    field(code + 10).unwrap().parse::<f64>().unwrap(),
+                ]
+            };
+            match record[0].1 {
+                "LINE" if field(8) == Some(layer) => segments.push([at(10), at(11)]),
+                "POLYLINE" | "SEQEND" => previous = None,
+                "VERTEX" if field(8) == Some(layer) => {
+                    let point = at(10);
+                    if let Some(a) = previous {
+                        segments.push([a, point]);
+                    }
+                    previous = Some(point);
+                }
+                _ => {}
+            }
+        }
+        segments
+    }
+
+    /// 重複や連結の前後で、両画層の線が同じ位置を覆うこと。
+    fn assert_projection_is_preserved(
+        meshes: &[Mesh],
+        sketches: &[Vec<P3>],
+        view: &View,
+        hidden: bool,
+        out: &ViewDxf,
+    ) {
+        let runs = view_runs(meshes, sketches, view, 0.02);
+        let (lo, hi) = runs_bounds(&runs);
+        let tol = crate::polylines::tolerance(lo, hi) * 2.0 + 1e-6;
+        let near = |p: [f64; 2], [a, b]: [[f64; 2]; 2]| {
+            let d = [b[0] - a[0], b[1] - a[1]];
+            let t = (((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1])
+                / (d[0] * d[0] + d[1] * d[1]).max(1e-30))
+            .clamp(0.0, 1.0);
+            (p[0] - a[0] - t * d[0]).hypot(p[1] - a[1] - t * d[1]) <= tol
+        };
+        for (seen, layer) in [(true, "VISIBLE"), (false, "HIDDEN")] {
+            if !seen && !hidden {
+                continue;
+            }
+            let raw: Vec<_> = runs
+                .iter()
+                .filter(|r| r.1 == seen)
+                .flat_map(|r| r.0.windows(2).map(|w| [w[0], w[1]]))
+                .collect();
+            let written = written_segments(&out.dxf, layer);
+            for (from, to) in [(&raw, &written), (&written, &raw)] {
+                for [a, b] in from {
+                    for t in [0.0, 0.5, 1.0] {
+                        let p = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+                        assert!(to.iter().any(|s| near(p, *s)), "{layer}: {p:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overlapping_sketch_lines_are_written_as_one_line() {
+        let lines = [
+            vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+            vec![[5.0, 0.0, 0.0], [15.0, 0.0, 0.0]],
+        ];
+        let top = View::named("top").unwrap();
+        let out = view_to_dxf(&[], &lines, &top, false, 0.02);
+        assert_eq!(out.dxf.matches("\nLINE\n").count(), 1, "{}", out.dxf);
+        assert_eq!((out.visible, out.hidden), (1, 0));
+        assert!(out.dxf.contains(" 10\n0.0\n 20\n0.0"));
+        assert!(out.dxf.contains(" 11\n15.0\n 21\n0.0"));
+    }
+
+    #[test]
+    fn coincident_visible_and_hidden_lines_keep_their_layers() {
+        let m = boxed([0.0; 3], [10.0, 10.0, 2.0]);
+        let lines = [
+            vec![[2.0, 5.0, 3.0], [8.0, 5.0, 3.0]],
+            vec![[2.0, 5.0, -1.0], [8.0, 5.0, -1.0]],
+        ];
+        let top = View::named("top").unwrap();
+        let with = view_to_dxf(std::slice::from_ref(&m), &lines, &top, true, 0.02);
+        assert_eq!((with.visible, with.hidden), (2, 1));
+        assert_eq!(with.dxf.matches("\nLINE\n").count(), 2);
+        for layer in ["VISIBLE", "HIDDEN"] {
+            assert!(
+                with.dxf.contains(&format!(
+                    "\nLINE\n  8\n{layer}\n 10\n2.0\n 20\n5.0\n 30\n0.0\n 11\n8.0\n 21\n5.0"
+                )),
+                "{layer}: {}",
+                with.dxf
+            );
+        }
+        let without = view_to_dxf(&[m], &lines, &top, false, 0.02);
+        assert_eq!((without.visible, without.hidden), (2, 0));
+        assert_eq!(without.dxf.matches("\nLINE\n").count(), 1);
+        assert!(!without.dxf.contains("  8\nHIDDEN\n"));
+    }
 
     /// 軸に平行な箱の網(面ごとに頂点を分け、外向きの巻き。稜線は 12 本)。
     pub(crate) fn boxed(lo: P3, hi: P3) -> Mesh {
@@ -144,8 +273,11 @@ pub(crate) mod tests {
         // 箱の横の床の線(見える)と、箱の下に隠れた床の線
         let beside = vec![[50.0, 0.0, 0.0], [60.0, 10.0, 0.0]];
         let under = vec![[10.0, 5.0, 0.0], [30.0, 8.0, 0.0]];
-        let r = view_to_dxf(std::slice::from_ref(&m), &[beside, under], &top, true, 0.02);
-        assert_eq!((r.visible, r.hidden), (8 + 1, 1), "{}", r.dxf);
+        let sketches = [beside, under];
+        let r = view_to_dxf(std::slice::from_ref(&m), &sketches, &top, true, 0.02);
+        // 箱の輪郭を 1 つの折れ線、横と下のスケッチを各 1 本で書く。
+        assert_eq!((r.visible, r.hidden), (2, 1), "{}", r.dxf);
+        assert_projection_is_preserved(std::slice::from_ref(&m), &sketches, &top, true, &r);
         assert_eq!(r.hidden, 1, "{}", r.dxf);
         assert!(r.dxf.contains("60.0"), "{}", r.dxf);
         let svg = crate::view_svg::view_to_svg(
@@ -164,10 +296,12 @@ pub(crate) mod tests {
         let m = boxed([0.0; 3], [40.0, 20.0, 10.0]);
         let top = View::named("top").unwrap();
         let r = view_to_dxf(std::slice::from_ref(&m), &[], &top, true, 0.02);
-        // 上から: 上面の縁 4 本が見え、下面の縁 4 本は上面の縁と重なる(縁ちょうどは隠さない)。
+        // 上面と下面で重なる 4 辺は、1 つの閉じた折れ線にする。
         // 縦の 4 本は点に見えるので書かない
         assert_eq!(r.hidden, 0, "{}", r.dxf);
-        assert_eq!(r.visible, 8);
+        assert_eq!(r.visible, 1);
+        assert_eq!(written_segments(&r.dxf, "VISIBLE").len(), 4);
+        assert_projection_is_preserved(std::slice::from_ref(&m), &[], &top, true, &r);
         assert!(r.dxf.contains("$INSUNITS"));
         assert!(r.dxf.contains("40.0"), "1 mm を 1 単位のまま書く");
         assert!(r.dxf.trim_end().ends_with("EOF"));
@@ -179,12 +313,15 @@ pub(crate) mod tests {
         let iso = View::named("iso").unwrap();
         let with = view_to_dxf(std::slice::from_ref(&m), &[], &iso, true, 0.02);
         // 等角の視点からは、奥の角に集まる 3 本の稜線が隠れる
-        assert_eq!(with.hidden, 3, "{}", with.dxf);
-        assert_eq!(with.visible, 9);
+        assert_eq!((with.visible, with.hidden), (3, 2));
+        assert_eq!(written_segments(&with.dxf, "HIDDEN").len(), 3);
+        assert_eq!(written_segments(&with.dxf, "VISIBLE").len(), 9);
+        assert_projection_is_preserved(std::slice::from_ref(&m), &[], &iso, true, &with);
         assert!(with.dxf.contains("HIDDEN") && with.dxf.contains("DASHED"));
         let without = view_to_dxf(&[m], &[], &iso, false, 0.02);
         assert_eq!(without.hidden, 0);
-        assert_eq!(without.visible, 9);
+        assert_eq!(without.visible, 3);
+        assert_eq!(written_segments(&without.dxf, "VISIBLE").len(), 9);
         assert!(!without.dxf.contains("\n  8\nHIDDEN\n"), "隠れ線を書かない");
     }
 
@@ -194,11 +331,15 @@ pub(crate) mod tests {
         let front = boxed([0.0, 0.0, 0.0], [40.0, 10.0, 5.0]);
         let back = boxed([10.0, 20.0, 0.0], [30.0, 30.0, 20.0]);
         let view = View::named("front").unwrap();
-        let r = view_to_dxf(&[front, back], &[], &view, true, 0.02);
+        let meshes = [front, back];
+        let r = view_to_dxf(&meshes, &[], &view, true, 0.02);
         // 後ろの箱の縦の稜線は、下の 5 mm だけ隠れる
-        // 見える線は前の箱の 8 本と、後ろの箱の横の 4 本と縦の上の 15 mm の 4 本
-        assert_eq!(r.hidden, 4, "{}", r.dxf);
-        assert_eq!(r.visible, 16, "{}", r.dxf);
+        // 重なる縁を除き、前の箱は 4 辺の輪、後ろの箱の見える所は 3 辺の折れ線にする。
+        // 後ろの縦の縁の隠れる部分は、それぞれ独立した線分になる。
+        assert_eq!((r.visible, r.hidden), (2, 2));
+        assert_eq!(written_segments(&r.dxf, "VISIBLE").len(), 7);
+        assert_eq!(written_segments(&r.dxf, "HIDDEN").len(), 2);
+        assert_projection_is_preserved(&meshes, &[], &view, true, &r);
     }
 
     /// 円柱(半径 5・高さ 10)を 24 角柱で近づけた網の側面(1 つの面)。
@@ -299,8 +440,9 @@ pub(crate) mod tests {
         m.edges.push((0..=ne).map(|k| at(k, ne, h)).collect());
         let iso = View::named("iso").unwrap();
         let out = view_to_dxf(std::slice::from_ref(&m), &[], &iso, true, 0.02);
-        // 見える線: 上の縁、輪郭 2 本、付け根の手前の半周(書き始めの角度で 2 つに分かれる)。
-        // 隠れ線は付け根の奥の半周だけ
-        assert_eq!((out.visible, out.hidden), (5, 1), "{}", out.dxf);
+        // 上の縁、輪郭、付け根の手前の半周は、つながる端をまとめて 3 つの実体になる。
+        // 隠れ線は付け根の奥の半周だけ。線の位置は両画層で保つ。
+        assert_eq!((out.visible, out.hidden), (3, 1), "{}", out.dxf);
+        assert_projection_is_preserved(std::slice::from_ref(&m), &[], &iso, true, &out);
     }
 }

@@ -6,9 +6,9 @@
 action-anim-appearance = Appearance
 action-anim-appearance-tip = Add a step that changes the selected part's appearance over the step's length (the design's appearance is unchanged). Pick the appearance again on the step bar
 action-anim-auto-explode-all = Auto Explode: All Levels
-action-anim-auto-explode-all-tip = Move parts away from the assembly center automatically, and parts inside parts away from that part's center. Choose one step or sequential, trail lines and explode scale, then OK
+action-anim-auto-explode-all-tip = Move items inside the selected part apart from their positions after the existing steps, including nested parts (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-auto-explode-one = Auto Explode: One Level
-action-anim-auto-explode-one-tip = Move parts away from the assembly center automatically (direct children only; parts inside are not moved). Choose one step (all at once) or sequential (1 second per part), trail lines and explode scale, then OK
+action-anim-auto-explode-one-tip = Move the selected part's direct children apart from their positions after the existing steps (the whole design when no part is selected). Choose one step or sequential, trail lines and explode scale, then OK
 action-anim-drive = Joint Motion
 action-anim-drive-tip = Add a step that drives a joint from its lower to its upper limit (without limits: 90 deg for revolute, the part's length for slider). Edit the values and length on the step bar
 action-anim-explode = Explode Move
@@ -24,6 +24,8 @@ action-asm-bom = Bill of Materials
 action-asm-bom-tip = Table of count, material, size (length × width × thickness), volume and mass per part. Pick the columns with "Columns" on the table. Parts with the same size and material are counted together
 action-asm-bom-csv = Export Bill of Materials…
 action-asm-bom-csv-tip = Export the bill of materials as CSV (opens in spreadsheet software)
+action-asm-mass-props = Mass Properties
+action-asm-mass-props-tip = Table of mass, center of mass and moments of inertia (principal moments) for the whole assembly, each component and each rigid group. Inertia is about each row's center of mass
 action-asm-contact-reach = Value Until Contact
 action-asm-contact-reach-tip = Drive a joint from its current value to a target and report at which value it hits a partner in a contact set, and how much further it can move (the shape is unchanged)
 action-asm-contacts = Enable Contact Sets
@@ -60,6 +62,8 @@ action-asm-new-contact-set = New Contact Set
 action-asm-new-contact-set-tip = Make the selected bodies (two or more) a contact set. While contact sets are enabled, dragging a joint's part stops just before it digs into a partner in the same set
 action-asm-new-rigid-group = Rigid Group
 action-asm-new-rigid-group-tip = Make the selected components (two or more) one block. Whichever part a joint or drag moves, they all move together
+action-asm-planetary-link = Link Planetary Set
+action-asm-planetary-link-tip = Link the rotations of the sun, carrier and ring (and the planet spin) of a planetary gear set by an equation from the tooth counts. The latest joint in the timeline follows the earlier two. For a differential, give the ring the same tooth count as the sun
 action-asm-snap-joint = Joint
 action-asm-snap-joint-tip = Move part 1 to meet part 2 and join them: face of part 1 → origin → face of part 2 → origin. Type, angle and offset can be changed later
 
@@ -93,6 +97,10 @@ action-cad-extrude-to-face = Up to Face
 action-cad-extrude-to-face-tip = Extrude the selected extrude up to the clicked flat face, vertex or construction plane (an inclined face trims the end of the tool body). It cuts if the extrusion passes through the body, and joins if it does not
 action-cad-fillet = Fillet
 action-cad-fillet-tip = Press, then click an edge or face to apply it and go on to the value fields (a face means all edges around it; Ctrl+click to pick several). If edges or faces are already selected, it applies to them
+action-cad-gear = Gear
+action-cad-gear-tip = Press, then click a plane → the center to make a gear profile and its body. Edit the type, module, number of teeth and other fields, then OK or Enter. Esc cancels
+action-cad-gear-outline = Gear Profile
+action-cad-gear-outline-tip = Place only the gear profile (no body). Use it as is for laser cutting, 2D contour machining or extrude
 action-cad-hole-add = Add Same Hole
 action-cad-hole-add-tip = Add the same hole as the selected one on the same face where you click. Press Enter to finish
 action-cad-hole-on-face = Hole
@@ -112,6 +120,12 @@ action-cad-mirror-plane = Select Mirror Plane
 action-cad-mirror-plane-tip = Set the mirror plane of the selected mirror by clicking the square of the origin XY, YZ or ZX plane, a construction plane, or a flat face of a body
 action-cad-move-axis = Select Rotation Axis
 action-cad-move-axis-tip = Set the rotation axis of the selected move/copy by clicking the origin X, Y or Z axis, a sketch line or a body edge (a circular edge gives its axis)
+action-cad-move-from = Select Source Point
+action-cad-move-from-tip = Set the source point of the selected move/copy (Point to Point) by clicking a body corner, circle center, edge midpoint, sketch point or construction point. It follows the same point when the shape changes.
+action-cad-move-to = Select Destination Point
+action-cad-move-to-tip = Set where the source point goes for the selected move/copy (Point to Point) by clicking a body corner, circle center, edge midpoint, sketch point or construction point. It follows the same point when the shape changes.
+action-cad-move-points = Select Source and Destination Points
+action-cad-move-points-tip = Set the source and destination points of the selected move/copy (Point to Point) by clicking body corners, circle centers, edge midpoints, sketch points or construction points. They follow the same points when the shape changes.
 action-cad-pattern-split-copies = Split Copies into Bodies
 action-cad-pattern-split-copies-tip = Make each copy of the selected body pattern or mirror (with "Copies as separate bodies" on) a separate body. Use it again after raising the count to split the new copies too
 action-cad-revolve = Revolve
@@ -127,7 +141,7 @@ action-cad-sketch-auto-constrain-tip = Add the coincident, horizontal, vertical,
 action-cad-sketch-export-dxf = Save as DXF…
 action-cad-sketch-export-dxf-tip = Export the lines of the selected sketch (except construction lines) to DXF
 action-cad-sketch-export-svg = Save as SVG…
-action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit (opens at the same size in laser cutter software such as LightBurn; connected lines are joined into closed outlines)
+action-cad-sketch-export-svg-tip = Export the lines of the selected sketch (except construction lines) to SVG at 1 mm = 1 unit; join connected lines into closed outlines
 action-cad-sketch-find = Find Sketch Entities
 action-cad-sketch-find-tip = List the points, lines, circles and so on of the selected sketch in a table, filtered by type, construction, how constrained, length, radius and region
 action-cad-sketch-insert-dxf = Insert DXF…
@@ -198,7 +212,7 @@ action-cam-add-pocket-tip = Select bottom faces in the 3D view, then press (Shif
 action-cam-add-project3d = Project (3D)
 action-cam-add-project3d-tip = Drop sketch lines straight down onto the part's faces and trace them. A negative stock to leave cuts below the faces. A selected sketch gives its lines; with nothing selected, the last sketch (uses a ball end mill if there is one)
 action-cam-add-radial3d = Radial (3D)
-action-cam-add-radial3d-tip = Finish by tracing lines radiating out and in from the part's center (uses a ball end mill if there is one)
+action-cam-add-radial3d-tip = Finish by tracing radial lines from the part's center. Choose depth levels and back-and-forth or one-way cutting (uses a ball end mill if there is one)
 action-cam-add-ramp3d = Ramp (3D)
 action-cam-add-ramp3d-tip = Finish vertical walls and steep slopes without breaks, going down diagonally 0.5 mm per lap (uses a ball end mill if there is one)
 action-cam-add-raster3d = Parallel (3D)
@@ -212,7 +226,7 @@ action-cam-add-setup-tip = Add a setup to machine the last body
 action-cam-add-slot = Slot
 action-cam-add-slot-tip = Cut a slot of a set width and depth along the sketch's lines as its center. A selected sketch gives its lines; with nothing selected, the last sketch
 action-cam-add-spiral3d = Spiral (3D)
-action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in (uses a ball end mill if there is one)
+action-cam-add-spiral3d-tip = Finish by tracing a spiral around the part's center from outside in. Choose depth levels and cutting direction (uses a ball end mill if there is one)
 action-cam-add-thread = Thread Milling
 action-cam-add-thread-tip = Cut a thread into the selected hole or boss wall with a thread mill. Needs a thread mill in the tool library
 action-cam-add-trace = Trace
@@ -352,14 +366,90 @@ action-drawing-move-view-tip = Change the paper position or distance from the pa
 action-drawing-set-view = Edit view
 action-drawing-set-view-tip = Change the scale and visibility of hidden and tangent lines
 action-drawing-delete = Delete drawing
-action-drawing-delete-tip = Delete a sheet or view; delete child views first
+action-drawing-delete-tip = Delete a sheet, view, or annotation; delete child views first
 action-drawing-picture = Export drawing lines
 action-drawing-picture-tip = Export the sheet geometry and problems as JSON
 action-cad-surface-patch = Surface patch
 action-cad-surface-patch-tip = Select a closed boundary and press Enter to create a sheet body
 action-io-export-obj = Export OBJ…
 action-io-export-obj-tip = Export visible bodies as OBJ with object names, vertices, normals and faces. Colors and materials are not written
+action-cam-nest-create = Nest on sheets
+action-cam-nest-create-tip = Create a setup that arranges the selected bodies on sheets
+action-cam-nest-add-part = Add nesting part
+action-cam-nest-add-part-tip = Add another body to the sheet layout
+action-cam-nest-remove-part = Remove nesting part
+action-cam-nest-remove-part-tip = Remove the part with the specified index from the layout
+action-cam-nest-set-part = Edit nesting part
+action-cam-nest-set-part-tip = Change the quantity, allowed rotation, and upper face of a part
+
+action-study-converge = Check accuracy
+action-study-converge-tip = Solve on three meshes to check convergence and estimate discretization error
+
+action-study-check = Check conditions
+action-study-check-tip = List missing study conditions and explain how to fix them before solving
+action-drawing-set-paper = Sheet settings
+action-drawing-set-paper-tip = Set the drawing sheet size, orientation, binding margin, pens, and layer colors
+
+action-drawing-set-title = Title block settings
+action-drawing-set-title-tip = Set fixed text or document fields in the title block and embed the required font glyphs
+
+action-drawing-export-pdf = Export drawing as PDF
+action-drawing-export-pdf-tip = Export one sheet or all sheets as pages with the actual paper dimensions
+
+action-drawing-export-dxf = Export drawing as DXF
+action-drawing-export-dxf-tip = Export one sheet as DXF with layers for line roles and line types
+
+action-drawing-export-svg = Export drawing as SVG
+action-drawing-export-svg-tip = Export one sheet as SVG with paper dimensions, line widths, and line types
+action-cad-import-mesh = Import STL or 3MF…
+action-cad-import-mesh-tip = Import a triangle mesh from STL or 3MF for viewing, measuring, and machining
+action-view-part-hues = Color by Component
+action-view-part-hues-tip = Distinguish bodies without appearances or materials with a color for each component. Remember this view per document.
+action-cad-sketch-dxf-layers = List DXF layers
+action-cad-sketch-dxf-layers-tip = Read DXF layer names and shape counts without changing the design
+action-cad-sketch-project-axis = Project Datum Axis
+action-cad-sketch-project-axis-tip = Project a datum axis into a sketch so its line or point follows the axis
 action-hrtf-process = Align HRTF formats
 action-hrtf-process-tip = Run a processing recipe (JSON): read SOFA HRTFs, align sampling rate, direction grid, onset and phase, and write SOFA files or split tables
 action-hrtf-compute = Compute HRTF from Head Mesh…
 action-hrtf-compute-tip = Solve a head mesh job JSON with the boundary element method and write HRIRs for all directions as SOFA
+action-cad-sketch-regions = List sketch regions
+action-cad-sketch-regions-tip = List the names of closed sketch regions for use in extrusions and other operations
+action-drawing-dimension = Dimension
+action-drawing-dimension-tip = Place a dimension that refers to view edges and shows the model value
+
+action-drawing-dimension-set = Place dimensions
+action-drawing-dimension-set-tip = Place baseline, chain, or ordinate dimensions once from selected points
+
+action-drawing-import-dimensions = Import model dimensions
+action-drawing-import-dimensions-tip = Import sketch dimensions once as dimensions referring to visible view edges
+
+action-drawing-note = Annotation
+action-drawing-note-tip = Place text with an optional leader on the sheet
+
+action-drawing-center-mark = Center mark
+action-drawing-center-mark-tip = Mark the center of a circle or arc
+
+action-drawing-center-line = Centerline
+action-drawing-center-line-tip = Draw a centerline between parallel edges or through the end circles of a cylinder
+
+action-drawing-balloon = Balloon
+action-drawing-balloon-tip = Place a balloon linked to a parts table row at a chosen position
+
+action-drawing-renumber-balloons = Renumber balloons
+action-drawing-renumber-balloons-tip = Match balloon numbers to the current order of parts table rows
+
+action-drawing-align-balloons = Align balloons
+action-drawing-align-balloons-tip = Align selected balloons horizontally or vertically with the first balloon
+
+action-drawing-parts-table = Parts table
+action-drawing-parts-table-tip = Place selected parts table columns on the sheet as lines and text
+
+action-drawing-set-style = Dimension style
+action-drawing-set-style-tip = Set the sheet style for text, arrows, extension lines, digits, units, and tolerances
+action-cad-thicken = Thicken
+action-cad-thicken-tip = Add thickness to a sheet body to create a closed solid
+action-cad-import-iges = Import IGES…
+action-cad-import-iges-tip = Insert IGES surfaces and solids, embedding the source so the design opens without the original file.
+action-params-apply-batch = Apply expressions together
+action-params-apply-batch-tip = Check multiple expressions in the parameter table and apply them as one change if all are valid
