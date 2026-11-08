@@ -166,7 +166,7 @@ fn boundary(
     let mut outward = Vec::new();
     if round > 0.0 {
         outward.push(arc(
-            &format!("{name}:root"),
+            format!("{name}:root"),
             center(t),
             round,
             foot,

@@ -20,12 +20,37 @@ fn make(p: &Params) -> Result<Layout, String> {
         p,
     )
 }
-fn area(p: &Profile) -> f64 {
-    p.regions
+// Green's theorem over exact lines and circular arcs, independent of the
+// display polyline resolution (which changes when one circle is split).
+fn ring_area(ring: &ProfileLoop) -> f64 {
+    ring.edges
         .iter()
-        .map(|r| r.outer.signed_area() + r.holes.iter().map(ProfileLoop::signed_area).sum::<f64>())
+        .map(|edge| {
+            let area = match edge.segment {
+                Segment::Line { a, b } => (a[0] * b[1] - a[1] * b[0]) / 2.0,
+                Segment::Arc {
+                    center: [x, y],
+                    radius: r,
+                    start: a,
+                    end: b,
+                } => {
+                    (r * r * (b - a) + r * x * (b.sin() - a.sin()) + r * y * (a.cos() - b.cos()))
+                        / 2.0
+                }
+                Segment::Circle { radius, .. } => PI * radius * radius,
+            };
+            if edge.reversed { -area } else { area }
+        })
         .sum()
 }
+fn area(profile: &Profile) -> f64 {
+    profile
+        .regions
+        .iter()
+        .map(|r| ring_area(&r.outer) + r.holes.iter().map(ring_area).sum::<f64>())
+        .sum()
+}
+
 fn closed(r: &ProfileLoop) {
     for (i, e) in r.edges.iter().enumerate() {
         let next = &r.edges[(i + 1) % r.edges.len()];
@@ -58,7 +83,12 @@ fn counts_and_both_curvature_directions_have_closed_disjoint_regions_and_conserv
                 assert!(r.outer.signed_area() > 0.0);
             }
             let split = area(&got.parts.rim) + area(web) + area(got.parts.boss.as_ref().unwrap());
-            assert!((split - area(&got.profile)).abs() < 1e-7);
+            assert!(
+                (split - area(&got.profile)).abs() < 1e-7,
+                "count={count} angle={angle} split={split:.15} whole={:.15} delta={:.15}",
+                area(&got.profile),
+                split - area(&got.profile)
+            );
             assert_eq!(got.parts.spokes.unwrap().paths.len(), count as usize);
         }
     }
@@ -130,6 +160,29 @@ fn old_parts_without_spokes_serialize_without_an_added_key() {
 
 #[test]
 fn analytic_intersections_reject_crossing_lines_and_arcs_but_not_separated_arcs() {
+    let center = [3.0, -7.0];
+    let radius = 2.0;
+    let quartered = ProfileLoop {
+        edges: (0..4)
+            .map(|i| {
+                let a = TAU * i as f64 / 4.0;
+                let b = TAU * (i + 1) as f64 / 4.0;
+                ProfileEdge {
+                    name: format!("quarter:{i}"),
+                    segment: Segment::Arc {
+                        center,
+                        radius,
+                        start: a,
+                        end: b,
+                    },
+                    reversed: false,
+                }
+            })
+            .collect(),
+    };
+    assert!((ring_area(&quartered) - 4.0 * PI).abs() < 1e-12);
+    assert!((ring_area(&reverse(quartered)) + 4.0 * PI).abs() < 1e-12);
+
     let line = Segment::Line {
         a: [-2.0, 0.0],
         b: [2.0, 0.0],

@@ -912,7 +912,7 @@ fn independent_spoke_union_volume(
             kmb_cad::Recipe::Extrude {
                 profile, from, to, ..
             } => {
-                expected += area(profile) * (to - from);
+                expected += spoke_profile_area(profile) * (to - from);
                 extrusions.push(
                     k.extrude(profile, *from, *to, "union-oracle-extrusion")
                         .unwrap(),
@@ -1036,7 +1036,7 @@ fn assert_spoke_target_operations(section: kmb_cad_gear::SpokeSection, new_volum
                 let FeatureStatus::Ok { outputs, .. } = report.feature(g).unwrap() else {
                     unreachable!()
                 };
-                area(&Profile::from_value(&outputs["profile"]).unwrap()) * 6.0
+                spoke_profile_area(&Profile::from_value(&outputs["profile"]).unwrap()) * 6.0
             }
             _ => unreachable!(),
         };
@@ -1047,4 +1047,39 @@ fn assert_spoke_target_operations(section: kmb_cad_gear::SpokeSection, new_volum
             mass.volume
         );
     }
+}
+
+/// Exact 2D Green integral; display tessellation cannot be added across the
+/// separately split ring/boss boundaries used by this volume oracle.
+fn spoke_profile_area(profile: &Profile) -> f64 {
+    let ring = |ring: &kmb_core::ProfileLoop| {
+        ring.edges
+            .iter()
+            .map(|edge| {
+                let area = match edge.segment {
+                    kmb_core::Segment::Line { a, b } => (a[0] * b[1] - a[1] * b[0]) / 2.0,
+                    kmb_core::Segment::Arc {
+                        center: [x, y],
+                        radius: r,
+                        start: a,
+                        end: b,
+                    } => {
+                        (r * r * (b - a)
+                            + r * x * (b.sin() - a.sin())
+                            + r * y * (a.cos() - b.cos()))
+                            / 2.0
+                    }
+                    kmb_core::Segment::Circle { radius, .. } => {
+                        std::f64::consts::PI * radius * radius
+                    }
+                };
+                if edge.reversed { -area } else { area }
+            })
+            .sum::<f64>()
+    };
+    profile
+        .regions
+        .iter()
+        .map(|r| ring(&r.outer) + r.holes.iter().map(&ring).sum::<f64>())
+        .sum()
 }
