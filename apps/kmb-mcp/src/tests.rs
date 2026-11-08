@@ -1321,6 +1321,56 @@ fn the_app_tool_reaches_a_running_screen_and_returns_its_picture() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// 確かめること: 人が画面で開いた文書のフォルダへは、許しの外でも保存できる(その回だけ自動で
+/// 許す)。ほかのフォルダは今までどおり断る。画面が無ければ許しは増えない。
+#[test]
+fn saving_next_to_the_document_open_on_the_screen_is_allowed() {
+    let base = temp_root("screen-folder");
+    let (work, doc, other, data) = (
+        base.join("work"),
+        base.join("doc"),
+        base.join("other"),
+        base.join("data"),
+    );
+    for d in [&work, &doc, &other, &data] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    let next_to = doc.join("b.kmb").display().to_string();
+    let mut s = Session::new(work.clone()).with_data_dir(data.clone());
+    s.sample(false, false).unwrap();
+    // 画面が無い間は断る
+    let e = s.save(Some(&next_to), false).unwrap_err();
+    assert!(e.message.contains("外"), "{}", e.message);
+    // 画面の代わり: 今のタブで doc/a.kmb を開いている
+    let (tx, rx) = std::sync::mpsc::channel::<kmb_session::live::Request>();
+    let l = kmb_session::live::Listener::start(&data, tx, || {}).unwrap();
+    let opened = doc.join("a.kmb").display().to_string();
+    let screen = std::thread::spawn(move || {
+        while let Ok(r) = rx.recv() {
+            assert_eq!(r.tool, "status");
+            r.reply.send(Ok(json!({ "file": opened }))).unwrap();
+        }
+    });
+    let saved = s.save(Some(&next_to), false).unwrap();
+    assert!(doc.join("b.kmb").is_file(), "{saved}");
+    let doc_dir = doc.canonicalize().unwrap();
+    assert!(s.roots().dirs().contains(&doc_dir));
+    // 許したフォルダの中なら、続けて書き出しても画面に聞き直さずに通る
+    s.save(Some(&doc.join("c.kmb").display().to_string()), false)
+        .unwrap();
+    // 画面で開いていないフォルダは断り、許しも増えない
+    let n = s.roots().dirs().len();
+    let e = s
+        .save(Some(&other.join("d.kmb").display().to_string()), false)
+        .unwrap_err();
+    assert!(e.message.contains("外"), "{}", e.message);
+    assert_eq!(s.roots().dirs().len(), n);
+    assert!(!other.join("d.kmb").exists());
+    drop(l);
+    screen.join().unwrap();
+    let _ = std::fs::remove_dir_all(&base);
+}
+
 /// `cell` を省けば操作の既定(設定の格子と荒削りの格子)に任せ、画面の無い同じ道で走らせた結果と
 /// 同じになる。
 #[test]
@@ -1679,15 +1729,19 @@ fn a_parameter_gets_its_comment_and_unit_from_the_ai() {
     let p = |s: &Session| s.work.doc().data().param_by_name("pitch").cloned().unwrap();
     assert_eq!(p(&s).comment, "穴の間隔");
     assert_eq!(p(&s).unit, kmb_core::ParamUnit::Length);
-    // 式とコメントを変えるのは 1 回で取り消せる。省いた単位は今のまま
+    // 式とコメントを変えるのは 1 回で取り消せる。省いた単位は今のまま。長さのパラメータに数だけを
+    // 打つと、画面のパラメータの表と同じく文書の単位を付ける
     let depth = s.work.doc().undo_depth();
     s.set_param_info("pitch", "4", Some("間隔"), None).unwrap();
     assert_eq!(s.work.doc().undo_depth(), depth + 1);
-    assert_eq!((p(&s).expr.as_str(), p(&s).comment.as_str()), ("4", "間隔"));
+    assert_eq!(
+        (p(&s).expr.as_str(), p(&s).comment.as_str()),
+        ("4 mm", "間隔")
+    );
     assert_eq!(p(&s).unit, kmb_core::ParamUnit::Length);
     // 知らない単位は断り、文書を変えない
     assert!(s.set_param_info("pitch", "5", None, Some("feet")).is_err());
-    assert_eq!(p(&s).expr, "4");
+    assert_eq!(p(&s).expr, "4 mm");
 }
 
 #[test]

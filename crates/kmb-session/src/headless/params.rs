@@ -28,12 +28,13 @@ impl Headless {
         if self.is_model_param(name) {
             return Err(format!("寸法の名前 {name} と同じ名前は使えません"));
         }
+        let expr = self.typed_param_expr(info.unit.unwrap_or_default(), expr)?;
         let mut draft = crate::param_guard::snapshot(self.doc.data()).map_err(|e| e.to_string())?;
-        let candidate = crate::edit::add_param_info(&mut draft, name, expr, info);
+        let candidate = crate::edit::add_param_info(&mut draft, name, &expr, info);
         draft.apply(candidate).map_err(|e| e.to_string())?;
         self.check_parameter_data(draft.data(), false)
             .map_err(|e| e.to_string())?;
-        let tx = crate::edit::add_param_info(&mut self.doc, name, expr, info);
+        let tx = crate::edit::add_param_info(&mut self.doc, name, &expr, info);
         self.apply(tx)
     }
 
@@ -55,8 +56,15 @@ impl Headless {
             return Err(format!("寸法 {name} にはコメントと単位を付けられません"));
         }
         let id = self.param_id(name)?;
+        let expr = match expr {
+            Some(e) => {
+                let unit = info.unit.unwrap_or_else(|| self.param_unit(id));
+                Some(self.typed_param_expr(unit, e)?)
+            }
+            None => None,
+        };
         let data = self.doc.data();
-        let mut tx = match expr {
+        let mut tx = match expr.as_deref() {
             Some(e) => crate::edit::set_param_expr(data, id, e),
             None => kmb_core::Transaction::new(format!("{name} のコメントと単位を変更"), vec![]),
         };
@@ -75,7 +83,25 @@ impl Headless {
             return self.set_model_param(name, expr);
         }
         let id = self.param_id(name)?;
-        self.apply(crate::edit::set_param_expr(self.doc.data(), id, expr))
+        let expr = self.typed_param_expr(self.param_unit(id), expr)?;
+        self.apply(crate::edit::set_param_expr(self.doc.data(), id, &expr))
+    }
+
+    /// パラメータ `id` の単位(長さ・角度など)。
+    fn param_unit(&self, id: ParamId) -> kmb_core::ParamUnit {
+        self.doc
+            .data()
+            .params
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.unit)
+            .unwrap_or_default()
+    }
+
+    /// 単位 `unit` のパラメータに打った式を、入れる式にする(画面のパラメータの表と同じ
+    /// [`crate::params::typed_param_expr`])。
+    fn typed_param_expr(&self, unit: kmb_core::ParamUnit, expr: &str) -> Result<String, String> {
+        crate::params::typed_param_expr(&self.report, unit, expr, self.doc.data().properties.units)
     }
 
     /// パラメータ名を変え、参照している式も書き換える。寸法の名前(`d1` など)も変えられる。

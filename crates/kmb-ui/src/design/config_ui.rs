@@ -237,18 +237,22 @@ impl Workspace {
                 (format!("構成「{old}」の名前を「{new}」にする"), None)
             }
             Act::Set(row, col, cell) => {
-                // 長さのパラメータに数だけを打てば、文書の単位を付ける(パラメータの欄と同じ)
+                // 長さ・角度のパラメータに数だけを打てば、文書の単位か deg を付ける(パラメータの欄と同じ)
                 let cell = match (&c.columns[col], cell) {
                     (ConfigColumn::Param { param }, ConfigCell::Expr(e)) => {
-                        let length = data
+                        let unit = data
                             .params
                             .iter()
-                            .any(|p| p.id == *param && p.unit == kmb_core::ParamUnit::Length);
-                        ConfigCell::Expr(if length {
-                            self.in_doc_unit(e.trim())
-                        } else {
-                            e.trim().to_string()
-                        })
+                            .find(|p| p.id == *param)
+                            .map(|p| p.unit)
+                            .unwrap_or_default();
+                        match self.typed_param(unit, e.trim()) {
+                            Ok(e) => ConfigCell::Expr(e.trim().to_string()),
+                            Err(why) => {
+                                self.win.fail(why);
+                                return;
+                            }
+                        }
                     }
                     (_, cell) => cell,
                 };

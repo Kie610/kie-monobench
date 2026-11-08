@@ -16,7 +16,7 @@ pub struct Server {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ImportArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
     /// 真なら、Y が上で作られた形を X 軸のまわりに 90 度回して Z が上に立てる(他の CAD の多くは Y が上)
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct MaterialArg {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct PathArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
 }
 
