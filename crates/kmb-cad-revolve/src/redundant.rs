@@ -149,6 +149,7 @@ mod tests {
                     outer: ProfileLoop {
                         edges: (0..points.len())
                             .map(|i| ProfileEdge {
+                                curve: None,
                                 name: format!("edge{i}"),
                                 reversed: false,
                                 segment: Segment::Line {

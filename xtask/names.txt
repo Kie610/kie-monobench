@@ -27,6 +27,7 @@ asm.link_insert	kmb-asm
 asm.link_pin	kmb-asm
 asm.link_relink	kmb-asm
 asm.link_update	kmb-asm
+asm.mass_props	kmb-asm
 asm.motion_link	kmb-asm
 asm.motion_study	kmb-asm
 asm.move_part	kmb-asm

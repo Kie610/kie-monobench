@@ -897,6 +897,7 @@ fn a_union_that_leaves_no_solid_is_refused_by_the_kernel() {
     ];
     let edges = (0..pts.len())
         .map(|i| ProfileEdge {
+            curve: None,
             name: format!("e{i}"),
             segment: Segment::Line {
                 a: pts[i],
@@ -931,6 +932,7 @@ fn a_union_that_leaves_no_solid_is_refused_by_the_kernel() {
                     .iter()
                     .enumerate()
                     .map(|(i, &a)| ProfileEdge {
+                        curve: None,
                         name: format!("e{i}"),
                         segment: Segment::Line {
                             a,

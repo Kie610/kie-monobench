@@ -264,6 +264,37 @@ void add_segment(Curves& out, const JcSegment& s)
         out.items.push_back(c);
         break;
     }
+    case JC_SEG_NURBS: {
+        if (s.degree < 1 || s.count <= s.degree || !s.knots || !s.points)
+            throw Failure{"曲線の区間の数が不正です"};
+        SmTArray<double> knots;
+        SmTArray<ULONG> mults;
+        for (size_t i = 0; i < size_t(s.count) + s.degree + 1; ++i)
+        {
+            const ULONG last = knots.GetSize();
+            if (last > 0 && std::fabs(s.knots[i] - knots[last - 1]) < 1e-12)
+                mults[last - 1] += 1;
+            else
+            {
+                knots.Add(s.knots[i]);
+                mults.Add(1);
+            }
+        }
+        SmTArray<SmPoint3d> pts;
+        SmTArray<double> weights;
+        for (uint32_t k = 0; k < s.count; ++k)
+        {
+            const double* q = s.points + size_t(k) * 3;
+            pts.Add(SmPoint3d(q[0], q[1], 0));
+            weights.Add(q[2]);
+        }
+        SmBSplineCurve* curve = nullptr;
+        check(SmBSplineCurve::CreateCanonical(*SmApiGetOrCreateContext(), 3, s.degree, pts, SM_CF_UNSPECIFIED, mults,
+                                              knots, SM_KT_UNSPECIFIED, &weights, nullptr, curve),
+              "曲線");
+        out.items.push_back(curve);
+        break;
+    }
     default:
         throw Failure{"区間の種類が不正です"};
     }

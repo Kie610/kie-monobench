@@ -256,6 +256,7 @@ fn to_loop(p: &Polyline<f64>, name: &str) -> ProfileLoop {
             let name = format!("{name}.{i}");
             if v.bulge.abs() < 1e-12 {
                 return Some(ProfileEdge {
+                    curve: None,
                     name,
                     segment: Segment::Line { a, b },
                     reversed: false,
@@ -269,6 +270,7 @@ fn to_loop(p: &Polyline<f64>, name: &str) -> ProfileLoop {
                 (ang(b), ang(a), true)
             };
             Some(ProfileEdge {
+                curve: None,
                 name,
                 segment: Segment::Arc {
                     center,

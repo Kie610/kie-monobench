@@ -7,6 +7,7 @@
 //!   置いた位置のまま結ぶ作り方(`asm.joint`)がある。値を変えると動く。
 //! - ジョイントの無い部品を引いて動かした位置(`asm.position@1`。[`position`])。
 //! - 干渉の確認(`asm.interference`。表と、重なった所を 3D に色で。引数 `coincident` で面で接する組も)と部品表(`asm.bom`・`asm.bom_csv`。[`inspect`])。
+//! - 質量特性(`asm.mass_props`。組立全体・部品の配置ごと・剛性グループごとの質量・重心・慣性。[`mass`])。
 //! - 別ファイルの部品をリンクで組み込む(`asm.link@1`。[`link`])。
 //! - アニメーションの段を足す操作(`anim.explode`・`anim.drive`。[`anim`])。作業空間「アニメーション」に出す。
 //! - 規格部品(ねじ・ナット・座金・玉軸受)を穴に挿す(`asm.fastener@1`。[`fastener`])。
@@ -22,6 +23,7 @@ pub mod fastener;
 pub mod inspect;
 pub mod joint;
 pub mod link;
+pub mod mass;
 pub mod motion;
 pub mod motion_link;
 pub mod occurrence;
@@ -38,6 +40,7 @@ pub use inspect::{
 };
 pub use joint::{Frame, How, JOINT, Joint, JointKind, Origin, Snap, TRANSFORM_TYPE};
 pub use link::{LINK, LINK_BODY, Link, LinkBody, LinkCommands};
+pub use mass::{Mass, MassRow, combine, mass_rows, mass_table};
 pub use occurrence::{
     DETACH_OCCURRENCE, OCCURRENCE, Occurrence, PLACE_OCCURRENCE, SYNC_OCCURRENCE,
 };
@@ -66,6 +69,8 @@ pub const JOINTS: &str = "asm.joints";
 pub const BOM: &str = "asm.bom";
 /// 部品表を CSV に書き出す操作。
 pub const BOM_CSV: &str = "asm.bom_csv";
+/// 組立全体・部品の配置ごと・剛性グループごとの質量・重心・慣性を窓に出す操作。
+pub const MASS_PROPS: &str = "asm.mass_props";
 /// 規格部品を穴に挿す操作(穴の口の面 → 穴の口の円)。
 pub const NEW_FASTENER: &str = "asm.fastener";
 
@@ -1120,6 +1125,12 @@ impl Extension for AsmCommands {
                 .aliases("ぶひんひょう 部品表 bom かっとりすと カットリスト cutlist")
                 .hint("部品ごとの数・材料・寸法(長さ×幅×厚さ)・体積・質量の表。出す列は表の「列」で選ぶ。同じ寸法と材料の物はまとめて数える")
                 .disabled_if(none),
+            Action::new(MASS_PROPS, "質量特性", "cad")
+                .menu("組立")
+                .icon("table")
+                .aliases("しつりょう 質量 おもさ 重さ じゅうしん 重心 かんせい 慣性 もーめんと モーメント しゅじく 主軸 mass inertia centroid")
+                .hint("組立全体・部品ごと・剛性グループごとの質量・重心・慣性モーメント(主慣性)の表。慣性は各行の重心のまわり")
+                .disabled_if(none),
             Action::new(BOM_CSV, "部品表の書き出し…", "cad")
                 .menu("組立")
                 .icon("export")
@@ -1293,6 +1304,10 @@ impl Extension for AsmCommands {
             BOM => Ok(Outcome::Table {
                 title: "部品表".into(),
                 table: bom_table(&bom_rows(cx)),
+            }),
+            MASS_PROPS => Ok(Outcome::Table {
+                title: "質量特性".into(),
+                table: mass_table(&mass_rows(cx)),
             }),
             BOM_CSV => {
                 let rows = bom_rows(cx);

@@ -36,11 +36,13 @@ impl From<ShapeHandle> for HandleRepr {
 pub type P2 = [f64; 2];
 pub type P3 = [f64; 3];
 
+mod curve;
 mod inertia;
 mod instances;
 mod math;
 mod profile;
 
+pub use curve::*;
 pub use inertia::*;
 pub use instances::*;
 pub use math::*;

@@ -143,6 +143,7 @@ impl Cylinder {
     fn profile(&self) -> Profile {
         let circle = |radius, name: &str| ProfileLoop {
             edges: vec![ProfileEdge {
+                curve: None,
                 name: name.into(),
                 segment: Segment::Circle {
                     center: [0.0; 2],
