@@ -2336,4 +2336,4 @@ field-cad-gear-helix-angle-help = Blank or 0 deg makes a spur gear. At least 0 d
 field-cad-gear-hand = Helix Hand
 field-cad-gear-body-herringbone = Herringbone
 field-cad-gear-body-groove = Center Groove Width
-field-cad-gear-body-groove-help = 0 mm leaves no groove. Must be less than the face width
+field-cad-gear-body-groove-help = Used for herringbone gears. 0 mm leaves no groove. Must be less than the face width

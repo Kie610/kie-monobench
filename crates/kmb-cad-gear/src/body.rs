@@ -228,8 +228,7 @@ pub fn register(reg: &mut Registry) {
             .field(
                 Field::opt_expr("groove", "中央の溝の幅")
                     .length()
-                    .help("0 mm なら溝なし。歯の幅より小さくする")
-                    .only("herringbone", "true", "false"),
+                    .help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする"),
             )
             .fields(operation_fields()),
         |d| {

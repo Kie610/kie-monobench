@@ -2336,4 +2336,4 @@ field-cad-gear-helix-angle-help = 空か 0 deg なら平歯車。0 deg 以上、
 field-cad-gear-hand = ねじれの向き
 field-cad-gear-body-herringbone = やまば
 field-cad-gear-body-groove = 中央の溝の幅
-field-cad-gear-body-groove-help = 0 mm なら溝なし。歯の幅より小さくする
+field-cad-gear-body-groove-help = やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする
