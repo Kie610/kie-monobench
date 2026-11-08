@@ -598,3 +598,55 @@ fn pulleys_and_rope_sheaves_revolve_their_sections_with_the_outline_width() {
         }
     }
 }
+
+#[test]
+fn an_axial_pulley_section_keeps_the_world_axis_when_parts_are_also_exported() {
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let g = b.feature(
+        kmb_cad_gear::GEAR,
+        "軸断面",
+        kmb_cad_gear::Gear {
+            kind: kmb_interchange::GearKind::VPulley,
+            plane: kmb_cad::plane::PlaneRef::OriginYz,
+            pulley_diameter: Some("80 mm".into()),
+            pulley_width: Some("30 mm".into()),
+            x: "7 mm".into(),
+            y: "11 mm".into(),
+            phase: Some("30 deg".into()),
+            ..Default::default()
+        },
+    );
+    let e = b.feature(
+        kmb_cad_gear::GEAR_BODY,
+        "車",
+        kmb_cad_gear::GearBody {
+            width: "5 mm".into(),
+            direction: kmb_cad_gear::body::Side::Reverse,
+            ..kmb_cad_gear::GearBody::new(g)
+        },
+    );
+    let mut doc = b.finish("軸断面の車");
+    let reg = registry();
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let FeatureStatus::Ok { outputs, .. } = report.feature(e).unwrap() else {
+        panic!("ボディ")
+    };
+    let spec = kmb_interchange::GearSpec::from_value(&outputs["gear"]).unwrap();
+    assert_eq!(spec.axis.origin, [-30.0, 7.0, 11.0]);
+    assert_eq!(spec.face_width, Some(30.0));
+    let mass = final_mass(&mut doc, &k);
+    assert!(
+        (mass.min[0] + 30.0).abs() < 1e-5 && mass.max[0].abs() < 1e-5,
+        "{mass:?}"
+    );
+    assert!(
+        ((mass.min[1] + mass.max[1]) / 2.0 - 7.0).abs() < 1e-5,
+        "{mass:?}"
+    );
+    assert!(
+        ((mass.min[2] + mass.max[2]) / 2.0 - 11.0).abs() < 1e-5,
+        "{mass:?}"
+    );
+}

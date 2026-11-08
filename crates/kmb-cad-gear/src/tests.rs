@@ -458,3 +458,125 @@ fn pulley_profiles_contain_the_axis_and_curves_stay_perpendicular_to_it() {
         );
     }
 }
+
+#[test]
+fn the_seven_integrated_kinds_keep_their_own_fields() {
+    let mut reg = Registry::new();
+    register(&mut reg);
+    let fields = reg.descriptor(GEAR).unwrap();
+    for kind in [
+        GearKind::External,
+        GearKind::Internal,
+        GearKind::Rack,
+        GearKind::Sprocket,
+        GearKind::FlatPulley,
+        GearKind::VPulley,
+        GearKind::RopeSheave,
+    ] {
+        assert!(kinds::available(kind));
+        let data = json!({"kind":kind.key(),"rack_size":"teeth"});
+        let on = |key| fields.field_at(key).unwrap().applies(&data);
+        assert_eq!(
+            on("module"),
+            matches!(
+                kind,
+                GearKind::External | GearKind::Internal | GearKind::Rack
+            ),
+            "{kind:?}"
+        );
+        assert_eq!(on("teeth"), !kind.is_pulley(), "{kind:?}");
+        assert_eq!(
+            on("bore"),
+            matches!(kind, GearKind::External | GearKind::Sprocket) || kind.is_pulley(),
+            "{kind:?}"
+        );
+        assert_eq!(on("outer_diameter"), kind == GearKind::Internal, "{kind:?}");
+        assert_eq!(
+            on("lightening_count"),
+            kind == GearKind::External,
+            "{kind:?}"
+        );
+        assert_eq!(on("boss_diameter"), kind == GearKind::External, "{kind:?}");
+        assert_eq!(on("chain"), kind == GearKind::Sprocket, "{kind:?}");
+        assert_eq!(on("rack_length"), false, "歯数で指定するラックの長さは隠す");
+        assert_eq!(on("pulley_diameter"), kind.is_pulley(), "{kind:?}");
+        assert_eq!(on("groove_count"), kind == GearKind::VPulley, "{kind:?}");
+        assert_eq!(
+            on("rope_diameter"),
+            kind == GearKind::RopeSheave,
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
+fn every_integrated_outline_exports_finite_parts_in_the_same_placement() {
+    use kmb_core::{Document, Edit, FeatureStatus, NullKernel};
+    let mut reg = Registry::new();
+    register(&mut reg);
+    for kind in [
+        GearKind::External,
+        GearKind::Internal,
+        GearKind::Rack,
+        GearKind::Sprocket,
+        GearKind::FlatPulley,
+        GearKind::VPulley,
+        GearKind::RopeSheave,
+    ] {
+        let mut doc = Document::new();
+        let g = Gear {
+            kind,
+            teeth: "12".into(),
+            plane: PlaneRef::OriginYz,
+            outer_diameter: (kind == GearKind::Internal).then(|| "40 mm".into()),
+            x: "7 mm".into(),
+            y: "11 mm".into(),
+            phase: Some("30 deg".into()),
+            ..Default::default()
+        };
+        let id = doc
+            .apply_edits(
+                "輪郭",
+                vec![Edit::Insert {
+                    type_id: GEAR.into(),
+                    name: "輪郭".into(),
+                    data: serde_json::to_value(g).unwrap(),
+                }],
+            )
+            .unwrap()[0];
+        let report = doc.recompute(&reg, &NullKernel);
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(id) else {
+            panic!("{kind:?}: {report:?}")
+        };
+        let profile = Profile::from_value(&outputs["profile"]).unwrap();
+        let parts = hub::Parts::from_value(&outputs[hub::PARTS_OUTPUT]).unwrap();
+        assert_eq!(
+            parts.rim, profile,
+            "分割を使わない輪郭は同じ位置で渡す: {kind:?}"
+        );
+        assert!(parts.web.is_none() && parts.boss.is_none());
+        for edge in profile
+            .regions
+            .iter()
+            .flat_map(|r| std::iter::once(&r.outer).chain(&r.holes))
+            .flat_map(|r| &r.edges)
+        {
+            assert!(
+                edge.from_point()
+                    .into_iter()
+                    .chain(edge.to_point())
+                    .all(f64::is_finite),
+                "{kind:?}"
+            );
+        }
+        assert!(
+            profile
+                .plane
+                .origin
+                .into_iter()
+                .chain(profile.plane.x_axis)
+                .chain(profile.plane.y_axis)
+                .all(f64::is_finite)
+        );
+    }
+}
