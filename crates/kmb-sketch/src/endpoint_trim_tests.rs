@@ -1,5 +1,6 @@
 //! 確かめること: 端と許容内の交点は切れ目にならず、零長さの片や延長を作らない。
 use crate::*;
+use crate::curve::Shape;
 use std::collections::BTreeSet;
 
 fn curve(kind: usize) -> (Sketch, EntityId) {
