@@ -46,6 +46,40 @@ impl Roots {
         Ok(())
     }
 
+    /// 人が画面で開いた文書 `file` のフォルダも許す(AI をつないでいる間だけ。覚えて残さない)。
+    /// ドライブの直下とホームのフォルダ(とその上)は広すぎるので断る。既に許しの中なら何もしない。
+    pub fn allow_document_folder(&mut self, file: &Path) -> Result<(), String> {
+        let dir = file
+            .parent()
+            .ok_or_else(|| format!("{} のフォルダが分かりません", file.display()))?;
+        let d = dir
+            .canonicalize()
+            .map_err(|e| format!("{} がありません: {e}", dir.display()))?;
+        if self.inside(&d) {
+            return Ok(());
+        }
+        let wide = || {
+            format!(
+                "画面で開いた文書のフォルダ {} は広すぎるので AI に許しません(ドライブの直下とホームの\
+                 フォルダは、起動の --allow で許してください)",
+                d.display()
+            )
+        };
+        if d.parent().is_none() {
+            return Err(wide());
+        }
+        let home = ["HOME", "USERPROFILE"]
+            .iter()
+            .filter_map(std::env::var_os)
+            .filter_map(|h| PathBuf::from(h).canonicalize().ok());
+        for h in home {
+            if h.starts_with(&d) {
+                return Err(wide());
+            }
+        }
+        self.allow(&d)
+    }
+
     /// 作業フォルダ。
     pub fn root(&self) -> &Path {
         &self.dirs[0]
@@ -185,6 +219,38 @@ mod tests {
         both.allow(&other).unwrap();
         let mut v = json!({ "path": outside });
         both.confine_args(&action, &mut v).unwrap();
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// 確かめること: 画面で開いた文書のフォルダは許せるが、ドライブの直下とホームのフォルダ(とその
+    /// 上)は広すぎるので断り、許しを増やさない。
+    #[test]
+    fn a_document_folder_is_allowed_but_not_a_drive_or_the_home() {
+        let base = std::env::temp_dir().join(format!("kmb-roots-doc-{}", std::process::id()));
+        let (work, doc) = (base.join("work"), base.join("doc"));
+        std::fs::create_dir_all(&work).unwrap();
+        std::fs::create_dir_all(&doc).unwrap();
+        let mut roots = Roots::new(work.clone());
+        roots.allow_document_folder(&doc.join("a.kmb")).unwrap();
+        assert!(
+            roots
+                .resolve(&doc.join("b.kmb").display().to_string())
+                .is_ok()
+        );
+        assert_eq!(roots.dirs().len(), 2);
+        // 2 度目は増やさない
+        roots.allow_document_folder(&doc.join("c.kmb")).unwrap();
+        assert_eq!(roots.dirs().len(), 2);
+        let drive = base.ancestors().last().unwrap().join("a.kmb");
+        let e = roots.allow_document_folder(&drive).unwrap_err();
+        assert!(e.contains("広すぎる"), "{e}");
+        if let Some(home) = ["HOME", "USERPROFILE"].iter().find_map(std::env::var_os) {
+            let e = roots
+                .allow_document_folder(&std::path::PathBuf::from(home).join("a.kmb"))
+                .unwrap_err();
+            assert!(e.contains("広すぎる"), "{e}");
+        }
+        assert_eq!(roots.dirs().len(), 2);
         let _ = std::fs::remove_dir_all(&base);
     }
 }

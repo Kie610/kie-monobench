@@ -83,6 +83,12 @@ fn a_material_colours_the_body_and_gives_the_measured_mass() {
     // 材料を付けていない板は既定の鋼(6000 mm³ × 7.85 g/cm³ = 47.1 g)
     assert!(row("材料").unwrap().starts_with("鋼"), "{rows:?}");
     assert_eq!(row("質量").as_deref(), Some("47.100 g"), "{rows:?}");
+    // 主慣性(重心のまわり): 0.0471 kg × (30² + 10²) / 12 = 3.925 kg·mm² が真ん中
+    let inertia = row("主慣性モーメント").unwrap_or_default();
+    assert!(
+        inertia.contains(" / 3.925 / ") && inertia.contains("kg·mm²"),
+        "{rows:?}"
+    );
     assert!(ws.cur.measure.as_ref().unwrap().report.point.is_some());
     // 材料を付けると質量が出る(6000 mm³ × 2.7 g/cm³ = 16.2 g)
     ws.set_body_material(root, "アルミ");

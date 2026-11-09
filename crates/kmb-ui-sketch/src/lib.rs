@@ -14,6 +14,7 @@ mod freedom_ui;
 mod group_ui;
 mod hud;
 mod infer;
+mod inference_settings;
 mod marks;
 mod menu;
 mod more_tools;
@@ -40,6 +41,8 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 pub struct SketchEditor {
     /// 開く時の PC 設定。カメラの途中の状態とは分け、文書のタブ間で共有する。
     opening_settings: opening_settings::Store,
+    /// PC 全体で共用する描画の推論設定。文書のタブ間だけで共有し、プロセス全体に置かない。
+    inference_settings: inference_settings::Store,
     view: view::ViewState,
     editor: view::Editor,
     /// 下の帯へ出した失敗の理由。解けた時は自分が出した知らせだけを消す。
@@ -921,16 +924,21 @@ impl FeatureEditor for SketchEditor {
     fn fresh(&self) -> Box<dyn FeatureEditor> {
         Box::new(SketchEditor {
             opening_settings: self.opening_settings.clone(),
+            inference_settings: self.inference_settings.clone(),
             ..SketchEditor::new()
         })
     }
 
     fn set_settings_dir(&mut self, dir: Option<&std::path::Path>) {
+        self.inference_settings.set_data_dir(dir);
         self.opening_settings.set_data_dir(dir);
     }
 
     fn settings(&self, text: &dyn Fn(&str) -> String) -> Vec<kmb_core::Settings> {
-        vec![self.opening_settings.settings(text)]
+        vec![
+            self.inference_settings.settings(text),
+            self.opening_settings.settings(text),
+        ]
     }
 
     fn change_settings(
@@ -939,7 +947,11 @@ impl FeatureEditor for SketchEditor {
         value: &serde_json::Value,
         persist: bool,
     ) -> Option<Result<(), String>> {
-        (id == opening_settings::ID).then(|| self.opening_settings.change(value, persist))
+        match id {
+            inference_settings::ID => Some(self.inference_settings.change(value, persist)),
+            opening_settings::ID => Some(self.opening_settings.change(value, persist)),
+            _ => None,
+        }
     }
 
     fn open_view(&mut self, camera: kmb_ui::view3d::Camera) {
@@ -973,6 +985,7 @@ impl FeatureEditor for SketchEditor {
         entry: &FeatureEntry,
     ) -> Option<serde_json::Value> {
         self.editor.fmt = kmb_sketch::dim_format(host.registry);
+        self.editor.guide_intersections = self.inference_settings.enabled();
         let Some((sketch, solution)) = sketch_of(host, entry) else {
             let why = host
                 .failure(entry.id)
@@ -1820,6 +1833,7 @@ impl FeatureEditor for SketchEditor {
     fn reset(&mut self) {
         *self = Self {
             opening_settings: self.opening_settings.clone(),
+            inference_settings: self.inference_settings.clone(),
             ..Self::default()
         };
     }
@@ -1891,6 +1905,9 @@ mod plane_frame_tests;
 
 #[cfg(test)]
 mod undo_line_tests;
+
+#[cfg(test)]
+mod inference_settings_tests;
 
 #[cfg(test)]
 mod opening_view_tests;

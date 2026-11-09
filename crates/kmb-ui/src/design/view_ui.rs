@@ -144,8 +144,13 @@ impl Workspace {
         self.frames_tick(ui.ctx());
         let mut overlay = self.overlay();
         self.play_filter_lines(&mut overlay.lines);
-        // 隠したスケッチ(や機能)を選んでいる時は、その線を重ねない
-        if self.cur.selected.is_some_and(|id| self.is_hidden(id)) {
+        // 隠したスケッチ(や機能)を選んでいる時は、その線を重ねない。直している間は重ねる(ボディが使う
+        // ので隠れた歯車の輪郭を直す時に、並べる見当のピッチ円などが見えるように)
+        if self
+            .cur
+            .selected
+            .is_some_and(|id| self.is_hidden(id) && self.cur.editing != Some(id))
+        {
             overlay.lines.clear();
         }
         overlay.lines.extend(self.sketch_lines());

@@ -5,7 +5,7 @@ use kmb_core::{FeatureId, Mesh, ShapeHandle};
 use std::time::Duration;
 
 /// カーネルを使わず、向きのそろった閉じた円筒か筒を作る。
-fn tube(inner: f32, outer: f32, count: usize, phase: f32) -> Mesh {
+pub(super) fn tube(inner: f32, outer: f32, count: usize, phase: f32) -> Mesh {
     let mut mesh = Mesh {
         face_names: ["outer", "inner", "top", "bottom"].map(String::from).into(),
         ..Default::default()
@@ -120,6 +120,7 @@ fn picture(gpu: &Gpu, scene: &Scene, cam: &Camera, colors: &Colors) -> Vec<u8> {
         Guides::default(),
         &[],
         &Behind::default(),
+        false,
     );
     let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("section-contact-readback"),

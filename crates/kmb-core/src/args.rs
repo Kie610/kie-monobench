@@ -112,13 +112,7 @@ impl Arg {
 
     /// `(値, 名前)` から選ぶ。
     pub fn choice(key: &str, help: &str, choices: &[(&str, &str)]) -> Self {
-        let choices = choices
-            .iter()
-            .map(|(v, l)| Choice {
-                value: (*v).into(),
-                label: (*l).into(),
-            })
-            .collect();
+        let choices = choices.iter().map(|(v, l)| Choice::new(*v, *l)).collect();
         Arg::new(key, ArgKind::Choice { choices }, help)
     }
 

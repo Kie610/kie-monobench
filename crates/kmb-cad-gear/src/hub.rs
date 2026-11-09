@@ -67,6 +67,7 @@ fn reverse(mut ring: ProfileLoop) -> ProfileLoop {
 fn circle(name: &str, center: [f64; 2], radius: f64) -> ProfileLoop {
     ProfileLoop {
         edges: vec![ProfileEdge {
+            curve: None,
             name: name.into(),
             segment: Segment::Circle { center, radius },
             reversed: false,
@@ -86,6 +87,7 @@ fn bore(radius: f64, key: Option<(f64, f64)>) -> ProfileLoop {
         .into_iter()
         .enumerate()
         .map(|(i, name)| ProfileEdge {
+            curve: None,
             name: name.into(),
             segment: Segment::Line {
                 a: points[i],

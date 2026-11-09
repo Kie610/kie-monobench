@@ -87,3 +87,6 @@ settings-import-upright-tip = Y が上で作られた形が寝ている時、Z �
 settings-sketch-opening-view = スケッチを開く時
 settings-sketch-opening-view-hint = 切にすると、今の視点のままスケッチを開きます。編集中も正面から見るボタンを使えます。
 settings-sketch-opening-front = 開く時に正面から見る
+settings-sketch-inference = スケッチの補助線
+settings-sketch-inference-hint = 直前に通った 2 点の縦・横の補助線が交わる位置を優先します。切の時は通常の並びの案内を使います。
+settings-sketch-guide-intersections = 直近の補助線の交点にスナップ

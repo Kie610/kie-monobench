@@ -448,7 +448,7 @@ pub(super) fn draw_guides(
 pub(crate) fn grid_plane(cam: &Camera) -> Option<(usize, usize)> {
     let (_, _, eye) = cam.basis();
     const FACING: f32 = 0.985;
-    if eye[2].abs() > 0.08 {
+    if eye[2].abs() > GRID_LOW.0 {
         Some((0, 1))
     } else if eye[0].abs() >= FACING {
         Some((1, 2))
@@ -459,15 +459,16 @@ pub(crate) fn grid_plane(cam: &Camera) -> Option<(usize, usize)> {
     }
 }
 
-/// 格子の真ん中(平面の 2 つの座標、`major` に丸める)と半分の大きさ。真ん中は回す中心の真下でなく、
-/// 視線の軸が格子の平面に当たる所にする(回す中心が部品の上にあると、寄った時に真下の格子が画面の
-/// 外へ出て格子が消えていた。10-20 u10)。浅い角度で遠くへ行き過ぎないよう、真下から半分の大きさまでに
-/// 留める。斜めに見るほど平面は縮んで見えるので、半分の大きさを広げる(3 倍まで)。
-fn grid_center(cam: &Camera, a: usize, b: usize, half: f32, major: f32) -> (f32, f32, f32) {
+/// 格子の真ん中(平面の 2 つの座標)と半分の大きさ。真ん中は回す中心の真下でなく、視線の軸が格子の
+/// 平面に当たる所にする(回す中心が部品の上にあると、寄った時に真下の格子が画面の外へ出て格子が消えて
+/// いた。10-20 u10)。浅い角度で遠くへ行き過ぎないよう、真下から半分の大きさまでに留める。斜めに見るほど
+/// 平面は縮んで見えるので、半分の大きさを広げる(3 倍まで)。どちらも丸めない(丸めると、拡大や回す中心の
+/// 移動で薄れる輪が飛び、格子の端がちらついた)。
+fn grid_center(cam: &Camera, a: usize, b: usize, half: f32) -> (f32, f32, f32) {
     let (_, _, e) = cam.basis();
     let k = 3 - a - b;
     let tilt = e[k].abs().max(1e-3);
-    let half = ((half / tilt.max(1.0 / 3.0) / major).ceil() * major).max(major);
+    let half = half / tilt.max(1.0 / 3.0);
     // 回す中心から視線の軸に沿って平面まで(平面は原点を通る)
     let t = -cam.target[k] / if e[k] == 0.0 { 1e-3 } else { e[k] };
     let (mut sa, mut sb) = (t * e[a], t * e[b]);
@@ -476,8 +477,7 @@ fn grid_center(cam: &Camera, a: usize, b: usize, half: f32, major: f32) -> (f32,
     if len > limit {
         (sa, sb) = (sa * limit / len, sb * limit / len);
     }
-    let round = |v: f32| (v / major).round() * major;
-    (round(cam.target[a] + sa), round(cam.target[b] + sb), half)
+    (cam.target[a] + sa, cam.target[b] + sb, half)
 }
 
 /// 格子の線の薄れ方: 薄れ始める所と消える所。`round` は格子の真ん中からの距離(半分の大きさに対する
@@ -498,9 +498,14 @@ const GRID_FADE_MAJOR: Fade = Fade {
     round: (0.55, 1.0),
     deep: (1.5, 4.5),
 };
-/// XY 平面の格子を薄くし始める視線の高さと、消えきる高さ(視線の向きの Z。`grid_plane` が描かなくなる
-/// 0.08 で消えきる)
-const GRID_LOW: (f32, f32) = (0.08, 0.14);
+/// XY 平面の格子を薄くし始める視線の高さと、消えきる高さ(視線の向きの Z。`grid_plane` はここより低いと
+/// 描かない)。遠くの詰まった線は線ごとの間隔で薄めるので、低く見ても格子を残す(前は 8 度ほどで薄れて
+/// 見えなくなった)
+const GRID_LOW: (f32, f32) = (0.03, 0.06);
+/// 細かい段から何段上まで見るか(上の段は浅い角度の遠くで残る)
+const GRID_LEVELS: usize = 7;
+/// 細かい線と太い線の色(背景から稜線の色へ寄せる割合)
+const GRID_INK: (f32, f32) = (0.10, 0.22);
 /// 1 本の線を分ける数(区間ごとに 1 つの濃さで引く。同じ濃さの続く区間はまとめる)
 const GRID_PIECES: usize = 24;
 
@@ -511,37 +516,42 @@ fn smooth(lo: f32, hi: f32, x: f32) -> f32 {
 }
 
 /// 格子の真ん中から `v` 離れた 1 本の線(真ん中からの距離 `r1` の円の内側)を区間に分け、区間の
-/// 真ん中の濃さ `k`(線に沿った位置から 0〜1)を透明度にして `put` へ渡す(線に沿った位置の両端と色)。
+/// 真ん中の濃さと太さ `k`(線に沿った位置から、透明度 0〜1 と、細い線の色 `thin` から太い線の色 `bold`
+/// へ寄せる割合 0〜1)で色を決めて `put` へ渡す(線に沿った位置の両端と色)。
 fn fade_line(
     r1: f32,
     v: f32,
-    c: Color32,
-    k: &dyn Fn(f32) -> f32,
+    thin: Color32,
+    bold: Color32,
+    k: &dyn Fn(f32) -> (f32, f32),
     put: &mut dyn FnMut(f32, f32, Color32),
 ) {
     if v.abs() >= r1 {
         return;
     }
     let s1 = (r1 * r1 - v * v).sqrt();
-    let [r, g, b, _] = c.to_srgba_unmultiplied();
     let at = |j: usize| -s1 + 2.0 * s1 * j as f32 / GRID_PIECES as f32;
-    // 同じ濃さの続く区間は 1 本にまとめる(始まりと濃さ)
-    let mut run: Option<(f32, u8)> = None;
+    // 同じ色の続く区間は 1 本にまとめる(始まりと色)
+    let mut run: Option<(f32, Color32)> = None;
     for j in 0..=GRID_PIECES {
-        let alpha = if j < GRID_PIECES {
-            (255.0 * k((at(j) + at(j + 1)) * 0.5)).round() as u8
+        let c = if j < GRID_PIECES {
+            let (alpha, t) = k((at(j) + at(j + 1)) * 0.5);
+            // 濃さと太さは 32 段に丸める(続く区間をまとめて線の数を抑える。差は見分けられない)
+            let (alpha, t) = ((alpha * 32.0).round() / 32.0, (t * 32.0).round() / 32.0);
+            let [r, g, b, _] = crate::mix(thin, bold, t).to_srgba_unmultiplied();
+            Color32::from_rgba_unmultiplied(r, g, b, (255.0 * alpha).round() as u8)
         } else {
-            0
+            Color32::TRANSPARENT
         };
         match run {
-            Some((_, a)) if a == alpha && j < GRID_PIECES => {}
+            Some((_, p)) if p == c && j < GRID_PIECES => {}
             _ => {
-                if let Some((from, a)) = run
-                    && a > 0
+                if let Some((from, p)) = run
+                    && p.a() > 0
                 {
-                    put(from, at(j), Color32::from_rgba_unmultiplied(r, g, b, a));
+                    put(from, at(j), p);
                 }
-                run = Some((at(j), alpha));
+                run = Some((at(j), c));
             }
         }
     }
@@ -556,21 +566,38 @@ pub(crate) fn guide_segments(
     g: Guides,
     line: &mut dyn FnMut([f32; 3], [f32; 3], Color32),
 ) {
-    let step = grid_step(cam.zoom, 14.0);
-    let major = grid_major(step);
-    // 見えている範囲を覆う大きさ(画面の対角の 1.3 倍)。太い線の間隔に丸める
+    let major = grid_level(cam.zoom, GRID_BOLD.1);
+    // 見えている範囲を覆う大きさ(画面の対角の 1.3 倍)
     let diag = (rect.width().powi(2) + rect.height().powi(2)).sqrt() / cam.zoom;
-    let half = ((diag * 1.3 / major).ceil() * major).max(major);
+    let half = (diag * 1.3).max(major);
     let round = |v: f32| (v / major).round() * major;
     let (cx, cy) = (round(cam.target[0]), round(cam.target[1]));
-    let minor_c = crate::mix(colors.background, colors.edge, 0.10);
-    let major_c = crate::mix(colors.background, colors.edge, 0.22);
     if g.grid
         && let Some((a, b)) = grid_plane(cam)
     {
-        let (ca, cb, half) = grid_center(cam, a, b, half, major);
-        // 線の数は画面の対角を `step` の画素(14)で割った数ほど。拡大が壊れても 2000 本で打ち切る
-        let n = ((half / step).round() as i32).clamp(0, 2000);
+        let (ca, cb, half) = grid_center(cam, a, b, half);
+        // 線はいちばん細かい段の倍数に置き、線の入るいちばん上の段の、その場所の画面の間隔で濃さと
+        // 太さを決める
+        // 段は回す中心の拡大だけで決める。透視では手前ほど大きく写り、細かい段が開くので、
+        // 半分の間隔の段まで線を置いておき(その段は回す中心の辺りでは消えている)、場所ごとの
+        // 間隔で濃くする(段の替わり目で手前の線が急に消えないように)
+        let fine = grid_level(
+            cam.zoom,
+            if cam.perspective {
+                GRID_PX.0 / 2.0
+            } else {
+                GRID_PX.0
+            },
+        );
+        let mut levels = [fine; GRID_LEVELS];
+        for i in 1..GRID_LEVELS {
+            levels[i] = grid_coarser(levels[i - 1]);
+        }
+        let on = |v: f32, s: f32| ((v / s).round() * s - v).abs() < fine * 0.01;
+        let thin = crate::mix(colors.background, colors.edge, GRID_INK.0);
+        let thick = crate::mix(colors.background, colors.edge, GRID_INK.1);
+        // 線の数は見える範囲を細かい段で割った数ほど。拡大が壊れても 2000 本で打ち切る
+        let n = ((half / fine).ceil() as i32).clamp(0, 2000);
         let at = |va: f32, vb: f32| {
             let mut p = [0.0; 3];
             p[a] = va;
@@ -586,38 +613,67 @@ pub(crate) fn guide_segments(
         };
         let eye = cam.eye_position(rect);
         let dist = cam.distance(rect).unwrap_or(1.0);
-        // 平面の上の点(2 つの座標)の濃さ
-        let alpha = |fade: Fade, pa: f32, pb: f32| {
-            let r = ((pa - ca).powi(2) + (pb - cb).powi(2)).sqrt();
+        let lerp =
+            |x: (f32, f32), y: (f32, f32), t: f32| (x.0 + (y.0 - x.0) * t, x.1 + (y.1 - x.1) * t);
+        // 段 `top` の線の、点 `p` の濃さ(`across` は線と直角に隣の線へ向かう軸、`run` は線に沿う軸)
+        let alpha = |top: f32, across: usize, run: usize, p: [f32; 3]| {
+            // 隣の線(同じ段)との画面の上の間隔。浅い角度では線が寝て、隣の線は横へずれても
+            // 縦に詰まるので、画面の上の線の向きと直角に測る
+            let o = cam.project(p, rect).0;
+            let mut q = p;
+            q[across] += top;
+            let d = cam.project(q, rect).0 - o;
+            let mut r = p;
+            r[run] += top;
+            let along = (cam.project(r, rect).0 - o).normalized();
+            let gap = (along.x * d.y - along.y * d.x).abs();
+            let seen = grid_seen(top, gap);
+            if seen <= 0.0 {
+                return (0.0, 0.0);
+            }
+            let bold = smooth(GRID_BOLD.0, GRID_BOLD.1, gap);
+            let fade = Fade {
+                round: lerp(GRID_FADE_MINOR.round, GRID_FADE_MAJOR.round, bold),
+                deep: lerp(GRID_FADE_MINOR.deep, GRID_FADE_MAJOR.deep, bold),
+            };
+            let r = ((p[a] - ca).powi(2) + (p[b] - cb).powi(2)).sqrt();
             let deep = eye.map_or(1.0, |o| {
-                let p = at(pa, pb);
                 let d = (0..3).map(|i| (p[i] - o[i]).powi(2)).sum::<f32>().sqrt();
                 smooth(fade.deep.1 * dist, fade.deep.0 * dist, d)
             });
-            low * smooth(fade.round.1 * half, fade.round.0 * half, r) * deep
+            let k = low * seen * smooth(fade.round.1 * half, fade.round.0 * half, r) * deep;
+            (k, bold)
         };
         if low > 0.0 {
+            // 線の位置は細かい段の倍数(真ん中は丸めずに薄れる輪だけに使う)
+            let (oa, ob) = ((ca / fine).round() * fine, (cb / fine).round() * fine);
+            let r1 = GRID_FADE_MAJOR.round.1 * half;
             for i in -n..=n {
-                let v = i as f32 * step;
-                let on_major = ((v / major).round() * major - v).abs() < step * 0.01;
-                let (c, fade) = if on_major {
-                    (major_c, GRID_FADE_MAJOR)
-                } else {
-                    (minor_c, GRID_FADE_MINOR)
-                };
-                let r1 = fade.round.1 * half;
-                let (x, y) = (ca + v, cb + v);
-                // 原点を通る線が X・Y の軸に重なる時は、軸の色の線だけ引く(Z の軸は短いので格子を残す)
-                if !(g.axes && b != 2 && x.abs() < step * 0.01) {
-                    let k = |s: f32| alpha(fade, x, cb + s);
-                    fade_line(r1, v, c, &k, &mut |s, t, c| {
-                        line(at(x, cb + s), at(x, cb + t), c)
-                    });
-                }
-                if !(g.axes && a != 2 && y.abs() < step * 0.01) {
-                    let k = |s: f32| alpha(fade, ca + s, y);
-                    fade_line(r1, v, c, &k, &mut |s, t, c| {
-                        line(at(ca + s, y), at(ca + t, y), c)
+                for (across, o, c) in [(a, oa, cb), (b, ob, ca)] {
+                    let v = o + i as f32 * fine;
+                    let run = if across == a { b } else { a };
+                    // 原点を通る線が X・Y の軸に重なる時は、軸の色の線だけ引く(Z の軸は短いので格子を残す)
+                    if g.axes && run != 2 && v.abs() < fine * 0.01 {
+                        continue;
+                    }
+                    let top = levels
+                        .iter()
+                        .rev()
+                        .find(|s| on(v, **s))
+                        .copied()
+                        .unwrap_or(fine);
+                    // 線は軸 `across` で `v`、もう 1 つの軸で真ん中 `c` から `s`
+                    let point = |s: f32| {
+                        if across == a {
+                            at(v, c + s)
+                        } else {
+                            at(c + s, v)
+                        }
+                    };
+                    let k = |s: f32| alpha(top, across, run, point(s));
+                    let off = v - if across == a { ca } else { cb };
+                    fade_line(r1, off, thin, thick, &k, &mut |s, t, c| {
+                        line(point(s), point(t), c)
                     });
                 }
             }

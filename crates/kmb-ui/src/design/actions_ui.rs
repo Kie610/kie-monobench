@@ -1214,18 +1214,35 @@ pub(crate) fn setting_field(
                 .iter()
                 .find(|c| c.value == cur)
                 .map_or(cur.clone(), |c| c.label.clone());
-            egui::ComboBox::from_id_salt(key)
-                .selected_text(shown)
-                .show_ui(ui, |ui| {
-                    for c in choices
-                        .iter()
-                        .filter(|c| !f.hidden.contains(&c.value) || c.value == cur)
-                    {
-                        if ui.selectable_label(c.value == cur, &c.label).clicked() {
-                            f.set(v, Some(serde_json::Value::String(c.value.clone())));
+            let icon = choices
+                .iter()
+                .find(|c| c.value == cur)
+                .map_or("", |c| c.icon.as_str());
+            // 絵のある選択肢は、選んでいる物の絵を一覧の前に並べる(表の欄の 1 つに収める)
+            let combo = |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(key)
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for c in choices
+                            .iter()
+                            .filter(|c| !f.hidden.contains(&c.value) || c.value == cur)
+                        {
+                            if crate::design::feature_ui::choice_row(ui, c.value == cur, c)
+                                .clicked()
+                            {
+                                f.set(v, Some(serde_json::Value::String(c.value.clone())));
+                            }
                         }
-                    }
+                    });
+            };
+            if icon.is_empty() {
+                combo(ui);
+            } else {
+                ui.horizontal(|ui| {
+                    crate::design::feature_ui::choice_icon(ui, icon);
+                    combo(ui);
                 });
+            }
         }
         _ => {
             ui.weak("(設定の窓では変えられない欄)");
