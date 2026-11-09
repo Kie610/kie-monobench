@@ -747,10 +747,7 @@ fn auto_explode_component_selection_clears_for_other_selections_and_rejects_a_si
             ..Default::default()
         },
         view3d::ViewEvents {
-            boxed: Some(egui::Rect::from_min_size(
-                egui::pos2(1., 1.),
-                egui::vec2(10., 10.),
-            )),
+            boxed: Some(egui::Rect::from_min_size(egui::pos2(1., 1.), egui::vec2(10., 10.)).into()),
             ..Default::default()
         },
     ] {

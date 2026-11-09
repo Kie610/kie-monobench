@@ -6,6 +6,7 @@ use egui::{Color32, Pos2, Rect, Sense, Vec2};
 use kmb_core::{FeatureId, Kernel, Mesh, ShapeHandle};
 use std::collections::HashSet;
 
+mod area;
 mod camera;
 #[cfg(test)]
 mod fit_tests;
@@ -25,6 +26,7 @@ mod threads;
 #[cfg(test)]
 mod turn_tests;
 
+pub use area::*;
 pub use camera::*;
 pub use hit::*;
 pub use look::*;
@@ -217,17 +219,41 @@ pub fn view3d(
         ev.orbiting |= nav.turns();
         ui.ctx().request_repaint();
     }
-    // 範囲は押した所と今の所で持つ(向きで選び方が替わる)
+    // 四角の窓は押した所と今の所、自由な形はなぞった点を全部持つ(向きで選び方が替わる)
     let box_id = resp.id.with("box");
-    if left && left_mode == LeftDrag::Select && !controls.no_box {
+    let lasso_id = resp.id.with("lasso");
+    let selecting = left && left_mode == LeftDrag::Select && !controls.no_box;
+    if selecting && controls.enclose == Enclose::Lasso {
+        if let (Some(start), Some(now)) = (pointer.press_origin(), pointer.latest_pos()) {
+            ui.ctx().data_mut(|m| {
+                let pts = m.get_temp_mut_or_insert_with(lasso_id, || vec![start]);
+                if pts.last().is_none_or(|l| (*l - now).length() >= LASSO_STEP) {
+                    pts.push(now);
+                }
+            });
+        }
+    } else if selecting {
         if let Some(start) = pointer.press_origin() {
             let now = pointer.latest_pos().unwrap_or(start);
             ui.ctx().data_mut(|m| m.insert_temp(box_id, (start, now)));
         }
     } else if let Some((a, b)) = ui.ctx().data(|m| m.get_temp::<(Pos2, Pos2)>(box_id)) {
         ui.ctx().data_mut(|m| m.remove::<(Pos2, Pos2)>(box_id));
-        ev.boxed = Some(Rect::from_two_pos(a, b));
+        ev.boxed = Some(Area::Rect(Rect::from_two_pos(a, b)));
         ev.crossing = b.x < a.x;
+    } else if let Some(pts) = ui.ctx().data(|m| m.get_temp::<Vec<Pos2>>(lasso_id)) {
+        ui.ctx().data_mut(|m| m.remove::<Vec<Pos2>>(lasso_id));
+        ev.boxed = Area::lasso(&pts);
+        ev.crossing = lasso_crossing(&pts);
+        log::debug!(
+            "自由な形で囲んだ: 点 {} 個、{}",
+            pts.len(),
+            if ev.crossing {
+                "かかった物"
+            } else {
+                "全部入った物"
+            }
+        );
     }
     if resp.hovered() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
@@ -539,6 +565,9 @@ pub fn view3d(
     if let Some((a, b)) = ui.ctx().data(|m| m.get_temp::<(Pos2, Pos2)>(box_id)) {
         draw_select_box(&painter, a, b, colors);
     }
+    if let Some(pts) = ui.ctx().data(|m| m.get_temp::<Vec<Pos2>>(lasso_id)) {
+        draw_select_lasso(&painter, &pts, colors);
+    }
     (ev, resp, rect)
 }
 
@@ -840,16 +869,36 @@ fn paint_scene(
     );
 }
 
+/// 囲む向きの色(左から右は選んだ色、右から左はマウスの下の色)。
+fn enclose_ink(crossing: bool, colors: &Colors) -> Color32 {
+    if crossing {
+        colors.inks.select_crossing
+    } else {
+        colors.inks.select_window
+    }
+}
+
+/// 囲む向きの説明を `at` の右下に書く。
+fn enclose_label(painter: &egui::Painter, at: Pos2, crossing: bool, edge: Color32) {
+    painter.text(
+        at + Vec2::new(8.0, 8.0),
+        egui::Align2::LEFT_TOP,
+        if crossing {
+            "かかった物を選ぶ"
+        } else {
+            "全部入った物を選ぶ"
+        },
+        crate::prop(12.0),
+        edge,
+    );
+}
+
 /// 囲んでいる範囲を描く(U30。2D スケッチと同じ見分け方)。左から右へ囲む(全部入った物を選ぶ)は
 /// 選んだ色の実線、右から左へ囲む(かかった物を選ぶ)はマウスの下の色の破線で、塗りの色も替える。
 pub fn draw_select_box(painter: &egui::Painter, a: Pos2, b: Pos2, colors: &Colors) {
     let crossing = b.x < a.x;
     let r = Rect::from_two_pos(a, b);
-    let edge = if crossing {
-        colors.inks.select_crossing
-    } else {
-        colors.inks.select_window
-    };
+    let edge = enclose_ink(crossing, colors);
     painter.rect_filled(r, 0.0, edge.gamma_multiply(0.10));
     let stroke = egui::Stroke::new(1.5, edge);
     let c = [
@@ -864,71 +913,30 @@ pub fn draw_select_box(painter: &egui::Painter, a: Pos2, b: Pos2, colors: &Color
     } else {
         painter.add(egui::Shape::line(c.to_vec(), stroke));
     }
-    painter.text(
-        r.right_bottom() + Vec2::new(8.0, 8.0),
-        egui::Align2::LEFT_TOP,
-        if crossing {
-            "かかった物を選ぶ"
-        } else {
-            "全部入った物を選ぶ"
-        },
-        crate::prop(12.0),
-        edge,
-    );
+    enclose_label(painter, r.right_bottom(), crossing, edge);
 }
 
-/// 範囲 `area` と三角形 `t`(画面の位置)が重なるか(三角形の点が入る、範囲の角が三角形に入る、
-/// 辺どうしが交わる)。
-pub fn triangle_touches(area: Rect, t: [Pos2; 3]) -> bool {
-    if t.iter().any(|p| area.contains(*p)) {
-        return true;
-    }
-    let corners = [
-        area.left_top(),
-        area.right_top(),
-        area.right_bottom(),
-        area.left_bottom(),
-    ];
-    let side = |a: Pos2, b: Pos2, p: Pos2| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-    let inside = |p: Pos2| {
-        let s = [
-            side(t[0], t[1], p),
-            side(t[1], t[2], p),
-            side(t[2], t[0], p),
-        ];
-        s.iter().all(|v| *v >= 0.0) || s.iter().all(|v| *v <= 0.0)
+/// なぞっている自由な形を描く(四角の窓と同じ見分け方)。なぞった道は実線か破線、今の所から押した所へ
+/// 閉じる線は細い破線で描く。塗りは凹んだ形で縁からはみ出すので描かない。
+pub fn draw_select_lasso(painter: &egui::Painter, pts: &[Pos2], colors: &Colors) {
+    let (Some(first), Some(last)) = (pts.first(), pts.last()) else {
+        return;
     };
-    if corners.iter().any(|c| inside(*c)) {
-        return true;
+    let crossing = lasso_crossing(pts);
+    let edge = enclose_ink(crossing, colors);
+    let stroke = egui::Stroke::new(1.5, edge);
+    if crossing {
+        painter.add(egui::Shape::dashed_line(pts, stroke, 6.0, 4.0));
+    } else {
+        painter.add(egui::Shape::line(pts.to_vec(), stroke));
     }
-    (0..3).any(|i| segment_touches(area, t[i], t[(i + 1) % 3]))
-}
-
-/// 範囲 `area` と線分 `a`〜`b`(画面の位置)が重なるか。
-pub fn segment_touches(area: Rect, a: Pos2, b: Pos2) -> bool {
-    // 範囲で線分を切る(Liang-Barsky)。残りがあれば重なる
-    let d = b - a;
-    let (mut t0, mut t1) = (0.0f32, 1.0f32);
-    for (p, q) in [
-        (-d.x, a.x - area.min.x),
-        (d.x, area.max.x - a.x),
-        (-d.y, a.y - area.min.y),
-        (d.y, area.max.y - a.y),
-    ] {
-        if p.abs() < 1e-9 {
-            if q < 0.0 {
-                return false;
-            }
-        } else {
-            let r = q / p;
-            if p < 0.0 {
-                t0 = t0.max(r);
-            } else {
-                t1 = t1.min(r);
-            }
-        }
-    }
-    t0 <= t1
+    painter.add(egui::Shape::dashed_line(
+        &[*last, *first],
+        egui::Stroke::new(1.0, edge.gamma_multiply(0.7)),
+        3.0,
+        3.0,
+    ));
+    enclose_label(painter, *last, crossing, edge);
 }
 
 /// 重ねる線を 1 本描く(描き方の役割で色と破線を決める)。
