@@ -46,7 +46,12 @@ fn setting_checkbox_reaches_the_extension_and_survives_reset_and_fresh() {
     assert!(editor.inference_settings.enabled());
     let fresh = editor.fresh();
     assert_eq!(
-        fresh.settings(&|id| id.into())[0].value,
+        fresh
+            .settings(&|id| id.into())
+            .into_iter()
+            .find(|setting| setting.id == inference_settings::ID)
+            .expect("補助線の設定")
+            .value,
         serde_json::json!({"guide_intersections": true})
     );
     let reset = harness.state_mut().reset_module_settings();

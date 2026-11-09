@@ -49,7 +49,13 @@ fn camera_is_copied_whole_when_front_is_off_and_defaults_remain_front() {
         "文書の編集状態を消してもPC設定は保つ"
     );
     assert_eq!(
-        editor.fresh().settings(&|id| id.into())[0].value,
+        editor
+            .fresh()
+            .settings(&|id| id.into())
+            .into_iter()
+            .find(|setting| setting.id == opening_settings::ID)
+            .expect("開く時の設定")
+            .value,
         serde_json::json!({"look_front_on_open":false})
     );
 }
@@ -399,4 +405,54 @@ fn direct_edit_switch_and_creation_copy_the_visible_editor_before_reset() {
         format!("{visible:?}"),
         "新規作成でもreset前に現在の専用ビューから引き継ぐ"
     );
+}
+
+#[test]
+fn opening_and_inference_settings_stay_independent_across_reset_and_fresh() {
+    fn value(editor: &dyn FeatureEditor, id: &str) -> serde_json::Value {
+        editor
+            .settings(&|key| key.into())
+            .into_iter()
+            .find(|setting| setting.id == id)
+            .expect("IDで設定を選ぶ")
+            .value
+    }
+    fn change(editor: &mut dyn FeatureEditor, id: &str, value: serde_json::Value) {
+        editor.change_settings(id, &value, false).unwrap().unwrap();
+    }
+    let opening = serde_json::json!({"look_front_on_open":true});
+    let oblique = serde_json::json!({"look_front_on_open":false});
+    let inference_off = serde_json::json!({"guide_intersections":false});
+    let inference_on = serde_json::json!({"guide_intersections":true});
+    let mut editor = SketchEditor::new();
+    let settings = editor.settings(&|key| key.into());
+    assert_eq!(settings.len(), 2);
+    for id in [opening_settings::ID, inference_settings::ID] {
+        assert_eq!(
+            settings.iter().filter(|setting| setting.id == id).count(),
+            1
+        );
+    }
+    assert_eq!(value(&editor, opening_settings::ID), opening);
+    assert_eq!(value(&editor, inference_settings::ID), inference_off);
+    change(&mut editor, opening_settings::ID, oblique.clone());
+    assert_eq!(value(&editor, inference_settings::ID), inference_off);
+    change(&mut editor, inference_settings::ID, inference_on.clone());
+    assert_eq!(value(&editor, opening_settings::ID), oblique);
+    editor.reset();
+    assert_eq!(value(&editor, opening_settings::ID), oblique);
+    assert_eq!(value(&editor, inference_settings::ID), inference_on);
+    let mut fresh = editor.fresh();
+    assert_eq!(value(fresh.as_ref(), opening_settings::ID), oblique);
+    assert_eq!(value(fresh.as_ref(), inference_settings::ID), inference_on);
+    change(fresh.as_mut(), opening_settings::ID, serde_json::json!({}));
+    assert_eq!(value(&editor, opening_settings::ID), opening);
+    assert_eq!(value(&editor, inference_settings::ID), inference_on);
+    change(
+        fresh.as_mut(),
+        inference_settings::ID,
+        serde_json::json!({}),
+    );
+    assert_eq!(value(&editor, inference_settings::ID), inference_off);
+    assert_eq!(value(&editor, opening_settings::ID), opening);
 }
