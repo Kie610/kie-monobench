@@ -188,6 +188,16 @@ pub fn validate_named_parameter_change(
     assignments(data, registry, report, tx).map(|_| ())
 }
 
+/// 記述子と共通のパーサで、展開が必要な名前付きの欄があるかを調べる。番号は割り当てない。
+pub(crate) fn has_named_parameter_change(
+    data: &DocumentData,
+    registry: &Registry,
+    report: &RecomputeReport,
+    tx: &Transaction,
+) -> Result<bool, NamedParamError> {
+    assignments(data, registry, report, tx).map(|found| !found.is_empty())
+}
+
 /// すべて確認してから番号を割り当て、パラメータと欄を同じ取り消し単位にする。
 pub(crate) fn complete_named_parameter_change(
     doc: &mut Document,

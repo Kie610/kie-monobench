@@ -639,13 +639,24 @@ impl Workspace {
                         expr = self.cur.param_batch.input(&key, expr);
                     }
                     let c = complete::begin(ui, id.with("edit"));
+                    let problem = id.with("problem");
+                    let why = ui.data(|d| d.get_temp::<String>(problem));
                     let edit = egui::TextEdit::singleline(&mut expr);
-                    let edit = if batching && self.cur.param_batch.errors.contains_key(&key) {
+                    let edit = if why.is_some()
+                        || matches!(v.status, ParamStatus::Error { .. })
+                        || (batching && self.cur.param_batch.errors.contains_key(&key))
+                    {
                         edit.text_color(err)
                     } else {
                         edit
                     };
-                    let r = ui.add_sized([130.0, h], c.filter(edit));
+                    let mut r = ui.add_sized([130.0, h], c.filter(edit));
+                    if let Some(why) = &why {
+                        r = r.on_hover_text(why);
+                    }
+                    if r.changed() {
+                        ui.data_mut(|d| d.remove::<String>(problem));
+                    }
                     c.end(ui, &r, &mut expr, &[]);
                     super::params_ui::expression_info(
                         ui,
@@ -687,21 +698,15 @@ impl Workspace {
             });
         if let Some((feature, key, expr)) = set {
             log::info!("機能の値を変える: {feature} {key} = {expr}");
-            match params::set_feature_value(
-                self.cur.work.doc().data(),
-                &self.win.registry,
-                self.cur.work.report(),
-                feature,
-                &key,
-                &expr,
-            ) {
-                Ok(tx) => {
-                    if self.apply(tx) {
-                        let id = crate::doc_id(ui.ctx(), ("feature_value", feature, key.as_str()));
-                        ui.data_mut(|d| d.remove::<FieldEdit>(id));
-                    }
-                }
-                Err(e) => self.win.fail(e),
+            let id = crate::doc_id(ui.ctx(), ("feature_value", feature, key.as_str()));
+            let result = self.cur.work.set_value(feature, &key, &expr);
+            if self.after_change(result) {
+                ui.data_mut(|d| {
+                    d.remove::<FieldEdit>(id);
+                    d.remove::<String>(id.with("problem"));
+                });
+            } else if let Some(why) = &self.win.message {
+                ui.data_mut(|d| d.insert_temp(id.with("problem"), why.clone()));
             }
         }
         act

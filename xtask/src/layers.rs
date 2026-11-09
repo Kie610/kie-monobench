@@ -547,7 +547,7 @@ const SCREEN_EDIT_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-ui", "src/live_ui.rs", 2),
     ("kmb-ui", "src/machining/reuse_ui.rs", 2),
     ("kmb-ui", "src/menus_ui.rs", 17),
-    ("kmb-ui", "src/workspace/edits.rs", 7),
+    ("kmb-ui", "src/workspace/edits.rs", 6),
     ("kmb-ui", "src/workspace/selection.rs", 1),
 ];
 
@@ -557,7 +557,6 @@ const SCREEN_EDIT_KNOWN: &[(&str, &str, usize)] = &[
 const SESSION_ONLY_KNOWN: &[&str] = &[
     "add_feature",
     "add_param",
-    "add_param_info",
     "add_param_view",
     "alloc_group_id",
     "duplicate_component",
@@ -585,7 +584,6 @@ const SESSION_ONLY_KNOWN: &[&str] = &[
     "set_param",
     "set_param_info",
     "set_properties",
-    "set_value",
     "squash_since",
     "stand_up",
     "ungroup",

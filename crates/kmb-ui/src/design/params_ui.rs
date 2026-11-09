@@ -239,8 +239,11 @@ impl Workspace {
                     let mut expr = if batching { self.cur.param_batch.input(&key, normal) } else { normal };
                     // 打っている名前の候補を欄の下に出す(U51)
                     let c = complete::begin(ui, crate::doc_id(ui.ctx(), ("param_expr", p.id)));
+                    let bad = ui.data(|d| d.get_temp::<String>(failed_id(p.id))).is_some()
+                        || self.cur.work.report().params.iter().any(|r| r.id==p.id && matches!(r.status, ParamStatus::Error { .. }))
+                        || (batching && self.cur.param_batch.errors.contains_key(&key));
                     let edit = egui::TextEdit::singleline(&mut expr);
-                    let edit = if batching && self.cur.param_batch.errors.contains_key(&key) { edit.text_color(err) } else { edit };
+                    let edit = if bad { edit.text_color(err) } else { edit };
                     let r = ui.add_sized([w_expr, h], c.filter(edit));
                     c.end(ui, &r, &mut expr, &[]);
                     expression_info(ui, &r, &p.name, &p.expr, &expr);
@@ -575,10 +578,17 @@ impl Workspace {
                 egui::TextEdit::singleline(&mut self.cur.new_param.0).hint_text("名前"),
             );
             let c = complete::begin(ui, crate::doc_id(ui.ctx(), "param_new_expr"));
-            let r = ui.add_sized(
-                [w.expr, w.h],
-                c.filter(egui::TextEdit::singleline(&mut self.cur.new_param.1).hint_text("式")),
-            );
+            let bad = ui.data(|d| d.get_temp::<String>(failed_new)).is_some();
+            let edit = egui::TextEdit::singleline(&mut self.cur.new_param.1).hint_text("式");
+            let edit = if bad {
+                edit.text_color(ui.visuals().error_fg_color)
+            } else {
+                edit
+            };
+            let r = ui.add_sized([w.expr, w.h], c.filter(edit));
+            if r.changed() {
+                ui.data_mut(|d| d.remove::<String>(failed_new));
+            }
             let inserted = c.end(ui, &r, &mut self.cur.new_param.1, &[]);
             // 単位は値の列に置く(足した後は行の 2 行目の単位になる)
             ui.allocate_ui_with_layout(
@@ -797,15 +807,23 @@ impl Workspace {
                         expr = self.cur.param_batch.input(&k, expr);
                     }
                     let c = complete::begin(ui, key.with("expr_edit"));
+                    let problem = key.with("problem");
+                    let why = ui.data(|d| d.get_temp::<String>(problem));
                     let edit = egui::TextEdit::singleline(&mut expr);
-                    let edit = if batching && self.cur.param_batch.errors.contains_key(&k) {
+                    let edit = if why.is_some()
+                        || matches!(p.status, ParamStatus::Error { .. })
+                        || (batching && self.cur.param_batch.errors.contains_key(&k))
+                    {
                         edit.text_color(err)
                     } else {
                         edit
                     };
                     let r = ui
                         .add_sized([w_expr, h], c.filter(edit))
-                        .on_hover_text(&place);
+                        .on_hover_text(why.as_deref().unwrap_or(&place));
+                    if r.changed() {
+                        ui.data_mut(|d| d.remove::<String>(problem));
+                    }
                     c.end(ui, &r, &mut expr, &[]);
                     expression_info(ui, &r, &p.name, &p.expr, &expr);
                     if batching {
@@ -815,7 +833,7 @@ impl Workspace {
                         pending_mark(ui, &r, self.cur.param_batch.inputs.contains_key(&k));
                     } else {
                         if r.lost_focus() && expr != p.expr {
-                            set = Some((p.name.clone(), expr.clone()));
+                            set = Some((p.name.clone(), expr.clone(), problem));
                         }
                         ui.data_mut(|d| {
                             d.insert_temp(key.with("expr"), FieldEdit::new(&p.expr, expr))
@@ -872,7 +890,7 @@ impl Workspace {
                 forget(ui, &old);
             }
         }
-        if let Some((name, expr)) = set {
+        if let Some((name, expr, problem)) = set {
             log::info!("寸法の式を変える: {name} = {expr}");
             // 数だけを打てば寸法の単位を補う(角度は deg、長さは文書の単位)
             let angle = rows.iter().any(|p| {
@@ -886,6 +904,9 @@ impl Workspace {
             };
             if self.set_model_param(&name, &with_unit_of(expr.trim(), &unit)) {
                 forget(ui, &name);
+                ui.data_mut(|d| d.remove::<String>(problem));
+            } else if let Some(why) = &self.win.message {
+                ui.data_mut(|d| d.insert_temp(problem, why.clone()));
             }
         }
         act

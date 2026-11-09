@@ -14,10 +14,10 @@ use kmb_core::{
 use std::collections::{BTreeSet, HashSet};
 
 mod named;
-pub(crate) use named::complete_named_parameter_change;
 pub use named::{
     NamedParamError, NamedParameter, parse_named_parameter, validate_named_parameter_change,
 };
+pub(crate) use named::{complete_named_parameter_change, has_named_parameter_change};
 
 /// 機能の値 1 つ(記述子の式の欄)。
 #[derive(Debug, Clone, PartialEq)]
@@ -43,8 +43,15 @@ pub fn feature_values(
     report: &RecomputeReport,
 ) -> Vec<FeatureValue> {
     let values = report.param_values();
-    let eval = |expr: &str| match kmb_core::eval_str(expr, &|n| values.get(n).copied()) {
-        Ok(value) => ParamStatus::Ok { value },
+    let eval = |expr: &str, unit: Option<&FieldUnit>| match kmb_core::eval_str(expr, &|n| {
+        values.get(n).copied()
+    }) {
+        Ok(value) => match unit_mismatch(unit, value.dim) {
+            Some(message) => ParamStatus::Error {
+                message: message.into(),
+            },
+            None => ParamStatus::Ok { value },
+        },
         Err(e) => ParamStatus::Error {
             message: e.to_string(),
         },
@@ -57,7 +64,10 @@ pub fn feature_values(
         if !shows_values(&d.category) {
             continue;
         }
-        let mut push = |key: String, label: String, v: Option<&serde_json::Value>| {
+        let mut push = |key: String,
+                        label: String,
+                        v: Option<&serde_json::Value>,
+                        unit: Option<&FieldUnit>| {
             if let Some(expr) = v.and_then(|v| v.as_str())
                 && !expr.trim().is_empty()
             {
@@ -66,7 +76,7 @@ pub fn feature_values(
                     key,
                     label,
                     expr: expr.to_string(),
-                    status: eval(expr),
+                    status: eval(expr, unit),
                 });
             }
         };
@@ -75,9 +85,12 @@ pub fn feature_values(
                 continue;
             }
             match &field.kind {
-                FieldKind::Expr { .. } => {
-                    push(field.key.clone(), field.label.clone(), field.get(&f.data))
-                }
+                FieldKind::Expr { .. } => push(
+                    field.key.clone(),
+                    field.label.clone(),
+                    field.get(&f.data),
+                    field.unit.as_ref(),
+                ),
                 FieldKind::Rows { fields } => {
                     let n = field.row_count(&f.data);
                     for row in 0..n {
@@ -94,7 +107,7 @@ pub fn feature_values(
                             } else {
                                 sub.label.clone()
                             };
-                            push(at.key.clone(), label, at.get(&f.data));
+                            push(at.key.clone(), label, at.get(&f.data), at.unit.as_ref());
                         }
                     }
                 }

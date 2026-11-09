@@ -527,6 +527,30 @@ fn obj_export_writes_indexed_triangles_without_a_material_file() {
 }
 
 #[test]
+fn invalid_parameter_expressions_exit_with_input_error_and_keep_the_saved_bytes() {
+    let dir = temp_dir("invalid-param-expression");
+    ok(&dir, &["new", "part.json"]);
+    ok(&dir, &["param", "add", "part.json", "w", "10 mm"]);
+    let path = dir.join("part.json");
+    let before = std::fs::read(&path).unwrap();
+    for expr in ["missing_name + 1 mm", "1 mm + 1 deg", "w + 1 mm"] {
+        assert_eq!(
+            exit_code(&dir, &["param", "set", "part.json", "w", expr]),
+            1,
+            "{expr}"
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            before,
+            "拒否した式を保存しない"
+        );
+    }
+    ok(&dir, &["param", "set", "part.json", "w", "20 mm"]);
+    assert_ne!(std::fs::read(&path).unwrap(), before);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn pack_writes_a_zip_that_the_cli_can_open() {
     let dir = temp_dir("pack");
     let file = format!("part.{}", kmb_core::DOCUMENT_EXTENSION);
@@ -646,10 +670,10 @@ fn a_script_runs_two_lines_and_saves_only_after_success() {
         "# 寸法\nadd_param width \"10 mm\"\nset_param width \"width + 5 mm\"\n",
     )
     .unwrap();
-    // 自分自身を読む式は計算の誤りで、行の番号を残す。
+    // 自己参照は、適用前に入力の誤りとして拒否する。
     assert_eq!(
         exit_code(&d, &["run", "parameters.jcs", "--save", "failed.json"]),
-        2
+        1
     );
     assert!(!d.join("failed.json").exists());
     std::fs::write(
@@ -728,7 +752,13 @@ fn a_script_can_edit_an_existing_document_and_export_the_result() {
 fn an_empty_script_does_not_save_a_document_with_recompute_errors() {
     let d = temp_dir("batch-empty-errors");
     ok(&d, &["new", "bad.json"]);
-    ok(&d, &["param", "add", "bad.json", "width", "missing + 1 mm"]);
+    ok(&d, &["param", "add", "bad.json", "width", "10 mm"]);
+    // 既存の不正な式を持つ文書を、保存済みのデータとして用意する。
+    let path = d.join("bad.json");
+    let mut document = read(&path);
+    document["params"][0]["expr"] = serde_json::json!("missing + 1 mm");
+    std::fs::write(&path, serde_json::to_vec(&document).unwrap()).unwrap();
+    let before = std::fs::read(&path).unwrap();
     std::fs::write(d.join("empty.jcs"), "# 計算の結果も確かめる\n").unwrap();
     assert_eq!(
         exit_code(
@@ -745,5 +775,6 @@ fn an_empty_script_does_not_save_a_document_with_recompute_errors() {
         2
     );
     assert!(!d.join("out.json").exists());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
     std::fs::remove_dir_all(d).ok();
 }

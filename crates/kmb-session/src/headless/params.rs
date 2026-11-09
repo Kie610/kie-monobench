@@ -29,6 +29,11 @@ impl Headless {
             return Err(format!("寸法の名前 {name} と同じ名前は使えません"));
         }
         let expr = self.typed_param_expr(info.unit.unwrap_or_default(), expr)?;
+        let mut draft = crate::param_guard::snapshot(self.doc.data()).map_err(|e| e.to_string())?;
+        let candidate = crate::edit::add_param_info(&mut draft, name, &expr, info);
+        draft.apply(candidate).map_err(|e| e.to_string())?;
+        self.check_parameter_data(draft.data(), false)
+            .map_err(|e| e.to_string())?;
         let tx = crate::edit::add_param_info(&mut self.doc, name, &expr, info);
         self.apply(tx)
     }
@@ -75,11 +80,7 @@ impl Headless {
     /// パラメータの式を変える。寸法の名前(`d1` など)なら、その寸法の式を変える。
     pub fn set_param(&mut self, name: &str, expr: &str) -> Result<(), String> {
         if self.doc.data().param_by_name(name).is_none() && self.is_model_param(name) {
-            self.doc
-                .set_model_param(&self.modules.registry, name, expr)
-                .map_err(|e| e.to_string())?;
-            self.recompute();
-            return Ok(());
+            return self.set_model_param(name, expr);
         }
         let id = self.param_id(name)?;
         let expr = self.typed_param_expr(self.param_unit(id), expr)?;
@@ -147,6 +148,8 @@ impl Headless {
             key,
             expr,
         )?;
+        self.check_table_transaction(&tx, true)
+            .map_err(|e| e.to_string())?;
         self.apply(tx)
     }
 
@@ -353,6 +356,14 @@ impl Headless {
         format: crate::param_io::Format,
     ) -> Result<crate::param_io::Imported, String> {
         let rows = crate::param_io::parse(text, format)?;
+        let mut draft = crate::param_guard::snapshot(self.doc.data()).map_err(|e| e.to_string())?;
+        let (candidate, _) =
+            crate::param_io::import(&mut draft, &self.modules.registry, &self.report, &rows);
+        if let Some(candidate) = candidate {
+            draft.apply(candidate).map_err(|e| e.to_string())?;
+            self.check_parameter_data(draft.data(), true)
+                .map_err(|e| e.to_string())?;
+        }
         let (tx, done) =
             crate::param_io::import(&mut self.doc, &self.modules.registry, &self.report, &rows);
         if let Some(tx) = tx {
@@ -381,6 +392,8 @@ impl Headless {
 
     /// 寸法の値(モデルのパラメータ `name`)の式を変えて再計算する。
     pub fn set_model_param(&mut self, name: &str, expr: &str) -> Result<(), String> {
+        self.check_model_expression(name, expr)
+            .map_err(|e| e.to_string())?;
         self.doc
             .set_model_param(&self.modules.registry, name, expr)
             .map_err(|e| e.to_string())?;
