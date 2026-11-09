@@ -609,6 +609,7 @@ impl Workspace {
             .copied()
             .find(|id| !self.is_companion(*id));
         if let Some(id) = last {
+            let camera = self.current_editor_view_camera();
             self.select(id);
             // 足したものは「作っている途中」: 編集パネルで値を直し、OK で決める。
             // キャンセル・Esc なら作る前へ戻す(押しただけで形が決まらないように)
@@ -617,6 +618,7 @@ impl Workspace {
             self.cur.work.begin_creation(id);
             self.cur.focus_new.set(Some(id));
             self.cur.editing = Some(id);
+            self.open_editor_view(id, camera);
             self.cur.edit_start = Some((id, self.cur.work.doc().undo_labels().len()));
             if let Some(p) = file {
                 self.report_imported(id, &p);

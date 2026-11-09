@@ -223,6 +223,9 @@ pub trait FeatureEditor: Any + Send {
         false
     }
 
+    /// 編集を開いた時の 3D の視点。専用のビューが現在の見方を引き継ぐ時に使う。
+    fn open_view(&mut self, _camera: crate::view3d::Camera) {}
+
     /// 中央のビューを描く([`FeatureEditor::takes_view`] が真の時)。
     fn view(
         &mut self,

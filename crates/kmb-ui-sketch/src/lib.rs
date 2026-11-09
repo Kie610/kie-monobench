@@ -19,6 +19,7 @@ mod marks;
 mod menu;
 mod more_tools;
 mod offset_tool;
+mod opening_settings;
 mod pattern_ui;
 mod snap;
 mod space3d;
@@ -38,6 +39,8 @@ type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 /// スケッチの編集器の状態(表示の移動と倍率、描いている途中の道具)。
 #[derive(Default)]
 pub struct SketchEditor {
+    /// 開く時の PC 設定。カメラの途中の状態とは分け、文書のタブ間で共有する。
+    opening_settings: opening_settings::Store,
     /// PC 全体で共用する描画の推論設定。文書のタブ間だけで共有し、プロセス全体に置かない。
     inference_settings: inference_settings::Store,
     view: view::ViewState,
@@ -920,6 +923,7 @@ impl SketchEditor {
 impl FeatureEditor for SketchEditor {
     fn fresh(&self) -> Box<dyn FeatureEditor> {
         Box::new(SketchEditor {
+            opening_settings: self.opening_settings.clone(),
             inference_settings: self.inference_settings.clone(),
             ..SketchEditor::new()
         })
@@ -927,10 +931,14 @@ impl FeatureEditor for SketchEditor {
 
     fn set_settings_dir(&mut self, dir: Option<&std::path::Path>) {
         self.inference_settings.set_data_dir(dir);
+        self.opening_settings.set_data_dir(dir);
     }
 
     fn settings(&self, text: &dyn Fn(&str) -> String) -> Vec<kmb_core::Settings> {
-        vec![self.inference_settings.settings(text)]
+        vec![
+            self.inference_settings.settings(text),
+            self.opening_settings.settings(text),
+        ]
     }
 
     fn change_settings(
@@ -939,7 +947,23 @@ impl FeatureEditor for SketchEditor {
         value: &serde_json::Value,
         persist: bool,
     ) -> Option<Result<(), String>> {
-        (id == inference_settings::ID).then(|| self.inference_settings.change(value, persist))
+        match id {
+            inference_settings::ID => Some(self.inference_settings.change(value, persist)),
+            opening_settings::ID => Some(self.opening_settings.change(value, persist)),
+            _ => None,
+        }
+    }
+
+    fn open_view(&mut self, camera: kmb_ui::view3d::Camera) {
+        self.view = if self.opening_settings.front() {
+            view::ViewState::default()
+        } else {
+            view::ViewState {
+                space: Some(camera),
+                ..view::ViewState::default()
+            }
+        };
+        self.editor.look_front = false;
     }
 
     fn handles(&self, type_id: &str) -> bool {
@@ -1808,6 +1832,7 @@ impl FeatureEditor for SketchEditor {
 
     fn reset(&mut self) {
         *self = Self {
+            opening_settings: self.opening_settings.clone(),
             inference_settings: self.inference_settings.clone(),
             ..Self::default()
         };
@@ -1883,3 +1908,6 @@ mod undo_line_tests;
 
 #[cfg(test)]
 mod inference_settings_tests;
+
+#[cfg(test)]
+mod opening_view_tests;
