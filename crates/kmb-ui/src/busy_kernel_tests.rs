@@ -26,12 +26,15 @@ fn the_view_keeps_its_meshes_and_edges_while_another_tab_computes() {
     let mut ws = settled();
     let shown = ws.cur.scene.bodies.len();
     let kernel = ws.cur.work.kernel().clone();
-    assert!(edge_count(&mut ws) > 0);
+    let edges = edge_count(&mut ws);
+    assert!(edges > 0);
     let busy = kmb_bundle::occupy_kernel(LIMIT);
     // 網の細かさを替える(網を作り直す)・辺を問い合わせ直す・ボディの種類を確かめる
     ws.cur.scene.set_tolerance(kernel.as_ref(), 0.2);
     ws.cur.edge_cache = Default::default();
-    assert_eq!(edge_count(&mut ws), 0, "辺は控えが無いので、まだ出せない");
+    // 一度数えた形の辺は、カーネルが形ごとに控えていて錠を待たずに返す(まだ数えていない形は
+    // 使用中で戻る。kmb-kernel-smlib の tests/busy.rs)
+    assert_eq!(edge_count(&mut ws), edges, "辺はカーネルの控えから出す");
     ws.cur.scene.set_body_kinds(kernel.as_ref());
     assert!(busy.still_held(), "ほかのタブの計算が終わるのを待った");
     assert!(ws.cur.scene.is_pending(), "作り直しを待つ");

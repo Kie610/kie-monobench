@@ -68,6 +68,8 @@ mod fea_tests;
 #[cfg(test)]
 mod flow_tests;
 #[cfg(test)]
+mod gear_edges_tests;
+#[cfg(test)]
 mod hole_tests;
 #[cfg(test)]
 mod machine_tests;
