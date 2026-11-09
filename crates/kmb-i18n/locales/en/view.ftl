@@ -140,3 +140,7 @@ view-candidate-vertex = Vertex ({ $position })
 
 view-others = Select other… (or hold)
 view-others-help = Select from overlapping faces, edges and vertices at this point. You can also hold the left mouse button to open the list.
+
+# Names for the existing visible sketch input markers.
+view-sketch-input-point = Sketch input point
+view-sketch-guide-intersection = Sketch guide intersection
