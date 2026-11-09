@@ -929,13 +929,16 @@ impl FeatureEditor for SketchEditor {
         editing: bool,
         _summary: &str,
         text: &dyn Fn(&str, usize) -> String,
-    ) -> Option<kmb_ui::FeaturePresentation> {
+    ) -> Option<kmb_ui::FeaturePresentationState> {
         if entry.type_id != SKETCH {
             return None;
         }
-        let current = cx
+        let Some(current) = cx
             .output(entry.id, "sketch")
-            .and_then(kmb_sketch::solution_of)?;
+            .and_then(kmb_sketch::solution_of)
+        else {
+            return Some(kmb_ui::FeaturePresentationState::Unavailable);
+        };
         let solution = if editing && self.editor.feature == Some(entry.id) {
             self.editor
                 .pattern_ghost
@@ -944,7 +947,9 @@ impl FeatureEditor for SketchEditor {
         } else {
             &current
         };
-        Some(constraint_status::presentation(solution, text))
+        Some(kmb_ui::FeaturePresentationState::Ready(
+            constraint_status::presentation(solution, text),
+        ))
     }
 
     fn fresh(&self) -> Box<dyn FeatureEditor> {

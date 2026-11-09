@@ -1136,16 +1136,20 @@ impl Workspace {
     /// 機能の設定欄に出す要約(加工なら経路の長さと時間)。
     pub fn summary(&self, id: FeatureId) -> Option<String> {
         let summary = self.win.extensions.summary(&self.context(), id)?;
-        Some(
-            self.presentation_from_summary(id, &summary)
-                .map_or(summary, |presentation| presentation.text),
-        )
+        match self.presentation_from_summary(id, &summary) {
+            None => Some(summary),
+            Some(crate::FeaturePresentationState::Ready(presentation)) => Some(presentation.text),
+            Some(crate::FeaturePresentationState::Unavailable) => None,
+        }
     }
 
     /// 要約を持つ機能の、編集器が宣言した行の説明と印。
     pub(crate) fn feature_presentation(&self, id: FeatureId) -> Option<crate::FeaturePresentation> {
         let summary = self.win.extensions.summary(&self.context(), id)?;
-        self.presentation_from_summary(id, &summary)
+        match self.presentation_from_summary(id, &summary)? {
+            crate::FeaturePresentationState::Ready(presentation) => Some(presentation),
+            crate::FeaturePresentationState::Unavailable => None,
+        }
     }
 
     /// 開いて直している機能の名前と、編集器が出した今の状態。閉じた選びには出さない。
@@ -1162,18 +1166,13 @@ impl Workspace {
         &self,
         id: FeatureId,
         summary: &str,
-    ) -> Option<crate::FeaturePresentation> {
-        // 再計算中は前の成功を今の入力の状態として出さない。
-        if self.cur.work.is_recomputing() {
-            return None;
-        }
+    ) -> Option<crate::FeaturePresentationState> {
         let entry = self.cur.work.doc().data().feature(id)?;
-        if !matches!(
-            self.cur.work.report().feature(id),
-            Some(kmb_core::FeatureStatus::Ok { .. })
-        ) {
-            return None;
-        }
+        let unavailable = self.cur.work.is_recomputing()
+            || !matches!(
+                self.cur.work.report().feature(id),
+                Some(kmb_core::FeatureStatus::Ok { .. })
+            );
         let cx = self.context();
         let text = |key: &str, dof: usize| self.win.t_with(key, &[("dof", (dof as f64).into())]);
         self.cur
@@ -1182,6 +1181,13 @@ impl Workspace {
             .filter(|editor| editor.handles(&entry.type_id))
             .find_map(|editor| {
                 editor.feature_presentation(&cx, entry, self.is_editing(id), summary, &text)
+            })
+            .map(|state| {
+                if unavailable {
+                    crate::FeaturePresentationState::Unavailable
+                } else {
+                    state
+                }
             })
     }
 

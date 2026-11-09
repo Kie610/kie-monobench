@@ -216,6 +216,13 @@ pub struct FeaturePresentation {
     pub mark: FeatureMark,
 }
 
+/// 拡張点への参加は `Some`、非参加は `None`。参加中の一時的な不可を非参加と混ぜない。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeaturePresentationState {
+    Unavailable,
+    Ready(FeaturePresentation),
+}
+
 impl FeaturePresentation {
     pub(crate) fn badge(&self) -> String {
         format!("{} {}", self.mark.symbol(), self.text)
@@ -269,7 +276,7 @@ pub trait FeatureEditor: Any + Send {
         _editing: bool,
         _summary: &str,
         _text: &dyn Fn(&str, usize) -> String,
-    ) -> Option<FeaturePresentation> {
+    ) -> Option<FeaturePresentationState> {
         None
     }
 
