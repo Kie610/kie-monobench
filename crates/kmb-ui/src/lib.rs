@@ -70,7 +70,7 @@ pub use commands_ui::{Command, CommandId};
 pub use doc_ui::StepUp;
 pub use editor::{
     APP_ADD_PARAM, APP_EDITS, APP_FINISH, APP_PARAMS, APP_RECOMPUTE, APP_REDO, APP_RUN, APP_SEARCH,
-    APP_UNDO, EditorHost, EditorTool, FeatureEditor, ToolGroup,
+    APP_UNDO, EditorHost, EditorTool, FeatureEditor, FeatureMark, FeaturePresentation, ToolGroup,
 };
 pub use feature_ui::with_unit_of;
 pub use files_ui::{Dialogs, NoDialogs, RecentAction, Sample, Unsaved};

@@ -32,6 +32,10 @@ use kmb_sketch::{SKETCH, Sketch, Solution};
 use kmb_ui::{EditorHost, EditorTool, FeatureEditor, ToolGroup};
 use std::collections::HashMap;
 
+mod constraint_status;
+#[cfg(test)]
+mod constraint_status_ui_tests;
+
 /// 面の輪郭を作り直す目安(ボディ、面、スケッチの平面。原点を替えると座標が変わる)
 type FaceKey = (kmb_core::ShapeHandle, String, kmb_core::Plane);
 
@@ -918,6 +922,31 @@ impl SketchEditor {
 }
 
 impl FeatureEditor for SketchEditor {
+    fn feature_presentation(
+        &self,
+        cx: &kmb_core::Context<'_>,
+        entry: &FeatureEntry,
+        editing: bool,
+        _summary: &str,
+        text: &dyn Fn(&str, usize) -> String,
+    ) -> Option<kmb_ui::FeaturePresentation> {
+        if entry.type_id != SKETCH {
+            return None;
+        }
+        let current = cx
+            .output(entry.id, "sketch")
+            .and_then(kmb_sketch::solution_of)?;
+        let solution = if editing && self.editor.feature == Some(entry.id) {
+            self.editor
+                .pattern_ghost
+                .as_ref()
+                .map_or(&current, |(_, _, solution)| solution)
+        } else {
+            &current
+        };
+        Some(constraint_status::presentation(solution, text))
+    }
+
     fn fresh(&self) -> Box<dyn FeatureEditor> {
         Box::new(SketchEditor {
             inference_settings: self.inference_settings.clone(),

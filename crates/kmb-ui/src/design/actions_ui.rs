@@ -1135,7 +1135,54 @@ impl Workspace {
 
     /// 機能の設定欄に出す要約(加工なら経路の長さと時間)。
     pub fn summary(&self, id: FeatureId) -> Option<String> {
-        self.win.extensions.summary(&self.context(), id)
+        let summary = self.win.extensions.summary(&self.context(), id)?;
+        Some(
+            self.presentation_from_summary(id, &summary)
+                .map_or(summary, |presentation| presentation.text),
+        )
+    }
+
+    /// 要約を持つ機能の、編集器が宣言した行の説明と印。
+    pub(crate) fn feature_presentation(&self, id: FeatureId) -> Option<crate::FeaturePresentation> {
+        let summary = self.win.extensions.summary(&self.context(), id)?;
+        self.presentation_from_summary(id, &summary)
+    }
+
+    /// 開いて直している機能の名前と、編集器が出した今の状態。閉じた選びには出さない。
+    pub(crate) fn editing_presentation(&self) -> Option<(String, Option<crate::FeatureMark>)> {
+        let id = self.cur.editing?;
+        let entry = self.cur.work.doc().data().feature(id)?;
+        Some(match self.feature_presentation(id) {
+            Some(state) => (format!("{} · {}", entry.name, state.text), Some(state.mark)),
+            None => (entry.name.clone(), None),
+        })
+    }
+
+    fn presentation_from_summary(
+        &self,
+        id: FeatureId,
+        summary: &str,
+    ) -> Option<crate::FeaturePresentation> {
+        // 再計算中は前の成功を今の入力の状態として出さない。
+        if self.cur.work.is_recomputing() {
+            return None;
+        }
+        let entry = self.cur.work.doc().data().feature(id)?;
+        if !matches!(
+            self.cur.work.report().feature(id),
+            Some(kmb_core::FeatureStatus::Ok { .. })
+        ) {
+            return None;
+        }
+        let cx = self.context();
+        let text = |key: &str, dof: usize| self.win.t_with(key, &[("dof", (dof as f64).into())]);
+        self.cur
+            .editors
+            .iter()
+            .filter(|editor| editor.handles(&entry.type_id))
+            .find_map(|editor| {
+                editor.feature_presentation(&cx, entry, self.is_editing(id), summary, &text)
+            })
     }
 
     /// 実行ボタンで解く機能(解析の研究)の様子。

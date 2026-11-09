@@ -70,3 +70,49 @@ fn redundant_constraints_are_distinct_from_a_fully_constrained_summary() {
     );
     assert_eq!(text, "過剰な拘束 C8");
 }
+
+#[test]
+fn a_previous_success_is_not_a_summary_for_a_non_successful_report() {
+    let modules = Modules::assemble(vec![crate::module()], Arc::new(NullKernel));
+    let mut doc = Document::new();
+    let id = doc
+        .apply_edits(
+            "見本",
+            vec![Edit::Insert {
+                type_id: crate::SKETCH.into(),
+                name: "拘束の見本".into(),
+                data: serde_json::to_value(crate::tests::rectangle("40 mm", "25 mm")).unwrap(),
+            }],
+        )
+        .unwrap()[0];
+    let mut report = doc.recompute(&modules.registry, modules.kernel.as_ref());
+    let read = |report: &kmb_core::RecomputeReport| {
+        modules.extensions.summary(
+            &Context::new(doc.data(), report, &modules.registry, &modules.kernel),
+            id,
+        )
+    };
+    assert_eq!(read(&report).as_deref(), Some("完全拘束"));
+    // 成功した同じ機能の報告だけを取り替え、前の出力に頼らないことを確かめる。
+    for status in [
+        FeatureStatus::Error {
+            message: "入力が不正".into(),
+        },
+        FeatureStatus::Blocked {
+            by: "上流が失敗".into(),
+            feature: None,
+        },
+        FeatureStatus::Suppressed,
+        FeatureStatus::RolledBack,
+    ] {
+        report
+            .features
+            .iter_mut()
+            .find(|feature| feature.id == id)
+            .unwrap()
+            .status = status;
+        assert_eq!(read(&report), None);
+    }
+    report.features.clear();
+    assert_eq!(read(&report), None);
+}

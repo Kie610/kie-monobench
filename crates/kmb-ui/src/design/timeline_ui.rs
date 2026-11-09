@@ -1322,6 +1322,11 @@ impl Workspace {
         let l = theme::look(ui.ctx());
         let f = &data.features[i];
         let health = self.health(f.id);
+        let presentation = self.feature_presentation(f.id);
+        let row_text = presentation.as_ref().map_or_else(
+            || f.name.clone(),
+            |state| format!("{} · {}", f.name, state.text),
+        );
         let selected = self.selection().contains(&f.id);
         let rolled = i >= data.active_len();
         let icon = self.feature_icon_name(&f.type_id);
@@ -1348,10 +1353,12 @@ impl Workspace {
             let w = if rows.name > 0.0 {
                 let text = ui
                     .painter()
-                    .layout_no_wrap(f.name.clone(), theme::prop(10.5), l.pal.ink2)
+                    .layout_no_wrap(row_text.clone(), theme::prop(10.5), l.pal.ink2)
                     .size()
                     .x;
-                (text + 8.0).min(theme::fs(84.0)).max(chip_size().x)
+                (text + 8.0)
+                    .min(theme::fs(if presentation.is_some() { 180.0 } else { 84.0 }))
+                    .max(chip_size().x)
             } else {
                 chip_size().x
             };
@@ -1361,6 +1368,11 @@ impl Workspace {
         r.widget_info(|| {
             egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &f.name)
         });
+        if let Some(state) = &presentation {
+            ui.ctx().accesskit_node_builder(r.id, |node| {
+                node.set_description(state.text.clone());
+            });
+        }
         // 札の見える所(横は、上のグループの名前の行と下の下線の分を除く)
         let rect = if v {
             full
@@ -1424,7 +1436,7 @@ impl Workspace {
                 l.pal.ink
             };
             let galley = p.layout(
-                f.name.clone(),
+                row_text.clone(),
                 crate::theme::prop(12.5),
                 ink,
                 (rect.width() - 32.0 - row_icon).max(10.0),
@@ -1446,7 +1458,7 @@ impl Workspace {
                 l.pal.ink2
             };
             let mut job =
-                egui::text::LayoutJob::simple_singleline(f.name.clone(), theme::prop(10.5), ink);
+                egui::text::LayoutJob::simple_singleline(row_text, theme::prop(10.5), ink);
             job.wrap = egui::text::TextWrapping {
                 max_width: rect.width() - 4.0,
                 max_rows: 1,
@@ -1474,18 +1486,32 @@ impl Workspace {
         } else {
             icon_box.right_bottom() + Vec2::new(-6.0, -6.0)
         };
-        paint_health(p, at, &health, &l, rolled);
+        if let Some(state) = presentation.as_ref().filter(|_| !health.is_problem()) {
+            p.text(
+                at,
+                egui::Align2::CENTER_CENTER,
+                state.mark.symbol(),
+                theme::prop(10.5),
+                state.mark.color(&l.pal),
+            );
+        } else {
+            paint_health(p, at, &health, &l, rolled);
+        }
         let reused = matches!(
             self.cur.work.report().feature(f.id),
             Some(FeatureStatus::Ok { reused: true, .. })
         );
-        let tip = chip_tip(
+        let mut tip = chip_tip(
             &self.win.words(),
             &f.name,
             &health,
             self.cur.work.report().time_ms(f.id),
             reused,
         );
+        if let Some(state) = &presentation {
+            tip.push('\n');
+            tip.push_str(&state.text);
+        }
         // 「タイムライン内を検索」で探した機能は、しばらく差し色の枠で光らせ、見える所まで送る。
         // AI が足した・直した機能も同じ枠で光らせる
         if let Some(glow) = self

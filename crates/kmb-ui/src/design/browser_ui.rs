@@ -114,6 +114,11 @@ fn row_radio(ui: &mut egui::Ui, r: Row<'_>) -> (egui::Response, bool, bool, bool
     resp.widget_info(|| {
         egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, r.selected, r.name)
     });
+    if let Some((text, _)) = r.badge {
+        ui.ctx().accesskit_node_builder(resp.id, |node| {
+            node.set_description(text.to_string());
+        });
+    }
     // 目は行の上に重ねた別のボタン(押しても行は選ばない)
     let eye = r.eye.map(|shown| {
         let er = Rect::from_center_size(
@@ -494,7 +499,15 @@ impl Workspace {
             None => self.feature_icon(f),
         };
         let cam = self.win.layout.space == Space::Machining;
-        let dot = self.status_dot(f.id, cam && meta.starts_with('T'));
+        let presentation = body
+            .is_none()
+            .then(|| self.feature_presentation(f.id))
+            .flatten();
+        let dot = if presentation.is_some() {
+            None
+        } else {
+            self.status_dot(f.id, cam && meta.starts_with('T'))
+        };
         // 目は行の目(ボディは最初に作った機能で覚える)、薄くするのはまとまりの目で隠れた時も
         let own_hidden = match body {
             Some(root) => self.is_body_hidden(root),
@@ -503,12 +516,19 @@ impl Workspace {
         let hidden = self.is_hidden(f.id);
         // 研究は実行の様子を札で出す(未実行・計算中・古い・済み)
         let run = self.run_state(f.id);
-        let badge = run.as_ref().map(|s| {
-            (
-                s.badge.clone(),
-                crate::actions_ui::tone_color(s.tone, &self.win.look.pal),
-            )
-        });
+        let badge = run
+            .as_ref()
+            .map(|s| {
+                (
+                    s.badge.clone(),
+                    crate::actions_ui::tone_color(s.tone, &self.win.look.pal),
+                )
+            })
+            .or_else(|| {
+                presentation
+                    .as_ref()
+                    .map(|state| (state.badge(), state.mark.color(&self.win.look.pal)))
+            });
         if run
             .as_ref()
             .is_some_and(|s| s.tone == kmb_core::RunTone::Busy)
@@ -590,6 +610,8 @@ impl Workspace {
                 &f.name,
                 &health,
             ))
+        } else if let Some(state) = &presentation {
+            r.on_hover_text(&state.text)
         } else if detail.is_empty() {
             r
         } else {

@@ -3,6 +3,11 @@
 ## 窓のボタン(アプリが描く窓の帯の右端)
 
 frame-window-minimize = 最小化
+sketch-state-full = 完全拘束
+sketch-state-under = 拘束不足 自由度 { $dof }
+sketch-state-over = 過剰な拘束
+sketch-state-inconsistent = 満たせない拘束
+sketch-state-empty = 図形なし
 frame-window-restore = 元の大きさに戻す
 frame-window-maximize = 最大化
 frame-window-close = 閉じる

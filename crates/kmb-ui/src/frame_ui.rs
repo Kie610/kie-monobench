@@ -325,6 +325,7 @@ impl Workspace {
     /// 知らせがあればそれを先に出す(× で消す)。
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         let l = theme::look(ui.ctx());
+        let editing = self.editing_presentation();
         ui.horizontal_centered(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             let info = self.selection_info();
@@ -412,6 +413,27 @@ impl Workspace {
                                 .on_hover_text(self.win.t("frame-status-computing-tip"));
                             }
                         }
+                        ui.add_space(12.0);
+                    }
+                    // 手順と知らせを優先し、通常の編集中だけ機能の名前と状態を先に出す。
+                    if self.cur.gesture.is_none()
+                        && self.win.message.is_none()
+                        && let Some((text, mark)) = &editing
+                    {
+                        let color = mark.map_or(l.pal.ink2, |mark| mark.color(&l.pal));
+                        let label = mark.map_or_else(
+                            || text.clone(),
+                            |mark| format!("{} {text}", mark.symbol()),
+                        );
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(label)
+                                    .size(crate::theme::fs(11.5))
+                                    .color(color),
+                            )
+                            .truncate(),
+                        )
+                        .on_hover_text(text);
                         ui.add_space(12.0);
                     }
                     // 入りきらない案内は途中で切らず、そこから後ろを出さない(字が大きい時)

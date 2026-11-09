@@ -7,6 +7,21 @@ use egui_kittest::kittest::Queryable;
 use kmb_core::Document;
 use kmb_samples::{reference_document, sample_document};
 
+#[test]
+fn editing_a_feature_without_a_presentation_keeps_its_name_until_closed() {
+    let doc = sample_document();
+    let entry = doc.data().features.last().unwrap();
+    let (id, name) = (entry.id, entry.name.clone());
+    let mut ws = Workspace::new(doc, None, kmb_bundle::modules());
+    let before = ws.document().to_json();
+    assert_eq!(ws.editing_presentation(), None);
+    ws.open_edit(id);
+    assert_eq!(ws.editing_presentation(), Some((name, None)));
+    ws.finish_edit();
+    assert_eq!(ws.editing_presentation(), None);
+    assert_eq!(ws.document().to_json(), before);
+}
+
 /// 操作が今使えるか。
 pub(crate) fn can(ws: &Workspace, id: &str) -> bool {
     ws.actions()
