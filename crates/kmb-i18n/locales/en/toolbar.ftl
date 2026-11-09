@@ -117,6 +117,9 @@ toolbar-pick-field = What the field "{ $name }" accepts
 toolbar-pick-now-body = Clicking a face selects its whole body
 toolbar-pick-now-mixed = Select vertices, edges and faces together
 toolbar-pick-all = Allow Selecting Everything
+toolbar-enclose-window = Window Selection
+toolbar-enclose-lasso = Freeform Selection
+toolbar-enclose-tip = Shape drawn by left-dragging. Freeform closes the traced path; first moving left selects what it touches, moving right selects what is fully inside
 
 toolbar-pick-now-part = Picking parts: { $name }
 toolbar-pick-stop-part = Finish picking parts

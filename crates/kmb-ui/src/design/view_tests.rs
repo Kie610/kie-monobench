@@ -295,7 +295,7 @@ fn picking_and_fitting_work_in_perspective() {
         "{at:?}"
     );
     // 範囲で選ぶと、見えている面だけ入る(下の面は入らない)
-    let faces = view3d::picks_in(&ws.cur.scene, &ws.cur.camera, rect, rect, false);
+    let faces = view3d::picks_in(&ws.cur.scene, &ws.cur.camera, rect, &rect.into(), false);
     assert!(faces.iter().any(|f| f.face == format!("f{}:end", plate.0)));
     assert!(
         faces
@@ -594,9 +594,9 @@ fn window_and_crossing_boxes_pick_differently() {
     let mut cam = ws.cur.camera;
     cam.fit(&ws.cur.scene, rect);
     // 左半分だけの範囲: 上の面は半分しか入らない
-    let area = egui::Rect::from_min_max(rect.min, egui::pos2(400.0, 600.0));
-    let window = view3d::picks_in(&ws.cur.scene, &cam, rect, area, false);
-    let crossing = view3d::picks_in(&ws.cur.scene, &cam, rect, area, true);
+    let area: view3d::Area = egui::Rect::from_min_max(rect.min, egui::pos2(400.0, 600.0)).into();
+    let window = view3d::picks_in(&ws.cur.scene, &cam, rect, &area, false);
+    let crossing = view3d::picks_in(&ws.cur.scene, &cam, rect, &area, true);
     let top = format!("f{}:end", part.plate.0);
     assert!(
         window.iter().all(|f| f.face != top),
@@ -609,43 +609,32 @@ fn window_and_crossing_boxes_pick_differently() {
     );
     assert!(crossing.len() > window.len());
     // ボディも同じ。全体を囲めばどちらでも入る
-    assert!(view3d::bodies_in(&ws.cur.scene, &cam, rect, area, false).is_empty());
+    assert!(view3d::bodies_in(&ws.cur.scene, &cam, rect, &area, false).is_empty());
     assert_eq!(
-        view3d::bodies_in(&ws.cur.scene, &cam, rect, area, true).len(),
+        view3d::bodies_in(&ws.cur.scene, &cam, rect, &area, true).len(),
         1
     );
     assert_eq!(
-        view3d::bodies_in(&ws.cur.scene, &cam, rect, rect, false).len(),
+        view3d::bodies_in(&ws.cur.scene, &cam, rect, &rect.into(), false).len(),
         1
     );
     // 線と三角形の当たり(範囲をまたぐだけでもかかる)
-    let r = egui::Rect::from_min_max(egui::pos2(10.0, 10.0), egui::pos2(20.0, 20.0));
-    assert!(view3d::segment_touches(
-        r,
-        egui::pos2(0.0, 15.0),
-        egui::pos2(30.0, 15.0)
+    let r = view3d::Area::from(egui::Rect::from_min_max(
+        egui::pos2(10.0, 10.0),
+        egui::pos2(20.0, 20.0),
     ));
-    assert!(!view3d::segment_touches(
-        r,
+    assert!(r.segment_touches(egui::pos2(0.0, 15.0), egui::pos2(30.0, 15.0)));
+    assert!(!r.segment_touches(egui::pos2(0.0, 0.0), egui::pos2(30.0, 5.0)));
+    assert!(r.triangle_touches([
         egui::pos2(0.0, 0.0),
-        egui::pos2(30.0, 5.0)
-    ));
-    assert!(view3d::triangle_touches(
-        r,
-        [
-            egui::pos2(0.0, 0.0),
-            egui::pos2(40.0, 0.0),
-            egui::pos2(0.0, 40.0)
-        ]
-    ));
-    assert!(!view3d::triangle_touches(
-        r,
-        [
-            egui::pos2(30.0, 30.0),
-            egui::pos2(40.0, 30.0),
-            egui::pos2(30.0, 40.0)
-        ]
-    ));
+        egui::pos2(40.0, 0.0),
+        egui::pos2(0.0, 40.0)
+    ]));
+    assert!(!r.triangle_touches([
+        egui::pos2(30.0, 30.0),
+        egui::pos2(40.0, 30.0),
+        egui::pos2(30.0, 40.0)
+    ]));
 }
 
 #[test]
