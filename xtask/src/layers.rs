@@ -644,6 +644,7 @@ const JSON_NAME_KNOWN: &[(&str, &str, usize)] = &[
     ("kmb-ui", "src/design/param_views_ui.rs", 2), // パラメータの表
     ("kmb-ui", "src/layout.rs", 1),          // 画面の配置
     ("kmb-ui", "src/themes.rs", 3),          // 色のテーマ
+    ("kmb-ui-sketch", "src/inference_settings.rs", 1), // スケッチの補助線の PC 設定
     ("kmb-ui-tools", "src/lib.rs", 4),       // 工具ライブラリ
 ];
 

@@ -455,6 +455,7 @@ impl Workspace {
     pub fn with_editor(mut self, e: impl FeatureEditor) -> Self {
         let mut e: Box<dyn FeatureEditor> = Box::new(e);
         e.set_data_dir(self.win.data_dir.as_deref());
+        e.set_settings_dir(self.win.data_dir.as_deref().filter(|_| !self.win.safe_mode));
         self.cur.editors.push(e);
         self
     }
@@ -956,3 +957,6 @@ mod mass_progress_tests;
 
 #[cfg(test)]
 mod mass_progress_live_tests;
+
+#[cfg(test)]
+mod editor_settings_tests;
