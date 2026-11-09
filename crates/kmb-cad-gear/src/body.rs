@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::hub::{PARTS_OUTPUT, Parts};
 
+mod swept;
+
 pub const GEAR_BODY: &str = "cad.gear_body@1";
 
 /// 歯の幅をどちらへ取るか。
@@ -38,6 +40,16 @@ pub enum Alignment {
     #[default]
     Centered,
     Start,
+}
+
+/// 腕の断面。楕円と十字は断面全体を相似に細くする。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpokeSection {
+    #[default]
+    Rectangle,
+    Ellipse,
+    Cross,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -64,6 +76,8 @@ pub struct GearBody {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boss: Option<String>,
     #[serde(default, skip_serializing_if = "is_default")]
+    pub spoke_section: SpokeSection,
+    #[serde(default, skip_serializing_if = "is_default")]
     pub alignment: Alignment,
     #[serde(default, skip_serializing_if = "is_default")]
     pub direction: Side,
@@ -80,6 +94,7 @@ impl GearBody {
             width: width_default(),
             web: None,
             boss: None,
+            spoke_section: SpokeSection::Rectangle,
             alignment: Alignment::default(),
             direction: Side::default(),
             operation: Operation::default(),
@@ -226,7 +241,9 @@ impl Feature for GearBody {
             stop: None,
             taper: 0.0,
         };
-        let recipe = if spec.kind.is_pulley() {
+        let recipe = if self.spoke_section != SpokeSection::Rectangle {
+            swept::recipe(self, &parts, width, web, boss, from, to)?
+        } else if spec.kind.is_pulley() {
             let direction = spec.axis.direction;
             profile.plane.origin = [0, 1, 2].map(|i| profile.plane.origin[i] + direction[i] * from);
             Recipe::Revolve {
@@ -299,6 +316,7 @@ pub fn register(reg: &mut Registry) {
                     .length()
                     .help("空なら歯の幅"),
             )
+            .field(Field::choice("spoke_section", "腕の断面", &[("rectangle", "長方形"), ("ellipse", "楕円"), ("cross", "十字")]).help("腕用。長方形は厚さ一定。楕円と十字は幅と厚さを同じ比で変え、先の厚さは腕の厚さ × 先の幅 / 付け根の幅。腕のある輪郭を選ぶ。楕円と十字の交差には未対応。新しいボディとして作る"))
             .field(Field::choice(
                 "alignment",
                 "腕とボスの位置",

@@ -189,3 +189,29 @@ fn no_extra_fields_preserve_the_complete_profile_and_partition_area() {
     assert!((sum - area(&plain.profile)).abs() < 1e-8);
     assert!(plain.parts.boss.is_none());
 }
+
+#[test]
+fn positive_rim_band_is_exact_even_below_one_module_and_zero_keeps_legacy_band() {
+    for (requested, expected) in [(0.0, 19.5), (0.5, 21.0), (3.0, 18.5)] {
+        let got = make(&Params {
+            rim_width: requested,
+            ..Default::default()
+        })
+        .unwrap();
+        let Segment::Circle { radius, .. } = got.parts.rim.regions[0].holes[0].edges[0].segment
+        else {
+            panic!("rim circle")
+        };
+        assert_eq!(radius, expected);
+    }
+    assert!(
+        make(&Params {
+            rim_width: 14.0,
+            boss_diameter: 16.0,
+            ..Default::default()
+        })
+        .err()
+        .unwrap()
+        .contains("13.500")
+    );
+}

@@ -2390,3 +2390,22 @@ field-cad-gear-rope-diameter-help = Empty uses 10 mm.
 field-cad-gear-flange-height = Flange Height
 
 field-cad-gear-flange-height-help = Empty uses 3 mm above the rope center.
+
+# Spoke outline and body section
+field-cad-gear-web-form = Disk or Spokes
+field-cad-gear-web-form-help = Spokes require an explicit positive boss outside diameter. Do not combine with lightening holes.
+field-cad-gear-spoke-count = Number of Spokes
+field-cad-gear-spoke-count-help = Empty uses 5. An integer from 3 to 12.
+field-cad-gear-spoke-root-width = Root Width
+field-cad-gear-spoke-root-width-help = Empty derives the width from the boss diameter and spoke count. Measured at the start of the spoke centerline.
+field-cad-gear-spoke-tip-width = Tip Width
+field-cad-gear-spoke-tip-width-help = Empty uses 0.75 times the root width. Measured at the end of the centerline.
+field-cad-gear-spoke-curve = Spoke Curve
+field-cad-gear-spoke-curve-angle = Curve Angle
+field-cad-gear-spoke-curve-angle-help = Central angle of the circular centerline. Empty uses 30 deg; 0 is straight. The sign selects the bending side.
+field-cad-gear-spoke-root-round = Root Round Radius
+field-cad-gear-spoke-root-round-help = Empty or 0 for none. Radius of the root reinforcement in the planar outline.
+field-cad-gear-rim-width = Rim Band Width
+field-cad-gear-rim-width-help = Empty or 0 retains the existing one-module band. A positive value is the exact width measured inward from the root circle.
+field-cad-gear-body-spoke-section = Spoke Section
+field-cad-gear-body-spoke-section-help = For spokes. Rectangle keeps constant thickness. Ellipse and cross taper width and thickness by the same ratio: tip thickness = web thickness × tip width / root width. Select an outline with spokes. Ellipse and cross do not support Intersect; create a new body instead.

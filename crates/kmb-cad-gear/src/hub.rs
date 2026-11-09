@@ -6,6 +6,8 @@ use kmb_core::{Payload, Plane, Profile, ProfileEdge, ProfileLoop, Region, Segmen
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
 
+pub mod spokes;
+
 pub const PARTS_OUTPUT: &str = "parts";
 
 /// 歯車のボディが厚さを分ける領域。同じ歯車 crate の輪郭とボディの間だけで受け渡す。
@@ -14,6 +16,8 @@ pub struct Parts {
     pub rim: Profile,
     pub web: Option<Profile>,
     pub boss: Option<Profile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spokes: Option<spokes::Arms>,
 }
 
 impl Payload for Parts {
@@ -30,6 +34,8 @@ pub struct Params {
     pub keyway: bool,
     pub key_width: Option<f64>,
     pub key_depth: Option<f64>,
+    pub rim_width: f64,
+    pub spokes: Option<spokes::Params>,
 }
 
 /// JIS B 1301 の平行キー: 軸の穴の径の区分と、キーの幅・穴の側の溝の深さ。
@@ -119,6 +125,7 @@ pub fn layout(
         p.circle_diameter,
         p.boss_diameter,
         bore_radius,
+        p.rim_width,
     ]
     .iter()
     .any(|v| !v.is_finite() || *v < 0.0)
@@ -128,7 +135,18 @@ pub fn layout(
     if p.count > 1000 {
         return Err("軽くする穴の数は 0 から 1000 までにしてください".into());
     }
-    let rim_inner = root_radius - module;
+    let rim_inner = root_radius
+        - if p.rim_width == 0.0 {
+            module
+        } else {
+            p.rim_width
+        };
+    if p.rim_width > 0.0 && rim_inner <= (p.boss_diameter / 2.0).max(bore_radius) {
+        return Err(format!(
+            "リムの縁の幅は {:.3} mm 未満にしてください",
+            root_radius - (p.boss_diameter / 2.0).max(bore_radius)
+        ));
+    }
     let boss_radius = p.boss_diameter / 2.0;
     if boss_radius > 0.0 && (boss_radius <= bore_radius || boss_radius >= rim_inner) {
         return Err(format!(
@@ -176,6 +194,22 @@ pub fn layout(
         None
     };
     let bore_loop = (bore_radius > 0.0).then(|| bore(bore_radius, key));
+    if let Some(arms) = &p.spokes {
+        if p.count != 0 {
+            return Err(
+                "腕と軽くする穴は同時に指定できません。軽くする穴の数を 0 にしてください".into(),
+            );
+        }
+        return spokes::layout(
+            outer,
+            root_radius,
+            module,
+            rim_inner,
+            boss_radius,
+            bore_loop,
+            arms,
+        );
+    }
     let mut holes = Vec::new();
     if p.count > 0 {
         let ring = p.circle_diameter / 2.0;
@@ -240,6 +274,7 @@ pub fn layout(
         };
         holes.extend(web_hole);
         Parts {
+            spokes: None,
             rim,
             web: Some(with_region(circle("rim:inner", [0.0; 2], rim_inner), holes)),
             boss: (boss_radius > 0.0).then(|| {
@@ -251,6 +286,7 @@ pub fn layout(
         }
     } else {
         Parts {
+            spokes: None,
             rim: profile.clone(),
             web: None,
             boss: None,
@@ -278,6 +314,17 @@ impl Layout {
         }
         if let Some(boss) = &mut self.parts.boss {
             place(boss);
+        }
+        if let Some(arms) = &mut self.parts.spokes {
+            for path in &mut arms.paths {
+                path.plane = plane;
+                for edge in &mut path.edges {
+                    *edge = crate::tooth::translate(&crate::tooth::rotate(edge, phase), center);
+                }
+            }
+            if let Some(pads) = &mut arms.root_pads {
+                place(pads);
+            }
         }
         self
     }

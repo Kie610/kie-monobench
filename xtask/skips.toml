@@ -7,6 +7,8 @@
 
 # 実行中に飛ばしてよいテスト(テストの関数の名前 = いつ飛ばすか)。ここに無い飛ばしが出たら落とす。
 [runtime]
+rectangular_elliptic_and_cross_spokes_have_distinct_positive_actual_volumes = "truck の回(断面を相似に変える腕の Sweep に未対応)"
+root_rounding_increases_actual_volume_for_all_three_sections = "truck の回(断面を相似に変える腕の Sweep に未対応)"
 an_extruded_ellipse_has_one_side_face_and_its_top_edge_rounds = "truck の回(曲線のまま押し出さず、線分と円弧の並びで作る)"
 an_extruded_spline_closed_by_a_line_has_one_curved_side_face = "truck の回(曲線のまま押し出さず、線分と円弧の並びで作る)"
 gear_hub_web_and_keyway_have_the_calculated_volume_and_alignment = "truck の回(リム・腕・ボスの同じ円筒で接する領域のブーリアンに失敗する)"

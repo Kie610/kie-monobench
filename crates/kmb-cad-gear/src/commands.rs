@@ -65,6 +65,24 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::length("chain_pitch", "鎖のピッチ(手で打つ時に必須)"),
         Arg::length("roller_diameter", "ローラーの径(手で打つ時に必須)"),
         Arg::length("chain_inner_width", "鎖の内幅(手で打つ時に必須)"),
+        Arg::choice(
+            "web_form",
+            "円板か腕",
+            &[("disk", "円板"), ("spokes", "腕")],
+        )
+        .default("disk"),
+        Arg::integer("spoke_count", "腕の数(3〜12、省くと5)"),
+        Arg::length("spoke_root_width", "付け根の幅"),
+        Arg::length("spoke_tip_width", "先の幅"),
+        Arg::choice(
+            "spoke_curve",
+            "腕の曲がり",
+            &[("straight", "まっすぐ"), ("curved", "曲がり")],
+        )
+        .default("straight"),
+        Arg::angle("spoke_curve_angle", "中心線の円弧の角(省くと30度)"),
+        Arg::length("spoke_root_round", "付け根の丸み(0なら無し)"),
+        Arg::length("rim_width", "リムの縁の幅(0なら従来のモジュール1つ分)"),
         Arg::integer("lightening_count", "軽くする穴の数(0 なら穴なし)"),
         Arg::length("lightening_diameter", "軽くする穴の径"),
         Arg::length("lightening_circle", "穴を並べる円の径"),
@@ -79,6 +97,16 @@ fn args(body: bool) -> Vec<Arg> {
             Arg::length("width", "歯の幅(省くと鎖車は鎖の内幅から、ほかは 10 mm)"),
             Arg::length("web", "腕の厚さ(省くと歯の幅)"),
             Arg::length("boss", "ボスの長さ(省くと歯の幅)"),
+            Arg::choice(
+                "spoke_section",
+                "腕の断面",
+                &[
+                    ("rectangle", "長方形"),
+                    ("ellipse", "楕円"),
+                    ("cross", "十字"),
+                ],
+            )
+            .default("rectangle"),
             Arg::choice(
                 "alignment",
                 "腕とボスの位置",
@@ -319,6 +347,49 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
     {
         return Err("ベルト車とロープ車の寸法は対応する種類で指定してください".into());
     }
+    let web_form = cx.arg_str("web_form").unwrap_or("disk");
+    let curve = cx.arg_str("spoke_curve").unwrap_or("straight");
+    let spoke_keys = [
+        "spoke_count",
+        "spoke_root_width",
+        "spoke_tip_width",
+        "spoke_curve_angle",
+        "spoke_root_round",
+        "rim_width",
+    ];
+    if kind != GearKind::External
+        && (web_form != "disk"
+            || curve != "straight"
+            || spoke_keys.iter().any(|key| cx.arg(key).is_some()))
+    {
+        return Err("腕とリムの縁の幅は平歯車で指定してください".into());
+    }
+    if web_form != "disk" {
+        gear["web_form"] = json!(web_form);
+    }
+    if curve != "straight" {
+        gear["spoke_curve"] = json!(curve);
+    }
+    if let Some(value) = cx.arg("spoke_count") {
+        let count = value
+            .as_u64()
+            .filter(|n| (3..=12).contains(n))
+            .ok_or("腕の数は 3 から 12 までの整数にしてください")?;
+        gear["spoke_count"] = json!(count.to_string());
+    }
+    for key in [
+        "spoke_root_width",
+        "spoke_tip_width",
+        "spoke_root_round",
+        "rim_width",
+    ] {
+        if let Some(value) = cx.arg_f64(key)? {
+            gear[key] = json!(format!("{value} mm"));
+        }
+    }
+    if let Some(value) = cx.arg_f64("spoke_curve_angle")? {
+        gear["spoke_curve_angle"] = json!(format!("{value} deg"));
+    }
     if let Some(value) = cx.arg("lightening_count") {
         let count = value
             .as_u64()
@@ -400,6 +471,9 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
             if let Some(value) = cx.arg_f64(key)? {
                 data[key] = json!(mm(value));
             }
+        }
+        if let Some(value) = cx.arg_str("spoke_section").filter(|s| *s != "rectangle") {
+            data["spoke_section"] = json!(value);
         }
         if let Some(value) = cx.arg("alignment") {
             data["alignment"] = value.clone();
