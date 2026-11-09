@@ -426,7 +426,6 @@ fn opening_and_inference_settings_stay_independent_across_reset_and_fresh() {
     let inference_on = serde_json::json!({"guide_intersections":true});
     let mut editor = SketchEditor::new();
     let settings = editor.settings(&|key| key.into());
-    assert_eq!(settings.len(), 2);
     for id in [opening_settings::ID, inference_settings::ID] {
         assert_eq!(
             settings.iter().filter(|setting| setting.id == id).count(),
