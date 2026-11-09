@@ -113,6 +113,7 @@ fn small_box(kernel: &Arc<dyn Kernel>) -> ShapeHandle {
             outer: ProfileLoop {
                 edges: (0..4)
                     .map(|i| ProfileEdge {
+                        curve: None,
                         name: format!("edge{i}"),
                         segment: Segment::Line {
                             a: points[i],

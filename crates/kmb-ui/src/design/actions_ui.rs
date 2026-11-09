@@ -886,6 +886,25 @@ impl Workspace {
     /// 設定を変え、データフォルダがあれば書く。文書ごとに持つ設定(レンダリングのシーン)は今の
     /// 文書にも書く(取り消せる)。正しくない値なら何も変えずに知らせる。
     pub fn change_settings(&mut self, id: &str, value: &serde_json::Value) -> bool {
+        let handled = self
+            .cur
+            .editors
+            .iter_mut()
+            .find_map(|e| e.change_settings(id, value, !self.win.safe_mode));
+        if let Some(result) = handled {
+            return match result {
+                Ok(()) => {
+                    self.win.message = self.win.safe_mode.then(|| {
+                        "安全モードなので、設定は今回だけ使い、ファイルには書きません".into()
+                    });
+                    true
+                }
+                Err(error) => {
+                    self.win.fail(error);
+                    false
+                }
+            };
+        }
         // AI が画面の欄に打った値なら、ファイルの欄(ポストのプラグインなど)を AI に許したフォルダに限る
         let r = match self.ai_roots_now() {
             Some(roots) => self.cur.work.set_settings_in(id, value, &roots),
@@ -915,7 +934,7 @@ impl Workspace {
     /// 戻した設定の id を返す(画面の台本の試験が、台本ごとに初めの値から始めるのにも使う)。
     pub fn reset_module_settings(&mut self) -> Vec<String> {
         let mut reset = Vec::new();
-        for g in self.cur.work.settings() {
+        for g in self.all_settings() {
             if g.value != g.default && self.change_settings(&g.id, &g.default) {
                 reset.push(g.id);
             }
@@ -1193,18 +1212,35 @@ pub(crate) fn setting_field(
                 .iter()
                 .find(|c| c.value == cur)
                 .map_or(cur.clone(), |c| c.label.clone());
-            egui::ComboBox::from_id_salt(key)
-                .selected_text(shown)
-                .show_ui(ui, |ui| {
-                    for c in choices
-                        .iter()
-                        .filter(|c| !f.hidden.contains(&c.value) || c.value == cur)
-                    {
-                        if ui.selectable_label(c.value == cur, &c.label).clicked() {
-                            f.set(v, Some(serde_json::Value::String(c.value.clone())));
+            let icon = choices
+                .iter()
+                .find(|c| c.value == cur)
+                .map_or("", |c| c.icon.as_str());
+            // 絵のある選択肢は、選んでいる物の絵を一覧の前に並べる(表の欄の 1 つに収める)
+            let combo = |ui: &mut egui::Ui| {
+                egui::ComboBox::from_id_salt(key)
+                    .selected_text(shown)
+                    .show_ui(ui, |ui| {
+                        for c in choices
+                            .iter()
+                            .filter(|c| !f.hidden.contains(&c.value) || c.value == cur)
+                        {
+                            if crate::design::feature_ui::choice_row(ui, c.value == cur, c)
+                                .clicked()
+                            {
+                                f.set(v, Some(serde_json::Value::String(c.value.clone())));
+                            }
                         }
-                    }
+                    });
+            };
+            if icon.is_empty() {
+                combo(ui);
+            } else {
+                ui.horizontal(|ui| {
+                    crate::design::feature_ui::choice_icon(ui, icon);
+                    combo(ui);
                 });
+            }
         }
         _ => {
             ui.weak("(設定の窓では変えられない欄)");

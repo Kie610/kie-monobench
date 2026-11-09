@@ -153,6 +153,54 @@ impl Store {
     }
 }
 
+/// ほかの文書の計算が SMLib を使っている間を作る(試験と動作確認用)。捨てるか `limit` が過ぎる
+/// まで、別の糸で SMLib の錠を持ち続ける。錠を待たない呼び出しは、その間 [`KernelError::Busy`] で
+/// 戻る。待った呼び出しは錠が空いてから戻るので、戻った時に [`Occupied::still_held`] が偽になる
+/// (時間で見ずに、待ったかを確かめられる)。
+pub struct Occupied {
+    release: Option<std::sync::mpsc::Sender<()>>,
+    holder: Option<std::thread::JoinHandle<()>>,
+    held: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// 錠を取ってから戻る([`Occupied`])。
+pub fn occupy(limit: std::time::Duration) -> Occupied {
+    use std::sync::atomic::Ordering;
+    let (taken, wait_taken) = std::sync::mpsc::channel();
+    let (release, wait_release) = std::sync::mpsc::channel::<()>();
+    let held = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let flag = held.clone();
+    let holder = std::thread::spawn(move || {
+        let g = ffi::lock_wait();
+        let _ = taken.send(());
+        let _ = wait_release.recv_timeout(limit);
+        flag.store(false, Ordering::SeqCst);
+        drop(g);
+    });
+    wait_taken.recv().expect("錠を持つ糸が止まった");
+    Occupied {
+        release: Some(release),
+        holder: Some(holder),
+        held,
+    }
+}
+
+impl Occupied {
+    /// まだ錠を持っているか。
+    pub fn still_held(&self) -> bool {
+        self.held.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Drop for Occupied {
+    fn drop(&mut self) {
+        drop(self.release.take());
+        if let Some(h) = self.holder.take() {
+            let _ = h.join();
+        }
+    }
+}
+
 /// SMLib による [`Kernel`] の実装。
 #[derive(Default)]
 pub struct SmlibKernel {
@@ -167,7 +215,7 @@ pub struct SmlibKernel {
 
 impl Drop for SmlibKernel {
     fn drop(&mut self) {
-        let _g = ffi::lock();
+        let _g = ffi::lock_wait();
         self.store
             .get_mut()
             .unwrap_or_else(|e| e.into_inner())
@@ -291,7 +339,7 @@ impl SmlibKernel {
             let h = k.transform(inner, m, suffix)?;
             return Ok(self.adopt_imported(h));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (mut brep, names) = {
             let src = s.get(shape)?;
@@ -362,7 +410,7 @@ impl SmlibKernel {
 
     /// 閉じた正しい立体か、立体の数、空洞の数。動作確認用。
     pub fn check(&self, h: ShapeHandle) -> Result<(bool, i64, i64), KernelError> {
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let s = self.lock();
         s.get(h)?.brep.check().map_err(failed("立体の検査"))
     }
@@ -380,7 +428,7 @@ impl SmlibKernel {
             .enumerate()
             .map(|(i, s)| s.patch(i as i64))
             .collect();
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let brep = ffi::patch_solid(&patches, n, n + 1).map_err(failed(what))?;
         let faces = brep
             .faces(ffi::FACE_INNER_POINT)
@@ -407,7 +455,7 @@ impl SmlibKernel {
             .enumerate()
             .map(|(i, f)| step_face(f, i as i64))
             .collect();
-        let _g = ffi::lock();
+        let _g = ffi::lock().map_err(|e| e.to_string())?;
         let brep = ffi::step_solid(&faces, STEP_TOLERANCE).map_err(|(i, e)| match i {
             Some(i) => format!("面 {}: {e}", model.faces[i].name),
             None => e,
@@ -506,6 +554,68 @@ fn segments(loops: &[&ProfileLoop]) -> (Vec<JcSegment>, Vec<u32>) {
     (segs, lens)
 }
 
+/// 輪郭を中継層の区間の並びにし、同じ元の曲線から続く辺(楕円・スプラインなどを線分と円弧で
+/// 近づけた物)を 1 本の有理 B スプラインにまとめる([`ProfileLoop::pieces`])。押し出しの側面が
+/// 曲線ごとに 1 枚の面になる。区間が指す節点と制御点は `data` が持つので、中継層へ渡し終わるまで
+/// この値を生かしておく。
+struct CurveOutline {
+    segs: Vec<JcSegment>,
+    lens: Vec<u32>,
+    /// 曲線にまとめた辺の名前から、まとめた曲線の名前(面の名前に使う)
+    merged: HashMap<String, String>,
+    _data: Vec<Vec<f64>>,
+}
+
+fn curve_segments(loops: &[&ProfileLoop]) -> CurveOutline {
+    let mut out = CurveOutline {
+        segs: Vec::new(),
+        lens: Vec::new(),
+        merged: HashMap::new(),
+        _data: Vec::new(),
+    };
+    for lp in loops {
+        let pieces = lp.pieces();
+        let before = out.segs.len();
+        for piece in pieces {
+            match piece {
+                k::LoopPiece::Edge(i) => {
+                    let (mut one, _) = segments(&[&ProfileLoop {
+                        edges: vec![lp.edges[i].clone()],
+                    }]);
+                    out.segs.append(&mut one);
+                }
+                k::LoopPiece::Curve { name, curve, edges } => {
+                    let knots = curve.knots.clone();
+                    let points: Vec<f64> = curve
+                        .ctrl
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(i, c)| {
+                            [c[0], c[1], curve.weights.get(i).copied().unwrap_or(1.0)]
+                        })
+                        .collect();
+                    let s = JcSegment {
+                        kind: ffi::SEG_NURBS,
+                        degree: curve.degree as u32,
+                        count: curve.ctrl.len() as u32,
+                        knots: knots.as_ptr(),
+                        points: points.as_ptr(),
+                        ..JcSegment::default()
+                    };
+                    out._data.push(knots);
+                    out._data.push(points);
+                    out.segs.push(s);
+                    for i in edges {
+                        out.merged.insert(lp.edges[i].name.clone(), name.clone());
+                    }
+                }
+            }
+        }
+        out.lens.push((out.segs.len() - before) as u32);
+    }
+    out
+}
+
 /// 回転軸に辺で 2 か所以上載るループ(半円の輪を直径の軸で回す時など)を、軸から軸までの線ごとに
 /// 軸の上の線で閉じたループに分け、囲む面積の大きい順に並べる(中のものは引かれ、さらに中のものは
 /// 足される。`jc_revolve`)。分けないと SMLib は軸で切れた殻をそれぞれ別の立体にし、中空の球が
@@ -541,6 +651,7 @@ fn split_on_axis(lp: &ProfileLoop, on_axis: &dyn Fn(P2) -> bool) -> Vec<ProfileL
         .map(|mut edges| {
             let (from, to) = (edges[0].from_point(), edges[edges.len() - 1].to_point());
             edges.push(ProfileEdge {
+                curve: None,
                 name: format!("{}:axis", edges[0].name),
                 segment: Segment::Line { a: to, b: from },
                 reversed: false,
@@ -567,6 +678,10 @@ fn nearest_edge<'a>(loops: &[&'a ProfileLoop], q: [f64; 2]) -> Option<(&'a str, 
         .map(|e| (e.name.as_str(), e.segment.distance(q)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
+
+/// 曲線のまま作った側面の上の点と、その曲線を近づけた辺との隔たりの上限(mm)。近似の許容差
+/// (スケッチの 0.002 mm)より広く、隣の別の辺と取り違えない程度に狭くする。
+const CURVE_FACE_GAP: f64 = 0.02;
 
 /// STEP の面を切り抜く時の許容差(mm)。
 const STEP_TOLERANCE: f64 = 1e-3;
@@ -672,7 +787,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.body_kind(inner);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let store = self.lock();
         let shape = store.get(shape)?;
         // 開いた縁を持つ面が混ざる時は、閉じた部分だけの体積を返さない。
@@ -725,12 +840,12 @@ impl Kernel for SmlibKernel {
             return Err(KernelError::Failed("閉じた輪郭がありません".into()));
         }
         let loops = all_loops(profile);
-        let (segs, lens) = segments(&loops);
+        let outline = curve_segments(&loops);
         let plane = profile.plane;
         let n = k::normalize(plane.normal());
-        let _g = ffi::lock();
-        let brep =
-            ffi::extrude(&jc_plane(&plane), &segs, &lens, from, to).map_err(failed("押し出し"))?;
+        let _g = ffi::lock()?;
+        let brep = ffi::extrude(&jc_plane(&plane), &outline.segs, &outline.lens, from, to)
+            .map_err(failed("押し出し"))?;
         // 平面の代表点は外形の箱の中心: 線分を押し出した側面(平行四辺形)では面の中心になる
         let faces = brep
             .faces(ffi::FACE_INNER_POINT_CURVED)
@@ -748,6 +863,10 @@ impl Kernel for SmlibKernel {
                     }
                 }
                 match nearest_edge(&loops, plane.to_local(f.point)) {
+                    // 曲線にまとめた辺の面は曲線の上にあり、近づけた辺から許容差ほど離れる
+                    Some((e, d)) if d < CURVE_FACE_GAP && outline.merged.contains_key(e) => {
+                        format!("{tag}:side:{}", outline.merged[e])
+                    }
                     Some((e, d)) if d < 1e-3 => format!("{tag}:side:{e}"),
                     _ => format!("{tag}:face"),
                 }
@@ -802,7 +921,7 @@ impl Kernel for SmlibKernel {
         let (segs, lens) = segments(&loops);
         let plane = profile.plane;
         let n = k::normalize(plane.normal());
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         // 輪郭の平面から表へ・裏へ、それぞれ傾けて作り、両方あれば足す
         let mut brep: Option<ffi::Brep> = None;
         for h in [to, from] {
@@ -923,7 +1042,7 @@ impl Kernel for SmlibKernel {
             .flat_map(|l| split_on_axis(l, &on_axis))
             .collect();
         let (segs, lens) = segments(&parts.iter().collect::<Vec<_>>());
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let brep = ffi::revolve(&jc_plane(&plane), &segs, &lens, axis_origin, a, angle)
             .map_err(failed("回転"))?;
         let faces = brep
@@ -1039,7 +1158,7 @@ impl Kernel for SmlibKernel {
                 ));
             }
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (mut result, tool_copy) = {
             let t = s.get(target)?;
@@ -1139,7 +1258,7 @@ impl Kernel for SmlibKernel {
                 "押し出しの距離は 0 より大きくしてください".into(),
             ));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (brep, n, origin) = {
             let src = s.get(shape)?;
@@ -1203,7 +1322,7 @@ impl Kernel for SmlibKernel {
                 "網のボディはシェルに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (result, src_faces, src_names) = {
             let src = s.get(shape)?;
@@ -1251,7 +1370,7 @@ impl Kernel for SmlibKernel {
         // 選んだ面だけを残して残りを開けたシェルが、面と動かした先の間の板になる(SMLib に面を 1 つ
         // だけ動かす関数は無い)。外へなら板を足し、内へなら板を引く
         let slab = {
-            let _g = ffi::lock();
+            let _g = ffi::lock()?;
             let mut s = self.lock();
             let (slab, slab_faces, src_faces, src_names) = {
                 let src = s.get(shape)?;
@@ -1302,7 +1421,7 @@ impl Kernel for SmlibKernel {
             BooleanOp::Subtract
         };
         let r = self.boolean(op, shape, slab);
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         s.shapes.remove(&slab.0);
         let h = r.map_err(|e| KernelError::Failed(format!("面を動かした形の足し引き: {e}")))?;
@@ -1336,7 +1455,7 @@ impl Kernel for SmlibKernel {
             let h = k.rename_faces(inner, renames)?;
             return Ok(self.adopt_imported(h));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (brep, mut names) = {
             let src = s.get(shape)?;
@@ -1366,7 +1485,7 @@ impl Kernel for SmlibKernel {
                 "網のボディの丸めは消せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let brep = {
             let src = s.get(shape)?;
@@ -1416,7 +1535,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.faces(inner);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         if let Some(f) = s.faces.get(&shape.0) {
             return Ok(f.clone());
@@ -1446,7 +1565,7 @@ impl Kernel for SmlibKernel {
         if let Some(v) = self.cached_edges(shape, |l| &l.edges) {
             return Ok(v);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let edges = s.straight_edges(shape)?;
         let sh = s.get(shape)?;
@@ -1493,7 +1612,7 @@ impl Kernel for SmlibKernel {
         if let Some(v) = self.cached_edges(shape, |l| &l.arc_edges) {
             return Ok(v);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let edges = s.arc_edges(shape)?;
         let sh = s.get(shape)?;
@@ -1533,7 +1652,7 @@ impl Kernel for SmlibKernel {
         if let Some(v) = self.cached_edges(shape, |l| &l.curve_edges) {
             return Ok(v);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         if !s.get(shape)?.rims.is_empty() {
             return surface::sheet_edges(s.get(shape)?);
@@ -1603,7 +1722,7 @@ impl Kernel for SmlibKernel {
                 "網のボディは辺の丸めに使えません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let (mut brep, jb, blended, radii) = {
             let src = s.get(shape)?;
@@ -1723,7 +1842,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.mass(inner);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         if let Some(&m) = s.masses.get(&shape.0) {
             return Ok(m);
@@ -1740,6 +1859,10 @@ impl Kernel for SmlibKernel {
             min: m.min,
             max: m.max,
             centroid: (m.has_centroid != 0).then_some(m.centroid),
+            inertia: (m.has_centroid != 0).then(|| {
+                let about = k::inertia_from_integrals(m.moments, m.products);
+                k::inertia_at_centroid(about, m.volume, m.centroid, m.inertia_origin)
+            }),
         };
         s.masses.insert(shape.0, props);
         Ok(props)
@@ -1750,7 +1873,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.volume(inner);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         if let Some(&v) = s.volumes.get(&shape.0) {
             return Ok(v);
@@ -1768,7 +1891,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.bounds(inner);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let s = self.lock();
         s.get(shape)?.brep.bounds().map_err(failed("外形の箱"))
     }
@@ -1777,7 +1900,7 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.mesh(inner, tolerance);
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let mut s = self.lock();
         let key = (shape.0, tolerance.to_bits());
         if let Some(m) = s.meshes.get(&key) {
@@ -1838,7 +1961,7 @@ impl Kernel for SmlibKernel {
                 "網のボディは STEP に書き出せません(三角形の網で、面と辺の形を持たないため)".into(),
             ));
         }
-        let _g = ffi::lock();
+        let _g = ffi::lock()?;
         let s = self.lock();
         let breps = shapes
             .iter()
@@ -1893,7 +2016,10 @@ impl Kernel for SmlibKernel {
                 k.retain(&imported.values().copied().collect());
             }
         }
-        let _g = ffi::lock();
+        // 待たない糸でほかの計算が錠を持っていれば、捨てるのは次の時に回す
+        let Ok(_g) = ffi::lock() else {
+            return;
+        };
         let mut s = self.lock();
         s.shapes.retain(|id, _| live.contains(&ShapeHandle(*id)));
         s.meshes

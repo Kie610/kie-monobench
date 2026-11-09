@@ -19,14 +19,19 @@ extern "C" {
 
 typedef struct JcBrep JcBrep;
 
-/* 輪郭の 1 区間。座標はスケッチの平面の 2D 座標。角度はラジアンで、円弧は start から end へ反時計回り。 */
-enum { JC_SEG_LINE = 0, JC_SEG_ARC = 1, JC_SEG_CIRCLE = 2 };
+/* 輪郭の 1 区間。座標はスケッチの平面の 2D 座標。角度はラジアンで、円弧は start から end へ反時計回り。
+ * JC_SEG_NURBS は平面の上の有理 B スプライン(楕円・スプライン・円錐曲線)。節点は端を含む全部
+ * (count + degree + 1 個)、points は x, y, 重み を count 組。指す配列は呼び出しの間だけ生きていればよい。 */
+enum { JC_SEG_LINE = 0, JC_SEG_ARC = 1, JC_SEG_CIRCLE = 2, JC_SEG_NURBS = 3 };
 typedef struct JcSegment {
     int32_t kind;
     double a[2], b[2];      /* 直線の両端 */
     double center[2];       /* 円弧・円 */
     double radius;
     double start, end;      /* 円弧 */
+    uint32_t degree, count; /* 有理 B スプライン */
+    const double* knots;
+    const double* points;
 } JcSegment;
 
 /* 平面: origin, x_axis, y_axis(法線は x × y)。 */
@@ -63,12 +68,17 @@ typedef struct JcArcEdge {
     int32_t convex;
 } JcArcEdge;
 
-/* has_centroid = 0 なら重心は求められなかった(閉じた立体でないなど)。 */
+/* has_centroid = 0 なら重心と慣性は求められなかった(閉じた立体でないなど)。
+   慣性は密度 1 で、点 inertia_origin を通り世界の軸に平行な軸のまわりの値。moments は
+   ∫(y²+z²)・∫(z²+x²)・∫(x²+y²)、products は ∫yz・∫zx・∫xy(正の積分のまま)。 */
 typedef struct JcMassProps {
     double volume, area;
     double min[3], max[3];
     double centroid[3];
     int32_t has_centroid;
+    double inertia_origin[3];
+    double moments[3];
+    double products[3];
 } JcMassProps;
 
 /* 三角形の網。tri_face は jc_faces の添字。edge_counts[i] 個ずつの点が edge_points に並ぶ。 */

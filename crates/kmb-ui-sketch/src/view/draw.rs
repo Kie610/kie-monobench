@@ -333,15 +333,35 @@ pub(super) fn draw(
             continue;
         }
         let c = t.to_screen(*p);
-        if let Some(h) = halo(*id) {
+        let selected = editor.selection.contains(id);
+        if selected {
+            // 選んだ点は、背景色のすき間をあけた輪で囲む(線の交わる所でも、カーソルが離れても
+            // どの点を選んだか分かるように)。カーソルの下ならさらに外を淡く光らせる
+            if hovered == Some(*id) || lit.contains(id) {
+                painter.circle_filled(c, 12.0, pick_color.gamma_multiply(0.45));
+            }
+            painter.circle_filled(c, 9.0, l.pal.canvas);
+            painter.circle_stroke(c, 8.0, Stroke::new(2.0, pick_color));
+        } else if let Some(h) = halo(*id) {
             painter.circle_filled(c, 8.0, h.color);
         }
-        let r = if editor.selection.contains(id) {
-            4.5
-        } else {
-            3.5
-        };
+        let r = if selected { 4.5 } else { 3.5 };
         painter.circle_filled(c, r, color_of(*id, false));
+        if editor.guide_intersections
+            && draws(editor.tool)
+            && matches!(sketch.entity(*id), Some(Entity::Point { .. }))
+        {
+            let marker = Rect::from_center_size(c, Vec2::splat(8.0));
+            if rect.contains_rect(marker) {
+                kmb_ui::drive::named_canvas_marker(
+                    ui,
+                    marker,
+                    response.id.with(("input-point", id.0)),
+                    "view-sketch-input-point",
+                    &format!(" {}", id.0),
+                );
+            }
+        }
         if centers.contains(id) {
             let k = Stroke::new(1.0, color_of(*id, false));
             painter.line_segment([c - Vec2::new(7.0, 0.0), c + Vec2::new(7.0, 0.0)], k);
@@ -609,6 +629,23 @@ pub(super) fn draw(
         if sn.on.is_some() || !sn.guides.is_empty() || line_rel.is_some() {
             let c = t.to_screen(w);
             painter.circle_stroke(c, 5.0, Stroke::new(1.5, ink));
+            if editor.guide_intersections
+                && draws(editor.tool)
+                && sn.guides.len() == 2
+                && sn.guides.iter().all(|(_, end)| *end == w)
+                && sn.on.is_none()
+            {
+                let marker = Rect::from_center_size(c, Vec2::splat(8.0));
+                if rect.contains_rect(marker) {
+                    kmb_ui::drive::named_canvas_marker(
+                        ui,
+                        marker,
+                        response.id.with("guide-intersection"),
+                        "view-sketch-guide-intersection",
+                        "",
+                    );
+                }
+            }
         }
         if let Some(label) = sn.label {
             badge(

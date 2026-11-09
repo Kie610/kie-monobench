@@ -294,7 +294,7 @@ impl Workspace {
             return;
         }
         // 文書ごとに持つ設定(レンダリングのシーン)は今の文書の値
-        let groups = self.cur.work.settings();
+        let groups = self.all_settings();
         let all = pages(
             &groups
                 .iter()
@@ -443,6 +443,18 @@ impl Workspace {
             self.settings.open = false;
             self.settings.key_capture = None;
         }
+    }
+
+    /// 計算の拡張と編集器が持つ設定を、同じ欄の描き方で並べる。
+    pub(crate) fn all_settings(&self) -> Vec<kmb_core::Settings> {
+        let mut groups = self.cur.work.settings();
+        groups.extend(
+            self.cur
+                .editors
+                .iter()
+                .flat_map(|e| e.settings(&|id| self.win.t(id))),
+        );
+        groups
     }
 
     /// 節が検索に当たるか。

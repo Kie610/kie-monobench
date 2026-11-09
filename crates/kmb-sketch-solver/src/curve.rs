@@ -4,7 +4,7 @@
 //! どの曲線もパラメータ `t` で表す([`Shape::domain`] の範囲)。楕円は離心角(中心のまわりに
 //! 反時計回り)、フィット点のスプラインは弦長を 0〜1 にしたもの、円錐曲線は 0〜1。
 
-use kmb_core::Segment;
+use kmb_core::{Nurbs2, Segment};
 use std::f64::consts::{FRAC_PI_2, TAU};
 
 pub use crate::vec2::P2;
@@ -42,18 +42,7 @@ impl BSpline {
 
     /// `knots[k] <= t < knots[k + 1]` の区間 `k`(範囲の外は端の区間)。
     fn span(&self, t: f64) -> usize {
-        let (p, n) = (self.degree, self.ctrl.len());
-        let u = &self.knots;
-        let mut last = p;
-        for k in p..n {
-            if u[k] < u[k + 1] {
-                if t < u[k + 1] {
-                    return k;
-                }
-                last = k;
-            }
-        }
-        last
+        kmb_core::knot_span(&self.knots, self.degree, self.ctrl.len(), t)
     }
 
     /// 区間 `k` での基底関数とその微分(`nd` 階まで)。The NURBS Book の A2.3 による。
@@ -786,8 +775,20 @@ impl Shape {
     /// 線分・円弧(円)の並びにする。線分・円弧・円はそのまま、自由曲線はバイアークで
     /// 許容差 `tol` の中に近似する(隣の区間と端と向きがそろう。G1)。
     pub fn segments(&self, tol: f64) -> Vec<Segment> {
+        self.segments_through(tol, &[])
+            .into_iter()
+            .map(|(s, ..)| s)
+            .collect()
+    }
+
+    /// [`Shape::segments`] の、近似の区間ごとに曲線のパラメータの範囲(始まり・終わり)を添えた物。
+    /// 自由曲線は `through` のパラメータの点でも区切り、近似の線が曲線のその点をちょうど通るように
+    /// する(ほかの線の端や交点が曲線の上にある所。近似の線の上で端がつながる)。バイアークの 2 つの
+    /// 円弧はどちらも 1 組の範囲を持つ(範囲の中の位置は [`Shape::param_near`] で求める)。
+    pub fn segments_through(&self, tol: f64, through: &[f64]) -> Vec<(Segment, f64, f64)> {
+        let (lo, hi) = self.domain();
         match self {
-            Shape::Line(a, b) => return vec![Segment::Line { a: *a, b: *b }],
+            Shape::Line(a, b) => return vec![(Segment::Line { a: *a, b: *b }, 0.0, 1.0)],
             Shape::Arc {
                 c,
                 r,
@@ -795,30 +796,162 @@ impl Shape {
                 sweep,
                 closed,
             } => {
-                return vec![if *closed {
-                    Segment::Circle {
-                        center: *c,
-                        radius: *r,
-                    }
-                } else {
-                    Segment::Arc {
-                        center: *c,
-                        radius: *r,
-                        start: *a0,
-                        end: a0 + sweep,
-                    }
-                }];
+                return vec![(
+                    if *closed {
+                        Segment::Circle {
+                            center: *c,
+                            radius: *r,
+                        }
+                    } else {
+                        Segment::Arc {
+                            center: *c,
+                            radius: *r,
+                            start: *a0,
+                            end: a0 + sweep,
+                        }
+                    },
+                    lo,
+                    hi,
+                )];
             }
             _ => {}
         }
-        let br = self.breaks();
+        let mut br = self.breaks();
+        let gap = 1e-9 * (hi - lo).max(1.0);
+        for t in through {
+            let t = self.wrap(*t);
+            if t > lo + gap && t < hi - gap {
+                br.push(t);
+            }
+        }
+        br.sort_by(f64::total_cmp);
+        br.dedup_by(|b, a| (*b - *a).abs() < gap);
         let mut out = Vec::new();
         for w in br.windows(2) {
-            self.fit_biarc(w[0], w[1], tol, 0, &mut out);
+            let n = out.len();
+            let mut segs = Vec::new();
+            self.fit_biarc(w[0], w[1], tol, 0, &mut segs);
+            out.extend(segs.into_iter().map(|s| (s, w[0], w[1])));
+            // 細かく分けた所は、分けた範囲を区間ごとに持たせる
+            let fitted = out.len() - n;
+            if fitted > 2 {
+                for piece in &mut out[n..] {
+                    let (a, b) = (piece.0.start_point(), piece.0.end_point());
+                    let ta = self.param_near(a, w[0], w[1]);
+                    let tb = self.param_near(b, w[0], w[1]);
+                    piece.1 = ta.min(tb);
+                    piece.2 = ta.max(tb);
+                }
+            }
         }
         out
     }
 
+    /// 点 `p` に最も近い、範囲 `lo`〜`hi` の中の曲線の点のパラメータ(細かく取った点から寄せる)。
+    pub fn param_near(&self, p: P2, lo: f64, hi: f64) -> f64 {
+        const K: usize = 32;
+        let mut best = (lo, f64::INFINITY);
+        for k in 0..=K {
+            let t = lo + (hi - lo) * k as f64 / K as f64;
+            let d = dist(self.at(t), p);
+            if d < best.1 {
+                best = (t, d);
+            }
+        }
+        let mut t = best.0;
+        for _ in 0..30 {
+            let [c, d1, d2] = self.ders(t);
+            let f = dot(sub(c, p), d1);
+            let df = dot(d1, d1) + dot(sub(c, p), d2);
+            if df.abs() < 1e-300 {
+                break;
+            }
+            let tn = (t - f / df).clamp(lo, hi);
+            if (tn - t).abs() < 1e-15 * (hi - lo).abs().max(1.0) {
+                t = tn;
+                break;
+            }
+            t = tn;
+        }
+        t
+    }
+
+    /// 曲線を有理 B スプラインにする(線分・円弧は `None`)。スプラインと円錐曲線はパラメータも
+    /// そのまま、楕円は [`Shape::nurbs_param`] で離心角を有理 B スプラインのパラメータへ移す。
+    pub fn nurbs(&self) -> Option<Nurbs2> {
+        match self {
+            Shape::Line(..) | Shape::Arc { .. } => None,
+            Shape::Spline { s, .. } => Some(Nurbs2 {
+                degree: s.degree,
+                knots: s.knots.clone(),
+                ctrl: s.ctrl.clone(),
+                weights: Vec::new(),
+            }),
+            Shape::Conic { p, w } => Some(Nurbs2 {
+                degree: 2,
+                knots: vec![0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
+                ctrl: p.to_vec(),
+                weights: vec![1.0, *w, 1.0],
+            }),
+            Shape::Ellipse {
+                c, u, v, t0, sweep, ..
+            } => {
+                // 中心角 90° 以下の円弧を有理 2 次ベジエで表し、楕円の軸へ写す(写しても重みは同じ)
+                let (m, phi) = ellipse_pieces(*sweep);
+                let h = phi / 2.0;
+                let map = |x: f64, y: f64| add(*c, add(scale(*u, x), scale(*v, y)));
+                let mut ctrl = Vec::with_capacity(2 * m + 1);
+                let mut weights = Vec::with_capacity(2 * m + 1);
+                let mut knots = vec![0.0; 3];
+                for k in 0..m {
+                    let a = t0 + phi * k as f64;
+                    if k == 0 {
+                        ctrl.push(map(a.cos(), a.sin()));
+                        weights.push(1.0);
+                    }
+                    let mid = a + h;
+                    ctrl.push(map(mid.cos() / h.cos(), mid.sin() / h.cos()));
+                    weights.push(h.cos());
+                    ctrl.push(map((a + phi).cos(), (a + phi).sin()));
+                    weights.push(1.0);
+                    if k + 1 < m {
+                        knots.extend([(k + 1) as f64; 2]);
+                    }
+                }
+                knots.extend([m as f64; 3]);
+                Some(Nurbs2 {
+                    degree: 2,
+                    knots,
+                    ctrl,
+                    weights,
+                })
+            }
+        }
+    }
+
+    /// 曲線のパラメータ `t` を、[`Shape::nurbs`] の有理 B スプラインのパラメータにする。
+    pub fn nurbs_param(&self, t: f64) -> f64 {
+        let Shape::Ellipse { t0, sweep, .. } = self else {
+            return t;
+        };
+        let (m, phi) = ellipse_pieces(*sweep);
+        let h = phi / 2.0;
+        let x = (t - t0).clamp(0.0, *sweep);
+        let k = ((x / phi).floor() as usize).min(m - 1);
+        // 有理 2 次ベジエの円弧では、パラメータ s は中央からの角の半分の正接に比例する
+        let a = x - phi * k as f64 - h;
+        let s = ((a / 2.0).tan() / (h / 2.0).tan() + 1.0) / 2.0;
+        k as f64 + s.clamp(0.0, 1.0)
+    }
+}
+
+/// 楕円(弧)を分ける数と、1 つの中心角(90° 以下)。
+fn ellipse_pieces(sweep: f64) -> (usize, f64) {
+    let m = ((sweep / FRAC_PI_2) - 1e-9).ceil().max(1.0) as usize;
+    (m, sweep / m as f64)
+}
+
+impl Shape {
     fn fit_biarc(&self, t0: f64, t1: f64, tol: f64, depth: usize, out: &mut Vec<Segment>) {
         let (p0, p1) = (self.at(t0), self.at(t1));
         if dist(p0, p1) < 1e-9 {
@@ -1101,6 +1234,97 @@ mod tests {
         for i in 0..=20 {
             let q = part.at(i as f64 / 20.0);
             assert!(c.closest(q).1 < 1e-9, "{i}");
+        }
+    }
+
+    /// 確かめること: 楕円(弧)・スプライン(開いた・閉じた)・円錐曲線を有理 B スプラインにすると、
+    /// 曲線のパラメータを移した点が元の曲線の点と同じで、部分を取っても形が変わらない。
+    #[test]
+    fn free_curves_become_the_same_rational_b_spline_and_keep_their_shape_when_cut() {
+        let shapes = [
+            Shape::ellipse([1.0, 2.0], [31.0, 2.0], [1.0, 14.0], None).unwrap(),
+            Shape::ellipse(
+                [0.0, 0.0],
+                [10.0, 10.0],
+                [-3.0, 3.0],
+                Some(([10.0, 10.0], [-3.0, 3.0])),
+            )
+            .unwrap(),
+            Shape::spline(
+                &[[0.0, 0.0], [10.0, 8.0], [20.0, 0.0], [25.0, 4.0]],
+                false,
+                false,
+                3,
+                None,
+            )
+            .unwrap(),
+            Shape::spline(
+                &[[0.0, 0.0], [10.0, 8.0], [20.0, 0.0], [12.0, -6.0]],
+                false,
+                true,
+                3,
+                None,
+            )
+            .unwrap(),
+            Shape::spline(
+                &[[0.0, 0.0], [10.0, 8.0], [20.0, 0.0], [12.0, -6.0]],
+                true,
+                true,
+                3,
+                None,
+            )
+            .unwrap(),
+            Shape::conic([0.0, 0.0], [10.0, 0.0], [5.0, 6.0], 0.3).unwrap(),
+        ];
+        for shape in &shapes {
+            let n = shape.nurbs().unwrap();
+            assert!(n.valid(), "{n:?}");
+            let (lo, hi) = shape.domain();
+            for k in 0..=50 {
+                let t = lo + (hi - lo) * k as f64 / 50.0;
+                let p = n.at(shape.nurbs_param(t));
+                assert!(close(p, shape.at(t), 1e-9), "{shape:?} {t} {p:?}");
+            }
+            let (a, b) = (
+                shape.nurbs_param(lo + (hi - lo) * 0.3),
+                shape.nurbs_param(lo + (hi - lo) * 0.8),
+            );
+            let part = n.sub(a, b).unwrap();
+            let (pa, pb) = part.domain();
+            assert!((pa - a).abs() < 1e-12 && (pb - b).abs() < 1e-12);
+            for k in 0..=20 {
+                let u = a + (b - a) * k as f64 / 20.0;
+                assert!(close(part.at(u), n.at(u), 1e-9), "{shape:?} {u}");
+            }
+            // 全体を取ると両端が止まった(clamped)曲線になり、形は同じ
+            let (da, db) = n.domain();
+            let whole = n.sub(da, db).unwrap();
+            assert!(close(whole.ctrl[0], n.at(da), 1e-9));
+            assert!(close(*whole.ctrl.last().unwrap(), n.at(db), 1e-9));
+        }
+    }
+
+    /// 確かめること: 曲線の上の点で近似を区切ると、近似の線がその点をちょうど通る。
+    #[test]
+    fn approximation_passes_through_the_requested_points() {
+        let s = Shape::spline(
+            &[[0.0, 0.0], [10.0, 8.0], [20.0, 0.0]],
+            false,
+            false,
+            3,
+            None,
+        )
+        .unwrap();
+        let t = 0.37;
+        let p = s.at(t);
+        let segs = s.segments_through(ARC_TOLERANCE, &[t]);
+        assert!(segs.iter().any(|(g, ..)| close(g.end_point(), p, 1e-12)));
+        for (g, lo, hi) in &segs {
+            assert!(lo < hi);
+            for q in [g.start_point(), g.end_point()] {
+                let u = s.param_near(q, *lo, *hi);
+                assert!(dist(s.at(u), q) <= ARC_TOLERANCE + 1e-9);
+            }
         }
     }
 }

@@ -106,6 +106,7 @@ impl Ring {
             .iter()
             .flat_map(|(s, back)| {
                 ProfileEdge {
+                    curve: None,
                     name: String::new(),
                     segment: s.clone(),
                     reversed: *back,
@@ -155,6 +156,7 @@ impl Ring {
     fn sample(&self) -> P2 {
         let (s, back) = &self.edges[0];
         let pl = ProfileEdge {
+            curve: None,
             name: String::new(),
             segment: s.clone(),
             reversed: *back,
@@ -325,6 +327,7 @@ pub fn regions(loops: Vec<Vec<(Segment, bool)>>) -> Vec<Region> {
                 .iter()
                 .enumerate()
                 .map(|(i, (s, back))| ProfileEdge {
+                    curve: None,
                     name: format!("g{k}.{i}"),
                     segment: s.clone(),
                     reversed: *back,

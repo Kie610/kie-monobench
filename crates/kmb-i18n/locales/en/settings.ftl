@@ -86,3 +86,7 @@ settings-key-name-sketch-construction = Sketch: Toggle construction geometry; wh
 
 settings-import-upright = Ask whether to rotate imported STEP and IGES geometry upright
 settings-import-upright-tip = Ask once whether to rotate Y-up geometry to Z-up. This can also be changed in the feature fields.
+
+settings-sketch-inference = Sketch guides
+settings-sketch-inference-hint = Prefer intersections of horizontal and vertical guides from the last two visited points. When off, use normal alignment guides.
+settings-sketch-guide-intersections = Snap to recent guide intersections

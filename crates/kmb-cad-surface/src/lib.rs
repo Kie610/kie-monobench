@@ -814,6 +814,7 @@ mod tests {
                 outer: k::ProfileLoop {
                     edges: (0..4)
                         .map(|i| k::ProfileEdge {
+                            curve: None,
                             name: format!("e{i}"),
                             segment: k::Segment::Line {
                                 a: [points[i][0], points[i][1]],

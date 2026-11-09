@@ -1131,6 +1131,7 @@ impl Kernel for TruckKernel {
                 min: im.min,
                 max: im.max,
                 centroid: im.centroid,
+                inertia: None,
             });
         }
         if let Some(m) = self.lock().mass.get(&shape.0) {
@@ -1164,6 +1165,7 @@ impl Kernel for TruckKernel {
                     min,
                     max,
                     centroid: None,
+                    inertia: None,
                 }
             };
             let fine = measure(MASS_TOLERANCE);

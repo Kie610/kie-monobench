@@ -16,7 +16,7 @@ pub struct Server {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct ImportArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
     /// 真なら、Y が上で作られた形を X 軸のまわりに 90 度回して Z が上に立てる(他の CAD の多くは Y が上)
     #[serde(default)]
@@ -68,7 +68,7 @@ pub struct MaterialArg {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct PathArg {
-    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダの外は不可)
+    /// 作業フォルダからの相対パス(作業フォルダと --allow で許したフォルダと、画面で開いている文書のフォルダの外は不可)
     pub path: String,
 }
 
@@ -747,7 +747,7 @@ tools! {
     fn actions(s, a: ActionsArg) edit => Ok(s.actions(a.selected));
     "モジュールの操作を実行する(actions の id)。文書を変える操作は status と added を返す"
     fn run_action(s, a: RunActionArg) edit => s.run_action_at(&a.id, a.selected, a.file.as_deref(), &a.args, a.out.as_deref());
-    "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)も"
+    "残ったボディの名前、体積(mm³)、表面積(mm²)、外形(mm)、重心(mm)。材料を付けたボディは材料・密度(g/cm³)・質量(g)と、重心のまわりの慣性 mass_inertia(kg·mm²)・主慣性 principal_moments・主軸 principal_axes も。組立全体・部品ごと・剛性グループごとの合成は actions の「質量特性」の操作"
     fn mass(s) edit => s.mass();
     "ボディに物理材料を付ける(取り消せる)。質量(mass)と外観の既定の色に使い、加工のセットアップの材料の既定にもなる"
     fn set_material(s, a: MaterialArg) edit => s.set_material(a.body, &a.material);

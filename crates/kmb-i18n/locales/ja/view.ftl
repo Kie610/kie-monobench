@@ -125,3 +125,7 @@ view-candidate-vertex = 頂点({ $position })
 
 view-others = ほかを選ぶ…(長押しでも)
 view-others-help = 右クリックした所に重なっている面・辺・頂点の一覧から選びます。左ボタンの長押しでも開けます。
+
+# Names for the existing visible sketch input markers.
+view-sketch-input-point = スケッチの入力点
+view-sketch-guide-intersection = スケッチの補助線交点

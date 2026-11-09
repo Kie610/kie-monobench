@@ -11,6 +11,7 @@ fn a_helical_sweep_is_a_named_closed_solid_with_the_expected_volume() {
         regions: vec![Region {
             outer: ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "circle".into(),
                     segment: Segment::Circle {
                         center: [0.0, 10.0],

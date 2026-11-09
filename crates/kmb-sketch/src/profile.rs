@@ -1,26 +1,115 @@
 //! 解いたスケッチから、押し出しや回転に使う閉じた輪郭を取り出す。
 
+use crate::curve::{Shape, shape_bounds};
 use crate::geom::{cross, dist, sub};
 use crate::{Entity, EntityId, Sketch, Solution};
 use kmb_core::kernel::{
-    Curves, P2, Plane, Profile, ProfileEdge, ProfileFace, ProfileFaces, ProfileLoop, Region,
-    Segment, arc_sweep, canonical_loop, merge_regions, natural_key, point_in_polygon, polygon_area,
+    Curves, EdgeCurve, Nurbs2, P2, Plane, Profile, ProfileEdge, ProfileFace, ProfileFaces,
+    ProfileLoop, Region, Segment, arc_sweep, canonical_loop, merge_regions, natural_key,
+    point_in_polygon, polygon_area,
 };
 use std::collections::HashMap;
+use std::rc::Rc;
 
 /// 補助線でない線分・円弧・円を、平面の上の区間にする(スケッチの順)。
 fn drawn_segments(sketch: &Sketch, sol: &Solution) -> Vec<(EntityId, Segment)> {
     entity_segments(sketch, sol, false)
 }
 
+/// 楕円・スプライン・円錐曲線の元の形。近似の区間から作った輪郭の辺に添える。
+struct Source {
+    name: String,
+    shape: Shape,
+    nurbs: Nurbs2,
+}
+
+/// 近似の区間が近づけている元の曲線と、その区間の曲線のパラメータの範囲。
+#[derive(Clone)]
+struct Span {
+    src: Rc<Source>,
+    lo: f64,
+    hi: f64,
+}
+
+impl Span {
+    /// 区間 `seg`(この範囲の近似か、その一部)を近づけている曲線の部分。
+    fn edge_curve(&self, seg: &Segment) -> EdgeCurve {
+        let shape = &self.src.shape;
+        let t = |p: P2| shape.nurbs_param(shape.param_near(p, self.lo, self.hi));
+        EdgeCurve {
+            name: self.src.name.clone(),
+            curve: self.src.nurbs.clone(),
+            closed: shape.closed(),
+            t0: t(seg.start_point()),
+            t1: t(seg.end_point()),
+        }
+    }
+}
+
+/// 補助線でない線を、元の曲線を添えた区間にする(スケッチの順)。
+fn drawn_spans(sketch: &Sketch, sol: &Solution) -> (Vec<(EntityId, Segment)>, Vec<Option<Span>>) {
+    entity_spans(sketch, sol, false).into_iter().unzip()
+}
+
 /// 線分・円弧・円を、平面の上の区間にする(スケッチの順)。`construction` なら補助線も含める。
 /// 楕円・スプライン・円錐曲線は、線分と円弧の並び(バイアーク。許容差
 /// [`crate::ARC_TOLERANCE`])にして、同じ要素の番号で続けて入れる(CNC の G2/G3 にそのまま使える)。
+/// ほかの線の端と、ほかの線との交点が曲線の上にあれば、近似の線もその点をちょうど通るように
+/// そこで区切る(近似の線と曲線の隔たりのせいで、曲線の途中に付けた端が離れて見えないように)。
 pub fn entity_segments(
     sketch: &Sketch,
     sol: &Solution,
     construction: bool,
 ) -> Vec<(EntityId, Segment)> {
+    entity_spans(sketch, sol, construction)
+        .into_iter()
+        .map(|(e, _)| e)
+        .collect()
+}
+
+/// [`entity_segments`] の、自由曲線の区間に元の曲線を添えた物。
+fn entity_spans(
+    sketch: &Sketch,
+    sol: &Solution,
+    construction: bool,
+) -> Vec<((EntityId, Segment), Option<Span>)> {
+    let used = |e: &Entity| construction || !e.is_construction();
+    // 線の端(閉じていない線の両端)と、自由曲線とほかの線の交点。自分の端は曲線の範囲の端なので、
+    // 区切りには足されない
+    let mut marks: Vec<P2> = Vec::new();
+    if sketch
+        .entities
+        .iter()
+        .any(|e| used(e) && crate::curve::is_free(e))
+    {
+        for e in sketch.entities.iter().filter(|e| used(e)) {
+            if let Some(shape) = sketch.solved_shape(sol, e.id())
+                && !shape.closed()
+            {
+                let (lo, hi) = shape.domain();
+                marks.push(shape.at(lo));
+                marks.push(shape.at(hi));
+            }
+        }
+        for (p, a, b) in sketch.free_curve_crossings(sol) {
+            if [a, b].iter().all(|id| sketch.entity(*id).is_some_and(used)) {
+                marks.push(p);
+            }
+        }
+    }
+    let through = |shape: &Shape| -> Vec<f64> {
+        let Some([lo, hi]) = shape_bounds(shape) else {
+            return Vec::new();
+        };
+        marks
+            .iter()
+            .filter(|p| (0..2).all(|k| p[k] >= lo[k] - EPS && p[k] <= hi[k] + EPS))
+            .filter_map(|p| {
+                let (t, d) = shape.closest(*p);
+                (d < EPS).then_some(t)
+            })
+            .collect()
+    };
     let pt = |id: &EntityId| sol.points.get(id).copied();
     let mut out = Vec::new();
     for e in &sketch.entities {
@@ -32,7 +121,7 @@ pub fn entity_segments(
                 construction: c,
             } if construction || !c => {
                 if let (Some(a), Some(b)) = (pt(a), pt(b)) {
-                    out.push((*id, Segment::Line { a, b }));
+                    out.push(((*id, Segment::Line { a, b }), None));
                 }
             }
             Entity::Arc {
@@ -44,15 +133,13 @@ pub fn entity_segments(
             } if construction || !c => {
                 if let (Some(c), Some(s), Some(t)) = (pt(center), pt(start), pt(end)) {
                     let radius = (s[0] - c[0]).hypot(s[1] - c[1]);
-                    out.push((
-                        *id,
-                        Segment::Arc {
-                            center: c,
-                            radius,
-                            start: (s[1] - c[1]).atan2(s[0] - c[0]),
-                            end: (t[1] - c[1]).atan2(t[0] - c[0]),
-                        },
-                    ));
+                    let arc = Segment::Arc {
+                        center: c,
+                        radius,
+                        start: (s[1] - c[1]).atan2(s[0] - c[0]),
+                        end: (t[1] - c[1]).atan2(t[0] - c[0]),
+                    };
+                    out.push(((*id, arc), None));
                 }
             }
             Entity::Circle {
@@ -62,25 +149,35 @@ pub fn entity_segments(
                 ..
             } if construction || !c => {
                 if let (Some(c), Some(r)) = (pt(center), sol.radii.get(id)) {
-                    out.push((
-                        *id,
-                        Segment::Circle {
-                            center: c,
-                            radius: *r,
-                        },
-                    ));
+                    let circle = Segment::Circle {
+                        center: c,
+                        radius: *r,
+                    };
+                    out.push(((*id, circle), None));
                 }
             }
             Entity::Ellipse { id, .. } | Entity::Spline { id, .. } | Entity::Conic { id, .. }
                 if construction || !e.is_construction() =>
             {
-                if let Some(s) = sketch.solved_shape(sol, *id) {
-                    out.extend(
-                        s.segments(crate::curve::ARC_TOLERANCE)
-                            .into_iter()
-                            .map(|seg| (*id, seg)),
-                    );
-                }
+                let Some(shape) = sketch.solved_shape(sol, *id) else {
+                    continue;
+                };
+                let pieces = shape.segments_through(crate::curve::ARC_TOLERANCE, &through(&shape));
+                let src = shape.nurbs().map(|nurbs| {
+                    Rc::new(Source {
+                        name: format!("e{}", id.0),
+                        shape: shape.clone(),
+                        nurbs,
+                    })
+                });
+                out.extend(pieces.into_iter().map(|(seg, lo, hi)| {
+                    let span = src.as_ref().map(|src| Span {
+                        src: src.clone(),
+                        lo,
+                        hi,
+                    });
+                    ((*id, seg), span)
+                }));
             }
             _ => {}
         }
@@ -103,7 +200,8 @@ pub fn curves_of(sketch: &Sketch, sol: &Solution, plane: Plane) -> Curves {
 /// 1 つ目の値は押し出しなどの既定の輪郭(重なった形は合わせ、入れ子の形は偶奇で穴にする)、
 /// 2 つ目はどの領域にも使われない線(途切れた線など)の名前。
 pub fn profile_of(sketch: &Sketch, sol: &Solution, plane: Plane) -> (Profile, Vec<String>) {
-    let a = Arrangement::new(&drawn_segments(sketch, sol));
+    let (segs, spans) = drawn_spans(sketch, sol);
+    let a = Arrangement::with_curves(&segs, &spans);
     let filled: Vec<&Region> = a
         .faces
         .iter()
@@ -121,7 +219,8 @@ pub fn profile_of(sketch: &Sketch, sol: &Solution, plane: Plane) -> (Profile, Ve
 
 /// 線で囲まれた一番小さな領域の全部(押し出しで 1 つずつ選べる)。
 pub fn faces_of(sketch: &Sketch, sol: &Solution, plane: Plane) -> ProfileFaces {
-    let a = Arrangement::new(&drawn_segments(sketch, sol));
+    let (segs, spans) = drawn_spans(sketch, sol);
+    let a = Arrangement::with_curves(&segs, &spans);
     ProfileFaces {
         plane,
         faces: a
@@ -137,7 +236,8 @@ pub fn faces_of(sketch: &Sketch, sol: &Solution, plane: Plane) -> ProfileFaces {
 
 /// 閉じていない輪郭の端(どの線ともつながらない線の端)の位置。補助線は数えない。押し出せない理由を図の上の印で見せるのに使う。
 pub fn open_ends_of(sketch: &Sketch, sol: &Solution) -> Vec<[f64; 2]> {
-    Arrangement::new(&drawn_segments(sketch, sol)).open_ends
+    let (segs, spans) = drawn_spans(sketch, sol);
+    Arrangement::with_curves(&segs, &spans).open_ends
 }
 
 /// 点を同じとみなす距離(mm)。
@@ -153,6 +253,8 @@ struct Piece {
     sources: Vec<String>,
     ends: Option<(usize, usize)>,
     alive: bool,
+    /// 楕円・スプライン・円錐曲線を近づけた区間なら、その元の曲線
+    curve: Option<Span>,
 }
 
 struct Face {
@@ -364,7 +466,13 @@ fn leaving(s: &Segment, forward: bool) -> (f64, f64) {
 }
 
 impl Arrangement {
+    #[cfg(test)]
     fn new(segs: &[(EntityId, Segment)]) -> Arrangement {
+        Arrangement::with_curves(segs, &vec![None; segs.len()])
+    }
+
+    /// 区間 `segs` と、区間ごとの元の曲線 `spans`(同じ数)から作る。
+    fn with_curves(segs: &[(EntityId, Segment)], spans: &[Option<Span>]) -> Arrangement {
         let n = segs.len();
         // 区間の名前。1 つの要素が何区間にもなる(自由曲線の近似)なら、`e5.0`、`e5.1` と番号を付ける
         let mut count: HashMap<EntityId, usize> = HashMap::new();
@@ -450,6 +558,7 @@ impl Arrangement {
                     segment: s.clone(),
                     ends: None,
                     alive: true,
+                    curve: spans[i].clone(),
                 });
             } else if parts.len() == 1 && !matches!(s, Segment::Circle { .. }) {
                 // 切れ目のない線分・円弧は、そのままの形と名前にする
@@ -460,6 +569,7 @@ impl Arrangement {
                     segment: s.clone(),
                     ends: Some((va, vb)),
                     alive: true,
+                    curve: spans[i].clone(),
                 });
             } else {
                 for (k, (seg, va, vb)) in parts.into_iter().enumerate() {
@@ -470,6 +580,7 @@ impl Arrangement {
                         segment: seg,
                         ends: Some((va, vb)),
                         alive: true,
+                        curve: spans[i].clone(),
                     });
                 }
             }
@@ -651,6 +762,10 @@ impl Arrangement {
             list[(i + list.len() - 1) % list.len()]
         };
         let edge = |h: usize| ProfileEdge {
+            curve: pieces[h / 2]
+                .curve
+                .as_ref()
+                .map(|c| c.edge_curve(&pieces[h / 2].segment)),
             name: pieces[h / 2].name.clone(),
             segment: pieces[h / 2].segment.clone(),
             reversed: h % 2 == 1,
@@ -685,6 +800,7 @@ impl Arrangement {
                     cycles.push((
                         ProfileLoop {
                             edges: vec![ProfileEdge {
+                                curve: p.curve.as_ref().map(|c| c.edge_curve(&p.segment)),
                                 name: p.name.clone(),
                                 segment: p.segment.clone(),
                                 reversed: rev,

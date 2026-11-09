@@ -88,6 +88,8 @@ pub use view3d::Pick;
 
 #[cfg(test)]
 mod named_parameter_tests;
+#[cfg(test)]
+mod unitless_number_tests;
 
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;
@@ -234,6 +236,9 @@ impl PickFilter {
         self.face && !self.body
     }
 }
+
+/// ほかの文書の計算がカーネルを使っていて待たずに戻った時、問い合わせ直すまでの間(ms)。
+const BUSY_RETRY_MS: u64 = 150;
 
 /// 3D のビューの右クリックのメニューの種類。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -450,6 +455,7 @@ impl Workspace {
     pub fn with_editor(mut self, e: impl FeatureEditor) -> Self {
         let mut e: Box<dyn FeatureEditor> = Box::new(e);
         e.set_data_dir(self.win.data_dir.as_deref());
+        e.set_settings_dir(self.win.data_dir.as_deref().filter(|_| !self.win.safe_mode));
         self.cur.editors.push(e);
         self
     }
@@ -532,15 +538,15 @@ impl Workspace {
         self.length_unit().show(q)
     }
 
-    /// 長さの欄に数だけを打った時、文書の単位を付ける(mm の文書はそのまま。計算では数だけは mm)。
-    pub(crate) fn in_doc_unit(&self, expr: &str) -> String {
-        let u = self.length_unit();
-        let t = expr.trim();
-        if !u.is_mm() && t.parse::<f64>().is_ok() {
-            format!("{t} {}", u.name())
-        } else {
-            expr.to_string()
-        }
+    /// 単位 `unit` のパラメータに打った式を、入れる式にする(数だけの長さの式は文書の単位を付け、
+    /// mm でない文書で単位の無い数を長さと足し引きする式は断る。規則は
+    /// [`kmb_session::params::typed_param_expr`] で、CLI・MCP の set_param と同じ)。
+    pub(crate) fn typed_param(
+        &self,
+        unit: kmb_core::ParamUnit,
+        expr: &str,
+    ) -> Result<String, String> {
+        kmb_session::params::typed_param_expr(self.report(), unit, expr, self.length_unit())
     }
 
     /// パラメータの単位の名前(長さは文書の単位)。
@@ -606,7 +612,14 @@ impl Workspace {
     /// 画面を描く。毎フレーム呼ぶ。
     pub fn ui(&mut self, ui: &mut egui::Ui) {
         self.win.perf.begin(std::time::Instant::now());
+        let busy = kmb_core::kernel::kernel_busy_count();
         self.frame(ui);
+        if kmb_core::kernel::kernel_busy_count() != busy {
+            // ほかの文書の計算がカーネルを使っていて、待たずに戻った問い合わせがある: 前の絵のまま
+            // 描き、少し後で問い合わせ直す(画面の糸は錠を待たない。kmb_core::kernel::set_kernel_wait)
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(BUSY_RETRY_MS));
+        }
         self.win.perf.end(std::time::Instant::now());
     }
 
@@ -636,6 +649,7 @@ impl Workspace {
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
         self.poll_job();
+        self.cur.scene.retry(self.cur.work.kernel().as_ref());
         self.measure_tick(ui.ctx());
         self.poll_task();
         self.follow_editing_for_hidden();
@@ -911,6 +925,8 @@ mod screen_fixes_tests;
 #[cfg(test)]
 mod appearance_tests;
 #[cfg(test)]
+mod busy_kernel_tests;
+#[cfg(test)]
 mod cmdline_tests;
 #[cfg(test)]
 mod doc_tests;
@@ -941,3 +957,6 @@ mod mass_progress_tests;
 
 #[cfg(test)]
 mod mass_progress_live_tests;
+
+#[cfg(test)]
+mod editor_settings_tests;
