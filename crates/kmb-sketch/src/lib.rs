@@ -547,6 +547,6 @@ mod tests;
 mod plane_arg_help_tests;
 
 #[cfg(test)]
-mod removal_connection_tests;
-#[cfg(test)]
 mod endpoint_trim_tests;
+#[cfg(test)]
+mod removal_connection_tests;
