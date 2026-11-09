@@ -171,8 +171,12 @@ fn mcp_open_and_close_show_the_current_constraint_state_without_editing_the_docu
                 "ui_expect",
                 json!({"target":format!("label:{band}"),"state":"exists"}),
             );
-            app(&mut h, &dir.0, "ui_key", json!({"keys":"Escape"}));
-            app(&mut h, &dir.0, "ui_key", json!({"keys":"Escape"}));
+            app(
+                &mut h,
+                &dir.0,
+                "ui_click",
+                json!({"target":"button:✓  スケッチを終了#1"}),
+            );
             assert!(
                 h.query_by_label(&band).is_none(),
                 "閉じると編集の帯が消える"
