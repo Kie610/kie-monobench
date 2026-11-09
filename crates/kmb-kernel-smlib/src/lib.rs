@@ -70,6 +70,29 @@ struct Store {
     /// 体積・表面積・外形・重心(形ごと)。AI が設計を調べるたびにボディごとの質量を聞くので、
     /// ボディが千あると 1 回に数十秒かかっていた。形は作った後に変わらないので 1 回だけ求める
     masses: HashMap<u64, MassProps>,
+    /// 辺の一覧(形ごと)。画面は辺と頂点の当たり判定にボディの辺を全部数え、歯車のように辺の多い形では
+    /// 円の辺の判定だけで debug で 6 秒かかった。曲がった辺はまっすぐな辺と円の辺を除いて求めるので、
+    /// ここに控えた物を使い回し、同じ形の辺を 2 度数えない(箱に入れ、カーネルの大きさを増やさない)
+    edges: Box<EdgeStore>,
+}
+
+#[derive(Default)]
+struct EdgeStore {
+    lists: HashMap<u64, EdgeLists>,
+    /// 円の辺を SMLib で数えた回数。試験で、控えが効いて 2 度数えないことを確かめる
+    arc_passes: u64,
+}
+
+/// 1 つの形の辺の一覧の控え。求めた物だけを持つ。答えの 3 つ([`Kernel::edges`]・[`Kernel::arc_edges`]・
+/// [`Kernel::curve_edges`])は SMLib の錠を取らずに返せる(重い計算の間も、画面が辺を聞いて待たない)。
+#[derive(Default)]
+struct EdgeLists {
+    /// SMLib のまっすぐな辺・円の辺(曲がった辺は、この 2 つを除いて求める)
+    straight: Option<Vec<ffi::JcEdge>>,
+    arcs: Option<Vec<ffi::JcArcEdge>>,
+    edges: Option<Vec<EdgeInfo>>,
+    arc_edges: Option<Vec<EdgeInfo>>,
+    curve_edges: Option<Vec<EdgeInfo>>,
 }
 
 impl Store {
@@ -85,6 +108,31 @@ impl Store {
 
     fn get(&self, h: ShapeHandle) -> Result<&Shape, KernelError> {
         self.shapes.get(&h.0).ok_or(KernelError::UnknownShape(h))
+    }
+
+    /// 形 `h` のまっすぐな辺(SMLib の順)。初めての時だけ数えて控える。
+    fn straight_edges(&mut self, h: ShapeHandle) -> Result<Vec<ffi::JcEdge>, KernelError> {
+        if let Some(v) = self.edges.lists.get(&h.0).and_then(|l| l.straight.as_ref()) {
+            return Ok(v.clone());
+        }
+        let v = self.get(h)?.brep.edges().map_err(failed("辺の列挙"))?;
+        self.edges.lists.entry(h.0).or_default().straight = Some(v.clone());
+        Ok(v)
+    }
+
+    /// 形 `h` の円の辺(SMLib の順)。初めての時だけ数えて控える。
+    fn arc_edges(&mut self, h: ShapeHandle) -> Result<Vec<ffi::JcArcEdge>, KernelError> {
+        if let Some(v) = self.edges.lists.get(&h.0).and_then(|l| l.arcs.as_ref()) {
+            return Ok(v.clone());
+        }
+        let v = self
+            .get(h)?
+            .brep
+            .arc_edges()
+            .map_err(failed("円の辺の列挙"))?;
+        self.edges.arc_passes += 1;
+        self.edges.lists.entry(h.0).or_default().arcs = Some(v.clone());
+        Ok(v)
     }
 
     /// 名前をタグとして形状に書き込み、しまう。
@@ -340,6 +388,24 @@ impl SmlibKernel {
     /// 持っている形状の数。テストと動作確認用。
     pub fn shape_count(&self) -> usize {
         self.lock().shapes.len()
+    }
+
+    /// 控えた辺の答え。`pick` で 3 つのどれかを選ぶ。
+    fn cached_edges(
+        &self,
+        shape: ShapeHandle,
+        pick: fn(&EdgeLists) -> &Option<Vec<EdgeInfo>>,
+    ) -> Option<Vec<EdgeInfo>> {
+        self.lock()
+            .edges
+            .lists
+            .get(&shape.0)
+            .and_then(|l| pick(l).clone())
+    }
+
+    /// 円の辺を SMLib で数えた回数(全部の形の合計)。テスト用: 控えが効いて同じ形を 2 度数えないことを確かめる。
+    pub fn arc_edge_passes(&self) -> u64 {
+        self.lock().edges.arc_passes
     }
 
     /// 閉じた正しい立体か、立体の数、空洞の数。動作確認用。
@@ -1496,10 +1562,13 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.edges(inner);
         }
+        if let Some(v) = self.cached_edges(shape, |l| &l.edges) {
+            return Ok(v);
+        }
         let _g = ffi::lock()?;
-        let s = self.lock();
+        let mut s = self.lock();
+        let edges = s.straight_edges(shape)?;
         let sh = s.get(shape)?;
-        let edges = sh.brep.edges().map_err(failed("辺の列挙"))?;
         // 両側の平面の法線から、角か継ぎ目かを求める
         let planes = sh.brep.faces(0).map_err(failed("面の列挙"))?;
         let seam = |f0: u32, f1: u32| match (planes.get(f0 as usize), planes.get(f1 as usize)) {
@@ -1532,6 +1601,7 @@ impl Kernel for SmlibKernel {
             })
             .collect();
         out.sort_by(|x, y| x.faces.cmp(&y.faces));
+        s.edges.lists.entry(shape.0).or_default().edges = Some(out.clone());
         Ok(out)
     }
 
@@ -1539,10 +1609,13 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.arc_edges(inner);
         }
+        if let Some(v) = self.cached_edges(shape, |l| &l.arc_edges) {
+            return Ok(v);
+        }
         let _g = ffi::lock()?;
-        let s = self.lock();
+        let mut s = self.lock();
+        let edges = s.arc_edges(shape)?;
         let sh = s.get(shape)?;
-        let edges = sh.brep.arc_edges().map_err(failed("円の辺の列挙"))?;
         let mut out: Vec<EdgeInfo> = edges
             .iter()
             .filter_map(|e| {
@@ -1568,6 +1641,7 @@ impl Kernel for SmlibKernel {
             })
             .collect();
         out.sort_by(|x, y| x.faces.cmp(&y.faces));
+        s.edges.lists.entry(shape.0).or_default().arc_edges = Some(out.clone());
         Ok(out)
     }
 
@@ -1575,15 +1649,19 @@ impl Kernel for SmlibKernel {
         if let Some((k, inner)) = self.imported(shape) {
             return k.curve_edges(inner);
         }
-        let _g = ffi::lock()?;
-        let s = self.lock();
-        let sh = s.get(shape)?;
-        if !sh.rims.is_empty() {
-            return surface::sheet_edges(sh);
+        if let Some(v) = self.cached_edges(shape, |l| &l.curve_edges) {
+            return Ok(v);
         }
+        let _g = ffi::lock()?;
+        let mut s = self.lock();
+        if !s.get(shape)?.rims.is_empty() {
+            return surface::sheet_edges(s.get(shape)?);
+        }
+        // まっすぐな辺と円の辺は、画面が先に聞いた時の控えを使う(円の辺を 2 度数えない)
+        let straight = s.straight_edges(shape)?;
+        let arcs = s.arc_edges(shape)?;
+        let sh = s.get(shape)?;
         let all = sh.brep.all_edges().map_err(failed("辺の列挙"))?;
-        let straight = sh.brep.edges().map_err(failed("辺の列挙"))?;
-        let arcs = sh.brep.arc_edges().map_err(failed("円の辺の列挙"))?;
         let same_faces = |f: [usize; 2], g0: u32, g1: u32| {
             let g = [g0 as usize, g1 as usize];
             f == g || f == [g[1], g[0]]
@@ -1628,6 +1706,7 @@ impl Kernel for SmlibKernel {
             })
             .collect();
         out.sort_by(|x, y| x.faces.cmp(&y.faces));
+        s.edges.lists.entry(shape.0).or_default().curve_edges = Some(out.clone());
         Ok(out)
     }
 

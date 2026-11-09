@@ -37,17 +37,7 @@ impl Drop for Scratch {
 }
 
 fn call(h: &mut Harness<'static, Workspace>, dir: &Path, tool: &str, args: Value) -> Value {
-    call_within(h, dir, tool, args, 30)
-}
-
-/// `call` の時間の上限を `secs` 秒にしたもの。
-fn call_within(
-    h: &mut Harness<'static, Workspace>,
-    dir: &Path,
-    tool: &str,
-    args: Value,
-    secs: u64,
-) -> Value {
+    let secs = 30;
     let dir = dir.to_owned();
     let tool = tool.to_string();
     let worker = std::thread::spawn(move || kmb_session::live::call(&dir, &tool, args));
@@ -117,14 +107,11 @@ fn types(h: &Harness<'static, Workspace>) -> Vec<String> {
 }
 
 /// 「作成 ▾」の `button` を押し、面 → 中心の順にクリックする。
-///
-/// 歯車のボディは辺が多く、できた直後に画面が辺を数え直す(手元の debug で十数秒)。そのため
-/// ボディを作る最後のクリックだけ時間の上限を広げる。輪郭だけならすぐ終わる。
 fn place_gear(h: &mut Harness<'static, Workspace>, dir: &Path, button: &str, face: &str) {
     call(h, dir, "ui_click", json!({"target": "作成 ▾"}));
     call(h, dir, "ui_click", json!({"target": button}));
     call(h, dir, "ui_pick", json!({"face": face}));
-    call_within(h, dir, "ui_pick", json!({"face": face}), 150);
+    call(h, dir, "ui_pick", json!({"face": face}));
 }
 
 #[test]
@@ -147,12 +134,11 @@ fn the_gear_button_places_an_outline_and_a_body_edited_in_the_panel() {
         "ui_expect",
         json!({"target": "種類", "state": "exists"}),
     );
-    call_within(
+    call(
         &mut h,
         &dir.0,
         "ui_type",
         json!({"target": "歯数", "text": "16", "commit": "tab"}),
-        150,
     );
     call(
         &mut h,
