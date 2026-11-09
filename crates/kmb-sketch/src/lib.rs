@@ -545,3 +545,6 @@ mod tests;
 
 #[cfg(test)]
 mod plane_arg_help_tests;
+
+#[cfg(test)]
+mod constraint_summary_tests;

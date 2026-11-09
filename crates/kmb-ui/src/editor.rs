@@ -180,6 +180,55 @@ pub struct EditorTool {
     pub sep: bool,
 }
 
+/// 行と状態の帯に出す印。実行・中止を持つ仕事の状態とは別に、編集対象の具合を示す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FeatureMark {
+    Complete,
+    Open,
+    Warning,
+    Error,
+}
+
+impl FeatureMark {
+    pub(crate) fn symbol(self) -> &'static str {
+        match self {
+            Self::Complete => "✔",
+            Self::Open => "○",
+            Self::Warning => "⚠",
+            Self::Error => "✖",
+        }
+    }
+
+    pub(crate) fn color(self, palette: &crate::theme::Palette) -> egui::Color32 {
+        match self {
+            Self::Complete => palette.ok,
+            Self::Open => palette.ink2,
+            Self::Warning => palette.warn,
+            Self::Error => palette.err,
+        }
+    }
+}
+
+/// 編集器が、計算済みの値から行と状態の帯へ渡す説明。文書へ保存しない。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeaturePresentation {
+    pub text: String,
+    pub mark: FeatureMark,
+}
+
+/// 拡張点への参加は `Some`、非参加は `None`。参加中の一時的な不可を非参加と混ぜない。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FeaturePresentationState {
+    Unavailable,
+    Ready(FeaturePresentation),
+}
+
+impl FeaturePresentation {
+    pub(crate) fn badge(&self) -> String {
+        format!("{} {}", self.mark.symbol(), self.text)
+    }
+}
+
 impl EditorTool {
     pub fn new(id: &str, label: &str, icon: &str, hint: &str) -> Self {
         EditorTool {
@@ -217,6 +266,19 @@ impl EditorTool {
 pub trait FeatureEditor: Any + Send {
     /// この編集器が扱う種類か。
     fn handles(&self, type_id: &str) -> bool;
+
+    /// 機能が既存の要約の口で出した状態を、今の言語の説明と印にする。描画中に計算し直さない。
+    /// `editing` の時だけ、編集器が持つ計算済みの見本を使える。
+    fn feature_presentation(
+        &self,
+        _cx: &kmb_core::Context<'_>,
+        _entry: &FeatureEntry,
+        _editing: bool,
+        _summary: &str,
+        _text: &dyn Fn(&str, usize) -> String,
+    ) -> Option<FeaturePresentationState> {
+        None
+    }
 
     /// 中央のビュー(3D のビューの代わり)を描くなら真。
     fn takes_view(&self) -> bool {

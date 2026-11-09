@@ -3,6 +3,11 @@
 ## Window buttons (right end of the title bar drawn by the app)
 
 frame-window-minimize = Minimize
+frame-sketch-state-full = Fully constrained
+frame-sketch-state-under = Underconstrained · { $dof } DOF
+frame-sketch-state-over = Overconstrained
+frame-sketch-state-inconsistent = Conflicting constraints
+frame-sketch-state-empty = No geometry
 frame-window-restore = Restore Down
 frame-window-maximize = Maximize
 frame-window-close = Close
