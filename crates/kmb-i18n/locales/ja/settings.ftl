@@ -83,3 +83,7 @@ settings-key-name-sketch-construction = スケッチ: 選んだ線を補助線�
 
 settings-import-upright = STEP・IGES を読み込んだら、立てるかを聞く
 settings-import-upright-tip = Y が上で作られた形が寝ている時、Z が上になるように立てるかを1回聞く。機能の欄でも変えられる
+
+settings-sketch-inference = スケッチの補助線
+settings-sketch-inference-hint = 直前に通った 2 点の縦・横の補助線が交わる位置を優先します。切の時は通常の並びの案内を使います。
+settings-sketch-guide-intersections = 直近の補助線の交点にスナップ
