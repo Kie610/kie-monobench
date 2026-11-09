@@ -40,6 +40,8 @@ mod find_tests;
 #[cfg(test)]
 mod hole_tests;
 #[cfg(test)]
+mod lasso_tests;
+#[cfg(test)]
 mod material_tests;
 #[cfg(test)]
 mod modify_tests;

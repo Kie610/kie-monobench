@@ -40,10 +40,30 @@ impl Workspace {
             }
         }
         ui.separator();
+        self.enclose_menu(ui);
+        ui.separator();
         if crate::theme::menu_row(ui, "select", "すべて選べるようにする", "", true).clicked()
         {
             self.reset_pick_filter();
             ui.close();
+        }
+    }
+
+    /// 左ドラッグで囲む形(四角の窓・自由な形)を選ぶ行。選択のメニューと Ctrl+右クリックで同じ物を出す。
+    pub(crate) fn enclose_menu(&mut self, ui: &mut egui::Ui) {
+        let tip = self.win.t("toolbar-enclose-tip");
+        for (mode, id) in [
+            (view3d::Enclose::Window, "toolbar-enclose-window"),
+            (view3d::Enclose::Lasso, "toolbar-enclose-lasso"),
+        ] {
+            let text = self.win.t(id);
+            let r = ui
+                .radio_value(&mut self.win.enclose, mode, text)
+                .on_hover_text(&tip);
+            if r.clicked() {
+                log::info!("囲む形: {mode:?}");
+                ui.close();
+            }
         }
     }
 
