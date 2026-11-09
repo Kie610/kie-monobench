@@ -512,7 +512,7 @@ pub(super) fn face_coverage(
     scene: &Scene,
     cam: &Camera,
     rect: Rect,
-    area: Rect,
+    area: &Area,
 ) -> Vec<(Pick, bool, bool)> {
     let eye = cam.eye_position(rect);
     let near = cam.near_limit(rect);
@@ -542,8 +542,8 @@ pub(super) fn face_coverage(
                 continue;
             }
             let q = v.map(|q| q.0);
-            let touches = triangle_touches(area, q);
-            let outside = !q.iter().all(|p| area.contains(*p));
+            let touches = area.triangle_touches(q);
+            let outside = !area.contains_all(&q);
             let p = Pick {
                 feature: b.feature,
                 face: m.face_names[*face as usize].clone(),
@@ -562,7 +562,7 @@ pub(super) fn face_coverage(
 
 /// 範囲で選ぶ面(U30)。`crossing`(右から左へ囲んだ)なら範囲にかかった面、そうでなければ見えている所が
 /// 全部範囲に入った面。裏向きの三角形は数えず、手前の面に隠れた面は拾う。
-pub fn picks_in(scene: &Scene, cam: &Camera, rect: Rect, area: Rect, crossing: bool) -> Vec<Pick> {
+pub fn picks_in(scene: &Scene, cam: &Camera, rect: Rect, area: &Area, crossing: bool) -> Vec<Pick> {
     face_coverage(scene, cam, rect, area)
         .into_iter()
         .filter(|(_, touches, outside)| if crossing { *touches } else { !*outside })
@@ -576,7 +576,7 @@ pub fn bodies_in(
     scene: &Scene,
     cam: &Camera,
     rect: Rect,
-    area: Rect,
+    area: &Area,
     crossing: bool,
 ) -> Vec<FeatureId> {
     let mut bodies: Vec<(FeatureId, bool, bool)> = Vec::new();

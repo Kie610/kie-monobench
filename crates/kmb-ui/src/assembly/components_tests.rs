@@ -1140,7 +1140,7 @@ fn a_box_selection_skips_what_is_outside_the_active_component() {
     let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(900.0, 700.0));
     ws.cur.camera.fit(&ws.cur.scene, rect);
     let all = crate::view3d::ViewEvents {
-        boxed: Some(rect.shrink(1.0)),
+        boxed: Some(rect.shrink(1.0).into()),
         ..Default::default()
     };
     let none = egui::Modifiers::NONE;

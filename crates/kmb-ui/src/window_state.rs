@@ -123,6 +123,8 @@ pub(crate) struct WinState {
     pub(crate) history_tone: Vec<Tone>,
     /// 左ドラッグの働き(ビューの下の帯で替える)
     pub(crate) left_drag: view3d::LeftDrag,
+    /// 左ドラッグで囲む形(選択のメニューで替える。四角の窓か自由な形)
+    pub(crate) enclose: view3d::Enclose,
     /// 全画面にする前の、ブラウザ・タイムライン・編集パネルの開閉
     pub(crate) focus_mode: Option<(bool, bool, bool)>,
     /// 再生の速さ(機械の時間の何倍か)
