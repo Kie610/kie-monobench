@@ -8,7 +8,7 @@
 //! どれも形を作った後の拘束を足すだけで、解き方(ソルバ)には手を入れない。
 
 use crate::snap::Kind;
-use kmb_sketch::{ConstraintKind, Entity, EntityId, Sketch, Solution};
+use kmb_sketch::{ConstraintKind, Entity, EntityId, ProjectionSource, Sketch, Solution};
 
 /// 推測で向きをそろえる角度の幅(度)。
 const ANGLE_TOL: f64 = 3.0;
@@ -22,12 +22,141 @@ const RECENT: usize = 2;
 pub(crate) struct State {
     /// カーソルが通った点(縦・横の並びの案内に使う)
     pub tracked: Vec<EntityId>,
+    /// 直近の案内の元。仮の中点は毎回の仮番号でなく元の線分で指す。
+    anchors: Vec<Anchor>,
     /// カーソルが触れた線分(平行・直角の相手にする)
     pub recent: Vec<EntityId>,
     /// 曲線の上に置いた位置と、その曲線(できた点に線上・円周上を付ける)
     pub placed: Vec<([f64; 2], EntityId)>,
     /// 形が同じ間の交点。カーソルを動かすだけでは計算し直さない。
     pub crossings: CrossingCache,
+}
+
+/// 案内の元の要素。投影の仮番号でなく、生成履歴を指す宣言で再発見する。
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum GuideSource {
+    Native(EntityId),
+    Projected(ProjectionSource),
+}
+
+impl GuideSource {
+    fn of(sketch: &Sketch, id: EntityId) -> Self {
+        sketch
+            .projections
+            .iter()
+            .find(|p| p.entity == id)
+            .map_or(Self::Native(id), |p| Self::Projected(p.source.clone()))
+    }
+
+    fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Native(a), Self::Native(b)) => a == b,
+            (Self::Projected(a), Self::Projected(b)) => a.same(b),
+            _ => false,
+        }
+    }
+
+    fn entity(&self, sketch: &Sketch) -> Option<EntityId> {
+        match self {
+            Self::Native(id) => Some(*id),
+            Self::Projected(source) => sketch
+                .projections
+                .iter()
+                .find(|p| p.source.same(source))
+                .map(|p| p.entity),
+        }
+    }
+}
+
+/// 投影の中の点の役割。形の種類が変わった時に別の点へ付け替えない。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum GuidePoint {
+    Whole,
+    Center,
+    Start,
+    End,
+}
+
+impl GuidePoint {
+    fn id(self, entity: &Entity) -> Option<EntityId> {
+        match (self, entity) {
+            (Self::Whole, Entity::Point { id, .. }) => Some(*id),
+            (Self::Center, Entity::Circle { center, .. } | Entity::Arc { center, .. }) => {
+                Some(*center)
+            }
+            (Self::Start, Entity::Line { a, .. }) => Some(*a),
+            (Self::End, Entity::Line { b, .. }) => Some(*b),
+            (Self::Start, Entity::Arc { start, .. }) => Some(*start),
+            (Self::End, Entity::Arc { end, .. }) => Some(*end),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Anchor {
+    Point(EntityId),
+    Projected(GuideSource, GuidePoint),
+    Midpoint(GuideSource),
+}
+
+impl Anchor {
+    fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Point(a), Self::Point(b)) => a == b,
+            (Self::Projected(a, x), Self::Projected(b, y)) => a.same(b) && x == y,
+            (Self::Midpoint(a), Self::Midpoint(b)) => a.same(b),
+            _ => false,
+        }
+    }
+
+    fn of(sketch: &Sketch, point: EntityId) -> Self {
+        if let Some(line) = sketch
+            .constraints
+            .iter()
+            .find_map(|constraint| match constraint.kind {
+                ConstraintKind::Midpoint { point: p, line } if p == point => Some(line),
+                _ => None,
+            })
+        {
+            return Self::Midpoint(GuideSource::of(sketch, line));
+        }
+        sketch
+            .projections
+            .iter()
+            .find_map(|projection| {
+                let entity = sketch.entity(projection.entity)?;
+                [
+                    GuidePoint::Whole,
+                    GuidePoint::Center,
+                    GuidePoint::Start,
+                    GuidePoint::End,
+                ]
+                .into_iter()
+                .find(|role| role.id(entity) == Some(point))
+                .map(|role| {
+                    Self::Projected(GuideSource::Projected(projection.source.clone()), role)
+                })
+            })
+            .unwrap_or(Self::Point(point))
+    }
+
+    fn at(&self, sketch: &Sketch, sol: &Solution) -> Option<[f64; 2]> {
+        match self {
+            Self::Point(id) => sol.points.get(id).copied(),
+            Self::Projected(source, point) => {
+                let entity = sketch.entity(source.entity(sketch)?)?;
+                sol.points.get(&point.id(entity)?).copied()
+            }
+            Self::Midpoint(source) => {
+                let Entity::Line { a, b, .. } = sketch.entity(source.entity(sketch)?)? else {
+                    return None;
+                };
+                let (a, b) = (sol.points.get(a)?, sol.points.get(b)?);
+                Some([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0])
+            }
+        }
+    }
 }
 
 impl State {
@@ -38,6 +167,12 @@ impl State {
     /// カーソルの下の点と線分を覚える。
     pub(crate) fn notice(&mut self, sketch: &Sketch, sol: &Solution, w: [f64; 2], tol: f64) {
         if let Some(h) = sketch.nearest_point(sol, w[0], w[1], tol) {
+            let anchor = Anchor::of(sketch, h.entity);
+            self.anchors.retain(|source| !source.same(&anchor));
+            self.anchors.push(anchor);
+            if self.anchors.len() > 2 {
+                self.anchors.remove(0);
+            }
             self.tracked.retain(|p| *p != h.entity);
             self.tracked.push(h.entity);
             if self.tracked.len() > TRACKED {
@@ -280,6 +415,22 @@ pub(crate) fn snap_cursor(
     tol: f64,
     state: &State,
 ) -> Snapped {
+    let tracked: Vec<_> = state
+        .tracked
+        .iter()
+        .filter_map(|id| sol.points.get(id).copied())
+        .collect();
+    snap_cursor_at(sketch, sol, w, tol, &tracked)
+}
+
+/// 案内の元を解き直した位置を使う。仮の番号が別の要素へ再利用されても参照しない。
+fn snap_cursor_at(
+    sketch: &Sketch,
+    sol: &Solution,
+    w: [f64; 2],
+    tol: f64,
+    tracked: &[[f64; 2]],
+) -> Snapped {
     let plain = Snapped {
         pos: w,
         ..Snapped::default()
@@ -314,10 +465,9 @@ pub(crate) fn snap_cursor(
     let mut out = plain;
     // 縦に並ぶ(x がそろう)点と、横に並ぶ(y がそろう)点。近い方を 1 つずつ
     let near = |axis: usize| {
-        state
-            .tracked
+        tracked
             .iter()
-            .filter_map(|id| sol.points.get(id).copied())
+            .copied()
             .map(|p| ((p[axis] - w[axis]).abs(), p))
             .filter(|(d, _)| *d <= tol)
             .min_by(|a, b| a.0.total_cmp(&b.0))
@@ -342,6 +492,44 @@ pub(crate) fn snap_cursor(
         g.1 = out.pos;
     }
     out
+}
+
+/// 直近 2 点から伸びる、直交する補助線の交わり。実点と曲線上の吸い付きを先にする。
+fn recent_intersection(
+    sketch: &Sketch,
+    sol: &Solution,
+    w: [f64; 2],
+    tol: f64,
+    state: &State,
+) -> Option<Snapped> {
+    let [a, b] = state.anchors.as_slice() else {
+        return None;
+    };
+    let (a, b) = (a.at(sketch, sol)?, b.at(sketch, sol)?);
+    if (a[0] - b[0]).hypot(a[1] - b[1]) <= tol {
+        return None;
+    }
+    let candidates = [([a[0], b[1]], a, b), ([b[0], a[1]], b, a)];
+    let (pos, vertical, horizontal) = candidates
+        .into_iter()
+        .filter(|(point, _, _)| (point[0] - w[0]).hypot(point[1] - w[1]) <= tol)
+        .min_by(|(p, _, _), (q, _, _)| {
+            (p[0] - w[0])
+                .hypot(p[1] - w[1])
+                .total_cmp(&(q[0] - w[0]).hypot(q[1] - w[1]))
+        })?;
+    // 片方の元そのものなら、2 本の交わりでなく既存の点の並びに任せる。
+    if (pos[0] - vertical[0]).hypot(pos[1] - vertical[1]) <= tol
+        || (pos[0] - horizontal[0]).hypot(pos[1] - horizontal[1]) <= tol
+    {
+        return None;
+    }
+    Some(Snapped {
+        pos,
+        on: None,
+        label: Some("縦横に並ぶ"),
+        guides: vec![(vertical, pos), (horizontal, pos)],
+    })
 }
 
 /// 線分の推測で付ける向きの拘束。
@@ -469,9 +657,29 @@ pub(crate) fn steer(
         return (Some(w), None, None);
     }
     editor.infer.notice(sketch, sol, w, tol);
-    let mut sn = snap_cursor(sketch, sol, w, tol, &editor.infer);
+    let mut sn = if editor.guide_intersections {
+        let tracked: Vec<_> = editor
+            .infer
+            .anchors
+            .iter()
+            .filter_map(|anchor| anchor.at(sketch, sol))
+            .collect();
+        snap_cursor_at(sketch, sol, w, tol, &tracked)
+    } else {
+        snap_cursor(sketch, sol, w, tol, &editor.infer)
+    };
+    let intersection = (editor.guide_intersections
+        && sn.on.is_none()
+        && sketch.nearest_point(sol, w[0], w[1], tol).is_none())
+    .then(|| recent_intersection(sketch, sol, w, tol, &editor.infer))
+    .flatten();
+    let crossing = intersection.is_some();
+    if let Some(intersection) = intersection {
+        sn = intersection;
+    }
     let mut rel = None;
-    if editor.tool == crate::view::Tool::Line
+    if !crossing
+        && editor.tool == crate::view::Tool::Line
         && let Some(start) = editor.pending
         && sn.on.is_none()
         && sketch.nearest_point(sol, w[0], w[1], tol).is_none()
@@ -585,6 +793,9 @@ pub(crate) fn add_line_rel(
 
 #[cfg(test)]
 mod curve_snap_tests;
+
+#[cfg(test)]
+mod guide_intersection_tests;
 
 #[cfg(test)]
 mod three_point_circle_tests;

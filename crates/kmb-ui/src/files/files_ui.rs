@@ -143,6 +143,7 @@ impl Workspace {
         self.cur.autosave = Some(kmb_session::Autosave::new(&dir));
         for e in &mut self.cur.editors {
             e.set_data_dir(Some(&dir));
+            e.set_settings_dir((!self.win.safe_mode).then_some(dir.as_path()));
         }
         // 加工のテンプレートなど、モジュールが PC 全体のファイルを置く所
         self.win.extensions.set_data_dir(Some(&dir));

@@ -82,6 +82,8 @@ pub(crate) struct Editor {
     pub(crate) in_space: bool,
     /// 描く道具の吸い付きと推測で覚えておくもの(infer.rs)
     pub(crate) infer: crate::infer::State,
+    /// 直近 2 点の縦・横の補助線の交わりを優先するか。
+    pub(crate) guide_intersections: bool,
     /// 描いている途中の寸法の欄(長さ・直径など。Tab で移って固定する)
     pub(crate) hud: crate::hud::Hud,
     /// 円弧の終点を決める間、始点からカーソルが回った角度(前の角度、回った量。正なら反時計回り)
@@ -239,6 +241,7 @@ impl Default for Editor {
             look_front: false,
             in_space: false,
             infer: crate::infer::State::default(),
+            guide_intersections: false,
             hud: crate::hud::Hud::default(),
             freedom: crate::freedom_ui::State::default(),
             arc_turn: None,
