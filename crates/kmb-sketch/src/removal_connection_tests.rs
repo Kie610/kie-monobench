@@ -41,9 +41,9 @@ fn dragging_a_surviving_end_moves_its_partner_after_middle_line_removal() {
     let (mut s, middle, a, b) = hub();
     s.remove_entities(&[middle]);
     let mut moved = s.clone();
-    moved.set_point(a, 2.0, 3.0);
+    moved.set_point(a, 0.2, 0.3);
     let sol = solve_dragging(&s, &moved, &HashMap::new(), &BTreeSet::from([a]), None).unwrap();
     let (a, b) = (sol.points[&a], sol.points[&b]);
-    assert!((a[0] - 2.0).hypot(a[1] - 3.0) < 1e-6, "引いた端が目標へ動く: {a:?}, {b:?}");
+    assert!((a[0] - 0.2).hypot(a[1] - 0.3) < 1e-6, "引いた端が目標へ動く: {a:?}, {b:?}");
     assert!((a[0] - b[0]).hypot(a[1] - b[1]) < 1e-6, "相手の端も一緒に動く: {a:?}, {b:?}");
 }
