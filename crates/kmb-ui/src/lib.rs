@@ -301,6 +301,7 @@ impl Workspace {
                 history_at: Vec::new(),
                 history_tone: Vec::new(),
                 left_drag: view3d::LeftDrag::Select,
+                enclose: view3d::Enclose::Window,
                 focus_mode: None,
                 play_speed: 10.0,
                 look: theme::Look::default(),

@@ -919,6 +919,8 @@ impl Workspace {
                 }
             }
             ui.separator();
+            self.enclose_menu(ui);
+            ui.separator();
             if ui.button(&all).clicked() {
                 self.reset_pick_filter();
                 ui.close();
