@@ -1,6 +1,6 @@
 //! 確かめること: 端と許容内の交点は切れ目にならず、零長さの片や延長を作らない。
-use crate::*;
 use crate::curve::Shape;
+use crate::*;
 use std::collections::BTreeSet;
 
 fn curve(kind: usize) -> (Sketch, EntityId) {
@@ -24,11 +24,29 @@ fn curve(kind: usize) -> (Sketch, EntityId) {
             let a = s.add_point(20.0, 0.0);
             let b = s.add_point(0.0, 10.0);
             s.add_entity(&Entity::Ellipse {
-                id: EntityId(0), center, major, minor, ends: Some((a, b)), construction: false,
+                id: EntityId(0),
+                center,
+                major,
+                minor,
+                ends: Some((a, b)),
+                construction: false,
             })
         }
-        3 => s.add_spline(&[(None, [0.0, 0.0]), (None, [10.0, 5.0]), (None, [20.0, 0.0])], true, false).unwrap(),
-        4 => s.add_conic((None, [0.0, 0.0]), (None, [20.0, 0.0]), (None, [10.0, 10.0]), 0.5).unwrap(),
+        3 => s
+            .add_spline(
+                &[(None, [0.0, 0.0]), (None, [10.0, 5.0]), (None, [20.0, 0.0])],
+                true,
+                false,
+            )
+            .unwrap(),
+        4 => s
+            .add_conic(
+                (None, [0.0, 0.0]),
+                (None, [20.0, 0.0]),
+                (None, [10.0, 10.0]),
+                0.5,
+            )
+            .unwrap(),
         _ => unreachable!(),
     };
     (s, id)
@@ -57,10 +75,20 @@ fn trim_near_end(kind: usize) {
                 crossbar(&mut s, &original, 0.5),
             ]);
             assert!(s.trim(id, at(&original, if side == 0.0 { 0.25 } else { 0.75 })));
-            let pieces: Vec<_> = s.entities.iter().filter_map(|e| {
-                (!cutters.contains(&e.id())).then(|| s.shape(e.id())).flatten()
-            }).collect();
-            assert_eq!(pieces.len(), 1, "{kind} {side} {offset}: 端の極小片は残さない");
+            let pieces: Vec<_> = s
+                .entities
+                .iter()
+                .filter_map(|e| {
+                    (!cutters.contains(&e.id()))
+                        .then(|| s.shape(e.id()))
+                        .flatten()
+                })
+                .collect();
+            assert_eq!(
+                pieces.len(),
+                1,
+                "{kind} {side} {offset}: 端の極小片は残さない"
+            );
             let piece = &pieces[0];
             let (a, b) = (at(piece, 0.0), at(piece, 1.0));
             assert!((a[0] - b[0]).hypot(a[1] - b[1]) > 1.0);
@@ -70,11 +98,26 @@ fn trim_near_end(kind: usize) {
         }
     }
 }
-#[test] fn line_trim_ignores_endpoint_intersections() { trim_near_end(0); }
-#[test] fn arc_trim_ignores_endpoint_intersections() { trim_near_end(1); }
-#[test] fn ellipse_arc_trim_ignores_endpoint_intersections() { trim_near_end(2); }
-#[test] fn spline_trim_ignores_endpoint_intersections() { trim_near_end(3); }
-#[test] fn conic_trim_ignores_endpoint_intersections() { trim_near_end(4); }
+#[test]
+fn line_trim_ignores_endpoint_intersections() {
+    trim_near_end(0);
+}
+#[test]
+fn arc_trim_ignores_endpoint_intersections() {
+    trim_near_end(1);
+}
+#[test]
+fn ellipse_arc_trim_ignores_endpoint_intersections() {
+    trim_near_end(2);
+}
+#[test]
+fn spline_trim_ignores_endpoint_intersections() {
+    trim_near_end(3);
+}
+#[test]
+fn conic_trim_ignores_endpoint_intersections() {
+    trim_near_end(4);
+}
 #[test]
 fn line_extend_ignores_an_intersection_within_endpoint_tolerance() {
     for offset in [0.0, -5e-9, 5e-9] {

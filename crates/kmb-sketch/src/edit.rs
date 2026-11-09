@@ -202,12 +202,16 @@ impl Sketch {
         // 消える点を介した元の一致群だけを手当てする。残った拘束・点はそのまま残す。
         let group = |p: EntityId| tied.get(&p).copied().unwrap_or(p);
         let affected: BTreeSet<_> = gone.iter().map(|p| group(*p)).collect();
-        let points: Vec<_> = self.entities.iter().filter_map(|e| match e {
-            Entity::Point { id, x, y, .. } if affected.contains(&group(*id)) => {
-                Some((*id, [*x, *y]))
-            }
-            _ => None,
-        }).collect();
+        let points: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Point { id, x, y, .. } if affected.contains(&group(*id)) => {
+                    Some((*id, [*x, *y]))
+                }
+                _ => None,
+            })
+            .collect();
         let mut pairs = Vec::new();
         for (i, (a, p)) in points.iter().enumerate() {
             for (b, q) in &points[i + 1..] {
