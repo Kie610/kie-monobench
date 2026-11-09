@@ -68,6 +68,7 @@ fn step_round_trip_keeps_curved_faces_and_seams_are_not_drawn() {
                 .map(|(i, a)| {
                     let b = [[0.0, 8.0], [12.0, 3.0], [12.0, 0.0], [0.0, 0.0]][i];
                     ProfileEdge {
+                        curve: None,
                         name: format!("e{}", i + 1),
                         segment: Segment::Line { a: *a, b },
                         reversed: false,
@@ -160,6 +161,7 @@ fn an_arc_ending_past_a_full_turn_is_extruded() {
             outer: ProfileLoop {
                 edges: vec![
                     ProfileEdge {
+                        curve: None,
                         name: "e1".into(),
                         segment: Segment::Arc {
                             center: [0.0, 0.0],
@@ -170,6 +172,7 @@ fn an_arc_ending_past_a_full_turn_is_extruded() {
                         reversed: false,
                     },
                     ProfileEdge {
+                        curve: None,
                         name: "e2".into(),
                         segment: Segment::Line {
                             a: at(50.0),
@@ -205,6 +208,7 @@ fn a_cut_from_the_bottom_of_a_cylinder_draws_no_line_where_its_side_was_split() 
         ProfileLoop {
             edges: vec![
                 ProfileEdge {
+                    curve: None,
                     name: "e1".into(),
                     segment: Segment::Arc {
                         center: [0.0, 0.0],
@@ -215,6 +219,7 @@ fn a_cut_from_the_bottom_of_a_cylinder_draws_no_line_where_its_side_was_split() 
                     reversed: false,
                 },
                 ProfileEdge {
+                    curve: None,
                     name: "e2".into(),
                     segment: Segment::Line { a: at(a), b: at(b) },
                     reversed: false,
@@ -570,6 +575,7 @@ fn the_tangent_chain_does_not_run_on_into_the_seams_beside_a_slot() {
     use std::f64::consts::PI;
     let k = kernel();
     let edge = |name: &str, segment| ProfileEdge {
+        curve: None,
         name: name.into(),
         segment,
         reversed: false,
@@ -840,4 +846,150 @@ fn mass_is_computed_once_per_shape() {
         twice * 5 < once,
         "2 回目は覚えた値を返す(1 回目 {once:?}、2 回目 {twice:?})"
     );
+}
+
+fn extruded(
+    k: &SmlibKernel,
+    outer: ProfileLoop,
+    holes: Vec<ProfileLoop>,
+    z0: f64,
+    z1: f64,
+) -> ShapeHandle {
+    let p = Profile {
+        plane: Plane::XY,
+        regions: vec![Region { outer, holes }],
+    };
+    k.extrude(&p, z0, z1, "f1").unwrap()
+}
+
+fn assert_tensor(got: [[f64; 3]; 3], want: [[f64; 3]; 3], rel: f64, what: &str) {
+    let scale = (0..3).map(|i| want[i][i].abs()).fold(0.0, f64::max);
+    for i in 0..3 {
+        for j in 0..3 {
+            assert!(
+                (got[i][j] - want[i][j]).abs() <= rel * scale,
+                "{what}: [{i}][{j}] {got:?} vs {want:?}"
+            );
+        }
+    }
+}
+
+/// 確かめること: 直方体・円柱・中空の円柱の重心まわりの慣性(密度 1)が式と合う。直方体は原点から
+/// 遠い所に置き、外形の箱の中心で積分して重心へ移す道でも桁が落ちないことも見る。
+#[test]
+fn inertia_of_a_box_and_cylinders_matches_the_formulas() {
+    let k = kernel();
+    let (a, b, c) = (10.0, 20.0, 30.0);
+    let far = extruded(
+        &k,
+        rect_loop(1000.0, -500.0, a, b, 1),
+        vec![],
+        200.0,
+        200.0 + c,
+    );
+    let m = k.mass(far).unwrap();
+    let v = a * b * c;
+    assert!(close(m.volume, v, 1e-6));
+    let want = [
+        [v * (b * b + c * c) / 12.0, 0.0, 0.0],
+        [0.0, v * (a * a + c * c) / 12.0, 0.0],
+        [0.0, 0.0, v * (a * a + b * b) / 12.0],
+    ];
+    assert_tensor(m.inertia().unwrap(), want, 1e-4, "直方体");
+
+    let (r, h) = (8.0, 25.0);
+    let cyl = extruded(&k, circle_loop([5.0, -3.0], r, "e1", false), vec![], 0.0, h);
+    let m = k.mass(cyl).unwrap();
+    let v = std::f64::consts::PI * r * r * h;
+    let side = v * (3.0 * r * r + h * h) / 12.0;
+    let want = [
+        [side, 0.0, 0.0],
+        [0.0, side, 0.0],
+        [0.0, 0.0, v * r * r / 2.0],
+    ];
+    assert_tensor(m.inertia().unwrap(), want, 1e-4, "円柱");
+
+    let ri = 5.0;
+    let pipe = extruded(
+        &k,
+        circle_loop([0.0, 0.0], r, "e1", false),
+        vec![circle_loop([0.0, 0.0], ri, "e2", true)],
+        0.0,
+        h,
+    );
+    let m = k.mass(pipe).unwrap();
+    let v = std::f64::consts::PI * (r * r - ri * ri) * h;
+    let rr = r * r + ri * ri;
+    let side = v * (3.0 * rr + h * h) / 12.0;
+    let want = [[side, 0.0, 0.0], [0.0, side, 0.0], [0.0, 0.0, v * rr / 2.0]];
+    assert_tensor(m.inertia().unwrap(), want, 1e-4, "中空の円柱");
+}
+
+/// 確かめること: L 字の板は重心まわりに xy の慣性乗積を持ち(符号と入る欄が正しい)、主軸は z 軸と
+/// xy 平面の中の 2 本になる。値は 2 つの直方体を平行軸の定理で合わせた物と比べる。
+#[test]
+fn an_l_shaped_plate_has_a_product_of_inertia_and_tilted_principal_axes() {
+    let k = kernel();
+    let t = 5.0;
+    let outer = ProfileLoop {
+        edges: {
+            let p = [
+                [0.0, 0.0],
+                [40.0, 0.0],
+                [40.0, 10.0],
+                [10.0, 10.0],
+                [10.0, 30.0],
+                [0.0, 30.0],
+            ];
+            (0..6)
+                .map(|i| ProfileEdge {
+                    curve: None,
+                    name: format!("e{}", i + 1),
+                    segment: Segment::Line {
+                        a: p[i],
+                        b: p[(i + 1) % 6],
+                    },
+                    reversed: false,
+                })
+                .collect()
+        },
+    };
+    let l = extruded(&k, outer, vec![], 0.0, t);
+    let m = k.mass(l).unwrap();
+    // 下の 40×10 と左の 10×20(y 10〜30)
+    let part = |x0: f64, y0: f64, w: f64, d: f64| {
+        let v = w * d * t;
+        let at = [
+            [v * (d * d + t * t) / 12.0, 0.0, 0.0],
+            [0.0, v * (w * w + t * t) / 12.0, 0.0],
+            [0.0, 0.0, v * (w * w + d * d) / 12.0],
+        ];
+        (at, v, [x0 + w / 2.0, y0 + d / 2.0, t / 2.0])
+    };
+    let parts = [part(0.0, 0.0, 40.0, 10.0), part(0.0, 10.0, 10.0, 20.0)];
+    let v: f64 = parts.iter().map(|p| p.1).sum();
+    let c = m.centroid.unwrap();
+    let mut want = [[0.0; 3]; 3];
+    for (at, pv, pc) in parts {
+        let moved = inertia_about(at, pv, pc, c);
+        for i in 0..3 {
+            for j in 0..3 {
+                want[i][j] += moved[i][j];
+            }
+        }
+    }
+    assert!(close(m.volume, v, 1e-6));
+    let got = m.inertia().unwrap();
+    assert!(
+        got[0][1] > 0.0,
+        "重心から見て腕は (+x, -y) と (-x, +y) の側にあるので ∫xy は負、Ixy は正: {got:?}"
+    );
+    assert_tensor(got, want, 1e-4, "L 字");
+    let p = m.principal().unwrap();
+    let w = principal_inertia(&want);
+    for i in 0..3 {
+        assert!(close(p.moments[i], w.moments[i], 1e-4), "{p:?} vs {w:?}");
+    }
+    // いちばん大きい主慣性の軸は板に垂直
+    assert!((p.axes[2][2].abs() - 1.0).abs() < 1e-6, "{p:?}");
 }

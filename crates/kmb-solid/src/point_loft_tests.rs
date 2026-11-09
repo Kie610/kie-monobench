@@ -286,6 +286,7 @@ fn point_loft_surfaces_close_at_an_exact_tip_for_square_circle_and_teardrop_prof
                         .into_iter()
                         .enumerate()
                         .map(|(i, segment)| ProfileEdge {
+                            curve: None,
                             name: format!("e{i}"),
                             segment,
                             reversed: false,
@@ -576,6 +577,7 @@ fn a_point_loft_interpolates_multiple_profiles_before_the_tip() {
         regions: vec![Region {
             outer: ProfileLoop {
                 edges: vec![ProfileEdge {
+                    curve: None,
                     name: "circle".into(),
                     segment: Segment::Circle {
                         center: [0.0; 2],
@@ -607,6 +609,7 @@ fn a_point_loft_interpolates_multiple_profiles_before_the_tip() {
 fn a_nearby_rail_does_not_move_the_selected_loft_tip() {
     use kmb_core::kernel::{PlanarPath, Plane, Profile, ProfileEdge, ProfileLoop, Region, Segment};
     let edge = |name: &str, segment| ProfileEdge {
+        curve: None,
         name: name.into(),
         segment,
         reversed: false,

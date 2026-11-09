@@ -96,6 +96,7 @@ fn sweep(
             y_axis: spec.axis.direction,
         },
         edges: vec![ProfileEdge {
+            curve: None,
             name: "width".into(),
             segment: Segment::Line {
                 a: [0.0, 0.0],
@@ -171,6 +172,7 @@ pub fn recipe(
         let center = profile.plane.to_local(spec.axis.origin);
         let root_circle = ProfileLoop {
             edges: vec![ProfileEdge {
+                curve: None,
                 name: "groove_root".into(),
                 segment: Segment::Circle { center, radius },
                 reversed: spec.kind == GearKind::Internal,
@@ -336,6 +338,7 @@ mod tests {
             regions: vec![Region {
                 outer: ProfileLoop {
                     edges: vec![ProfileEdge {
+                        curve: None,
                         name: "rim".into(),
                         segment: Segment::Circle {
                             center: [0.0, 0.0],

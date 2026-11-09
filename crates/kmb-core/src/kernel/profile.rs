@@ -256,9 +256,24 @@ pub struct ProfileEdge {
     pub segment: Segment,
     #[serde(default)]
     pub reversed: bool,
+    /// 区間が楕円・スプライン・円錐曲線を近づけた物なら、その元の曲線の部分。曲線のまま形を作れる
+    /// カーネルが、同じ曲線から続く辺を 1 本にまとめるのに使う([`ProfileLoop::pieces`])。
+    /// 加工の経路・画面・曲線を扱わないカーネルは `segment` の線分と円弧を使う。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curve: Option<EdgeCurve>,
 }
 
 impl ProfileEdge {
+    /// 元の曲線を持たない辺。
+    pub fn new(name: impl Into<String>, segment: Segment, reversed: bool) -> ProfileEdge {
+        ProfileEdge {
+            name: name.into(),
+            segment,
+            reversed,
+            curve: None,
+        }
+    }
+
     pub fn from_point(&self) -> P2 {
         if self.reversed {
             self.segment.end_point()
@@ -574,6 +589,16 @@ fn fuse_pieces(mut l: ProfileLoop) -> ProfileLoop {
                 i,
                 j,
                 ProfileEdge {
+                    // 同じ元の曲線の続く 2 本なら、曲線の範囲もつなぐ(区間の向きで first の後に second)
+                    curve: match (&first.curve, &second.curve) {
+                        (Some(c1), Some(c2)) if c1.name == c2.name && c1.curve == c2.curve => {
+                            Some(EdgeCurve {
+                                t1: c2.t1,
+                                ..c1.clone()
+                            })
+                        }
+                        _ => None,
+                    },
                     name,
                     segment: seg,
                     reversed: a.reversed,

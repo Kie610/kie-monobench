@@ -373,16 +373,22 @@ impl Workspace {
     pub(crate) fn scene_edges(&mut self) -> &[(FeatureId, Vec<kmb_core::EdgeInfo>)] {
         if self.cur.edge_cache.0 != self.cur.scene.key() {
             let key = self.cur.scene.key().to_vec();
-            let edges = key
-                .iter()
-                .map(|(f, h)| {
-                    let mut edges = self.cur.work.kernel().edges(*h).unwrap_or_default();
-                    edges.extend(self.cur.work.kernel().arc_edges(*h).unwrap_or_default());
-                    // 曲がった辺(丸めた面の縁など)も選べる。フィレット・面取りのカーネルの丸めで使う
-                    edges.extend(self.cur.work.kernel().curve_edges(*h).unwrap_or_default());
-                    (*f, edges)
-                })
-                .collect::<BodyEdges>();
+            let kernel = self.cur.work.kernel();
+            let (edges, busy) = kmb_core::kernel::without_waiting(|| {
+                key.iter()
+                    .map(|(f, h)| {
+                        let mut edges = kernel.edges(*h).unwrap_or_default();
+                        edges.extend(kernel.arc_edges(*h).unwrap_or_default());
+                        // 曲がった辺(丸めた面の縁など)も選べる。フィレット・面取りのカーネルの丸めで使う
+                        edges.extend(kernel.curve_edges(*h).unwrap_or_default());
+                        (*f, edges)
+                    })
+                    .collect::<BodyEdges>()
+            });
+            if busy {
+                // ほかの文書の計算がカーネルを使っている: 前の辺のまま、次に呼ばれた時に問い合わせ直す
+                return &self.cur.edge_cache.1;
+            }
             self.cur.vertex_cache = edges
                 .iter()
                 .map(|(f, l)| (*f, kmb_core::vertices_of_edges(l)))

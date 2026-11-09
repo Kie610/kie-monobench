@@ -34,6 +34,7 @@ fn grid_step(side: usize) -> String {
                     outer: ProfileLoop {
                         edges: (0..4)
                             .map(|i| ProfileEdge {
+                                curve: None,
                                 name: format!("edge{i}"),
                                 segment: Segment::Line {
                                     a: points[i],
@@ -77,6 +78,7 @@ fn sphere_step(radius: f64) -> String {
             outer: ProfileLoop {
                 edges: vec![
                     ProfileEdge {
+                        curve: None,
                         name: "arc".into(),
                         segment: Segment::Arc {
                             center: [0.0; 2],
@@ -87,6 +89,7 @@ fn sphere_step(radius: f64) -> String {
                         reversed: false,
                     },
                     ProfileEdge {
+                        curve: None,
                         name: "axis".into(),
                         segment: Segment::Line {
                             a: [0.0, radius],

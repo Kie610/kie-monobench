@@ -36,10 +36,14 @@ impl From<ShapeHandle> for HandleRepr {
 pub type P2 = [f64; 2];
 pub type P3 = [f64; 3];
 
+mod curve;
+mod inertia;
 mod instances;
 mod math;
 mod profile;
 
+pub use curve::*;
+pub use inertia::*;
 pub use instances::*;
 pub use math::*;
 pub use profile::*;
@@ -328,6 +332,25 @@ pub struct MassProps {
     /// 重心(密度が一様な時。M47)。求められないカーネルは `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub centroid: Option<P3>,
+    /// 重心を通り世界の軸に平行な軸のまわりの慣性テンソル(密度 1 の時。長さの 5 乗)。
+    /// 質量の慣性は密度を掛ける。求められないカーネルは `None`([`MassProps::inertia`] が
+    /// 対応していない誤りにする)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inertia: Option<InertiaTensor>,
+}
+
+impl MassProps {
+    /// 重心まわりの慣性テンソル。カーネルが求めていなければ対応していない誤り
+    /// (0 の慣性を返して計算を続けない)。
+    pub fn inertia(&self) -> Result<InertiaTensor, KernelError> {
+        self.inertia
+            .ok_or_else(|| KernelError::Unsupported("慣性の計算".into()))
+    }
+
+    /// 重心まわりの主軸と主慣性モーメント(密度 1 の時)。
+    pub fn principal(&self) -> Result<PrincipalInertia, KernelError> {
+        Ok(principal_inertia(&self.inertia()?))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -335,6 +358,56 @@ pub enum KernelError {
     Unsupported(String),
     UnknownShape(ShapeHandle),
     Failed(String),
+    /// 錠を待たない糸([`set_kernel_wait`])が呼んだ時に、ほかの文書の計算がカーネルを使っていた。
+    /// 形は壊れていないので、後でもう一度呼べば答えが出る
+    Busy,
+}
+
+impl KernelError {
+    /// ほかの計算がカーネルを使っていて、待たずに戻ったか。
+    pub fn is_busy(&self) -> bool {
+        matches!(self, KernelError::Busy)
+    }
+}
+
+thread_local! {
+    /// この糸がカーネルの錠を待つか(既定は待つ)
+    static WAITS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// 待たずに戻った回数(この糸で数える)
+    static BUSY: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// この糸がカーネルの錠を待つかを決める。画面の糸は `false` にして、ほかの文書の重い計算が
+/// カーネルを使っている間も待たずに [`KernelError::Busy`] で戻る(糸ごとの設定で、前の値を返す)。
+/// 錠を持つカーネル(1 つの錠をすべての文書で分け合う物)が [`kernel_waits`] を見る。
+pub fn set_kernel_wait(wait: bool) -> bool {
+    WAITS.with(|w| w.replace(wait))
+}
+
+/// この糸がカーネルの錠を待つか([`set_kernel_wait`])。
+pub fn kernel_waits() -> bool {
+    WAITS.with(std::cell::Cell::get)
+}
+
+/// 錠を待たずに戻ったことを数える(カーネルが [`KernelError::Busy`] を返す時に呼ぶ)。
+pub fn note_kernel_busy() -> KernelError {
+    BUSY.with(|b| b.set(b.get() + 1));
+    KernelError::Busy
+}
+
+/// この糸で、待たずに戻った回数(画面は、こまの前後で比べ、増えていれば控えを作らずに描き直す)。
+pub fn kernel_busy_count() -> u64 {
+    BUSY.with(std::cell::Cell::get)
+}
+
+/// `f` を、カーネルの錠を待たずに呼ぶ(画面の控え・網づくりなど、後で作り直せる所)。待たずに
+/// 戻った呼び出しがあったかを結果と一緒に返す。あった時、呼ぶ側は控えを残さず、次のこまで作り直す。
+pub fn without_waiting<R>(f: impl FnOnce() -> R) -> (R, bool) {
+    let was = set_kernel_wait(false);
+    let before = kernel_busy_count();
+    let r = f();
+    set_kernel_wait(was);
+    (r, kernel_busy_count() != before)
 }
 
 impl fmt::Display for KernelError {
@@ -343,6 +416,10 @@ impl fmt::Display for KernelError {
             KernelError::Unsupported(op) => write!(f, "このカーネルは {op} に対応していません"),
             KernelError::UnknownShape(h) => write!(f, "形状 {} が見つかりません", h.0),
             KernelError::Failed(m) => write!(f, "{m}"),
+            KernelError::Busy => write!(
+                f,
+                "形状カーネルはほかの文書の計算に使われています。終わってからもう一度試してください"
+            ),
         }
     }
 }

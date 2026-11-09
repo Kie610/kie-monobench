@@ -350,7 +350,7 @@ pub fn register(reg: &mut Registry) {
     use kmb_core::Field;
     reg.register_described(
         kmb_cad::solid(GEAR_BODY, "歯車のボディ")
-            .icon("gear")
+            .icon("gears")
             .hint("歯車の輪郭を歯の幅だけ押し出すかねじって立体にする。やまばは中央で左右の歯すじを合わせる")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))

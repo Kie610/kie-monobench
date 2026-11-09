@@ -455,6 +455,7 @@ impl BodyFacts {
                 min,
                 max,
                 centroid: None,
+                inertia: None,
             }
         } else {
             kernel.mass(shape)?
@@ -466,7 +467,7 @@ impl BodyFacts {
         }))
     }
 
-    /// 行(体積・表面積・外形・重心、材料があれば材料と質量)。
+    /// 行(体積・表面積・外形・重心、材料があれば材料と質量と、求められれば主慣性モーメント)。
     pub fn rows(&self) -> Vec<(String, String)> {
         let b = &self.props;
         let mut rows = vec![
@@ -504,6 +505,18 @@ impl BodyFacts {
                         format!("{g:.3} g")
                     },
                 ));
+                // 慣性は重心のまわり。カーネルは密度 1(mm⁵)で返すので、密度(g/mm³)と g→kg を掛ける
+                if let Ok(p) = b.principal() {
+                    let k = density * 1e-6;
+                    let m = p.moments.map(|v| v * k);
+                    rows.push((
+                        "主慣性モーメント".into(),
+                        format!(
+                            "{:.3} / {:.3} / {:.3} kg·mm²(重心のまわり)",
+                            m[0], m[1], m[2]
+                        ),
+                    ));
+                }
             }
             None => rows.push((
                 "材料".into(),

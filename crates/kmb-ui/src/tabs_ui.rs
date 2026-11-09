@@ -183,6 +183,7 @@ impl Workspace {
             .map(|e| {
                 let mut n = e.fresh();
                 n.set_data_dir(self.win.data_dir.as_deref());
+                n.set_settings_dir(self.win.data_dir.as_deref().filter(|_| !self.win.safe_mode));
                 n
             })
             .collect();
