@@ -13,6 +13,73 @@ impl Drop for Scratch {
     }
 }
 
+#[test]
+fn a_participating_busy_summary_clears_success_without_changing_the_legacy_fallback() {
+    // 本物の成功を確定してから裏の再計算を始める。時計や計算時間には依存しない。
+    let mut sketch = Sketch::default();
+    let a = sketch.add_point(0.0, 0.0);
+    let b = sketch.add_point(10.0, 0.0);
+    let line = sketch.add_line(a, b);
+    sketch.add_constraint(ConstraintKind::Fix { point: a });
+    sketch.add_constraint(ConstraintKind::Horizontal { line });
+    sketch.add_constraint(ConstraintKind::Length {
+        line,
+        value: "10 mm".into(),
+    });
+    let mut doc = Document::new();
+    let id = doc
+        .apply_edits(
+            "見本",
+            vec![Edit::Insert {
+                type_id: kmb_sketch::SKETCH.into(),
+                name: "Busy fixture".into(),
+                data: serde_json::to_value(&sketch).unwrap(),
+            }],
+        )
+        .unwrap()[0];
+    let modules = || {
+        kmb_core::Modules::assemble(
+            vec![kmb_sketch::module()],
+            std::sync::Arc::new(kmb_core::NullKernel),
+        )
+    };
+    let mut participating =
+        Workspace::open(doc.clone(), None, true, modules()).with_editor(crate::SketchEditor::new());
+    let mut legacy = Workspace::open(doc, None, true, modules());
+    participating.layout_mut().appearance.language = "en".into();
+    legacy.layout_mut().appearance.language = "en".into();
+    participating.wait();
+    legacy.wait();
+    assert_eq!(
+        participating.summary(id).as_deref(),
+        Some("Fully constrained")
+    );
+    assert_eq!(legacy.summary(id).as_deref(), Some("完全拘束"));
+    // 新しい入力を送った直後は、完了を取り込むまで前の成功した report が残る。
+    sketch.add_constraint(ConstraintKind::Length {
+        line,
+        value: "10 mm".into(),
+    });
+    let data = serde_json::to_value(sketch).unwrap();
+    assert!(participating.set_feature_data(id, data.clone()));
+    assert!(legacy.set_feature_data(id, data));
+    assert!(participating.is_busy());
+    assert!(legacy.is_busy());
+    let participating_summary = participating.summary(id);
+    let legacy_summary = legacy.summary(id);
+    participating.wait();
+    legacy.wait();
+    assert_eq!(
+        legacy_summary.as_deref(),
+        Some("完全拘束"),
+        "非参加の既存の要約は変えない"
+    );
+    assert_eq!(
+        participating_summary, None,
+        "再計算中は古い成功の文に戻さない"
+    );
+}
+
 fn app(
     h: &mut Harness<'static, Workspace>,
     dir: &std::path::Path,
