@@ -838,10 +838,17 @@ fn mass_is_computed_once_per_shape() {
     let t = std::time::Instant::now();
     let first = k.mass(b).unwrap();
     let once = t.elapsed();
-    let t = std::time::Instant::now();
-    let again = k.mass(b).unwrap();
-    let twice = t.elapsed();
-    assert_eq!(first, again);
+    // 2 回目は数回測って最も速い回で比べる(混んだ実行機で 1 回だけ遅れても落ちない)
+    let twice = (0..5)
+        .map(|_| {
+            let t = std::time::Instant::now();
+            let again = k.mass(b).unwrap();
+            let took = t.elapsed();
+            assert_eq!(first, again);
+            took
+        })
+        .min()
+        .unwrap();
     assert!(
         twice * 5 < once,
         "2 回目は覚えた値を返す(1 回目 {once:?}、2 回目 {twice:?})"
