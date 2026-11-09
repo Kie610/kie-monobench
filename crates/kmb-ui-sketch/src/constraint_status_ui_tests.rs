@@ -43,8 +43,13 @@ fn a_participating_busy_summary_clears_success_without_changing_the_legacy_fallb
             std::sync::Arc::new(kmb_core::NullKernel),
         )
     };
-    let mut participating =
-        Workspace::open(doc.clone(), None, true, modules()).with_editor(crate::SketchEditor::new());
+    let mut participating = Workspace::open(
+        Document::from_json(&doc.to_json()).unwrap(),
+        None,
+        true,
+        modules(),
+    )
+    .with_editor(crate::SketchEditor::new());
     let mut legacy = Workspace::open(doc, None, true, modules());
     participating.layout_mut().appearance.language = "en".into();
     legacy.layout_mut().appearance.language = "en".into();
