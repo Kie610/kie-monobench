@@ -15,6 +15,7 @@
 
 pub mod body;
 pub mod commands;
+pub mod helical;
 pub mod hub;
 pub mod kinds;
 pub mod mech;
@@ -79,6 +80,11 @@ pub struct Gear {
     pub rack_back: Option<String>,
     #[serde(default = "pressure_default")]
     pub pressure_angle: String,
+    /// 歯すじのねじれ角(空なら 0 = 平歯車)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub helix_angle: Option<String>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub hand: kmb_interchange::gear::Hand,
     /// 転位係数(空なら 0)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_shift: Option<String>,
@@ -186,6 +192,8 @@ impl Default for Gear {
             rack_length: None,
             rack_back: None,
             pressure_angle: pressure_default(),
+            helix_angle: None,
+            hand: Default::default(),
             profile_shift: None,
             tip_round: None,
             root_round: None,
@@ -234,6 +242,7 @@ impl Exprs for Gear {
             [
                 &mut self.rack_length,
                 &mut self.rack_back,
+                &mut self.helix_angle,
                 &mut self.profile_shift,
                 &mut self.tip_round,
                 &mut self.root_round,
@@ -316,7 +325,7 @@ impl Gear {
         Ok(Some(chain))
     }
 
-    fn params(&self, ctx: &EvalCtx<'_>) -> Result<kinds::Params, EvalError> {
+    fn normal_params(&self, ctx: &EvalCtx<'_>) -> Result<kinds::Params, EvalError> {
         let len = |src: &Option<String>, what: &str, default: f64| {
             given(src).map_or(Ok(default), |s| length(ctx, s, what))
         };
@@ -407,6 +416,24 @@ impl Gear {
         })
     }
 
+    fn helix_angle(&self, ctx: &EvalCtx<'_>) -> Result<f64, EvalError> {
+        given(&self.helix_angle).map_or(Ok(0.0), |s| angle(ctx, s, "ねじれ角"))
+    }
+
+    fn params(&self, ctx: &EvalCtx<'_>) -> Result<kinds::Params, EvalError> {
+        let normal = self.normal_params(ctx)?;
+        let beta = self.helix_angle(ctx)?;
+        if !matches!(self.kind, GearKind::External | GearKind::Internal) {
+            if beta != 0.0 || self.hand != kmb_interchange::gear::Hand::Right {
+                return Err(EvalError::InvalidData(
+                    "ねじれ角と向きは外歯か内歯の歯車に指定してください".into(),
+                ));
+            }
+            return Ok(normal);
+        }
+        helical::transverse(&normal, beta).map_err(EvalError::InvalidData)
+    }
+
     /// 置く平面と中心(平面の座標)。
     fn origin(&self, ctx: &EvalCtx<'_>) -> Result<(Plane, [f64; 2]), EvalError> {
         let offset = [
@@ -473,6 +500,18 @@ impl Feature for Gear {
 
     fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
         let params = self.params(ctx)?;
+        let normal = self.normal_params(ctx)?;
+        let beta = self.helix_angle(ctx)?;
+        if self.hand == kmb_interchange::gear::Hand::Both {
+            return Err(EvalError::InvalidData(
+                "ねじれの向きは右か左を選んでください。やまばはボディの欄で選びます".into(),
+            ));
+        }
+        if beta != 0.0 && !matches!(self.kind, GearKind::External | GearKind::Internal) {
+            return Err(EvalError::InvalidData(
+                "ねじれ角は外歯か内歯の歯車に指定してください".into(),
+            ));
+        }
         let phase = given(&self.phase).map_or(Ok(0.0), |s| angle(ctx, s, "回す角"))?;
         let bore = given(&self.bore).map_or(Ok(0.0), |s| length(ctx, s, "軸の穴の径"))?;
         if self.kind == GearKind::Rack && bore != 0.0 {
@@ -630,13 +669,13 @@ impl Feature for Gear {
             module: if params.chain.is_some() || shape.axial {
                 0.0
             } else {
-                params.module
+                normal.module
             },
-            normal_module: false,
+            normal_module: beta != 0.0,
             pressure_angle: if params.chain.is_some() || shape.axial {
                 0.0
             } else {
-                params.pressure_angle
+                normal.pressure_angle
             },
             teeth: if shape.axial { 0 } else { params.teeth },
             profile_shift: if params.chain.is_some() || shape.axial {
@@ -652,8 +691,8 @@ impl Feature for Gear {
             },
             phase,
             face_width: None,
-            helix_angle: 0.0,
-            hand: kmb_interchange::gear::Hand::Right,
+            helix_angle: beta,
+            hand: self.hand,
             cone_angle: 0.0,
             chain_pitch: params.chain.map(|c| c.pitch),
             starts: 1,
@@ -737,16 +776,18 @@ pub fn register(reg: &mut Registry) {
                         f.hide_choice(k.key())
                     }),
             )
-            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ピッチ円の径 = モジュール × 歯数").only("kind", "external|internal|rack", "external"))
+            .field(Field::expr("module", "モジュール").length().help("歯の大きさ。ねじれ角があれば歯直角のモジュール。ピッチ円の径 = モジュール × 歯数 / cos(ねじれ角)").only("kind", "external|internal|rack", "external"))
             .field(Field::choice("rack_size", "ラックの長さの指定", &[("teeth", "歯数"), ("length", "長さ")]).only("kind", "rack", "external"))
             .field(Field::expr("teeth", "歯数").unitless().step(1.0, 1.0).help("ラックでは長さの指定が「歯数」の時だけ使う").only("kind", "external|internal|rack|sprocket", "external").and_only("rack_size", "teeth", "teeth"))
             .field(Field::opt_expr("rack_length", "ラックの長さ").length().help("歯を含む全長。円ピッチごとに入るだけの歯を並べる").only("kind", "rack", "external").and_only("rack_size", "length", "teeth"))
             .field(Field::opt_expr("rack_back", "背の厚さ").length().help("歯底から背の面まで。空ならモジュールの 2 倍").only("kind", "rack", "external"))
-            .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg").only("kind", "external|internal|rack", "external"))
+            .field(Field::expr("pressure_angle", "圧力角").angle().help("ふつうは 20 deg。ねじれ角を指定する時は歯直角の圧力角").only("kind", "external|internal|rack", "external"))
             .field(Field::opt_expr("profile_shift", "転位係数").unitless().help("空なら 0。正で外歯は厚く、内歯は薄くなり、歯先円と歯底円が外へ広がる").only("kind", "external|internal", "external"))
             .field(Field::opt_expr("tip_round", "歯先の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0").only("kind", "external|internal|rack", "external"))
             .field(Field::opt_expr("root_round", "歯底の丸み").unitless().help("丸みの半径をモジュールに対する割合で。空なら 0.38").only("kind", "external|internal|rack", "external"))
             .field(Field::opt_expr("bore", "軸の穴の径").length().only("kind", "external|sprocket|flat_pulley|v_pulley|rope_sheave", "external").help("空か 0 なら穴なし"))
+            .field(Field::opt_expr("helix_angle", "ねじれ角").angle().help("空か 0 deg なら平歯車。0 deg 以上、90 deg 未満").only("kind", "external|internal", "external"))
+            .field(Field::choice("hand", "ねじれの向き", &[("right", "右"), ("left", "左")]).only("kind", "external|internal", "external"))
             .field(Field::expr("outer_diameter", "輪の外径").length().only("kind", "internal", "external").help("内歯車で必須。歯底円の径 + モジュールの 2 倍以上"))
             .field(Field::opt_expr("lightening_count", "軽くする穴の数").unitless().step(1.0, 0.0).help("空か 0 なら穴なし").only("kind", "external", "external"))
             .field(Field::opt_expr("lightening_diameter", "軽くする穴の径").length().only("kind", "external", "external"))

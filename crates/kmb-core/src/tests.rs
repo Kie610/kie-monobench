@@ -2200,3 +2200,98 @@ fn step_changes_plain_numbers_only() {
     let fine = Step { by: 0.1, min: 0.0 };
     assert_eq!(fine.next("0.2", true).as_deref(), Some("0.3"));
 }
+
+/// 確かめること: 宣言的な参照条件は既存条件とANDし、既定と参照切れ・不正値を区別する。
+#[test]
+fn referenced_field_conditions_use_declared_defaults_and_follow_document_changes() {
+    let mut doc = Document::new();
+    let id = doc
+        .apply_edits(
+            "参照元",
+            vec![Edit::Insert {
+                type_id: "sample.source@1".into(),
+                name: "元".into(),
+                data: json!({}),
+            }],
+        )
+        .unwrap()[0];
+    let field = Field::bool("flag", "入")
+        .only("enabled", "yes", "no")
+        .only_reference("source", "mode", "supported|also", "supported");
+    let input = json!({"source":id.0,"enabled":"yes"});
+    assert!(field.applies_in(&input, doc.data()));
+    assert!(!field.applies_in(&json!({"source":id.0}), doc.data()));
+    for invalid in [
+        json!({"enabled":"yes"}),
+        json!({"source":"bad","enabled":"yes"}),
+        json!({"source":9999,"enabled":"yes"}),
+    ] {
+        assert!(!field.applies_in(&invalid, doc.data()));
+    }
+    for (mode, want) in [
+        (json!("also"), true),
+        (json!("unknown"), false),
+        (json!(42), false),
+        (json!(null), false),
+    ] {
+        doc.apply(Transaction::new(
+            "値を変更",
+            vec![Op::SetFeatureData {
+                id,
+                data: json!({"mode":mode}),
+            }],
+        ))
+        .unwrap();
+        assert_eq!(field.applies_in(&input, doc.data()), want);
+    }
+    let wrong = doc
+        .apply_edits(
+            "違う型",
+            vec![Edit::Insert {
+                type_id: "sample.other@1".into(),
+                name: "別".into(),
+                data: json!({}),
+            }],
+        )
+        .unwrap()[0];
+    let typed = field.clone().only_reference_of_type(
+        "source",
+        "sample.source@1",
+        "mode",
+        "supported|also",
+        "supported",
+    );
+    doc.apply(Transaction::new(
+        "既定へ戻す",
+        vec![Op::SetFeatureData {
+            id,
+            data: json!({}),
+        }],
+    ))
+    .unwrap();
+    assert!(
+        typed.applies_in(&input, doc.data()),
+        "正しい型の省略値は宣言の既定に戻る"
+    );
+    let wrong_input = json!({"source":wrong.0,"enabled":"yes"});
+    assert!(
+        !typed.applies_in(&wrong_input, doc.data()),
+        "違う型のkind省略にfallbackしない"
+    );
+    assert!(
+        field.applies_in(&wrong_input, doc.data()),
+        "型指定のない宣言の挙動は変えない"
+    );
+    let ordinary = Field::bool("flag", "入").only("enabled", "yes", "no");
+    assert_eq!(
+        ordinary.applies_in(&input, doc.data()),
+        ordinary.applies(&input)
+    );
+    assert!(
+        !serde_json::to_value(ordinary)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("reference_when")
+    );
+}

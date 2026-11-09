@@ -165,13 +165,13 @@ field-cad-gear-bore = Bore Diameter
 field-cad-gear-bore-help = Empty or 0 for no bore.
 field-cad-gear-kind = Type
 field-cad-gear-module = Module
-field-cad-gear-module-help = Tooth size. Pitch diameter = module × number of teeth.
+field-cad-gear-module-help = Tooth size. With a helix angle, this is the normal module. Pitch diameter = module × teeth / cos(helix angle)
 field-cad-gear-outer-diameter = Ring Outer Diameter
 field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
 field-cad-gear-phase = Rotation
 field-cad-gear-phase-help = Direction of the first tooth, or the travel direction of a rack. Empty for 0.
 field-cad-gear-pressure-angle = Pressure Angle
-field-cad-gear-pressure-angle-help = Usually 20 deg.
+field-cad-gear-pressure-angle-help = Usually 20 deg. With a helix angle, use the normal pressure angle
 field-cad-gear-profile-shift = Profile Shift Coefficient
 field-cad-gear-profile-shift-help = Empty for 0. Positive values thicken external teeth, thin internal teeth, and move the tip and root circles outward.
 field-cad-gear-root-round = Root Fillet
@@ -2352,6 +2352,12 @@ field-cad-gear-rack-back = Back Thickness
 field-cad-gear-rack-back-help = From the tooth root to the back face. Empty for twice the module.
 field-cad-gear-teeth-help = Used for a rack only when its size is specified by number of teeth.
 field-cad-gear-y-help = For a rack, the start of the pitch line.
+field-cad-gear-helix-angle = Helix Angle
+field-cad-gear-helix-angle-help = Blank or 0 deg makes a spur gear. At least 0 deg and less than 90 deg
+field-cad-gear-hand = Helix Hand
+field-cad-gear-body-herringbone = Herringbone
+field-cad-gear-body-groove = Center Groove Width
+field-cad-gear-body-groove-help = Used for herringbone gears. 0 mm leaves no groove. Must be less than the face width. Use 0 mm with lightening holes or a keyway.
 
 field-cad-gear-pulley-diameter = Pitch Diameter
 
@@ -2419,3 +2425,4 @@ field-mech-cam-y = Center Y
 field-mech-cam-phase = Rotation Angle
 field-mech-cam-follower-cam = Cam
 field-mech-cam-follower-width = Follower Thickness
+field-cad-gear-body-herringbone-help = Helical gears use equal face, web, and boss thicknesses and twist the whole plate, including holes and the keyway.

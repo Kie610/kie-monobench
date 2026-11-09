@@ -591,31 +591,7 @@ impl Workspace {
             .iter()
             .filter_map(|e| self.win.registry.descriptor(&e.type_id))
             .collect();
-        if descs.len() != entries.len() {
-            return Vec::new();
-        }
-        descs[0]
-            .fields
-            .iter()
-            .filter(|f| {
-                !matches!(
-                    f.kind,
-                    FieldKind::Output { .. }
-                        | FieldKind::Info
-                        | FieldKind::Pick { .. }
-                        | FieldKind::Rows { .. }
-                )
-            })
-            .filter(|f| {
-                descs[1..].iter().all(|d| {
-                    d.fields
-                        .iter()
-                        .any(|g| g.key == f.key && same_kind(&g.kind, &f.kind))
-                })
-            })
-            .filter(|f| entries.iter().all(|e| f.applies(&e.data)))
-            .cloned()
-            .collect()
+        common_fields_in(entries, &descs, self.cur.work.doc().data())
     }
 
     fn multi_panel(&mut self, ui: &mut egui::Ui, ids: &[kmb_core::FeatureId]) {
@@ -697,4 +673,186 @@ enum Footer {
 
 fn same_kind(a: &FieldKind, b: &FieldKind) -> bool {
     std::mem::discriminant(a) == std::mem::discriminant(b)
+}
+
+/// 文書にある参照を使い、複数編集で共通して表示できる欄を選ぶ(描画や状態変更なし)。
+fn common_fields_in(
+    entries: &[FeatureEntry],
+    descs: &[kmb_core::Descriptor],
+    doc: &kmb_core::DocumentData,
+) -> Vec<Field> {
+    if descs.len() != entries.len() {
+        return Vec::new();
+    }
+    descs[0]
+        .fields
+        .iter()
+        .filter(|f| {
+            !matches!(
+                f.kind,
+                FieldKind::Output { .. }
+                    | FieldKind::Info
+                    | FieldKind::Pick { .. }
+                    | FieldKind::Rows { .. }
+            )
+        })
+        .filter(|f| {
+            descs[1..].iter().all(|d| {
+                d.fields
+                    .iter()
+                    .any(|g| g.key == f.key && same_kind(&g.kind, &f.kind))
+            })
+        })
+        .filter(|f| entries.iter().all(|e| f.applies_in(&e.data, doc)))
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod reference_field_tests {
+    use super::*;
+    use kmb_core::{Document, Edit};
+    use serde_json::json;
+
+    /// 確かめること: 通常の文書の参照先kindで、単一と混在する複数編集の欄が追従する。
+    #[test]
+    fn referenced_kind_filters_single_and_mixed_body_fields_without_frames() {
+        let mut doc = Document::new();
+        let insert = |name: &str, data| Edit::Insert {
+            type_id: "cad.gear@1".into(),
+            name: name.into(),
+            data,
+        };
+        let gears = doc
+            .apply_edits(
+                "歯車",
+                vec![
+                    insert("省略した外歯", json!({})),
+                    insert("ラック", json!({"kind":"rack"})),
+                ],
+            )
+            .unwrap();
+        let bodies = doc
+            .apply_edits(
+                "ボディ",
+                gears
+                    .iter()
+                    .map(|id| Edit::Insert {
+                        type_id: "cad.gear_body@1".into(),
+                        name: "ボディ".into(),
+                        data: json!({"gear":id.0}),
+                    })
+                    .collect(),
+            )
+            .unwrap();
+        let descriptor = kmb_bundle::registry()
+            .descriptor("cad.gear_body@1")
+            .unwrap();
+        let fields = |doc: &Document, ids: &[kmb_core::FeatureId]| {
+            let entries: Vec<_> = ids
+                .iter()
+                .map(|id| doc.data().feature(*id).unwrap().clone())
+                .collect();
+            common_fields_in(
+                &entries,
+                &vec![descriptor.clone(); entries.len()],
+                doc.data(),
+            )
+        };
+        let has = |fields: Vec<Field>, key: &str| fields.iter().any(|f| f.key == key);
+        assert!(
+            has(fields(&doc, &[bodies[0]]), "herringbone"),
+            "kind省略は外歯"
+        );
+        assert!(
+            !has(fields(&doc, &[bodies[1]]), "herringbone"),
+            "ラックのボディには出さない"
+        );
+        assert!(
+            !has(fields(&doc, &bodies), "groove"),
+            "異なる参照先が混在する複数編集"
+        );
+        doc.apply(kmb_core::Transaction::new(
+            "種類を外歯へ",
+            vec![kmb_core::Op::SetFeatureData {
+                id: gears[1],
+                data: json!({"kind":"external"}),
+            }],
+        ))
+        .unwrap();
+        assert!(
+            has(fields(&doc, &bodies), "herringbone"),
+            "親kind変更直後に追従"
+        );
+        doc.apply(kmb_core::Transaction::new(
+            "参照をラックへ",
+            vec![kmb_core::Op::SetFeatureData {
+                id: gears[0],
+                data: json!({"kind":"rack"}),
+            }],
+        ))
+        .unwrap();
+        assert!(!has(fields(&doc, &bodies), "herringbone"));
+        for kind in [
+            "external",
+            "internal",
+            "rack",
+            "sprocket",
+            "flat_pulley",
+            "v_pulley",
+            "rope_sheave",
+            "unknown",
+        ] {
+            doc.apply(kmb_core::Transaction::new(
+                "親の種類",
+                vec![kmb_core::Op::SetFeatureData {
+                    id: gears[0],
+                    data: json!({"kind":kind}),
+                }],
+            ))
+            .unwrap();
+            let expected = matches!(kind, "external" | "internal");
+            assert_eq!(
+                has(fields(&doc, &[bodies[0]]), "herringbone"),
+                expected,
+                "{kind}"
+            );
+            assert_eq!(
+                has(fields(&doc, &[bodies[0]]), "groove"),
+                expected,
+                "{kind}"
+            );
+        }
+        let wrong = doc
+            .apply_edits(
+                "異なる機能",
+                vec![Edit::Insert {
+                    type_id: "sample.other@1".into(),
+                    name: "別".into(),
+                    data: json!({}),
+                }],
+            )
+            .unwrap()[0];
+        doc.apply(kmb_core::Transaction::new(
+            "違う型への参照",
+            vec![kmb_core::Op::SetFeatureData {
+                id: bodies[0],
+                data: json!({"gear":wrong.0}),
+            }],
+        ))
+        .unwrap();
+        assert!(
+            !has(fields(&doc, &[bodies[0]]), "herringbone"),
+            "存在しても型が違えばkind省略にfallbackしない"
+        );
+        doc.apply(kmb_core::Transaction::new(
+            "切れた参照",
+            vec![kmb_core::Op::SetFeatureData {
+                id: bodies[0],
+                data: json!({"gear":9999}),
+            }],
+        ))
+        .unwrap();
+        assert!(!has(fields(&doc, &[bodies[0]]), "herringbone"));
+    }
 }

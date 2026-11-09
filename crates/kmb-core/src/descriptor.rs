@@ -152,6 +152,9 @@ pub struct Field {
     /// 使わない間は値を消し、使い始めた時に空なら画面は直前の候補を入れる
     #[serde(skip_serializing_if = "Option::is_none")]
     pub when: Option<When>,
+    /// 参照先の機能データで使う・使わないを決める。参照先を写さず、表示時の文書から読む。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reference_when: Option<ReferenceWhen>,
     /// 一覧から選べる候補(打つこともできる)。数や文字の欄に付ける
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suggest: Option<Suggest>,
@@ -305,6 +308,44 @@ pub struct When {
     pub and: Option<Box<When>>,
 }
 
+/// 他の機能を指す欄と、その参照先データの欄による表示条件。
+/// 参照先の欄を省いた時だけ `default` を使う。参照切れや不正な値には使わない。
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ReferenceWhen {
+    pub reference: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_type: Option<String>,
+    pub key: String,
+    pub value: String,
+    pub default: String,
+}
+
+impl ReferenceWhen {
+    fn holds(&self, data: &serde_json::Value, doc: &crate::DocumentData) -> bool {
+        let source = Field::info(&self.reference, "");
+        let Some(id) = source.get(data).and_then(serde_json::Value::as_u64) else {
+            return false;
+        };
+        let Some(entry) = doc.feature(crate::FeatureId(id)) else {
+            return false;
+        };
+        if self
+            .expected_type
+            .as_ref()
+            .is_some_and(|expected| *expected != entry.type_id)
+        {
+            return false;
+        }
+        let target = Field::info(&self.key, "");
+        let current = match target.get(&entry.data) {
+            None => self.default.as_str(),
+            Some(serde_json::Value::String(value)) => value.as_str(),
+            Some(_) => return false,
+        };
+        self.value.split('|').any(|value| value == current)
+    }
+}
+
 impl When {
     fn holds(&self, data: &serde_json::Value) -> bool {
         let f = Field::info(&self.key, "");
@@ -325,6 +366,7 @@ impl Field {
             kind,
             help: String::new(),
             when: None,
+            reference_when: None,
             suggest: None,
             pick: None,
             marks: None,
@@ -790,6 +832,50 @@ impl Field {
             }
         }
         self
+    }
+
+    /// 他の機能を指す `reference` の参照先で `key` が `value` の時だけ使う。
+    /// 既存の `only` 等とは AND。参照先の欄がない時だけ宣言側の `default` を使う。
+    pub fn only_reference(
+        mut self,
+        reference: &str,
+        key: &str,
+        value: &str,
+        default: &str,
+    ) -> Self {
+        self.reference_when = Some(ReferenceWhen {
+            reference: reference.into(),
+            expected_type: None,
+            key: key.into(),
+            value: value.into(),
+            default: default.into(),
+        });
+        self
+    }
+
+    /// 参照先の機能の型も指定する参照条件。型が違う時は省略時の既定を使わない。
+    pub fn only_reference_of_type(
+        self,
+        reference: &str,
+        expected_type: &str,
+        key: &str,
+        value: &str,
+        default: &str,
+    ) -> Self {
+        let mut field = self.only_reference(reference, key, value, default);
+        if let Some(condition) = &mut field.reference_when {
+            condition.expected_type = Some(expected_type.into());
+        }
+        field
+    }
+
+    /// 文書を参照できる編集画面でこの欄を使うか。参照条件のない既存欄は `applies` と同じ。
+    pub fn applies_in(&self, data: &serde_json::Value, doc: &crate::DocumentData) -> bool {
+        self.applies(data)
+            && self
+                .reference_when
+                .as_ref()
+                .is_none_or(|condition| condition.holds(data, doc))
     }
 
     /// この欄を今のデータで使うか。
