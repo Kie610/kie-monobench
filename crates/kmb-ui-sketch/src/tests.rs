@@ -48,7 +48,11 @@ fn harness() -> Harness<'static, Workspace> {
 fn sample_is_well_constrained_and_shown() {
     let mut h = harness();
     h.run();
-    h.get_by_label("完全拘束");
+    h.get(
+        egui_kittest::kittest::by()
+            .role(egui::accesskit::Role::Button)
+            .label("完全拘束"),
+    );
     // ブラウザとタイムラインの両方に出る
     assert!(h.get_all_by_label_contains("板の輪郭").count() >= 2);
     assert_eq!(h.state().report().error_count(), 0);
@@ -207,7 +211,11 @@ fn renaming_keeps_the_sketch_solved() {
     assert!(h.state_mut().rename_param(id, "w"));
     h.run();
     assert_eq!(h.state().report().error_count(), 0);
-    h.get_by_label("完全拘束");
+    h.get(
+        egui_kittest::kittest::by()
+            .role(egui::accesskit::Role::Button)
+            .label("完全拘束"),
+    );
 }
 
 /// スケッチの座標(mm)の点の、画面の位置(前のフレームの変換で。画面の配置が変わっても同じ点を指す)。
@@ -333,7 +341,11 @@ fn selecting_a_line_offers_a_length_dimension() {
     // 過剰な拘束のまま足さない)
     assert_eq!(s.constraints.len(), 11);
     assert!(s.constraints.last().unwrap().reference);
-    h.get_by_label("完全拘束");
+    h.get(
+        egui_kittest::kittest::by()
+            .role(egui::accesskit::Role::Button)
+            .label("完全拘束"),
+    );
     let note = editor(h.state_mut())
         .editor
         .notice
@@ -400,7 +412,11 @@ fn the_dimension_tool_measures_and_places_a_reference_when_already_determined() 
     let c = s.constraints.last().unwrap();
     assert!(c.reference, "{c:?}");
     // 参照寸法は形を決めないので、過剰な拘束にならない(図には括弧つきで出る)
-    h.get_by_label("完全拘束");
+    h.get(
+        egui_kittest::kittest::by()
+            .role(egui::accesskit::Role::Button)
+            .label("完全拘束"),
+    );
     // 駆動へ戻すのは、余分なので断る
     let id = c.id;
     // 辺を選び直すと、それを決めている拘束の一覧に出る(全部の一覧は畳んだまま)

@@ -419,7 +419,10 @@ pub(crate) fn status_text(s: &crate::Solution) -> String {
 
 impl Extension for SketchCommands {
     fn summary(&self, cx: &Context<'_>, id: kmb_core::FeatureId) -> Option<String> {
-        let entry = cx.data.feature(id).filter(|entry| entry.type_id == SKETCH)?;
+        let entry = cx
+            .data
+            .feature(id)
+            .filter(|entry| entry.type_id == SKETCH)?;
         let solution = crate::solution_of(cx.output(entry.id, "sketch")?)?;
         Some(status_text(&solution))
     }

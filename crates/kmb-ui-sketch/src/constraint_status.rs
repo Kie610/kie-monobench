@@ -8,13 +8,17 @@ pub(crate) fn presentation(
     text: &dyn Fn(&str, usize) -> String,
 ) -> FeaturePresentation {
     let (key, mark) = if solution.is_blank() {
-        ("sketch-state-empty", FeatureMark::Open)
+        ("frame-sketch-state-empty", FeatureMark::Open)
     } else {
         match &solution.status {
-            SolveStatus::WellConstrained => ("sketch-state-full", FeatureMark::Complete),
-            SolveStatus::UnderConstrained { .. } => ("sketch-state-under", FeatureMark::Open),
-            SolveStatus::OverConstrained { .. } => ("sketch-state-over", FeatureMark::Warning),
-            SolveStatus::Inconsistent { .. } => ("sketch-state-inconsistent", FeatureMark::Error),
+            SolveStatus::WellConstrained => ("frame-sketch-state-full", FeatureMark::Complete),
+            SolveStatus::UnderConstrained { .. } => ("frame-sketch-state-under", FeatureMark::Open),
+            SolveStatus::OverConstrained { .. } => {
+                ("frame-sketch-state-over", FeatureMark::Warning)
+            }
+            SolveStatus::Inconsistent { .. } => {
+                ("frame-sketch-state-inconsistent", FeatureMark::Error)
+            }
         }
     };
     FeaturePresentation {
@@ -42,7 +46,7 @@ mod tests {
         assert_eq!(
             presentation(&under, &translate),
             FeaturePresentation {
-                text: "sketch-state-under:1".into(),
+                text: "frame-sketch-state-under:1".into(),
                 mark: FeatureMark::Open,
             }
         );
@@ -56,7 +60,7 @@ mod tests {
         assert_eq!(
             presentation(&full, &translate),
             FeaturePresentation {
-                text: "sketch-state-full:0".into(),
+                text: "frame-sketch-state-full:0".into(),
                 mark: FeatureMark::Complete,
             }
         );
@@ -70,14 +74,14 @@ mod tests {
         assert_eq!(
             presentation(&over, &translate),
             FeaturePresentation {
-                text: "sketch-state-over:0".into(),
+                text: "frame-sketch-state-over:0".into(),
                 mark: FeatureMark::Warning,
             }
         );
         // 表示は与えた計算済みの結果を読むだけで、古い自由度を残さない。
         assert_eq!(
             presentation(&under, &translate).text,
-            "sketch-state-under:1"
+            "frame-sketch-state-under:1"
         );
     }
 }
