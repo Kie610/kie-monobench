@@ -85,10 +85,13 @@ pub struct FlowData {
     /// 残すコマの数(流れ)。空なら 50
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub frames: String,
+    /// 矢印の間隔(mm)。空なら自動。解き直す条件ではない
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub arrows: String,
 }
 
 impl FlowData {
-    fn exprs(&self) -> [&String; 7] {
+    fn exprs(&self) -> [&String; 8] {
         [
             &self.speed,
             &self.at,
@@ -97,10 +100,11 @@ impl FlowData {
             &self.cg,
             &self.end,
             &self.frames,
+            &self.arrows,
         ]
     }
 
-    fn exprs_mut(&mut self) -> [&mut String; 7] {
+    fn exprs_mut(&mut self) -> [&mut String; 8] {
         [
             &mut self.speed,
             &mut self.at,
@@ -109,6 +113,7 @@ impl FlowData {
             &mut self.cg,
             &mut self.end,
             &mut self.frames,
+            &mut self.arrows,
         ]
     }
 }
@@ -266,11 +271,23 @@ impl Feature for Study {
             solve,
         };
         let key = job.key();
+        let arrows = if self.kind == Kind::Wing || is_empty(&self.data.arrows) {
+            None
+        } else {
+            let value = length(ctx, &self.data.arrows, "矢印の間隔")?;
+            if !value.is_finite() || value <= 0.0 {
+                return Err(EvalError::InvalidData(
+                    "矢印の間隔は 0 より大きい長さにしてください".into(),
+                ));
+            }
+            Some(value)
+        };
         let plan = Plan {
             key,
             steps: job.steps(),
             section,
             keeps_partial: self.kind != Kind::Wing,
+            arrows,
             ..Plan::default()
         };
         kmb_study::prepare(ctx, key, Arc::new(job));
@@ -1038,6 +1055,12 @@ fn bodies_field(label: &str, help: &str) -> Field {
     Field::pick("bodies", label, &[RefKind::Body], 1, None).help(help)
 }
 
+fn arrows_field() -> Field {
+    Field::opt_expr("arrows", "矢印の間隔")
+        .length()
+        .help("空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない")
+}
+
 fn speed_field() -> Field {
     Field::opt_expr("speed", "速さ(m/s)")
         .plain("m/s")
@@ -1134,6 +1157,7 @@ pub fn register(reg: &mut Registry) {
             )
             .field(end_field())
             .field(frames_field())
+            .field(arrows_field())
             .template(json!({"plane": "xy", "dir": "+x", "speed": "10", "fluid": "air"})),
         |d| {
             Ok(Box::new(Study {
@@ -1158,6 +1182,7 @@ pub fn register(reg: &mut Registry) {
             .field(Field::opt_expr("size", "格子の大きさ").length().help("格子の 1 辺。空なら自動(約 22 万セル)"))
             .field(end_field())
             .field(frames_field())
+            .field(arrows_field())
             .template(json!({"plane": "xy", "dir": "+x", "speed": "10", "fluid": "air"})),
         |d| Ok(Box::new(Study { kind: Kind::Volume, data: from(d)? })),
     );

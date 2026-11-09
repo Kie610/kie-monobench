@@ -2390,3 +2390,8 @@ field-cad-gear-rope-diameter-help = 空なら 10 mm
 field-cad-gear-flange-height = 縁の高さ
 
 field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ
+
+field-flow-section-arrows = 矢印の間隔
+field-flow-section-arrows-help = 空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない
+field-flow-volume-arrows = 矢印の間隔
+field-flow-volume-arrows-help = 空なら自動。セルより細かい間隔はセルの大きさに揃える。直しても解き直さない

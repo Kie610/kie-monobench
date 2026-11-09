@@ -476,6 +476,7 @@ impl Feature for Study {
                 steps,
                 section,
                 keeps_partial,
+                arrows: None,
                 checks,
             }
             .to_value(),

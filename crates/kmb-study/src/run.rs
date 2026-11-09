@@ -57,6 +57,9 @@ pub struct Plan {
     /// (3D の流れの「断面」の欄。直しても解き直さない)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<(usize, f64)>,
+    /// 矢印の間隔(mm)。見せ方なので仕事の鍵には入れない
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arrows: Option<f64>,
     /// 中止しても途中までの結果を残すか(時刻を進める流れ)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub keeps_partial: bool,

@@ -2390,3 +2390,8 @@ field-cad-gear-rope-diameter-help = Empty uses 10 mm.
 field-cad-gear-flange-height = Flange Height
 
 field-cad-gear-flange-height-help = Empty uses 3 mm above the rope center.
+
+field-flow-section-arrows = Arrow spacing
+field-flow-section-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
+field-flow-volume-arrows = Arrow spacing
+field-flow-volume-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.

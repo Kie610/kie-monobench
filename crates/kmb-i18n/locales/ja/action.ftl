@@ -454,3 +454,6 @@ action-cad-import-iges = IGES を読み込む…
 action-cad-import-iges-tip = IGES の面と立体を設計へ挿入する。元のファイルが無くても開けるよう中身を文書に残す
 action-params-apply-batch = 式をまとめて適用
 action-params-apply-batch-tip = パラメータの表の複数の式を確かめ、すべて通れば1回の変更として適用する
+
+action-study-view-arrows = 矢印を出す
+action-study-view-arrows-tip = 一定の間隔の点から、速さと向きを矢印で出す・隠す

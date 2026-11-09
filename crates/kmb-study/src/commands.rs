@@ -24,6 +24,7 @@ pub const VIEW_FRAME: &str = "study.view.frame.";
 const VIEW_PHASE: &str = "study.view.phase.";
 pub const VIEW_SURFACE: &str = "study.view.surface";
 pub const VIEW_SECTION: &str = "study.view.section";
+pub const VIEW_ARROWS: &str = "study.view.arrows";
 pub const VIEW_STREAM: &str = "study.view.streamlines";
 pub const VIEW_SMOOTH: &str = "study.view.smooth";
 pub const VIEW_RANGE: &str = "study.view.range";
@@ -40,6 +41,7 @@ struct Show {
     section: bool,
     section_q: usize,
     streamlines: bool,
+    arrows: bool,
     smooth: bool,
     banded: bool,
     frame_only: bool,
@@ -214,6 +216,7 @@ impl StudyCommands {
                 section: on_grid || r.start.section,
                 section_q: if on_grid { q } else { first_grid },
                 streamlines: r.start.streamlines,
+                arrows: keep.arrows,
                 // 見せ方の好みは同じ研究の次の結果にも残す
                 smooth: keep.smooth,
                 banded: keep.banded,
@@ -274,6 +277,8 @@ impl StudyCommands {
             surface: s.surface,
             section: section.filter(|_| s.section),
             streamlines: s.streamlines,
+            arrows: s.arrows,
+            arrow_spacing: plan(cx, id).and_then(|p| p.arrows),
             smooth: !s.banded,
             deform: !s.no_deform,
             phase: s.phase.unwrap_or(1.0),
@@ -605,6 +610,24 @@ impl Extension for StudyCommands {
                 "流体の所だけを塗った断面を出す(位置は研究の「断面」の欄。解き直さずに変えられる)",
             ));
         }
+        if r.quantities.iter().any(|q| {
+            q.role == Role::Velocity
+                && q.comps == 3
+                && r.parts
+                    .get(q.part)
+                    .is_some_and(|p| matches!(p.geom, Geometry::Grid(_)))
+        }) {
+            out.push(
+                toggle(
+                    VIEW_ARROWS,
+                    s.arrows,
+                    "矢印を隠す",
+                    "矢印を出す",
+                    "一定の間隔の点から、速さと向きを矢印で出す・隠す",
+                )
+                .args([]),
+            );
+        }
         if r.quantities.iter().any(|q| q.role == Role::Velocity) {
             out.push(toggle(
                 VIEW_STREAM,
@@ -799,6 +822,7 @@ impl Extension for StudyCommands {
                         }),
                         VIEW_SECTION => self.set_show(cx, fid, |s| s.section = !s.section),
                         VIEW_STREAM => self.set_show(cx, fid, |s| s.streamlines = !s.streamlines),
+                        VIEW_ARROWS => self.set_show(cx, fid, |s| s.arrows = !s.arrows),
                         VIEW_SMOOTH => self.set_show(cx, fid, |s| s.banded = !s.banded),
                         VIEW_RANGE => self.set_show(cx, fid, |s| s.frame_only = !s.frame_only),
                         VIEW_DEFORM => self.set_show(cx, fid, |s| s.no_deform = !s.no_deform),

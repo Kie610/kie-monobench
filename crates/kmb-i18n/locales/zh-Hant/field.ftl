@@ -2297,3 +2297,8 @@
 # field-cad-gear-flange-height = 縁の高さ
 
 # field-cad-gear-flange-height-help = 空なら 3 mm。ロープの中心からの高さ
+
+# field-flow-section-arrows = Arrow spacing
+# field-flow-section-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
+# field-flow-volume-arrows = Arrow spacing
+# field-flow-volume-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
