@@ -163,13 +163,13 @@ fn mcp_open_and_close_show_the_current_constraint_state_without_editing_the_docu
                 &mut h,
                 &dir.0,
                 "ui_click",
-                json!({"target":"Status fixture#1","button":"double"}),
+                json!({"target":"button:Status fixture#1","button":"double"}),
             );
             app(
                 &mut h,
                 &dir.0,
                 "ui_expect",
-                json!({"target":band,"state":"exists"}),
+                json!({"target":format!("label:{band}"),"state":"exists"}),
             );
             app(&mut h, &dir.0, "ui_key", json!({"keys":"Escape"}));
             app(&mut h, &dir.0, "ui_key", json!({"keys":"Escape"}));
