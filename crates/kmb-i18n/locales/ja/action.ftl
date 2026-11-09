@@ -457,3 +457,5 @@ action-params-apply-batch-tip = パラメータの表の複数の式を確かめ
 
 action-study-view-arrows = 矢印を出す
 action-study-view-arrows-tip = 一定の間隔の点から、速さと向きを矢印で出す・隠す
+action-mech-cam = カム
+action-mech-cam-tip = 平面と中心を選び、変位の線図からカムと従節を別のボディで作る

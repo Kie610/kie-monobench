@@ -17,6 +17,7 @@ pub mod body;
 pub mod commands;
 pub mod hub;
 pub mod kinds;
+pub mod mech;
 pub mod tooth;
 
 pub use body::{GEAR_BODY, GearBody};
@@ -792,8 +793,10 @@ pub fn module() -> kmb_core::Module {
     kmb_core::Module::new("kmb-cad-gear", |reg| {
         register(reg);
         body::register(reg);
+        mech::register(reg);
     })
     .with_extension(GearCommands)
+    .with_extension(mech::cam::CamCommands)
 }
 
 #[cfg(test)]

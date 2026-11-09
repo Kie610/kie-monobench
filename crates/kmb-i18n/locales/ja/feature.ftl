@@ -77,3 +77,8 @@ feature-solid-import-iges = IGES の読み込み
 feature-solid-import-iges-tip = IGES の面と立体を読み込む。閉じない面は面のボディとして残し、読めない面の理由を知らせる
 
 feature-tool-clearance-warning = 工具が届かない所が { $count } か所あります。入る工具径の目安は { $diameter } mm 以下です。小さい工具で取残し加工をしてください
+
+feature-mech-cam = カム
+feature-mech-cam-tip = 変位の線図からカムと従節の輪郭を作り、別のボディへ押し出す
+feature-mech-cam-follower = カムの従節
+feature-mech-cam-follower-tip = カムの従節の輪郭を別のボディへ押し出す

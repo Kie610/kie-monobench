@@ -650,3 +650,63 @@ fn an_axial_pulley_section_keeps_the_world_axis_when_parts_are_also_exported() {
         "{mass:?}"
     );
 }
+
+/// 確かめること: カムと従節が別ボディで、厚さごとの輪郭面積に合う体積とCamSpecを出す。
+#[test]
+fn a_cam_and_its_follower_make_separate_bodies_and_a_one_degree_motion_table() {
+    use kmb_cad_gear::mech::cam::{CAM, Cam, FOLLOWER_BODY, FOLLOWER_PROFILE, FollowerBody};
+    let k = TestKernel::new();
+    let mut b = DocBuilder::new();
+    let cam = b.feature(
+        CAM,
+        "カム",
+        Cam {
+            width: "4 mm".into(),
+            ..Default::default()
+        },
+    );
+    let follower = b.feature(
+        FOLLOWER_BODY,
+        "従節",
+        FollowerBody {
+            cam,
+            width: "3 mm".into(),
+        },
+    );
+    let mut doc = b.finish("カムと従節");
+    let mut reg = registry();
+    kmb_cad_gear::mech::register(&mut reg);
+    let report = doc.recompute(&reg, &*k);
+    assert_ok(&report);
+    let bodies = visible_bodies(doc.data(), &reg, &report);
+    assert_eq!(bodies.len(), 2);
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(cam) else {
+        panic!("カム")
+    };
+    let profile = Profile::from_value(&outputs["profile"]).unwrap();
+    let follower_profile = Profile::from_value(&outputs[FOLLOWER_PROFILE]).unwrap();
+    let spec =
+        kmb_interchange::gear::CamSpec::from_value(&outputs[kmb_interchange::gear::CAM_OUTPUT])
+            .unwrap();
+    assert_eq!(spec.segments.len(), 360);
+    assert!((spec.displacement(60f64.to_radians()) - 5.0).abs() < 1e-6);
+    let kmb_core::Value::Shape(shape) = outputs["body"] else {
+        panic!("カムのボディ")
+    };
+    assert!(close(
+        k.mass(shape).unwrap().volume,
+        area(&profile) * 4.0,
+        0.01
+    ));
+    let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(follower) else {
+        panic!("従節")
+    };
+    let kmb_core::Value::Shape(shape) = outputs["body"] else {
+        panic!("従節のボディ")
+    };
+    assert!(close(
+        k.mass(shape).unwrap().volume,
+        area(&follower_profile) * 3.0,
+        0.01
+    ));
+}
