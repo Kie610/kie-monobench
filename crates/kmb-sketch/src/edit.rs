@@ -212,10 +212,12 @@ impl Sketch {
                 _ => None,
             })
             .collect();
+        let existing = crate::ends::tied_groups(self);
+        let connected = |p: EntityId| existing.get(&p).copied().unwrap_or(p);
         let mut pairs = Vec::new();
         for (i, (a, p)) in points.iter().enumerate() {
             for (b, q) in &points[i + 1..] {
-                if group(*a) == group(*b) {
+                if group(*a) == group(*b) && connected(*a) != connected(*b) {
                     let distance = (p[0] - q[0]).hypot(p[1] - q[1]);
                     if distance.is_finite() {
                         pairs.push((distance, (*a).min(*b), (*a).max(*b)));
