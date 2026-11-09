@@ -88,6 +88,8 @@ pub use view3d::Pick;
 
 #[cfg(test)]
 mod named_parameter_tests;
+#[cfg(test)]
+mod unitless_number_tests;
 
 /// 測る計算(画面を持たない作業と共通)。
 use kmb_measure as measure;
@@ -454,6 +456,7 @@ impl Workspace {
     pub fn with_editor(mut self, e: impl FeatureEditor) -> Self {
         let mut e: Box<dyn FeatureEditor> = Box::new(e);
         e.set_data_dir(self.win.data_dir.as_deref());
+        e.set_settings_dir(self.win.data_dir.as_deref().filter(|_| !self.win.safe_mode));
         self.cur.editors.push(e);
         self
     }
@@ -536,15 +539,15 @@ impl Workspace {
         self.length_unit().show(q)
     }
 
-    /// 長さの欄に数だけを打った時、文書の単位を付ける(mm の文書はそのまま。計算では数だけは mm)。
-    pub(crate) fn in_doc_unit(&self, expr: &str) -> String {
-        let u = self.length_unit();
-        let t = expr.trim();
-        if !u.is_mm() && t.parse::<f64>().is_ok() {
-            format!("{t} {}", u.name())
-        } else {
-            expr.to_string()
-        }
+    /// 単位 `unit` のパラメータに打った式を、入れる式にする(数だけの長さの式は文書の単位を付け、
+    /// mm でない文書で単位の無い数を長さと足し引きする式は断る。規則は
+    /// [`kmb_session::params::typed_param_expr`] で、CLI・MCP の set_param と同じ)。
+    pub(crate) fn typed_param(
+        &self,
+        unit: kmb_core::ParamUnit,
+        expr: &str,
+    ) -> Result<String, String> {
+        kmb_session::params::typed_param_expr(self.report(), unit, expr, self.length_unit())
     }
 
     /// パラメータの単位の名前(長さは文書の単位)。
@@ -955,3 +958,6 @@ mod mass_progress_tests;
 
 #[cfg(test)]
 mod mass_progress_live_tests;
+
+#[cfg(test)]
+mod editor_settings_tests;

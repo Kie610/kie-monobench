@@ -141,7 +141,13 @@ fn prepare(
             errors.push(failure(&change.row, "この行は文書にありません".into()));
             continue;
         };
-        row.expr = completed(data, registry, report, &change.row, &change.expr);
+        row.expr = match completed(data, registry, report, &change.row, &change.expr) {
+            Ok(expr) => expr,
+            Err(why) => {
+                errors.push(failure(&change.row, why));
+                continue;
+            }
+        };
         if let Err(why) = crate::param_io::checked_row(draft.data(), &row) {
             errors.push(failure(&change.row, why));
         }
@@ -292,18 +298,13 @@ fn completed(
     report: &RecomputeReport,
     key: &ParamKey,
     expr: &str,
-) -> String {
+) -> Result<String, String> {
     let unit = match key {
-        ParamKey::User { id } => {
-            data.params
-                .iter()
-                .find(|p| p.id == *id)
-                .and_then(|p| match p.unit {
-                    ParamUnit::Length => Some(FieldUnit::Length),
-                    ParamUnit::Angle => Some(FieldUnit::Angle),
-                    _ => None,
-                })
-        }
+        ParamKey::User { id } => data
+            .params
+            .iter()
+            .find(|p| p.id == *id)
+            .and_then(|p| crate::params::param_field_unit(p.unit)),
         ParamKey::Field { feature, key } => data
             .feature(*feature)
             .and_then(|f| registry.descriptor(&f.type_id))
@@ -312,7 +313,10 @@ fn completed(
         ParamKey::Model { .. } => None,
     };
     if let Some(unit) = unit {
-        return crate::params::typed_expr(Some(&unit), expr, data.properties.units);
+        let values = report.param_values();
+        return crate::params::read_typed(Some(&unit), expr, data.properties.units, &|n| {
+            values.get(n).copied()
+        });
     }
     let status = match key {
         ParamKey::Model { feature, key } => report
@@ -323,20 +327,20 @@ fn completed(
             })
             .map(|p| &p.status),
         ParamKey::Field { feature, key } => {
-            return crate::params::feature_values(data, registry, report)
+            return Ok(crate::params::feature_values(data, registry, report)
                 .into_iter()
                 .find(|v| v.feature == *feature && v.key == *key)
                 .map_or_else(
                     || expr.trim().to_string(),
                     |v| crate::params::with_unit_of_value(expr, &v.status, data.properties.units),
-                );
+                ));
         }
         _ => None,
     };
-    status.map_or_else(
+    Ok(status.map_or_else(
         || expr.trim().to_string(),
         |s| crate::params::with_unit_of_value(expr, s, data.properties.units),
-    )
+    ))
 }
 
 #[cfg(test)]

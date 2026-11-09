@@ -742,3 +742,43 @@ fn a_long_fit_spline_with_constraints_solves_in_reasonable_time() {
     assert!(took.as_secs_f64() < 20.0, "{took:?}");
     eprintln!("40 点のスプライン: {took:?} {} 回", sol.iterations);
 }
+
+/// スプライン A(フィット点 (0,0)→(10,8)→(20,0))と、両端を結ぶ線分。A の途中の曲線の上の点から
+/// 線分の途中 (12,0) へ、もう 1 本のスプライン B を引く。B の端は A の本当の曲線の上にあり、
+/// 線分と円弧の並びの近似の上にはない(隔たりは許容差の中)。囲みは B で 2 つに分かれる。
+#[test]
+fn a_spline_ending_on_another_splines_middle_splits_the_region() {
+    let mut s = Sketch::default();
+    let a = s
+        .add_spline(
+            &[(None, [0.0, 0.0]), (None, [10.0, 8.0]), (None, [20.0, 0.0])],
+            false,
+            false,
+        )
+        .unwrap();
+    let Some(Entity::Spline { points, .. }) = s.entity(a).cloned() else {
+        panic!("スプライン")
+    };
+    s.add_line(points[2], points[0]);
+    let sol = solve_mm(&s);
+    let (p, _, d) = s.curve_closest(&sol, a, [4.0, 7.0]).unwrap();
+    assert!(d > 0.1, "{d}");
+    // 近似からは離れている(この症状の前提)
+    let off = entity_segments(&s, &sol, false)
+        .into_iter()
+        .filter(|(e, _)| *e == a)
+        .map(|(_, g)| segment_point_distance(&g, p))
+        .fold(f64::INFINITY, f64::min);
+    assert!(off > 1e-6, "{off}");
+    s.add_spline(
+        &[(None, p), (None, [9.0, 3.0]), (None, [12.0, 0.0])],
+        false,
+        false,
+    )
+    .unwrap();
+    let sol = solve_mm(&s);
+    let faces = faces_of(&s, &sol, kmb_core::Plane::XY);
+    let (_, unused) = profile_of(&s, &sol, kmb_core::Plane::XY);
+    assert_eq!(faces.faces.len(), 2, "{unused:?}");
+    assert!(unused.is_empty(), "{unused:?}");
+}

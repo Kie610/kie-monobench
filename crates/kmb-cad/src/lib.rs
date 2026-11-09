@@ -10,7 +10,7 @@ mod flush;
 mod inspect;
 pub mod plane;
 mod point_ref;
-pub use point_ref::PointRef;
+pub use point_ref::{PointRef, point_choices};
 pub mod prism;
 pub mod regions;
 pub mod stop_at;
@@ -384,6 +384,7 @@ fn cut_by_stop(
     let corners = [[-r, -r], [r, -r], [r, r], [-r, r]];
     let edges = (0..4)
         .map(|i| k::ProfileEdge {
+            curve: None,
             name: format!("s{i}"),
             segment: Segment::Line {
                 a: corners[i],

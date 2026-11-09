@@ -363,7 +363,7 @@ pub struct BomRow {
 }
 
 /// ボディ `root` が規格部品なら、その名前と材料。
-fn fastener_item(cx: &Context<'_>, root: FeatureId) -> Option<(String, String)> {
+pub(crate) fn fastener_item(cx: &Context<'_>, root: FeatureId) -> Option<(String, String)> {
     let e = cx
         .data
         .feature(root)

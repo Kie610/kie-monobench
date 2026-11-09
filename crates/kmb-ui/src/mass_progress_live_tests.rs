@@ -98,6 +98,7 @@ impl Kernel for ReadingKernel {
             min: [x, 0.0, 0.0],
             max: [x + 2.0, 3.0, height],
             centroid: Some([x + 1.0, 1.5, height / 2.0]),
+            inertia: None,
         })
     }
     fn bounds(&self, h: ShapeHandle) -> Result<([f64; 3], [f64; 3]), KernelError> {

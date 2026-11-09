@@ -1,0 +1,23 @@
+# 移動タイプを「点から点」にすると、元の点と先の点をクリックで選ぶ手順が始まり、選んだ角を参照で持つこと。
+# 参照で持つので、板の幅を変えても同じ角を追う(付いて来る形は kmb-solid の move_point_tests が確かめる)。
+#! sample part
+
+key m
+select "移動タイプ" "点から点"
+shot 点から点を選んだ直後
+
+# 板の上の面の右手前の角(60, 0, 10)を元の点、左手前の角(0, 0, 10)を先の点にする
+pick f8:end|f8:side:e5|f8:side:e6
+pick f8:end|f8:side:e5|f8:side:e8
+wait
+expect "元の点" = "ボディの角"
+expect "先の点" = "ボディの角"
+expect "元の点の座標" missing
+shot 角を2つ選んだ後
+click "button:~OK"
+wait
+
+# 板の幅を変えても、移動は誤りにならない(角の名前は面の名前なので同じ角を追う)
+set_param width "80 mm"
+wait
+shot 幅を変えた後

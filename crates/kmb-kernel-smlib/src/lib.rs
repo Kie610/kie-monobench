@@ -488,6 +488,68 @@ fn segments(loops: &[&ProfileLoop]) -> (Vec<JcSegment>, Vec<u32>) {
     (segs, lens)
 }
 
+/// 輪郭を中継層の区間の並びにし、同じ元の曲線から続く辺(楕円・スプラインなどを線分と円弧で
+/// 近づけた物)を 1 本の有理 B スプラインにまとめる([`ProfileLoop::pieces`])。押し出しの側面が
+/// 曲線ごとに 1 枚の面になる。区間が指す節点と制御点は `data` が持つので、中継層へ渡し終わるまで
+/// この値を生かしておく。
+struct CurveOutline {
+    segs: Vec<JcSegment>,
+    lens: Vec<u32>,
+    /// 曲線にまとめた辺の名前から、まとめた曲線の名前(面の名前に使う)
+    merged: HashMap<String, String>,
+    _data: Vec<Vec<f64>>,
+}
+
+fn curve_segments(loops: &[&ProfileLoop]) -> CurveOutline {
+    let mut out = CurveOutline {
+        segs: Vec::new(),
+        lens: Vec::new(),
+        merged: HashMap::new(),
+        _data: Vec::new(),
+    };
+    for lp in loops {
+        let pieces = lp.pieces();
+        let before = out.segs.len();
+        for piece in pieces {
+            match piece {
+                k::LoopPiece::Edge(i) => {
+                    let (mut one, _) = segments(&[&ProfileLoop {
+                        edges: vec![lp.edges[i].clone()],
+                    }]);
+                    out.segs.append(&mut one);
+                }
+                k::LoopPiece::Curve { name, curve, edges } => {
+                    let knots = curve.knots.clone();
+                    let points: Vec<f64> = curve
+                        .ctrl
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(i, c)| {
+                            [c[0], c[1], curve.weights.get(i).copied().unwrap_or(1.0)]
+                        })
+                        .collect();
+                    let s = JcSegment {
+                        kind: ffi::SEG_NURBS,
+                        degree: curve.degree as u32,
+                        count: curve.ctrl.len() as u32,
+                        knots: knots.as_ptr(),
+                        points: points.as_ptr(),
+                        ..JcSegment::default()
+                    };
+                    out._data.push(knots);
+                    out._data.push(points);
+                    out.segs.push(s);
+                    for i in edges {
+                        out.merged.insert(lp.edges[i].name.clone(), name.clone());
+                    }
+                }
+            }
+        }
+        out.lens.push((out.segs.len() - before) as u32);
+    }
+    out
+}
+
 /// 回転軸に辺で 2 か所以上載るループ(半円の輪を直径の軸で回す時など)を、軸から軸までの線ごとに
 /// 軸の上の線で閉じたループに分け、囲む面積の大きい順に並べる(中のものは引かれ、さらに中のものは
 /// 足される。`jc_revolve`)。分けないと SMLib は軸で切れた殻をそれぞれ別の立体にし、中空の球が
@@ -523,6 +585,7 @@ fn split_on_axis(lp: &ProfileLoop, on_axis: &dyn Fn(P2) -> bool) -> Vec<ProfileL
         .map(|mut edges| {
             let (from, to) = (edges[0].from_point(), edges[edges.len() - 1].to_point());
             edges.push(ProfileEdge {
+                curve: None,
                 name: format!("{}:axis", edges[0].name),
                 segment: Segment::Line { a: to, b: from },
                 reversed: false,
@@ -549,6 +612,10 @@ fn nearest_edge<'a>(loops: &[&'a ProfileLoop], q: [f64; 2]) -> Option<(&'a str, 
         .map(|e| (e.name.as_str(), e.segment.distance(q)))
         .min_by(|a, b| a.1.total_cmp(&b.1))
 }
+
+/// 曲線のまま作った側面の上の点と、その曲線を近づけた辺との隔たりの上限(mm)。近似の許容差
+/// (スケッチの 0.002 mm)より広く、隣の別の辺と取り違えない程度に狭くする。
+const CURVE_FACE_GAP: f64 = 0.02;
 
 /// STEP の面を切り抜く時の許容差(mm)。
 const STEP_TOLERANCE: f64 = 1e-3;
@@ -707,12 +774,12 @@ impl Kernel for SmlibKernel {
             return Err(KernelError::Failed("閉じた輪郭がありません".into()));
         }
         let loops = all_loops(profile);
-        let (segs, lens) = segments(&loops);
+        let outline = curve_segments(&loops);
         let plane = profile.plane;
         let n = k::normalize(plane.normal());
         let _g = ffi::lock()?;
-        let brep =
-            ffi::extrude(&jc_plane(&plane), &segs, &lens, from, to).map_err(failed("押し出し"))?;
+        let brep = ffi::extrude(&jc_plane(&plane), &outline.segs, &outline.lens, from, to)
+            .map_err(failed("押し出し"))?;
         // 平面の代表点は外形の箱の中心: 線分を押し出した側面(平行四辺形)では面の中心になる
         let faces = brep
             .faces(ffi::FACE_INNER_POINT_CURVED)
@@ -730,6 +797,10 @@ impl Kernel for SmlibKernel {
                     }
                 }
                 match nearest_edge(&loops, plane.to_local(f.point)) {
+                    // 曲線にまとめた辺の面は曲線の上にあり、近づけた辺から許容差ほど離れる
+                    Some((e, d)) if d < CURVE_FACE_GAP && outline.merged.contains_key(e) => {
+                        format!("{tag}:side:{}", outline.merged[e])
+                    }
                     Some((e, d)) if d < 1e-3 => format!("{tag}:side:{e}"),
                     _ => format!("{tag}:face"),
                 }
@@ -1709,6 +1780,10 @@ impl Kernel for SmlibKernel {
             min: m.min,
             max: m.max,
             centroid: (m.has_centroid != 0).then_some(m.centroid),
+            inertia: (m.has_centroid != 0).then(|| {
+                let about = k::inertia_from_integrals(m.moments, m.products);
+                k::inertia_at_centroid(about, m.volume, m.centroid, m.inertia_origin)
+            }),
         };
         s.masses.insert(shape.0, props);
         Ok(props)

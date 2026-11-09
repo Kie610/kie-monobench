@@ -471,6 +471,7 @@ fn revolved(parts: &[shape::Part], center: k::P3, x: k::P3, n: k::P3) -> Recipe 
         edges: parts
             .iter()
             .map(|(name, a, b)| ProfileEdge {
+                curve: None,
                 name: (*name).into(),
                 segment: Segment::Line { a: *a, b: *b },
                 reversed: false,
@@ -520,6 +521,7 @@ fn recipe(
                     .map(|(p, c)| Region {
                         outer: ProfileLoop {
                             edges: vec![ProfileEdge {
+                                curve: None,
                                 // まっすぐな穴の面の名前は `edge_name` で決まる(後の機能と加工がこの名前で参照する)
                                 name: kmb_interchange::hole::edge_name(p.0, name),
                                 segment: Segment::Circle { center: *c, radius },

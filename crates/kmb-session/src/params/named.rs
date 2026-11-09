@@ -76,8 +76,14 @@ pub fn parse_named_parameter(
             dimension: true,
         });
     }
-    let expr = super::typed_expr(unit, expr, length);
     let values = report.param_values();
+    let expr =
+        super::read_typed(unit, expr, length, &|n| values.get(n).copied()).map_err(|reason| {
+            NamedParamError::Expression {
+                expr: expr.into(),
+                reason,
+            }
+        })?;
     let value = kmb_core::eval_str(&expr, &|n| values.get(n).copied()).map_err(|e| {
         NamedParamError::Expression {
             expr: expr.clone(),

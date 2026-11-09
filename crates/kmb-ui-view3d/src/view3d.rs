@@ -10,6 +10,10 @@ mod area;
 mod camera;
 #[cfg(test)]
 mod fit_tests;
+#[cfg(test)]
+mod grid_shots_tests;
+#[cfg(test)]
+mod grid_tests;
 mod hit;
 mod look;
 #[cfg(test)]
@@ -735,6 +739,8 @@ fn paint_scene(
             settings.edge_px.to_bits(),
         )
             .hash(&mut h);
+        // GPU で回す・動かす間は入り隅の陰を軽くする(止まった時に描き直す)
+        (gpu.is_some() && settings.dynamic && settings.ao && moving).hash(&mut h);
         h.finish()
     };
     let id = base.with("render");
@@ -768,6 +774,7 @@ fn paint_scene(
                                 guides,
                                 &[],
                                 behind,
+                                moving,
                             )
                         }
                         None => g.render(
@@ -784,6 +791,7 @@ fn paint_scene(
                             guides,
                             ghosts,
                             behind,
+                            moving,
                         ),
                     };
                     ui.ctx().data_mut(|d| d.insert_temp(gid, (key, t)));

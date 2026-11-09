@@ -17,6 +17,7 @@ fn testdata(file: &str) -> String {
 
 fn line(a: [f64; 2], b: [f64; 2], name: &str) -> ProfileEdge {
     ProfileEdge {
+        curve: None,
         name: name.into(),
         segment: Segment::Line { a, b },
         reversed: false,
@@ -35,6 +36,7 @@ fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> ProfileLoop {
 fn circle(c: [f64; 2], r: f64, reversed: bool) -> ProfileLoop {
     ProfileLoop {
         edges: vec![ProfileEdge {
+            curve: None,
             name: "e9".into(),
             segment: Segment::Circle {
                 center: c,

@@ -242,9 +242,9 @@ pub fn grid_step(px_per_mm: f32, min_px: f32) -> f32 {
         .unwrap_or(10.0 * p)
 }
 
-/// ビューの左下に出す格子の間隔の札(字は [`crate::prop`] の 10.5)。
+/// ビューの左下に出す格子の間隔の札(字は [`crate::prop`] の 10.5)。細かい線は半分より濃く見える
+/// いちばん細かい段、太線は太く見えるいちばん細かい段。
 pub fn grid_label(px_per_mm: f32) -> String {
-    let step = grid_step(px_per_mm, 14.0);
     let fmt = |v: f32| {
         if v >= 1.0 {
             format!("{v:.0}")
@@ -252,18 +252,60 @@ pub fn grid_label(px_per_mm: f32) -> String {
             format!("{v}")
         }
     };
-    format!("格子 {} mm(太線 {} mm)", fmt(step), fmt(grid_major(step)))
+    let mut step = grid_level(px_per_mm, GRID_PX.0);
+    while grid_seen(step, step * px_per_mm) < 0.5 {
+        step = grid_coarser(step);
+    }
+    format!(
+        "格子 {} mm(太線 {} mm)",
+        fmt(step),
+        fmt(grid_level(px_per_mm, GRID_BOLD.1))
+    )
 }
 
-/// 太い線の間隔(細かい線の 5 本か 10 本ごと。2 の刻みなら 5 本で 10 の刻みにそろえる)。
-pub fn grid_major(step: f32) -> f32 {
+/// 3D の格子の段の間隔(mm)。1・5 × 10^k の段から、画面で `min_px` 画素以上あくいちばん細かい段を
+/// 選ぶ。段は 5 倍と 2 倍を交互に重ね、上の段の線は必ず下の段の線に重なる(段の替わり目で前後の段を
+/// 重ねて薄めるため。1・2・5 の刻みでは 2 の段と 5 の段の線が重ならず、混ざる間は間隔が乱れる)。
+pub fn grid_level(px_per_mm: f32, min_px: f32) -> f32 {
+    let raw = (min_px / px_per_mm.max(1e-6)).max(1e-3);
+    let p = 10f32.powf(raw.log10().floor());
+    [1.0, 5.0, 10.0]
+        .into_iter()
+        .map(|k| k * p)
+        .find(|v| *v >= raw * 0.999)
+        .unwrap_or(10.0 * p)
+}
+
+/// [`grid_level`] の段で、`step` の 1 つ上の段。
+pub fn grid_coarser(step: f32) -> f32 {
     let lead = step / 10f32.powf(step.log10().floor());
-    if (lead - 2.0).abs() < 0.01 {
-        step * 5.0
+    if (lead - 5.0).abs() < 0.01 {
+        step * 2.0
     } else {
-        step * 10.0
+        step * 5.0
     }
 }
+
+/// 格子の段の濃さを決める画面の上の線の間隔(画素): 前は消え、後ろから先はその段の濃さのまま。
+/// 後ろは段ごとに、1 つ下の段が現れ始める間隔(前 × 下の段との比)に留める。そうすると、段の替わり目で
+/// 消える段と現れる段の濃さがつながる(拡大で格子がぱっと替わってちらついた。11-01 v1)。比が 5 の段
+/// (5 の段)は長くかけて濃くなる。透視や浅い角度では、同じ段でも遠くの線ほど詰まるので、線の場所ごとの
+/// 間隔で薄める(遠くの格子が縞に乱れた)
+pub(crate) const GRID_PX: (f32, f32) = (8.0, 16.0);
+
+/// 段 `step` の線の、画面の上の間隔 `gap`(画素)での濃さ(0〜1)。
+pub(crate) fn grid_seen(step: f32, gap: f32) -> f32 {
+    let lead = step / 10f32.powf(step.log10().floor());
+    let hi = if (lead - 5.0).abs() < 0.01 {
+        GRID_PX.0 * 5.0
+    } else {
+        GRID_PX.1
+    };
+    let t = ((gap - GRID_PX.0) / (hi - GRID_PX.0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+/// 線を太線の濃さへ寄せ始める、その段の線の間隔(画素)と、寄せきる間隔
+pub(crate) const GRID_BOLD: (f32, f32) = (70.0, 140.0);
 
 /// 3D スケッチの作図面の四角の大きさの元(mm)。画面の短い辺の 2 割ほどを、きりのよい値に丸める。
 pub fn guide_size(cam: &Camera, rect: Rect) -> f32 {
