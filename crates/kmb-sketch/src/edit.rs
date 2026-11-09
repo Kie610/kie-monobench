@@ -163,6 +163,7 @@ impl Sketch {
     /// 要素を消す。消した点を使う図形と、消した要素を参照する拘束も消す。
     /// 消した図形だけが使っていた点も消す(ほかの図形と共有している点は残す)。
     pub fn remove_entities(&mut self, ids: &[EntityId]) {
+        let tied = crate::ends::tied_groups(self);
         let mut gone: BTreeSet<EntityId> = ids.iter().copied().collect();
         for e in &self.entities {
             if uses(e).iter().any(|u| gone.contains(u)) {
@@ -197,6 +198,46 @@ impl Sketch {
         });
         self.projections.retain(|p| !gone.contains(&p.entity));
         self.centerlines.retain(|c| !gone.contains(c));
+
+        // 消える点を介した元の一致群だけを手当てする。残った拘束・点はそのまま残す。
+        let group = |p: EntityId| tied.get(&p).copied().unwrap_or(p);
+        let affected: BTreeSet<_> = gone.iter().map(|p| group(*p)).collect();
+        let points: Vec<_> = self
+            .entities
+            .iter()
+            .filter_map(|e| match e {
+                Entity::Point { id, x, y, .. } if affected.contains(&group(*id)) => {
+                    Some((*id, [*x, *y]))
+                }
+                _ => None,
+            })
+            .collect();
+        let existing = crate::ends::tied_groups(self);
+        let connected = |p: EntityId| existing.get(&p).copied().unwrap_or(p);
+        let mut pairs = Vec::new();
+        for (i, (a, p)) in points.iter().enumerate() {
+            for (b, q) in &points[i + 1..] {
+                if group(*a) == group(*b) && connected(*a) != connected(*b) {
+                    let distance = (p[0] - q[0]).hypot(p[1] - q[1]);
+                    if distance.is_finite() {
+                        pairs.push((distance, (*a).min(*b), (*a).max(*b)));
+                    }
+                }
+            }
+        }
+        pairs.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        let mut used = BTreeSet::new();
+        for (_, a, b) in pairs {
+            if used.contains(&a) || used.contains(&b) {
+                continue;
+            }
+            let current = crate::ends::tied_groups(self);
+            if current.get(&a).copied().unwrap_or(a) == current.get(&b).copied().unwrap_or(b) {
+                continue;
+            }
+            self.add_constraint(ConstraintKind::Coincident { a, b });
+            used.extend([a, b]);
+        }
     }
 
     /// 基準点(mm)に最も近い点。`tol` より遠ければ `None`。同じ近さなら投影でない点
