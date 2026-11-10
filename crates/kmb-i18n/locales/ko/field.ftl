@@ -2259,6 +2259,12 @@
 # field-cad-gear-y-help = For a rack, the start of the pitch line.
 # field-cad-gear-outer-diameter = Ring Outer Diameter
 # field-cad-gear-outer-diameter-help = Required for internal gears. At least the root diameter plus twice the module.
+# field-cad-gear-helix-angle = Helix Angle
+# field-cad-gear-helix-angle-help = Blank or 0 deg makes a spur gear. At least 0 deg and less than 90 deg
+# field-cad-gear-hand = Helix Hand
+# field-cad-gear-body-herringbone = Herringbone
+# field-cad-gear-body-groove = Center Groove Width
+# field-cad-gear-body-groove-help = 0 mm leaves no groove. Must be less than the face width
 
 # field-cad-gear-pulley-diameter = ピッチ円の径
 
@@ -2302,3 +2308,22 @@
 # field-flow-section-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
 # field-flow-volume-arrows = Arrow spacing
 # field-flow-volume-arrows-help = Leave blank for automatic spacing. Spacing finer than a cell uses the cell size. Changing this does not require solving again.
+# field-mech-cam-plane-kind = Plane
+# field-mech-cam-base-radius = Base Circle Radius
+# field-mech-cam-rotation = Rotation Direction
+# field-mech-cam-follower = Follower Motion
+# field-mech-cam-tip = Follower Tip
+# field-mech-cam-roller-radius = Roller Radius
+# field-mech-cam-offset = Offset
+# field-mech-cam-arm-length = Arm Length
+# field-mech-cam-pivot-x = Pivot X
+# field-mech-cam-pivot-y = Pivot Y
+# field-mech-cam-diagram = Displacement Diagram
+# field-mech-cam-diagram-help = Separate each number and unit with spaces. Translating displacement uses mm and oscillating displacement uses deg. Section angles must total 360 deg
+# field-mech-cam-width = Cam Thickness
+# field-mech-cam-anchor = Sketch for Center Point
+# field-mech-cam-x = Center X
+# field-mech-cam-y = Center Y
+# field-mech-cam-phase = Rotation Angle
+# field-mech-cam-follower-cam = Cam
+# field-mech-cam-follower-width = Follower Thickness

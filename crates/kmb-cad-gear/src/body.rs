@@ -18,6 +18,10 @@ use crate::hub::{PARTS_OUTPUT, Parts};
 
 pub const GEAR_BODY: &str = "cad.gear_body@1";
 
+pub(crate) const HELICAL_KIND_UNSUPPORTED: &str = "ねじれ角・ねじれの向き・やまばは、外歯か内歯の歯車だけで使えます。 / Helix angle, helix hand, and herringbone are available only for external and internal gears.";
+pub(crate) const HELICAL_THICKNESS_UNSUPPORTED: &str = "はすばとやまばでは、腕とボスの厚さを歯の幅にそろえてください。異なる厚さには対応していません。 / Helical and herringbone gears require web and boss thicknesses equal to the face width. Different thicknesses are not supported.";
+pub(crate) const HELICAL_GROOVE_HOLES_UNSUPPORTED: &str = "軽くする穴やキー溝があるやまばは、中央の溝の幅を 0 mm にしてください。この組み合わせには対応していません。 / Herringbone gears with lightening holes or a keyway require a zero center groove width. This combination is not supported.";
+
 /// 歯の幅をどちらへ取るか。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -63,6 +67,12 @@ pub struct GearBody {
     /// ボスの長さ(空なら歯の幅)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boss: Option<String>,
+    /// 円板全体を左右で逆向きにねじる
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub herringbone: bool,
+    /// 中央の溝の幅(空か 0 なら溝なし)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groove: Option<String>,
     #[serde(default, skip_serializing_if = "is_default")]
     pub alignment: Alignment,
     #[serde(default, skip_serializing_if = "is_default")]
@@ -80,10 +90,25 @@ impl GearBody {
             width: width_default(),
             web: None,
             boss: None,
+            herringbone: false,
+            groove: None,
             alignment: Alignment::default(),
             direction: Side::default(),
             operation: Operation::default(),
             target: None,
+        }
+    }
+}
+
+impl GearBody {
+    fn part_span(&self, from: f64, to: f64, thickness: f64) -> (f64, f64) {
+        match self.alignment {
+            Alignment::Centered => {
+                let middle = (from + to) / 2.0;
+                (middle - thickness / 2.0, middle + thickness / 2.0)
+            }
+            Alignment::Start if self.direction == Side::Reverse => (to - thickness, to),
+            Alignment::Start => (from, from + thickness),
         }
     }
 }
@@ -94,7 +119,11 @@ impl Exprs for GearBody {
         if !self.width.trim().is_empty() {
             v.push(&mut self.width);
         }
-        v.extend([&mut self.web, &mut self.boss].into_iter().flatten());
+        v.extend(
+            [&mut self.web, &mut self.boss, &mut self.groove]
+                .into_iter()
+                .flatten(),
+        );
         v
     }
 }
@@ -201,6 +230,11 @@ impl Feature for GearBody {
             };
             let mut web = thickness(&self.web, "腕の厚さ")?;
             let mut boss = thickness(&self.boss, "ボスの長さ")?;
+            if spec.helix_angle != 0.0
+                && ((web - width).abs() > 1e-9 || (boss - width).abs() > 1e-9)
+            {
+                return Err(EvalError::Other(HELICAL_THICKNESS_UNSUPPORTED.into()));
+            }
             for (present, value, what) in [
                 (parts.web.is_some(), &mut web, "腕の厚さ"),
                 (parts.boss.is_some(), &mut boss, "ボスの長さ"),
@@ -217,6 +251,29 @@ impl Feature for GearBody {
             Side::Reverse => (-width, 0.0),
             Side::Symmetric => (-width / 2.0, width / 2.0),
         };
+        let gap = self
+            .groove
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map_or(Ok(0.0), |s| length(ctx, s, "中央の溝の幅"))?;
+        if !gap.is_finite() || gap < 0.0 || gap >= width {
+            return Err(EvalError::InvalidData(
+                "中央の溝の幅は 0 以上、歯の幅より小さくしてください".into(),
+            ));
+        }
+        if (self.herringbone || gap != 0.0)
+            && !matches!(
+                spec.kind,
+                kmb_interchange::GearKind::External | kmb_interchange::GearKind::Internal
+            )
+        {
+            return Err(EvalError::Other(HELICAL_KIND_UNSUPPORTED.into()));
+        }
+        if (self.herringbone || gap != 0.0) && spec.helix_angle == 0.0 {
+            return Err(EvalError::InvalidData(
+                "やまばには 0 deg より大きいねじれ角を指定してください".into(),
+            ));
+        }
         let extrude = |profile, from, to| Recipe::Extrude {
             operation: self.operation,
             profile,
@@ -226,7 +283,25 @@ impl Feature for GearBody {
             stop: None,
             taper: 0.0,
         };
-        let recipe = if spec.kind.is_pulley() {
+        let recipe = if spec.helix_angle != 0.0 {
+            if spec.kind == kmb_interchange::GearKind::External
+                && self.herringbone
+                && gap > 0.0
+                && !crate::helical::concentric_holes(&profile, &spec)
+            {
+                return Err(EvalError::Other(HELICAL_GROOVE_HOLES_UNSUPPORTED.into()));
+            }
+            crate::helical::recipe(
+                &profile,
+                &spec,
+                from,
+                to,
+                self.herringbone,
+                gap,
+                self.operation,
+            )
+            .map_err(EvalError::InvalidData)?
+        } else if spec.kind.is_pulley() {
             let direction = spec.axis.direction;
             profile.plane.origin = [0, 1, 2].map(|i| profile.plane.origin[i] + direction[i] * from);
             Recipe::Revolve {
@@ -243,18 +318,10 @@ impl Feature for GearBody {
             if self.operation == Operation::Intersect {
                 return Err(EvalError::InvalidData("厚さが異なる歯車の交差には対応していません。歯の幅・腕の厚さ・ボスの長さをそろえるか、新しいボディとして作ってください".into()));
             }
-            let span = |thickness: f64| match self.alignment {
-                Alignment::Centered => {
-                    let middle = (from + to) / 2.0;
-                    (middle - thickness / 2.0, middle + thickness / 2.0)
-                }
-                Alignment::Start if self.direction == Side::Reverse => (to - thickness, to),
-                Alignment::Start => (from, from + thickness),
-            };
             let mut recipes = vec![extrude(parts.rim, from, to)];
             for (part, size) in [(parts.web, web), (parts.boss, boss)] {
                 if let Some(part) = part {
-                    let (a, b) = span(size);
+                    let (a, b) = self.part_span(from, to, size);
                     recipes.push(extrude(part, a, b));
                 }
             }
@@ -265,6 +332,9 @@ impl Feature for GearBody {
         let n = spec.axis.direction;
         spec.axis.origin = [0, 1, 2].map(|i| spec.axis.origin[i] + n[i] * from);
         spec.face_width = Some(width);
+        if self.herringbone {
+            spec.hand = kmb_interchange::gear::Hand::Both;
+        }
         out.insert(GEAR_OUTPUT.to_string(), spec.to_value());
         kmb_core::add_warnings(&mut out, warnings);
         Ok(out)
@@ -281,7 +351,7 @@ pub fn register(reg: &mut Registry) {
     reg.register_described(
         kmb_cad::solid(GEAR_BODY, "歯車のボディ")
             .icon("gears")
-            .hint("歯車の輪郭を歯の幅だけ押し出して歯車の立体にする")
+            .hint("歯車の輪郭を歯の幅だけ押し出すかねじって立体にする。やまばは中央で左右の歯すじを合わせる")
             .aliases("はぐるま gear ぎあ ぼでぃ")
             .field(Field::output("gear", "歯車の輪郭", GEAR_OUTPUT))
             .field(
@@ -313,6 +383,8 @@ pub fn register(reg: &mut Registry) {
                     ("symmetric", "対称"),
                 ],
             ))
+            .field(Field::bool("herringbone", "やまば").help("はすばは腕とボスも歯の幅にそろえ、穴とキー溝を含む円板全体をねじる").only_reference_of_type("gear",crate::GEAR,"kind","external|internal","external"))
+            .field(Field::opt_expr("groove", "中央の溝の幅").length().help("やまばの時に使う。0 mm なら溝なし。歯の幅より小さくする。軽くする穴やキー溝があれば 0 mm にする").only_reference_of_type("gear",crate::GEAR,"kind","external|internal","external"))
             .fields(operation_fields()),
         |d| {
             let g: GearBody = serde_json::from_value(d.clone())
@@ -320,4 +392,71 @@ pub fn register(reg: &mut Registry) {
             Ok(Box::new(g))
         },
     );
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 確かめること: 歯の幅の全方向で、腕とボスの中央そろえ・片側そろえを保つ。
+    #[test]
+    fn all_part_spans_preserve_alignment_for_both_short_and_long_parts() {
+        for (direction, alignment, from, to, short, long) in [
+            (
+                Side::Normal,
+                Alignment::Centered,
+                0.0,
+                8.0,
+                (2.5, 5.5),
+                (-2.0, 10.0),
+            ),
+            (
+                Side::Reverse,
+                Alignment::Centered,
+                -8.0,
+                0.0,
+                (-5.5, -2.5),
+                (-10.0, 2.0),
+            ),
+            (
+                Side::Symmetric,
+                Alignment::Centered,
+                -4.0,
+                4.0,
+                (-1.5, 1.5),
+                (-6.0, 6.0),
+            ),
+            (
+                Side::Normal,
+                Alignment::Start,
+                0.0,
+                8.0,
+                (0.0, 3.0),
+                (0.0, 12.0),
+            ),
+            (
+                Side::Reverse,
+                Alignment::Start,
+                -8.0,
+                0.0,
+                (-3.0, 0.0),
+                (-12.0, 0.0),
+            ),
+            (
+                Side::Symmetric,
+                Alignment::Start,
+                -4.0,
+                4.0,
+                (-4.0, -1.0),
+                (-4.0, 8.0),
+            ),
+        ] {
+            let body = GearBody {
+                direction,
+                alignment,
+                ..GearBody::new(FeatureId(1))
+            };
+            assert_eq!(body.part_span(from, to, 3.0), short);
+            assert_eq!(body.part_span(from, to, 12.0), long);
+        }
+    }
 }

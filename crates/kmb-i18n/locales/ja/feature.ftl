@@ -27,7 +27,7 @@ feature-solid-scale-tip = ボディの大きさを、基準の点を中心に倍
 feature-cad-gear = 歯車の輪郭
 feature-cad-gear-tip = 平面の上に歯車の輪郭を置く。モジュールと歯数から歯の形を作り、押し出し・2D 輪郭の加工・レーザーにそのまま使える
 feature-cad-gear-body = 歯車のボディ
-feature-cad-gear-body-tip = 歯車の輪郭を歯の幅だけ押し出して歯車の立体にする
+feature-cad-gear-body-tip = 歯車の輪郭を歯の幅だけ押し出すかねじって立体にする。やまばは中央で左右の歯すじを合わせる
 feature-cad-datum-axis = 作業軸
 feature-cad-datum-axis-tip = 回転やパターンの軸にする直線を作る(2 点を通る、辺に沿う、円筒の軸、2 平面の交わり)
 feature-cad-datum-plane = 作業平面
@@ -77,3 +77,8 @@ feature-solid-import-iges = IGES の読み込み
 feature-solid-import-iges-tip = IGES の面と立体を読み込む。閉じない面は面のボディとして残し、読めない面の理由を知らせる
 
 feature-tool-clearance-warning = 工具が届かない所が { $count } か所あります。入る工具径の目安は { $diameter } mm 以下です。小さい工具で取残し加工をしてください
+
+feature-mech-cam = カム
+feature-mech-cam-tip = 変位の線図からカムと従節の輪郭を作り、別のボディへ押し出す
+feature-mech-cam-follower = カムの従節
+feature-mech-cam-follower-tip = カムの従節の輪郭を別のボディへ押し出す

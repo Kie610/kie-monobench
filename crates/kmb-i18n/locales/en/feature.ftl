@@ -26,7 +26,7 @@ feature-solid-scale-tip = Resize bodies by a factor about a base point (non-unif
 feature-cad-gear = Gear Profile
 feature-cad-gear-tip = Place a gear profile on a plane. The tooth shape comes from the module and number of teeth, and the profile can be extruded, contour machined or laser cut as is
 feature-cad-gear-body = Gear Body
-feature-cad-gear-body-tip = Extrude a gear profile by the face width to make the gear solid
+feature-cad-gear-body-tip = Extrude or twist a gear profile by its face width. Herringbone teeth meet with opposite helix hands at the center
 feature-cad-datum-axis = Construction Axis
 feature-cad-datum-axis-tip = Create a straight line to use as an axis for revolves and patterns (through two points, along an edge, a cylinder's axis, or where two planes meet)
 feature-cad-datum-plane = Construction Plane
@@ -76,3 +76,8 @@ feature-solid-import-iges = IGES import
 feature-solid-import-iges-tip = Read IGES surfaces and solids, retaining open sheets and reporting faces that cannot be read.
 
 feature-tool-clearance-warning = The tool cannot reach { $count } regions. An estimated fitting tool diameter is { $diameter } mm or less. Use a smaller tool for rest machining.
+
+feature-mech-cam = Cam
+feature-mech-cam-tip = Build cam and follower profiles from a displacement diagram and extrude them as separate bodies
+feature-mech-cam-follower = Cam Follower
+feature-mech-cam-follower-tip = Extrude a cam follower profile as a separate body

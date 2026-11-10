@@ -38,7 +38,7 @@ fn args(body: bool) -> Vec<Arg> {
     v.extend([
         Arg::vector("point", "中心(世界座標の mm。省くと平面の原点か面の代表点)"),
         Arg::choice("kind", "歯車の種類", &kinds).default(GearKind::External.key()),
-        Arg::length("module", "モジュール(ピッチ円の径 = モジュール × 歯数)").default(1.0),
+        Arg::length("module", "モジュール。外歯・内歯は歯直角の値で、ピッチ円の径 = モジュール × 歯数 / cos(ねじれ角)").default(1.0),
         Arg::integer("teeth", "歯数(平歯車は 3 以上、ラックは 1 以上)").default(20),
         Arg::choice(
             "rack_size",
@@ -49,7 +49,9 @@ fn args(body: bool) -> Vec<Arg> {
         Arg::length("rack_length", "ラックの全長(長さ指定の時に必須)"),
         Arg::length("rack_back", "ラックの背の厚さ(省くとモジュールの 2 倍)"),
         Arg::angle("phase", "回す角(ラックは進む向き、歯車は 1 枚目の歯の向き)"),
-        Arg::angle("pressure_angle", "圧力角").default(20.0),
+        Arg::angle("pressure_angle", "圧力角(外歯・内歯は歯直角の値)").default(20.0),
+        Arg::angle("helix_angle", "ねじれ角(省くと平歯車)"),
+        Arg::choice("hand", "ねじれの向き", &[("right", "右"), ("left", "左")]).default("right"),
         Arg::length("bore", "軸の穴の径(省くと穴なし)"),
         Arg::length("pulley_diameter", "ピッチ円の径(ベルト車とロープ車)"),
         Arg::length("pulley_width", "ベルト車とロープ車の幅"),
@@ -84,6 +86,8 @@ fn args(body: bool) -> Vec<Arg> {
                 "腕とボスの位置",
                 &[("centered", "中央にそろえる"), ("start", "片側にそろえる")],
             ),
+            Arg::flag("herringbone", "やまばの歯すじにする"),
+            Arg::length("groove", "やまばの中央の溝の幅(省くと 0 mm)"),
         ]);
     }
     v
@@ -165,11 +169,38 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         return Err("歯数は平歯車と内歯車で 3 以上、ラックで 1 以上にしてください".into());
     }
     let pressure = cx.arg_f64("pressure_angle")?.unwrap_or(20.0);
-    let module_text = if kind == GearKind::Rack {
+    let module_text = if kind == GearKind::Rack || cx.arg_f64("helix_angle")?.unwrap_or(0.0) != 0.0
+    {
         format!("{module} mm")
     } else {
         mm(module)
     };
+    let beta = cx.arg_f64("helix_angle")?.unwrap_or(0.0);
+    let hand = cx.arg_str("hand").unwrap_or("right");
+    let normal = kinds::Params {
+        module,
+        pressure_angle: pressure.to_radians(),
+        ..Default::default()
+    };
+    let transverse = if !matches!(kind, GearKind::External | GearKind::Internal) {
+        normal
+    } else {
+        crate::helical::transverse(
+            &kinds::Params {
+                module,
+                pressure_angle: pressure.to_radians(),
+                ..Default::default()
+            },
+            beta.to_radians(),
+        )?
+    };
+    if !matches!(kind, GearKind::External | GearKind::Internal) && (beta != 0.0 || hand != "right")
+    {
+        return Err(kmb_core::Problem::new(
+            kmb_core::ProblemKind::Unavailable,
+            crate::body::HELICAL_KIND_UNSUPPORTED,
+        ));
+    }
     let mut gear = json!({
         "plane": serde_json::to_value(&plane).expect("JSON にできる"),
         "module": module_text,
@@ -372,7 +403,8 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         let d = cx
             .arg_f64("outer_diameter")?
             .ok_or("内歯車では輪の外径を指定してください")?;
-        let minimum = 2.0 * (module * teeth as f64 / 2.0 + 1.25 * module) + 2.0 * module;
+        let minimum = 2.0 * (transverse.module * teeth as f64 / 2.0 + 1.25 * transverse.module)
+            + 2.0 * transverse.module;
         if d < minimum {
             return Err(format!("輪の外径は {minimum:.3} mm 以上にしてください").into());
         }
@@ -381,6 +413,12 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         gear["outer_diameter"] = json!(format!("{d} mm"));
     } else if cx.arg("outer_diameter").is_some() {
         return Err("輪の外径は内歯車で指定してください".into());
+    }
+    if beta != 0.0 {
+        gear["helix_angle"] = json!(format!("{beta} deg"));
+    }
+    if hand != "right" {
+        gear["hand"] = json!(hand);
     }
     let n = cx.count_of(GEAR) + 1;
     let mut edits = vec![Edit::Insert {
@@ -403,6 +441,61 @@ fn add(cx: &Context<'_>, body: bool) -> Result<Outcome, Problem> {
         }
         if let Some(value) = cx.arg("alignment") {
             data["alignment"] = value.clone();
+        }
+        let herringbone = cx
+            .arg("herringbone")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let width = cx.arg_f64("width")?.unwrap_or(10.0);
+        let groove = cx.arg_f64("groove")?.unwrap_or(0.0);
+        if !groove.is_finite() || groove < 0.0 || groove >= width {
+            return Err("中央の溝の幅は 0 以上、歯の幅より小さくしてください".into());
+        }
+        if groove > 0.0 && !herringbone {
+            return Err("中央の溝は、やまばの時に指定してください".into());
+        }
+        if !matches!(kind, GearKind::External | GearKind::Internal)
+            && (herringbone || groove != 0.0)
+        {
+            return Err(kmb_core::Problem::new(
+                kmb_core::ProblemKind::Unavailable,
+                crate::body::HELICAL_KIND_UNSUPPORTED,
+            ));
+        }
+        if beta != 0.0 {
+            for key in ["web", "boss"] {
+                if let Some(thickness) = cx.arg_f64(key)?
+                    && (thickness - width).abs() > 1e-9
+                {
+                    return Err(kmb_core::Problem::new(
+                        kmb_core::ProblemKind::Unavailable,
+                        crate::body::HELICAL_THICKNESS_UNSUPPORTED,
+                    ));
+                }
+            }
+        }
+        if herringbone
+            && groove > 0.0
+            && (cx.arg("keyway").and_then(|v| v.as_bool()).unwrap_or(false)
+                || cx
+                    .arg("lightening_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    > 0)
+        {
+            return Err(kmb_core::Problem::new(
+                kmb_core::ProblemKind::Unavailable,
+                crate::body::HELICAL_GROOVE_HOLES_UNSUPPORTED,
+            ));
+        }
+        if herringbone && beta == 0.0 {
+            return Err("やまばには 0 deg より大きいねじれ角を指定してください".into());
+        }
+        if herringbone {
+            data["herringbone"] = json!(true);
+        }
+        if groove != 0.0 {
+            data["groove"] = json!(format!("{groove} mm"));
         }
         edits.push(Edit::Insert {
             type_id: GEAR_BODY.into(),

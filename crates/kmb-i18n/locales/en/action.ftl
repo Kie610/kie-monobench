@@ -456,3 +456,5 @@ action-params-apply-batch-tip = Check multiple expressions in the parameter tabl
 
 action-study-view-arrows = Show / hide arrows
 action-study-view-arrows-tip = Show or hide regularly spaced arrows indicating flow speed and direction
+action-mech-cam = Cam
+action-mech-cam-tip = Select a plane and center to create a cam and follower as separate bodies from a displacement diagram
