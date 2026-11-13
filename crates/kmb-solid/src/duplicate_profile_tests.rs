@@ -72,6 +72,24 @@ impl Kernel for MeasuredKernel {
     }
 }
 
+/// 円の格子を切る板(60 × 50 × 5 mm)の体積。
+const PLATE: f64 = 60.0 * 50.0 * 5.0;
+
+/// 板を切った後の体積 `after` が、理論の工具体積 `tool` を引いた形に合うかを見る。
+///
+/// SMLib の体積は求める立体の大きさに対する割合(相対 1e-7 ほど)で誤差を持ち、その値は動かす
+/// 環境(OS の版など)でも少し動く。工具の体積を「板 − 切った後」で出すと、大きな板の誤差が小さな
+/// 工具へそのまま乗り、工具に対する割合では数倍に膨らむ。なので SMLib では、誤差の生まれる
+/// 切った後の体積そのものを相対 1e-6 で比べる(円 1 つを取り落とすだけで 60 mm³ ほど違うので、
+/// 見落とす形は無い)。truck は曲面を網で近づけるため、工具の体積に対する割合 `truck_rel` で許す。
+fn cut_matches_theory(kernel: &TestKernel, after: f64, tool: f64, truck_rel: f64) -> bool {
+    if kernel.is_truck() {
+        close(PLATE - after, tool, truck_rel)
+    } else {
+        close(after, PLATE - tool, 1e-6)
+    }
+}
+
 fn circle_grid(duplicate: bool, count: usize) -> (Document, FeatureId) {
     let mut b = DocBuilder::new();
     let outline = rect_sketch(&mut b, SketchPlane::Xy, 0.0, 0.0, 60.0, 50.0);
@@ -199,15 +217,17 @@ fn duplicate_circles_do_not_multiply_the_grid_cut_or_change_its_shape() {
     assert_eq!(single.7, 1, "切り取りは一回");
     assert_eq!(single.7, double.7, "切り取りの試行を増やさない");
     let expected_holes = 20.0 * std::f64::consts::PI * 4.0 * 5.0;
-    // 網から求める体積には曲面の近似誤差を許す。重複の有無の同値判定とは分ける。
-    let theory_rel = if kernel.inner.is_truck() { 2e-3 } else { 1e-6 };
     for result in [single, double] {
-        let removed = 60.0 * 50.0 * 5.0 - result.3;
+        let removed = PLATE - result.3;
         eprintln!(
             "穴の体積={removed}, 理論={expected_holes}, 差={}",
             removed - expected_holes
         );
-        assert!(close(removed, expected_holes, theory_rel), "{measured:?}");
+        // 網から求める truck の体積には曲面の近似誤差を許す。重複の有無の同値判定とは分ける。
+        assert!(
+            cut_matches_theory(&kernel.inner, result.3, expected_holes, 2e-3),
+            "{measured:?}"
+        );
     }
     // 短い基準時間の揺れを 2 秒まで許し、長い場合でも 8 倍以内に抑える。
     assert!(
@@ -263,18 +283,28 @@ fn named_regions_of_duplicate_circles_extrude_and_cut_the_same_volume() {
             };
             let v = 2.0 * std::f64::consts::PI * 4.0 * 5.0;
             let actual = kernel.mass(body).unwrap().volume;
-            let volume = if operation == Operation::Cut {
-                60.0 * 50.0 * 5.0 - actual
-            } else {
-                actual
-            };
-            // 小さな円の工具は、既存の円穴の試験と同じ網の近似誤差を許す。
-            let theory_rel = if kernel.inner.is_truck() { 1e-2 } else { 1e-6 };
+            let cut = operation == Operation::Cut;
+            let volume = if cut { PLATE - actual } else { actual };
             eprintln!(
                 "二重={duplicate}, 操作={operation:?}: 体積={actual}, 工具体積={volume}, 理論={v}, 差={}",
                 volume - v
             );
-            assert!(close(volume, v, theory_rel), "{volume} vs {v}");
+            // 小さな円の工具は、既存の円穴の試験と同じ網の近似誤差を truck に許す。
+            let truck_rel = 1e-2;
+            let matches = if cut {
+                cut_matches_theory(&kernel.inner, actual, v, truck_rel)
+            } else {
+                close(
+                    volume,
+                    v,
+                    if kernel.inner.is_truck() {
+                        truck_rel
+                    } else {
+                        1e-6
+                    },
+                )
+            };
+            assert!(matches, "{volume} vs {v}");
             let mut names: Vec<_> = kernel
                 .faces(body)
                 .unwrap()
