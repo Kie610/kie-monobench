@@ -529,6 +529,8 @@ mod dimension_tests;
 #[cfg(test)]
 mod draw_core_tests;
 #[cfg(test)]
+mod face_projection_tests;
+#[cfg(test)]
 mod group_tests;
 #[cfg(test)]
 mod io_tests;
