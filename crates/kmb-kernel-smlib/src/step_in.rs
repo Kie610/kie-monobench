@@ -570,6 +570,13 @@ impl Data {
                 self.curve(rid(arg(r, 1)?)?)?
             }
             "TRIMMED_CURVE" => self.curve(rid(arg(r, 1)?)?)?,
+            // 繰り返しの辺を、元の曲線を動かした写しとして書く CAD がある。元を動かした同じ種類の曲線にする
+            "CURVE_REPLICA" => {
+                let parent = self.curve(rid(arg(r, 1)?)?)?;
+                self.moving(rid(arg(r, 2)?)?)
+                    .map_err(|e| format!("写しの曲線 #{id}: {e}"))?
+                    .curve(parent)
+            }
             "POLYLINE" => {
                 let pts: Vec<P3> = list(arg(r, 1)?)?
                     .iter()
@@ -628,6 +635,32 @@ impl Data {
             return Err(format!("B スプラインの曲線 #{id} のノットの数が合いません"));
         }
         Ok(Some(Nurbs { degree, knots, pts }))
+    }
+
+    /// 写しの動かし方(CARTESIAN_TRANSFORMATION_OPERATOR_3D)。引数の終わりの 5 つが軸 1・軸 2・原点・
+    /// 倍率・軸 3 で、その前の名前(と説明)の数は書いた CAD によって違うので、終わりから数える。
+    fn moving(&self, id: u64) -> Result<Moving, String> {
+        let r = self.rec(id)?;
+        if r.name != "CARTESIAN_TRANSFORMATION_OPERATOR_3D" || r.params.len() < 5 {
+            return Err(format!("動かし方 {}(#{id})には対応していません", r.name));
+        }
+        let p = &r.params[r.params.len() - 5..];
+        let dir = |q: &P| match q {
+            P::Ref(i) => self.direction(*i).map(Some),
+            _ => Ok(None),
+        };
+        let s = match &p[3] {
+            P::Null => 1.0,
+            q => num(q)?,
+        };
+        if !(s.is_finite() && s > 0.0) {
+            return Err(format!("倍率 {s} は正の数ではありません"));
+        }
+        Ok(Moving {
+            o: self.point(rid(&p[2])?)?,
+            u: base_axis(dir(&p[0])?, dir(&p[1])?, dir(&p[4])?)?,
+            s,
+        })
     }
 
     fn vertex(&self, id: u64) -> Result<P3, String> {
@@ -727,6 +760,82 @@ impl Data {
             name,
         })
     }
+}
+
+/// 写しの動かし方: 点 p を `o + s (p0 u0 + p1 u1 + p2 u2)` へ移す(ISO 10303-42 の
+/// cartesian_transformation_operator)。軸は直交する単位の向きで、左手系なら鏡に写す。
+struct Moving {
+    o: P3,
+    u: [P3; 3],
+    s: f64,
+}
+
+impl Moving {
+    fn dir(&self, v: P3) -> P3 {
+        k::add(
+            k::add(k::scale(self.u[0], v[0]), k::scale(self.u[1], v[1])),
+            k::scale(self.u[2], v[2]),
+        )
+    }
+
+    fn point(&self, p: P3) -> P3 {
+        k::add(self.o, k::scale(self.dir(p), self.s))
+    }
+
+    /// 円と楕円は、角度の向き(X から Y へ)を保つように Z を X × Y で作り直す(鏡に写すと回る向きが変わる)。
+    fn frame(&self, f: &Frame) -> Frame {
+        let (x, y) = (self.dir(f.x), self.dir(f.y));
+        Frame {
+            o: self.point(f.o),
+            x,
+            y,
+            z: k::cross(x, y),
+        }
+    }
+
+    fn curve(&self, c: Curve) -> Curve {
+        match c {
+            // 直線の辺は両端の頂点で決まる
+            Curve::Line => Curve::Line,
+            Curve::Circle(f, r) => Curve::Circle(self.frame(&f), r * self.s),
+            Curve::Ellipse(f, a, b) => Curve::Ellipse(self.frame(&f), a * self.s, b * self.s),
+            // 制御点を動かせば、曲線そのものを動かしたことになる(重みは変えない)
+            Curve::BSpline(n) => Curve::BSpline(Nurbs {
+                pts: n
+                    .pts
+                    .iter()
+                    .map(|q| {
+                        let p = self.point([q[0], q[1], q[2]]);
+                        [p[0], p[1], p[2], q[3]]
+                    })
+                    .collect(),
+                ..n
+            }),
+        }
+    }
+}
+
+/// 動かし方の 3 本の軸(ISO 10303-42 の base_axis)。軸 3 が無ければ Z、軸 1 が無ければ X(軸 3 が X に
+/// 沿う時は Y)を、軸 3 に直交するように直す。軸 2 が無ければ軸 3 × 軸 1。
+fn base_axis(a1: Option<P3>, a2: Option<P3>, a3: Option<P3>) -> Result<[P3; 3], String> {
+    let z = a3.unwrap_or([0.0, 0.0, 1.0]);
+    let off = |v: P3, axes: &[P3]| -> Result<P3, String> {
+        let w = axes
+            .iter()
+            .fold(v, |w, a| k::sub(w, k::scale(*a, k::dot(w, *a))));
+        if k::dot(w, w).sqrt() < 1e-9 {
+            return Err("動かし方の軸が平行です".into());
+        }
+        Ok(norm(w))
+    };
+    let x0 = a1.unwrap_or(if z[0].abs() > 1.0 - 1e-9 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [1.0, 0.0, 0.0]
+    });
+    let x = off(x0, &[z])?;
+    let y = off(a2.unwrap_or_else(|| k::cross(z, x)), &[z, x])?;
+    Ok([x, y, z])
 }
 
 /// 重みつきの数の並び `mults` と値 `knots` を、重複を並べたノットにする。
@@ -1127,6 +1236,56 @@ mod tests {
         );
         let full = edge_curve(&c, a, a, true).unwrap();
         assert_eq!(full.pts.len(), 9);
+    }
+
+    /// 写しの元の円と、回して・倍にして・鏡に写した写しの円を読む。
+    fn replica(axis2: &str) -> (Curve, Curve, Moving) {
+        let t = format!(
+            "ISO-10303-21;\nDATA;\n\
+             #1=CARTESIAN_POINT('',(1.,2.,3.));\n#2=DIRECTION('',(0.,0.,1.));\n#3=DIRECTION('',(1.,0.,0.));\n\
+             #4=AXIS2_PLACEMENT_3D('',#1,#2,#3);\n#5=CIRCLE('',#4,5.);\n\
+             #6=DIRECTION('',(0.,1.,0.));\n#7=DIRECTION('',(1.,0.,1.));\n#8=CARTESIAN_POINT('',(10.,0.,0.));\n\
+             #9=DIRECTION('',(0.,0.,-1.));\n\
+             #10=CARTESIAN_TRANSFORMATION_OPERATOR_3D('','',#6,{axis2},#8,2.,#7);\n\
+             #11=CURVE_REPLICA('',#5,#10);\nENDSEC;\n"
+        );
+        let data = Data {
+            recs: parse(&t).unwrap(),
+            angle: 1.0,
+            len: 1.0,
+        };
+        let m = data.moving(10).unwrap();
+        (data.curve(5).unwrap(), data.curve(11).unwrap(), m)
+    }
+
+    #[test]
+    fn a_replica_is_its_parent_moved_turned_scaled_and_mirrored() {
+        for axis2 in ["$", "#9"] {
+            let (parent, copy, m) = replica(axis2);
+            // 軸は直交する単位の向き。軸 2 を書かなければ右手系、Z の負の向きなら鏡に写す
+            let [x, y, z] = m.u;
+            for (a, b) in [(x, y), (y, z), (z, x)] {
+                assert!(k::dot(a, b).abs() < 1e-12);
+            }
+            let hand = k::dot(k::cross(x, y), z);
+            assert!((hand - if axis2 == "$" { 1.0 } else { -1.0 }).abs() < 1e-12);
+            let Curve::Circle(_, r) = copy else {
+                panic!("{copy:?}")
+            };
+            assert_eq!(r, 10.0);
+            // 元の円の上の点を動かした所が、写しの円の上で同じ順に並ぶ
+            let a = [6.0, 2.0, 3.0];
+            let full = edge_curve(&parent, a, a, true).unwrap();
+            let moved = edge_curve(&copy, m.point(a), m.point(a), true).unwrap();
+            for i in 0..=8 {
+                let t = i as f64 / 8.0;
+                let (p, q) = (m.point(eval(&full, t)), eval(&moved, t));
+                assert!(
+                    k::dot(k::sub(p, q), k::sub(p, q)).sqrt() < 1e-9,
+                    "{axis2} {t}: {p:?} {q:?}"
+                );
+            }
+        }
     }
 
     #[test]

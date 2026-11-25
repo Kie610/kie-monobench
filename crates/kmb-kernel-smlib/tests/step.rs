@@ -257,3 +257,19 @@ fn a_cone_that_ends_in_a_point_becomes_a_solid() {
         assert!(solid && solids == 1, "{file}");
     }
 }
+
+#[test]
+fn an_edge_written_as_a_moved_copy_of_another_closes_the_solid() {
+    // 上の縁の円を、下の縁の円を回して上げた写し(CURVE_REPLICA)として書いた円柱。
+    // 写しを読めないと上の面と側面の辺が無く、立体に閉じない
+    let k = SmlibKernel::new();
+    let h = k
+        .import_step(&testdata("cylinder-replica.step"))
+        .unwrap_or_else(|e| panic!("{e}"));
+    let m = k.mass(h).unwrap();
+    assert!(close(m.volume, 2000.0 * PI, 1e-6), "体積 {}", m.volume);
+    let area = 2.0 * PI * 100.0 + TAU * 10.0 * 20.0;
+    assert!(close(m.area, area, 1e-4), "表面積 {}", m.area);
+    let (solid, solids, _) = k.check(h).unwrap();
+    assert!(solid && solids == 1);
+}
