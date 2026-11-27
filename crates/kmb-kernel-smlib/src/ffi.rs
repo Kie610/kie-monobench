@@ -179,6 +179,7 @@ pub struct JcMesh {
     pub edge_count: usize,
     pub edge_counts: *mut u32,
     pub edge_points: *mut f32,
+    pub failed_faces: usize,
 }
 
 /// 2 つの面の境目の辺(形を問わない)。折れ線は `jc_all_edges` の点の並びの `first..first + count`。
@@ -919,6 +920,7 @@ impl Brep {
             tri_face: slice_u(m.tri_face, m.triangle_count),
             edge_counts,
             edge_points: slice_f(m.edge_points, total * 3),
+            failed_faces: m.failed_faces,
         };
         unsafe { jc_mesh_free(p) };
         Ok(out)
@@ -933,6 +935,8 @@ pub struct MeshData {
     pub tri_face: Vec<u32>,
     pub edge_counts: Vec<u32>,
     pub edge_points: Vec<f32>,
+    /// 網にできずに抜いた面の数(ほかの面の網は残す)
+    pub failed_faces: usize,
 }
 
 /// 形状を STEP(AP214、mm)の文字列にする。`names` は立体ごとの名前。

@@ -1923,6 +1923,13 @@ impl Kernel for SmlibKernel {
             i += c;
         }
         let nfaces = sh.names.len() as u32;
+        if m.failed_faces > 0 {
+            log::warn!(
+                "形 {} の {} 面を網にできず、表示から抜きました(ほかの面は表示します)",
+                shape.0,
+                m.failed_faces
+            );
+        }
         let mesh = Mesh {
             positions: three(&m.positions),
             normals: three(&m.normals),
