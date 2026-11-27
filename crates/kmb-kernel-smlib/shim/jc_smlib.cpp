@@ -1921,8 +1921,13 @@ int jc_mesh(const JcBrep* brep, double chord, double angle_deg, JcMesh** out)
         params.dCurveAngleTolDeg = angle_deg;
         params.dSurfaceAngleTolDeg = angle_deg;
         SmPolyBrep* raw = nullptr;
-        check(SmApiTessellate(b, raw, params), "三角形への分割");
+        // 網にできない面があっても、ほかの面の網は残す(1 枚のためにボディ全体を画面から消さない)。
+        // 網にできなかった面の数は failed_faces で返し、全部の面が駄目な時だけ誤りにする
+        SmTArray<SmTessellationFailure> failures;
+        check(SmApiTessellate(b, raw, params, TRUE, &failures), "三角形への分割");
         std::unique_ptr<SmPolyBrep> poly(raw);
+        if (!poly || (faces.GetSize() > 0 && failures.GetSize() >= faces.GetSize()))
+            throw Failure{"どの面も三角形に分けられません"};
 
         std::vector<float> pos, nor;
         std::vector<uint32_t> tris, tface;
@@ -2021,6 +2026,7 @@ int jc_mesh(const JcBrep* brep, double chord, double angle_deg, JcMesh** out)
             if (dst && !v.empty())
                 std::memcpy(dst, v.data(), sizeof(T) * v.size());
         };
+        m->failed_faces = failures.GetSize();
         m->vertex_count = pos.size() / 3;
         copy(pos, m->positions);
         copy(nor, m->normals);

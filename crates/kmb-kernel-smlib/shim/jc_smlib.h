@@ -92,6 +92,7 @@ typedef struct JcMesh {
     size_t edge_count;
     uint32_t* edge_counts;  /* edge_count */
     float* edge_points;     /* 合計点数 * 3 */
+    size_t failed_faces;    /* 網にできず抜いた面の数 */
 } JcMesh;
 
 const char* jc_last_error(void);

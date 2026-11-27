@@ -663,6 +663,32 @@ fn split_on_axis(lp: &ProfileLoop, on_axis: &dyn Fn(P2) -> bool) -> Vec<ProfileL
     out
 }
 
+/// 閉じた立体を 1 つ以上囲む形か。
+fn is_closed_solid(brep: &ffi::Brep) -> Result<bool, KernelError> {
+    let (manifold, solids, _) = brep.check().map_err(failed("立体の検査"))?;
+    Ok(manifold && solids >= 1)
+}
+
+/// 輪郭の領域(外形と穴)を 1 つずつ押し出し、足して 1 つの形にする。呼ぶ側が SMLib の錠を持つ。
+fn extrude_regions_one_by_one(
+    profile: &Profile,
+    from: f64,
+    to: f64,
+) -> Result<ffi::Brep, KernelError> {
+    let plane = jc_plane(&profile.plane);
+    let mut out: Option<ffi::Brep> = None;
+    for r in &profile.regions {
+        let loops: Vec<&ProfileLoop> = std::iter::once(&r.outer).chain(&r.holes).collect();
+        let o = curve_segments(&loops);
+        let b = ffi::extrude(&plane, &o.segs, &o.lens, from, to).map_err(failed("押し出し"))?;
+        match out.as_mut() {
+            None => out = Some(b),
+            Some(acc) => acc.boolean(b, 0).map_err(failed("押し出した領域の結合"))?,
+        }
+    }
+    out.ok_or_else(|| KernelError::Failed("閉じた輪郭がありません".into()))
+}
+
 fn all_loops(profile: &Profile) -> Vec<&ProfileLoop> {
     profile
         .regions
@@ -844,8 +870,21 @@ impl Kernel for SmlibKernel {
         let plane = profile.plane;
         let n = k::normalize(plane.normal());
         let _g = ffi::lock()?;
-        let brep = ffi::extrude(&jc_plane(&plane), &outline.segs, &outline.lens, from, to)
+        let mut brep = ffi::extrude(&jc_plane(&plane), &outline.segs, &outline.lens, from, to)
             .map_err(failed("押し出し"))?;
+        if !is_closed_solid(&brep)? {
+            // 辺で接する領域をまとめて 1 枚の面から押し出すと、閉じた立体にならないことがある
+            // (環境によって起きる)。その時は領域ごとに押し出して足し、それでも駄目なら止める
+            if profile.regions.len() > 1 {
+                brep = extrude_regions_one_by_one(profile, from, to)?;
+            }
+            if !is_closed_solid(&brep)? {
+                return Err(KernelError::Failed(
+                    "押し出しの結果が閉じた立体になりませんでした(輪郭が辺や点で接している所を確かめてください)"
+                        .into(),
+                ));
+            }
+        }
         // 平面の代表点は外形の箱の中心: 線分を押し出した側面(平行四辺形)では面の中心になる
         let faces = brep
             .faces(ffi::FACE_INNER_POINT_CURVED)
@@ -1923,6 +1962,13 @@ impl Kernel for SmlibKernel {
             i += c;
         }
         let nfaces = sh.names.len() as u32;
+        if m.failed_faces > 0 {
+            log::warn!(
+                "形 {} の {} 面を網にできず、表示から抜きました(ほかの面は表示します)",
+                shape.0,
+                m.failed_faces
+            );
+        }
         let mesh = Mesh {
             positions: three(&m.positions),
             normals: three(&m.normals),
@@ -2026,5 +2072,55 @@ impl Kernel for SmlibKernel {
             .retain(|(id, _), _| live.contains(&ShapeHandle(*id)));
         s.volumes.retain(|id, _| live.contains(&ShapeHandle(*id)));
         s.masses.retain(|id, _| live.contains(&ShapeHandle(*id)));
+    }
+}
+
+#[cfg(test)]
+mod extrude_fallback_tests {
+    use super::*;
+
+    fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> ProfileLoop {
+        let p = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        ProfileLoop {
+            edges: (0..4)
+                .map(|i| ProfileEdge {
+                    curve: None,
+                    name: format!("e{}", i + 1),
+                    segment: Segment::Line {
+                        a: p[i],
+                        b: p[(i + 1) % 4],
+                    },
+                    reversed: false,
+                })
+                .collect(),
+        }
+    }
+
+    /// 確かめること: まとめた押し出しが閉じた立体にならない環境で使う「領域ごとに押し出して足す」が、
+    /// 辺で接する 2 つの長方形から閉じた 1 つの立体を作り、体積が面積 × 高さになること。
+    #[test]
+    fn regions_touching_on_an_edge_extrude_one_by_one_into_one_solid() {
+        let profile = Profile {
+            plane: k::Plane::XY,
+            regions: vec![
+                k::Region {
+                    outer: rect(0.0, 0.0, 10.0, 10.0),
+                    holes: vec![],
+                },
+                k::Region {
+                    outer: rect(10.0, 2.0, 20.0, 8.0),
+                    holes: vec![],
+                },
+            ],
+        };
+        let _g = ffi::lock().unwrap();
+        let b = extrude_regions_one_by_one(&profile, 0.0, 5.0).unwrap();
+        let (manifold, solids, voids) = b.check().unwrap();
+        assert!(
+            manifold && solids == 1 && voids == 0,
+            "{manifold} {solids} {voids}"
+        );
+        let v = b.mass(VOLUME_ACCURACY).unwrap().volume;
+        assert!((v - 800.0).abs() < 1e-6 * 800.0, "{v}");
     }
 }
