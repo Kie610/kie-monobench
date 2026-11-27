@@ -362,3 +362,106 @@ fn relink_follows_bodies_by_name_and_lists_missing_ones() {
     assert_eq!(t.link(link_id).file, "蓋.json");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 確かめること: リンクした部品の板の上面に置いたスケッチは、元を直して最新にすると(板を 2 mm から
+/// 5 mm に)厚くなった板の上面に付いて来る。その部品をジョイントで回すと、スケッチも一緒に回る。
+#[test]
+fn a_sketch_on_a_linked_part_follows_the_update_and_a_joint() {
+    use kmb_asm::{AsmCommands, Joint, NEW_JOINT, Origin};
+    let dir = scratch("sketch");
+    let src = dir.join("板.json");
+    let write = |t: f64| {
+        let mut b = DocBuilder::new();
+        block(&mut b, "板", [0.0, 0.0, 30.0, 20.0], t);
+        std::fs::write(&src, b.finish("板").to_json()).unwrap();
+    };
+    write(2.0);
+    let mut b = DocBuilder::new();
+    block(&mut b, "箱", [40.0, 0.0, 30.0, 20.0], 10.0);
+    let mut t = Bench::new(b.finish("箱"));
+    let added = t.run(LINK_INSERT, None, Some(&src)).unwrap();
+    let plate = added[1];
+    let out = |t: &Bench, id: FeatureId| match t.report.feature(id) {
+        Some(kmb_core::FeatureStatus::Ok { outputs, .. }) => outputs.clone(),
+        other => panic!("{id}: {other:?}"),
+    };
+    let kmb_core::Value::Shape(h) = out(&t, plate)["body"] else {
+        panic!("板のボディ");
+    };
+    let top =
+        t.k.faces(h)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.planar.as_ref().is_some_and(|p| p.normal[2] > 0.99))
+            .expect("板の上面")
+            .name;
+    let mut s = kmb_samples::sample::SketchBuilder::new(SketchPlane::Face {
+        feature: plate,
+        face: top,
+        origin: kmb_sketch::FaceOrigin::World,
+    });
+    let o = s.fixed_point(5.0, 5.0);
+    s.rectangle(o, "4 mm", "4 mm", [5.0, 5.0, 9.0, 9.0]);
+    let sk = t
+        .doc
+        .apply_edits(
+            "スケッチ",
+            vec![kmb_core::Edit::Insert {
+                type_id: kmb_sketch::SKETCH.into(),
+                name: "板の上".into(),
+                data: serde_json::to_value(s.build()).unwrap(),
+            }],
+        )
+        .unwrap()[0];
+    t.recompute();
+    let plane = |t: &Bench| {
+        kmb_core::Profile::from_value(&out(t, sk)["profile"])
+            .expect("輪郭")
+            .plane
+    };
+    assert!((plane(&t).origin[2] - 2.0).abs() < 1e-6);
+    write(5.0);
+    t.run(LINK_UPDATE, Some(plate), Some(&src)).unwrap();
+    assert!(
+        (plane(&t).origin[2] - 5.0).abs() < 1e-6,
+        "最新にした板の上面に付いて来ない {:?}",
+        plane(&t)
+    );
+    // 板の部品を、手前の下の辺(X の向き)のまわりに 90° 回す
+    let args = serde_json::json!({"moving": "f", "origin": Origin {
+        feature: plate,
+        point: [0.0, 0.0, 0.0],
+        axis: [1.0, 0.0, 0.0],
+    }});
+    let cx = Context {
+        args: &args,
+        ..Context::new(t.doc.data(), &t.report, &t.reg, &t.k)
+    };
+    let Some(Ok(Outcome::Change { label, edits })) = AsmCommands.run(NEW_JOINT, &cx) else {
+        panic!("ジョイントを作れない");
+    };
+    let j = t.doc.apply_edits(&label, edits).unwrap()[0];
+    let mut data: Joint =
+        serde_json::from_value(t.doc.data().feature(j).unwrap().data.clone()).unwrap();
+    assert!(
+        data.attached.iter().any(|a| a.feature == sk),
+        "板の上のスケッチが一緒に動く物に入る: {:?}",
+        data.attached
+    );
+    data.angle = "90 deg".into();
+    t.doc
+        .apply(kmb_core::Transaction::new(
+            "回す",
+            vec![kmb_core::Op::SetFeatureData {
+                id: j,
+                data: serde_json::to_value(data).unwrap(),
+            }],
+        ))
+        .unwrap();
+    t.recompute();
+    let n = plane(&t).normal();
+    assert!(
+        n[2].abs() < 1e-6 && n[1].abs() > 0.99,
+        "スケッチが板と一緒に回らない {n:?}"
+    );
+}

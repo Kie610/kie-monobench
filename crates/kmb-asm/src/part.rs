@@ -123,3 +123,68 @@ pub fn heir_before(
     }
     cur
 }
+
+/// 部品と一緒に動かす機能 1 つと、その動かす出力の名前。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attached {
+    pub feature: FeatureId,
+    pub slots: Vec<String>,
+}
+
+/// 部品のボディ `bodies`(受け継いだ機能でもよい)に付いた作業物とスケッチ: ボディを出さない機能のうち、
+/// 部品のボディの面・辺・角か、既に付いた物を元にする物(作業平面・作業軸・作業点・面や作業平面の上の
+/// スケッチ)を、タイムラインの今の終わりまで並べた順に集める。動かせる出力
+/// ([`crate::joint::moved_value`])の無い機能は入れない。部品を動かす機能(位置・ジョイント・拘束)が、
+/// ボディと一緒に動かす。原点の平面や座標だけから作った物は部品に属さないので入れない。
+pub fn attached_to(
+    data: &DocumentData,
+    registry: &Registry,
+    report: &RecomputeReport,
+    bodies: &[FeatureId],
+) -> Vec<Attached> {
+    let roots: Vec<FeatureId> = bodies
+        .iter()
+        .map(|b| body_root(data, registry, *b))
+        .collect();
+    let mut found: Vec<Attached> = Vec::new();
+    for f in data.features.iter().filter(|f| !f.suppressed) {
+        let Some(FeatureStatus::Ok { outputs, .. }) = report.feature(f.id) else {
+            continue;
+        };
+        if outputs.contains_key("body") {
+            continue;
+        }
+        let mut slots: Vec<String> = outputs
+            .iter()
+            .filter(|(s, v)| {
+                !s.starts_with(kmb_core::MOVED)
+                    && crate::joint::moved_value(v, &kmb_core::kernel::IDENTITY).is_some()
+            })
+            .map(|(s, _)| s.clone())
+            .collect();
+        if slots.is_empty() {
+            continue;
+        }
+        slots.sort();
+        let Some(Ok(feature)) = registry.instantiate(&f.type_id, &f.data) else {
+            continue;
+        };
+        let Ok(inputs) = feature.inputs() else {
+            continue;
+        };
+        let on_part = inputs.iter().any(|i| match i {
+            InputRef::Output { feature, slot } if slot == "body" => {
+                roots.contains(&body_root(data, registry, *feature))
+            }
+            InputRef::Output { feature, .. } => found.iter().any(|a| a.feature == *feature),
+            _ => false,
+        });
+        if on_part {
+            found.push(Attached {
+                feature: f.id,
+                slots,
+            });
+        }
+    }
+    found
+}

@@ -148,29 +148,37 @@ fn moved_to(base: Plane, at: P3) -> Plane {
     }
 }
 
-/// 面 `face` の平らな面の情報(無い・平らでなければ誤りの文)。
+/// 面 `face` の平らな面の情報と、見つけた面の名前と知らせ(無い・平らでなければ誤りの文)。分かれた面の
+/// 切れ端を指していて、面が 1 枚に戻っていれば戻った面を使い、知らせを付ける([`kmb_core::rejoined_face`])。
 fn planar(
     kernel: &dyn Kernel,
     shape: ShapeHandle,
     face: &str,
-) -> Result<kmb_core::kernel::PlanarFace, String> {
+) -> Result<(kmb_core::kernel::PlanarFace, String, Option<String>), String> {
     let faces = kernel.faces(shape).map_err(|e| e.to_string())?;
-    let f = faces
-        .iter()
-        .find(|f| f.name == face)
-        .ok_or_else(|| format!("面 {face} が見つかりません(参照が切れています)"))?;
-    f.planar
-        .ok_or_else(|| format!("面 {face} は平らではありません"))
+    let (f, note) = match faces.iter().find(|f| f.name == face) {
+        Some(f) => (f, None),
+        None => {
+            let whole = kmb_core::rejoined_face(face, faces.iter().map(|f| f.name.as_str()))
+                .ok_or_else(|| format!("面 {face} が見つかりません(参照が切れています)"))?;
+            let f = faces.iter().find(|f| f.name == whole).expect("見つけた面");
+            (f, Some(kmb_core::rejoined_note(face, whole)))
+        }
+    };
+    let p = f
+        .planar
+        .ok_or_else(|| format!("面 {face} は平らではありません"))?;
+    Ok((p, f.name.clone(), note))
 }
 
 /// 新しく面にスケッチを作る時の原点(面の左下の角。角が無ければ円の中心、それも無ければ世界の
 /// 原点を写した点)。
 pub fn default_origin(kernel: &dyn Kernel, shape: ShapeHandle, face: &str) -> FaceOrigin {
-    let Ok(p) = planar(kernel, shape, face) else {
+    let Ok((p, face, _)) = planar(kernel, shape, face) else {
         return FaceOrigin::World;
     };
     let base = Plane::from_point_normal(p.point, p.normal);
-    let spots = face_spots(kernel, shape, face);
+    let spots = face_spots(kernel, shape, &face);
     corner_spot(&spots, &base, Corner::LowerLeft).map_or(FaceOrigin::World, |s| s.origin.clone())
 }
 
@@ -182,21 +190,21 @@ pub fn face_plane(
     face: &str,
     origin: &FaceOrigin,
 ) -> Result<(Plane, Option<String>), String> {
-    let p = planar(kernel, shape, face)?;
+    let (p, face, note) = planar(kernel, shape, face)?;
     let base = Plane::from_point_normal(p.point, p.normal);
     if origin.is_world() {
-        return Ok((base, None));
+        return Ok((base, note));
     }
-    let spots = face_spots(kernel, shape, face);
+    let spots = face_spots(kernel, shape, &face);
     if let Some(s) = spots.iter().find(|s| s.origin == *origin) {
-        return Ok((moved_to(base, s.at), None));
+        return Ok((moved_to(base, s.at), note));
     }
     let what = match origin {
         FaceOrigin::Vertex { faces } => format!("面 {} が交わる角", faces.join("・")),
         FaceOrigin::Center { faces } => format!("面 {} の円の中心", faces.join("・")),
         FaceOrigin::World => unreachable!(),
     };
-    Ok(match corner_spot(&spots, &base, Corner::LowerLeft) {
+    let (plane, lost) = match corner_spot(&spots, &base, Corner::LowerLeft) {
         Some(s) => (
             moved_to(base, s.at),
             Some(format!(
@@ -209,7 +217,9 @@ pub fn face_plane(
                 "スケッチの原点({what})が見つかりません。世界の原点を面へ写した点を原点にしています"
             )),
         ),
-    })
+    };
+    let both: Vec<String> = note.into_iter().chain(lost).collect();
+    Ok((plane, (!both.is_empty()).then(|| both.join("\n"))))
 }
 
 impl Sketch {

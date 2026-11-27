@@ -45,7 +45,7 @@ pub use extension::{
     TableMark, TableOption, sibling_path,
 };
 pub use extension::{JobControl, JobProgress};
-pub use face_names::{FaceAliases, SPLIT_BY};
+pub use face_names::{FaceAliases, SPLIT_BY, rejoined_face, rejoined_note};
 pub use feature::{
     CONCURRENT, EvalCtx, EvalError, Factory, Feature, InputRef, ModelParam, Names, Outputs,
     Registry, Value, WARNINGS, add_warnings, expr_inputs, template_inputs, warnings_of,
@@ -68,8 +68,8 @@ pub use problem::{Problem, ProblemKind};
 pub use recompute::{
     Cache, FeatureResult, FeatureStatus, MOVED, ModelParamResult, NESTED_DEPTH, ParamResult,
     ParamStatus, RecomputeReport, body_heir, body_labels, body_root, eval_exprs, model_params,
-    moved_slot, reads_now, recompute_cancellable, recompute_detached, recompute_nested,
-    recompute_watched, visible_bodies, visible_bodies_before,
+    moved_output_slot, moved_slot, reads_now, recompute_cancellable, recompute_detached,
+    recompute_nested, recompute_watched, visible_bodies, visible_bodies_before,
 };
 pub use refs::{
     Ref, RefKind, VertexInfo, VertexPick, face_feature, one_or_many, vertices, vertices_of_edges,

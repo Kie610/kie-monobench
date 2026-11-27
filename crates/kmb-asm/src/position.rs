@@ -44,6 +44,9 @@ pub struct Position {
     pub moving: Part,
     /// 一緒に動かすボディ(この機能の手前で受け継いだ機能)
     pub bodies: Vec<FeatureId>,
+    /// 一緒に動かす作業物とスケッチ(部品のボディから作った物。[`crate::part::attached_to`])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attached: Vec<crate::part::Attached>,
     #[serde(default = "zero_mm")]
     pub x: String,
     #[serde(default = "zero_mm")]
@@ -77,6 +80,7 @@ impl Exprs for Position {
 impl Feature for Position {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v: Vec<InputRef> = self.bodies.iter().map(|b| output(*b, "body")).collect();
+        v.extend(crate::joint::attached_inputs(&self.attached));
         for b in &self.center_bodies {
             let input = output(*b, "body");
             if !v.contains(&input) {
@@ -133,7 +137,7 @@ impl Feature for Position {
             }
             m = mul(&m, &rotation);
         }
-        moved_outputs(ctx, &self.bodies, &m, &mut out)?;
+        moved_outputs(ctx, &self.bodies, &self.attached, &m, &mut out)?;
         Ok(out)
     }
 
@@ -383,7 +387,7 @@ pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
             }],
         });
     }
-    let bodies = set
+    let bodies: Vec<FeatureId> = set
         .iter()
         .map(|r| heir_before(cx.data, cx.registry, cx.report, *r, None))
         .collect();
@@ -391,6 +395,7 @@ pub fn drag_position(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let p = Position {
         center_bodies: center_bodies(cx, &part),
         moving: part,
+        attached: crate::part::attached_to(cx.data, cx.registry, cx.report, &bodies),
         bodies,
         x,
         y,
@@ -446,6 +451,12 @@ pub fn move_part(cx: &Context<'_>, part: Part) -> Result<Outcome, kmb_core::Prob
         .collect();
     let (mut data, _) = placement_data(cx)?;
     data["moving"] = serde_json::json!(part);
+    data["attached"] = serde_json::json!(crate::part::attached_to(
+        cx.data,
+        cx.registry,
+        cx.report,
+        &bodies
+    ));
     data["bodies"] = serde_json::json!(bodies);
     data["center_bodies"] = serde_json::json!(center_bodies(cx, &part));
     let n = cx.count_of(POSITION) + 1;

@@ -82,3 +82,16 @@ fn an_ambiguous_old_name_is_not_rewritten() {
     a.insert("f3:end~f12#1".into(), "f2:end#1#1".into());
     assert!(a.current().is_empty(), "{:?}", a.current());
 }
+
+/// 切れ端の名前(`元#k`・`元~機能#k`)は、元の名前の面が 1 つだけある時にその面へ戻る。割れていない
+/// 名前・元の面が無い・2 つある時は戻さない。
+#[test]
+fn a_piece_name_finds_the_face_made_whole_again() {
+    let whole = ["f2:end", "f2:start"];
+    assert_eq!(rejoined_face("f2:end#1", whole), Some("f2:end"));
+    assert_eq!(rejoined_face("f2:end~f12#0", whole), Some("f2:end"));
+    assert_eq!(rejoined_face("f2:end", whole), None);
+    assert_eq!(rejoined_face("f3:end#0", whole), None);
+    assert_eq!(rejoined_face("f2:end#1", ["f2:end#0", "f2:end#2"]), None);
+    assert_eq!(rejoined_face("f2:end#1", ["f2:end", "f2:end"]), None);
+}

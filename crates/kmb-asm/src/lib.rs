@@ -741,6 +741,9 @@ fn insert_joint(
     mut edits: Vec<Edit>,
 ) -> Result<Outcome, kmb_core::Problem> {
     let name = format!("ジョイント{}", cx.count_of(JOINT) + 1);
+    let mut j = j.clone();
+    j.attached = part::attached_to(cx.data, cx.registry, cx.report, &j.bodies);
+    let j = &j;
     log::info!(
         "{name} を作る({:?}・{:?}、動かすボディ {} 個、前のジョイント {} 個を直す)",
         j.how,
