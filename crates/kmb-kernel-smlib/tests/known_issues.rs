@@ -435,7 +435,7 @@ fn loft_with_equal_end_sections_and_square_to_circle() {
     assert!(v > PI * 64.0 * 20.0 && v < 8000.0, "{v}");
 }
 
-/// 辺で接する 2 つの長方形の輪郭を押し出す(1 つの立体)。
+/// 辺で接する 2 つの長方形の輪郭を押し出すと、閉じた 1 つの立体になる。
 #[test]
 fn extrude_two_rectangles_touching_on_an_edge() {
     let k = SmlibKernel::new();
@@ -452,14 +452,8 @@ fn extrude_two_rectangles_touching_on_an_edge() {
             },
         ],
     };
-    match k.extrude(&p, 0.0, 5.0, "f1") {
-        Err(e) => eprintln!("断った: {e}"),
-        Ok(h) => {
-            let (_, solids, _) = k.check(h).unwrap();
-            assert!(solids >= 1);
-            assert!(close(k.volume(h).unwrap(), (100.0 + 60.0) * 5.0, 1e-6));
-        }
-    }
+    let h = k.extrude(&p, 0.0, 5.0, "f1").unwrap();
+    assert!(close(solid(&k, h, 0), (100.0 + 60.0) * 5.0, 1e-6));
 }
 
 /// 接線から 3° だけ折れた角(出隅と浅い入り隅)を丸める。
