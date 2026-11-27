@@ -19,10 +19,11 @@ use crate::part::Part;
 use kmb_cad::{Exprs, angle, body_of, expr_refs, kernel_err, length, output, parse, rename};
 use kmb_core::kernel::{self as k, Matrix4, P3};
 use kmb_core::{
-    Descriptor, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, Registry, Value,
-    add_warnings, category, moved_slot,
+    Descriptor, EvalCtx, EvalError, Feature, FeatureId, Field, InputRef, Outputs, Payload,
+    Registry, Value, add_warnings, category, moved_output_slot, moved_slot,
 };
 use kmb_interchange::animation::{self as anim, DRIVE_SLOT, Drive};
+use kmb_interchange::{DatumAxis, DatumPoint};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -211,6 +212,9 @@ pub struct Joint {
     pub base: Option<Part>,
     /// 一緒に動かすボディ(このジョイントの手前で受け継いだ機能)
     pub bodies: Vec<FeatureId>,
+    /// 一緒に動かす作業物とスケッチ(部品のボディから作った物。[`crate::part::attached_to`])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attached: Vec<crate::part::Attached>,
     /// 作った時の軸の通る点(世界座標。土台を動かす前)
     pub origin: P3,
     /// 作った時の軸の向き(原点の Z)
@@ -374,12 +378,14 @@ impl Exprs for Joint {
 /// 行列の積 `a × b`(`b` を先に掛ける)。アニメーションの動きと同じ式を使う。
 pub(crate) use kmb_interchange::animation::mul;
 
-/// 動かす機能(ジョイント・拘束・位置)の出力: `bodies` を `m` で動かした形と、動き(`transform`)。
-/// 動かない時(`m` が単位行列)は形を出さない。面の名前はそのまま(後の機能と加工が、動かす前と同じ
-/// 名前で指せる)。
+/// 動かす機能(ジョイント・拘束・位置)の出力: `bodies` を `m` で動かした形と、一緒に動かす作業物と
+/// スケッチ `attached` の出力を動かした値と、動き(`transform`)。動かない時(`m` が単位行列)は形も値も
+/// 出さない。面の名前はそのまま(後の機能と加工が、動かす前と同じ名前で指せる)。作業物とスケッチは、
+/// 後の機能が読む値と画面に出す値が動いた先になる(部品の中身として一緒に動く。読む側の機能は変えない)。
 pub(crate) fn moved_outputs(
     ctx: &mut EvalCtx<'_>,
     bodies: &[FeatureId],
+    attached: &[crate::part::Attached],
     m: &Matrix4,
     out: &mut Outputs,
 ) -> Result<(), EvalError> {
@@ -388,6 +394,13 @@ pub(crate) fn moved_outputs(
             let src = body_of(ctx, *b)?;
             let h = ctx.kernel().transform(src, m, "").map_err(kernel_err)?;
             out.insert(moved_slot(*b), Value::Shape(h));
+        }
+        for a in attached {
+            for slot in &a.slots {
+                if let Some(v) = moved_value(ctx.output(a.feature, slot)?, m) {
+                    out.insert(moved_output_slot(a.feature, slot), v);
+                }
+            }
         }
     }
     out.insert(
@@ -398,6 +411,44 @@ pub(crate) fn moved_outputs(
         },
     );
     Ok(())
+}
+
+/// 一緒に動かす作業物とスケッチの出力を読む入力。
+pub(crate) fn attached_inputs(
+    attached: &[crate::part::Attached],
+) -> impl Iterator<Item = InputRef> + '_ {
+    attached
+        .iter()
+        .flat_map(|a| a.slots.iter().map(|s| output(a.feature, s)))
+}
+
+/// 部品と一緒に動かせる値を `m` で動かした値(動かせない値なら `None`)。動かせるのは、作業軸・作業点と、
+/// 平面の上の値(`plane` の欄に平面を持つ値。作業平面と、スケッチの出す輪郭・線・点・要素)。平面の上の
+/// 値は平面の座標で中身を持つので、平面だけを動かす。
+pub(crate) fn moved_value(v: &Value, m: &Matrix4) -> Option<Value> {
+    if let Value::Custom { type_key, data } = v
+        && let Some(plane) = data.get("plane")
+        && let Ok(mut p) = serde_json::from_value::<kmb_core::Plane>(plane.clone())
+    {
+        p.origin = k::transform_point(m, p.origin);
+        p.x_axis = apply_dir(m, p.x_axis);
+        p.y_axis = apply_dir(m, p.y_axis);
+        let mut data = data.clone();
+        data["plane"] = json!(p);
+        return Some(Value::Custom {
+            type_key: type_key.clone(),
+            data,
+        });
+    }
+    if let Some(mut d) = DatumAxis::from_value(v) {
+        d.at = k::transform_point(m, d.at);
+        d.dir = apply_dir(m, d.dir);
+        return Some(d.to_value());
+    }
+    DatumPoint::from_value(v).map(|mut d| {
+        d.at = k::transform_point(m, d.at);
+        d.to_value()
+    })
 }
 
 /// 回して動かすだけの行列の逆。
@@ -863,6 +914,7 @@ impl Joint {
 impl Feature for Joint {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v: Vec<InputRef> = self.bodies.iter().map(|b| output(*b, "body")).collect();
+        v.extend(attached_inputs(&self.attached));
         if self.kind != JointKind::Rigid || self.how == How::Snap {
             v.extend(self.follows.iter().map(|j| output(*j, "transform")));
         }
@@ -888,7 +940,7 @@ impl Feature for Joint {
         if let Some(d) = drive {
             out.insert(DRIVE_SLOT.into(), d.to_value());
         }
-        moved_outputs(ctx, &self.bodies, &m, &mut out)?;
+        moved_outputs(ctx, &self.bodies, &self.attached, &m, &mut out)?;
         add_warnings(&mut out, warnings);
         Ok(out)
     }
@@ -1055,6 +1107,7 @@ pub fn new_joint(moving: Part, base: Option<Part>, bodies: Vec<FeatureId>, o: &O
         moving,
         base,
         bodies,
+        attached: Vec::new(),
         origin: o.point,
         axis: k::normalize(o.axis),
         x_dir: None,

@@ -679,6 +679,8 @@ pub(crate) fn run(
 /// 機能)を変えずに動かした形(ジョイント)。再計算は、それより後の機能が読むその機能の `body` と、
 /// 結果の並びのその機能の `body` を、この形に置き換える(見えるボディも動いた形になる)。
 /// 1 つの機能が出せるボディは `body` の 1 つなので、いくつものボディを一緒に動かすのに使う。
+/// `moved:<機能の番号>:<出力の名前>` の形は、その機能のボディ以外の出力(部品と一緒に動く作業平面
+/// など)を動かした値で、同じようにその出力を置き換える([`moved_output_slot`])。
 pub const MOVED: &str = "moved:";
 
 /// 機能 `id` のボディを動かした形を入れる出力の名前([`MOVED`])。
@@ -686,33 +688,38 @@ pub fn moved_slot(id: FeatureId) -> String {
     format!("{MOVED}{}", id.0)
 }
 
-/// 出力 `out` の [`MOVED`] の形で、動かしたボディの `body` を置き換える。
+/// 機能 `id` の出力 `slot`(ボディ以外)を動かした値を入れる出力の名前([`MOVED`])。
+pub fn moved_output_slot(id: FeatureId, slot: &str) -> String {
+    format!("{MOVED}{}:{slot}", id.0)
+}
+
+/// 出力 `out` の [`MOVED`] の形で、動かしたボディの `body` と、動かした出力を置き換える。
 fn relocate(
     out: &Outputs,
     outputs: &mut HashMap<FeatureId, Outputs>,
     features: &mut [FeatureResult],
 ) {
     for (slot, v) in out {
-        let Some(id) = slot
-            .strip_prefix(MOVED)
-            .and_then(|n| n.parse::<u64>().ok())
-            .map(FeatureId)
-        else {
+        let Some(rest) = slot.strip_prefix(MOVED) else {
             continue;
         };
-        if !matches!(v, Value::Shape(_)) {
+        let (num, target) = rest.split_once(':').unwrap_or((rest, "body"));
+        let Ok(id) = num.parse::<u64>().map(FeatureId) else {
+            continue;
+        };
+        if target == "body" && !matches!(v, Value::Shape(_)) {
             continue;
         }
         if let Some(o) = outputs.get_mut(&id)
-            && o.contains_key("body")
+            && o.contains_key(target)
         {
-            o.insert("body".into(), v.clone());
+            o.insert(target.into(), v.clone());
         }
         if let Some(r) = features.iter_mut().rev().find(|r| r.id == id)
             && let FeatureStatus::Ok { outputs: o, .. } = &mut r.status
-            && o.contains_key("body")
+            && o.contains_key(target)
         {
-            o.insert("body".into(), v.clone());
+            o.insert(target.into(), v.clone());
         }
     }
 }

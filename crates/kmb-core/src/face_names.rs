@@ -40,6 +40,32 @@ fn strip_split(head: &str) -> &str {
     }
 }
 
+/// 名前 `wanted` の面が無い時に、その面が分かれる前の 1 枚の面の名前(`names` の中の物)。`wanted` が
+/// 割れた面の切れ端の名前(`元#k`・`元~機能#k`)で、`names` に元の名前の面がちょうど 1 つある時だけ
+/// 返す。割った機能を消す・止めると切れ端は 1 枚に戻って元の名前になり、その面は切れ端の続きなので
+/// 同じ面として見つけてよい(別の面に付け替えるのとは違う)。それ以外は `None`(参照が切れた誤りにする)。
+pub fn rejoined_face<'a>(
+    wanted: &str,
+    names: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let (head, count) = strip_numbers(wanted);
+    if count == 0 {
+        return None;
+    }
+    let base = strip_split(head);
+    let mut found = names.into_iter().filter(|n| *n == base);
+    let first = found.next()?;
+    found.next().is_none().then_some(first)
+}
+
+/// 1 枚に戻った面を指している知らせ([`rejoined_face`])。分かれた面の両方を別々に指していた物は、
+/// 戻った後は同じ 1 枚の面を指す。
+pub fn rejoined_note(wanted: &str, whole: &str) -> String {
+    format!(
+        "面 {wanted} は分かれていた面が 1 枚に戻ったので、戻った面 {whole} に付けています(分かれた面の両方に付けていた物は同じ面に付きます)"
+    )
+}
+
 /// 並べる時の名前の欠片(数は数として比べ、`#10` を `#2` の後ろにする)。
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 enum Piece<'a> {

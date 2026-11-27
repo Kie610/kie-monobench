@@ -107,6 +107,9 @@ pub struct Constraint {
     pub base: Part,
     /// 一緒に動かすボディ(この機能の手前で受け継いだ機能)
     pub bodies: Vec<FeatureId>,
+    /// 一緒に動かす作業物とスケッチ(部品のボディから作った物。[`crate::part::attached_to`])
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attached: Vec<crate::part::Attached>,
     pub rows: Vec<Row>,
 }
 
@@ -663,6 +666,7 @@ impl Constraint {
 impl Feature for Constraint {
     fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
         let mut v: Vec<InputRef> = self.bodies.iter().map(|b| output(*b, "body")).collect();
+        v.extend(crate::joint::attached_inputs(&self.attached));
         for r in self.rows.iter().flat_map(|r| r.a.iter().chain(&r.b)) {
             let i = output(r.feature(), "body");
             if !v.contains(&i) {
@@ -698,7 +702,7 @@ impl Feature for Constraint {
         })?;
         log::debug!("拘束の動き: {m:?}");
         let mut out = Outputs::new();
-        moved_outputs(ctx, &self.bodies, &m, &mut out)?;
+        moved_outputs(ctx, &self.bodies, &self.attached, &m, &mut out)?;
         Ok(out)
     }
 
@@ -880,6 +884,7 @@ pub fn new_constraint(cx: &Context<'_>) -> Result<Outcome, kmb_core::Problem> {
     let c = Constraint {
         moving,
         base,
+        attached: crate::part::attached_to(data, cx.registry, cx.report, &bodies),
         bodies,
         rows: vec![row],
     };

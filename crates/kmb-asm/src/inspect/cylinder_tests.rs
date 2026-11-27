@@ -230,7 +230,7 @@ impl Feature for MatrixProbe {
             .unwrap()
             .record("joint_matrix", start.elapsed());
         let mut out = Outputs::new();
-        moved_outputs(cx, &[], &m, &mut out)?;
+        moved_outputs(cx, &[], &[], &m, &mut out)?;
         Ok(out)
     }
 }

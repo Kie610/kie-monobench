@@ -87,6 +87,7 @@ mod link_tests;
 mod mesh_import_tests;
 mod modify_tests;
 mod move_point_tests;
+mod moved_reference_tests;
 mod multi_pick_tests;
 mod occurrence_tests;
 mod origin_tests;
