@@ -376,7 +376,8 @@ pub struct AppArg {
     /// 画面の道具: status(今のタブの文書の要約と選んでいる物)・screenshot・probe(screenshot の絵の
     /// 画素に見えている面・点・法線)・selection・
     /// set_param・add_param・set_value・undo・redo・actions(操作の一覧と引数の宣言)・run(操作を
-    /// ID で実行する。画面のボタンと同じ道)。画面の部品を名前で探し、人と同じマウスと
+    /// ID で実行する。画面のボタンと同じ道)。stop(走っている再計算を止める。計算できた所までの形を
+    /// 出し、文書は変えない)・recompute(止めた再計算をもう一度行う)。画面の部品を名前で探し、人と同じマウスと
     /// キーの入力で操作する道具: ui_tree・ui_find・ui_click・ui_type・ui_key・ui_select・ui_pick・
     /// ui_expect。コマンド欄のコマンドを流す: command(1 行)・script(何行も。途中で失敗したら
     /// 残りは流さない。コマンドの一覧はコマンド `help`)。running(受けてまだ答えていない頼みの一覧。

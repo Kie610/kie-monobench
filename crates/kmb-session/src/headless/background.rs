@@ -42,6 +42,18 @@ pub enum Polled {
     Lost,
 }
 
+/// 別のスレッドから再計算を止める口([`Headless::stopper`])。
+#[derive(Clone)]
+pub struct Stopper(Arc<AtomicBool>);
+
+impl Stopper {
+    /// 今走っている再計算を止める([`Headless::stop_recompute`] と同じ)。
+    pub fn stop(&self) {
+        log::info!("再計算を止めるよう頼まれた(別のスレッドから)");
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
 /// 裏で再計算する時の様子。
 #[derive(Default)]
 pub(super) struct Background {
@@ -112,6 +124,7 @@ impl Headless {
             creating: None,
             just_hidden: Default::default(),
             old_names: true,
+            halt: Default::default(),
         }
     }
 
@@ -170,13 +183,15 @@ impl Headless {
         let done = Arc::new(AtomicUsize::new(0));
         let passed = done.clone();
         let total = data.features.len();
+        let halt = self.halt.clone();
         std::thread::spawn(move || {
-            let report = kmb_core::recompute_watched(
+            let report = kmb_core::recompute_watched_stoppable(
                 &data,
                 &registry,
                 kernel.as_ref(),
                 &mut cache,
                 &stop,
+                &halt,
                 &passed,
             )
             // 最後の機能の間にやめる印が立った時も、結果は出さない(続けて行う仕事をせずに次の
@@ -220,6 +235,30 @@ impl Headless {
         }
     }
 
+    /// 走っている再計算を利用者が止める。計算していた機能とその後ろを「止めた」にして、計算できた
+    /// 所までの結果を出す(文書の中身は変えない)。止めた後は、変更・取り消し・[`Self::recompute`]
+    /// で計算し直す。走っていなければ何もせず `false`。
+    ///
+    /// 画面のボタン・MCP の `app` の `stop`・CLI の `--stop-after` が、この口と [`Self::stopper`] を通る。
+    pub fn stop_recompute(&mut self) -> bool {
+        if !self.is_recomputing() {
+            return false;
+        }
+        log::info!("再計算を止めるよう頼まれた");
+        self.halt.store(true, Ordering::Relaxed);
+        true
+    }
+
+    /// 再計算を止めるよう頼まれた後か(走っている間だけ)。
+    pub fn is_stopping(&self) -> bool {
+        self.is_recomputing() && self.halt.load(Ordering::Relaxed)
+    }
+
+    /// 別のスレッドから再計算を止める口(この場で計算する CLI が、決めた時間で止める時など)。
+    pub fn stopper(&self) -> Stopper {
+        Stopper(self.halt.clone())
+    }
+
     /// 裏の計算が終わっていれば結果を取り込む(待たない)。
     pub fn poll_recompute(&mut self) -> Polled {
         let Some(r) = self.background.as_ref().and_then(|bg| bg.running.as_ref()) else {
@@ -244,6 +283,7 @@ impl Headless {
     }
 
     fn lost(&mut self) -> Polled {
+        self.halt.store(false, Ordering::Relaxed);
         if let Some(bg) = &mut self.background {
             bg.running = None;
             bg.dirty = true;
@@ -252,6 +292,8 @@ impl Headless {
     }
 
     fn absorb(&mut self, f: Finished) -> Polled {
+        // 止める印は計算を終えてから下ろす(止める頼みは、走っている計算にだけ効く)
+        self.halt.store(false, Ordering::Relaxed);
         let Some(bg) = &mut self.background else {
             return Polled::Idle;
         };
@@ -295,6 +337,9 @@ impl Headless {
 
 #[cfg(test)]
 mod step_cancel_tests;
+
+#[cfg(test)]
+mod stop_tests;
 
 #[cfg(test)]
 mod tests {

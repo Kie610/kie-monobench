@@ -12,6 +12,7 @@ timeline-health-blocked-by = { $by } が使えないので、この機能は計�
 timeline-status-blocked = { $by } が使えません
 timeline-status-suppressed = 抑制中
 timeline-status-rolled-back = ロールバック位置より後ろ
+timeline-status-stopped = 再計算を止めたので計算していない。もう一度計算するには「再計算」
 
 ## 札の吹き出し($name: 機能の名前、$title: 具合の種類、$message: 知らせの文)
 

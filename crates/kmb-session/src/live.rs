@@ -31,6 +31,8 @@ pub const APP_TOOLS: &[&str] = &[
     "set_value",
     "undo",
     "redo",
+    "stop",
+    "recompute",
     "actions",
     "run",
     "ui_find",

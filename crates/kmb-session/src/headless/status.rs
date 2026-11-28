@@ -167,6 +167,10 @@ impl Headless {
                     }
                     Some(FeatureStatus::Suppressed) => ("suppressed", None),
                     Some(FeatureStatus::RolledBack) => ("rolled_back", None),
+                    Some(FeatureStatus::Stopped) => (
+                        "stopped",
+                        Some("再計算を止めたので計算していません".to_string()),
+                    ),
                     None => ("unknown", None),
                 };
                 o["status"] = json!(state);
@@ -322,6 +326,7 @@ impl Headless {
                 FeatureStatus::Blocked { by, .. } => format!("停止({by} が使えません)"),
                 FeatureStatus::Suppressed => "抑制中".into(),
                 FeatureStatus::RolledBack => "ロールバック位置より後ろ".into(),
+                FeatureStatus::Stopped => "止めた(再計算を止めたので計算していません)".into(),
             };
             s += &format!("  {} {}: {t}\n", f.id, f.name);
         }

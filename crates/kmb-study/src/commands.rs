@@ -120,6 +120,7 @@ fn problem(cx: &Context<'_>, id: FeatureId) -> String {
         Some(FeatureStatus::Blocked { by, .. }) => format!("{by} が使えません"),
         Some(FeatureStatus::Suppressed) => "抑制しています".into(),
         Some(FeatureStatus::RolledBack) => "ロールバックの位置より後ろです".into(),
+        Some(FeatureStatus::Stopped) => "再計算を止めたので計算していません".into(),
         _ => "条件を読めていません(再計算してください)".into(),
     }
 }

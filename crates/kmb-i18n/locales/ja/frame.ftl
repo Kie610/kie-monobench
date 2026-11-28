@@ -84,6 +84,11 @@ frame-status-progress-left = { $note } · 経過 { $elapsed } · 残り 約 { $l
 frame-status-finish-tip = ここまでの回数で絵を仕上げてファイルに書く(粗さが残ることがある)
 frame-status-stop = 中止
 frame-status-stop-tip = 途中でやめる。ファイルは書かない
+frame-status-stop-recalc-tip = 再計算を止める。計算できた所までの形を出し、文書は変えない
+frame-status-recalc-stopped = 再計算を止めました
+frame-status-recalc-stopped-tip = 止めた機能から後ろはまだ計算していない。変更・取り消し・「再計算」で計算し直す
+frame-status-recalc = 再計算
+frame-status-recalc-tip = 止めた所からもう一度計算する
 frame-status-dismiss-tip = この知らせを消す(鐘の一覧には残る)
 # $count: 選んでいる物の数
 frame-status-selected = { $count } 個を選んでいます

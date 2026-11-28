@@ -374,6 +374,8 @@ impl Workspace {
             Some(FeatureStatus::Error { .. }) | Some(FeatureStatus::Blocked { .. }) => {
                 Some(l.pal.err)
             }
+            // 止めた機能は誤りではないが、形はまだ無い(計算し直すと出る)
+            Some(FeatureStatus::Stopped) => Some(l.pal.warn),
             Some(FeatureStatus::Suppressed) | Some(FeatureStatus::RolledBack) => Some(l.pal.ink3),
             None => None,
         }

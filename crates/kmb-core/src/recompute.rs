@@ -43,6 +43,29 @@ pub enum FeatureStatus {
     Suppressed,
     /// ロールバック位置より後ろにある
     RolledBack,
+    /// 利用者が再計算を止めたので計算していない(止めた時に計算していた機能と、その後ろの機能)。
+    /// 文書の中身は変えない。変更・取り消し・「再計算」の操作で計算し直す
+    Stopped,
+}
+
+/// 再計算をやめる・止める印。どちらも別のスレッドから立てる。
+#[derive(Clone, Copy)]
+pub(crate) struct Stops<'a> {
+    /// 立ったら結果を出さずにやめる(新しい変更が来た・取り消した。もう要らない計算)
+    pub(crate) cancel: &'a AtomicBool,
+    /// 立ったら、計算していた機能とその後ろを [`FeatureStatus::Stopped`] にして、計算できた所
+    /// までの結果を出す(利用者が止めた)
+    pub(crate) halt: &'a AtomicBool,
+    /// 入れ子の計算([`EvalCtx::recompute_nested`])。止めた時も途中の結果を出さずにやめる
+    /// (外の機能が途中の形を結果にしないため)
+    pub(crate) nested: bool,
+}
+
+impl Stops<'_> {
+    /// どちらかの印が立っている。
+    pub(crate) fn any(&self) -> bool {
+        self.cancel.load(Ordering::Relaxed) || self.halt.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -136,6 +159,13 @@ impl RecomputeReport {
                 .iter()
                 .filter(|f| matches!(f.status, FeatureStatus::Error { .. }))
                 .count()
+    }
+
+    /// 利用者が止めたので計算していない機能があるか([`FeatureStatus::Stopped`])。
+    pub fn stopped(&self) -> bool {
+        self.features
+            .iter()
+            .any(|f| matches!(f.status, FeatureStatus::Stopped))
     }
 
     /// 名前のパラメータ(利用者のものか、機能が持つモデルのもの)の計算の結果。
@@ -261,6 +291,29 @@ pub fn recompute_detached(
         .expect("やめる印を立てないので、必ず最後まで計算する")
 }
 
+/// [`recompute_detached`] と同じだが、`halt` が立ったら、計算していた機能とその後ろを
+/// [`FeatureStatus::Stopped`] にして、計算できた所までの結果を返す(利用者が止めた時)。
+/// 長い機能も、[`EvalCtx::stopping`] を見ていれば途中で止まる。止めた機能の結果は残さない。
+pub fn recompute_stoppable(
+    data: &DocumentData,
+    registry: &Registry,
+    kernel: &dyn Kernel,
+    cache: &mut Cache,
+    halt: &AtomicBool,
+) -> RecomputeReport {
+    let never = AtomicBool::new(false);
+    recompute_watched_stoppable(
+        data,
+        registry,
+        kernel,
+        cache,
+        &never,
+        halt,
+        &AtomicUsize::new(0),
+    )
+    .expect("やめる印を立てないので、必ず結果を返す")
+}
+
 /// [`recompute_detached`] と同じだが、`cancel` が立ったら次の機能の前でやめて `None` を返す
 /// (取り消しを続けて押した時など、もう要らない計算を早く終えるため)。評価し終えた機能の結果は
 /// キャッシュに残るので、次の再計算で使い回せる。やめた時はカーネルの形状を捨てない
@@ -285,8 +338,28 @@ pub fn recompute_watched(
     cancel: &AtomicBool,
     done: &AtomicUsize,
 ) -> Option<RecomputeReport> {
+    let never = AtomicBool::new(false);
+    recompute_watched_stoppable(data, registry, kernel, cache, cancel, &never, done)
+}
+
+/// [`recompute_watched`] に、利用者が止める印 `halt` を足したもの([`recompute_stoppable`])。
+/// `cancel` が立てば `None`、`halt` が立てば計算できた所までの結果を返す。
+pub fn recompute_watched_stoppable(
+    data: &DocumentData,
+    registry: &Registry,
+    kernel: &dyn Kernel,
+    cache: &mut Cache,
+    cancel: &AtomicBool,
+    halt: &AtomicBool,
+    done: &AtomicUsize,
+) -> Option<RecomputeReport> {
     done.store(0, Ordering::Relaxed);
-    let report = run(data, registry, kernel, cache, cancel, done)?;
+    let stops = Stops {
+        cancel,
+        halt,
+        nested: false,
+    };
+    let report = run(data, registry, kernel, cache, stops, done)?;
     kernel.retain(&cache.shapes());
     Some(report)
 }
@@ -316,6 +389,27 @@ pub fn recompute_nested(
     registry: &Registry,
     kernel: &dyn Kernel,
 ) -> Result<RecomputeReport, crate::EvalError> {
+    let never = AtomicBool::new(false);
+    nested_in(
+        data,
+        registry,
+        kernel,
+        Stops {
+            cancel: &never,
+            halt: &never,
+            nested: true,
+        },
+    )
+}
+
+/// [`recompute_nested`] を、外の計算の印 `stops` を見ながら行う。外の計算をやめた・止めた時は、
+/// 中の文書の次の機能の前でやめて誤りを返す(外の機能は途中の形を結果にしない)。
+pub(crate) fn nested_in(
+    data: &DocumentData,
+    registry: &Registry,
+    kernel: &dyn Kernel,
+    stops: Stops<'_>,
+) -> Result<RecomputeReport, crate::EvalError> {
     let depth = DEPTH.with(|d| {
         d.set(d.get() + 1);
         d.get()
@@ -326,17 +420,24 @@ pub fn recompute_nested(
             "組み込んだ部品の入れ子が {NESTED_DEPTH} 段を超えました"
         )));
     }
-    let never = AtomicBool::new(false);
     let t = Instant::now();
-    let report = run(
+    let stops = Stops {
+        nested: true,
+        ..stops
+    };
+    let Some(report) = run(
         data,
         registry,
         kernel,
         &mut Cache::default(),
-        &never,
+        stops,
         &AtomicUsize::new(0),
-    )
-    .expect("やめる印を立てないので、必ず最後まで計算する");
+    ) else {
+        log::info!("組み込んだ文書の計算をやめた(入れ子 {depth} 段目)");
+        return Err(crate::EvalError::Other(
+            "再計算を止めたので、組み込んだ部品の計算をやめました".into(),
+        ));
+    };
     log::info!(
         "組み込んだ文書を計算した(入れ子 {depth} 段目、機能 {} 個、誤り {}、{:.1} ms)",
         data.features.len(),
@@ -351,7 +452,7 @@ pub(crate) fn run(
     registry: &Registry,
     kernel: &dyn Kernel,
     cache: &mut Cache,
-    cancel: &AtomicBool,
+    stops: Stops<'_>,
     done: &AtomicUsize,
 ) -> Option<RecomputeReport> {
     let started = Instant::now();
@@ -404,13 +505,23 @@ pub(crate) fn run(
 
     for (i, entry) in data.features.iter().enumerate() {
         done.store(i, Ordering::Relaxed);
-        if cancel.load(Ordering::Relaxed) {
+        let halted = stops.halt.load(Ordering::Relaxed);
+        if stops.cancel.load(Ordering::Relaxed) || (halted && stops.nested) {
             log::info!(
-                "再計算をやめた(新しい変更が来た): 機能 {i}/{} の前、評価 {evaluated}、{:.1} ms",
+                "再計算をやめた(新しい変更が来たか、止めた): 機能 {i}/{} の前、評価 {evaluated}、{:.1} ms",
                 data.features.len(),
                 started.elapsed().as_secs_f64() * 1e3
             );
             return None;
+        }
+        if halted {
+            log::info!(
+                "再計算を止めた: 機能 {i}/{} の前、評価 {evaluated}、{:.1} ms",
+                data.features.len(),
+                started.elapsed().as_secs_f64() * 1e3
+            );
+            stop_rest(data, i, active, &mut features);
+            break;
         }
         let t = Instant::now();
         // 同時に計算できる種類なら、組み立てて入力を調べる(待っている機能を使うなら、先に済ませる)
@@ -460,6 +571,7 @@ pub(crate) fn run(
                 &mut features,
                 &mut times,
                 &mut aliases,
+                stops,
             );
         }
         if let Some(inputs) = concurrent {
@@ -604,11 +716,17 @@ pub(crate) fn run(
                     kernel,
                     registry,
                     data,
+                    stops,
+                    saw_stop: Default::default(),
                 };
                 evaluated += 1;
                 let result = feature.evaluate(&mut ctx);
                 let ms = t.elapsed().as_secs_f64() * 1e3;
                 times.insert(entry.id, ms);
+                // 計算の途中で印を見てやめた: 途中で返した結果かもしれないので残さない
+                if ctx.saw_stop.get() {
+                    return FeatureStatus::Stopped;
+                }
                 match result {
                     Ok(mut out) => {
                         let pairs = shorten_names(kernel, entry.id, &mut out, &aliases);
@@ -648,7 +766,12 @@ pub(crate) fn run(
         &mut features,
         &mut times,
         &mut aliases,
+        stops,
     );
+    // 最後の機能の間にやめる印が立った
+    if stops.cancel.load(Ordering::Relaxed) {
+        return None;
+    }
     cache.entries.retain(|id, _| position.contains_key(id));
     cache.placed = placing.finish(kernel, data, &bodies, &mut outputs, &mut features);
     pin_warnings(data, &bodies, &mut features);
@@ -824,6 +947,25 @@ fn finish(
     });
 }
 
+/// 止めた機能 `from` から後ろの結果を並べる(計算しない)。ロールバックの棒の後ろと抑制した機能は
+/// そのままの状態にする。
+fn stop_rest(data: &DocumentData, from: usize, active: usize, features: &mut Vec<FeatureResult>) {
+    for (j, entry) in data.features.iter().enumerate().skip(from) {
+        let status = if j >= active {
+            FeatureStatus::RolledBack
+        } else if entry.suppressed {
+            FeatureStatus::Suppressed
+        } else {
+            FeatureStatus::Stopped
+        };
+        features.push(FeatureResult {
+            id: entry.id,
+            name: entry.name.clone(),
+            status,
+        });
+    }
+}
+
 fn log_status(entry: &crate::FeatureEntry, status: &FeatureStatus, ms: f64) {
     match status {
         FeatureStatus::Ok { reused: false, .. } => {
@@ -855,22 +997,26 @@ fn run_jobs(
     features: &mut [FeatureResult],
     times: &mut HashMap<FeatureId, f64>,
     aliases: &mut crate::FaceAliases,
+    stops: Stops<'_>,
 ) {
     if pending.is_empty() {
         return;
     }
     let jobs = std::mem::take(pending);
     let ready: &HashMap<FeatureId, Outputs> = outputs;
-    let one = |job: &Job| -> (Result<Outputs, String>, f64) {
+    // 誤りは、その機能の状態(誤りか、印を見てやめた)
+    let one = |job: &Job| -> (Result<Outputs, FeatureStatus>, f64) {
         let t = Instant::now();
         let entry = &data.features[job.index];
-        let run = || -> Result<Outputs, String> {
+        let run = || -> Result<Outputs, FeatureStatus> {
             let feature = match registry.instantiate(&entry.type_id, &entry.data) {
-                None => return Err(format!("未登録の機能の種類です: {}", entry.type_id)),
-                Some(Err(e)) => return Err(e.to_string()),
+                None => {
+                    return Err(error(format!("未登録の機能の種類です: {}", entry.type_id)));
+                }
+                Some(Err(e)) => return Err(error(e.to_string())),
                 Some(Ok(f)) => f,
             };
-            let declared = feature.inputs().map_err(|e| e.to_string())?;
+            let declared = feature.inputs().map_err(|e| error(e.to_string()))?;
             let mut ctx = EvalCtx {
                 id: job.id,
                 declared: &declared,
@@ -882,20 +1028,26 @@ fn run_jobs(
                 kernel,
                 registry,
                 data,
+                stops,
+                saw_stop: Default::default(),
             };
-            feature.evaluate(&mut ctx).map_err(|e| e.to_string())
+            let result = feature.evaluate(&mut ctx);
+            if ctx.saw_stop.get() {
+                return Err(FeatureStatus::Stopped);
+            }
+            result.map_err(|e| error(e.to_string()))
         };
         // カーネルや機能の panic で文書全体を止めない
         let result = catch_unwind(AssertUnwindSafe(run)).unwrap_or_else(|payload| {
-            Err(format!(
+            Err(error(format!(
                 "評価中に panic しました: {}",
                 panic_message(&payload)
-            ))
+            )))
         });
         (result, t.elapsed().as_secs_f64() * 1e3)
     };
     let started = Instant::now();
-    let results: Vec<(Result<Outputs, String>, f64)> = if jobs.len() == 1 {
+    let results: Vec<(Result<Outputs, FeatureStatus>, f64)> = if jobs.len() == 1 {
         vec![one(&jobs[0])]
     } else {
         par_map(&jobs, one)
@@ -921,7 +1073,7 @@ fn run_jobs(
                     reused: false,
                 }
             }
-            Err(e) => error(e),
+            Err(st) => st,
         };
         log_status(entry, &status, ms);
         if let FeatureStatus::Ok { outputs: out, .. } = &status {

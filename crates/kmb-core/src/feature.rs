@@ -384,6 +384,10 @@ pub struct EvalCtx<'a> {
     pub(crate) registry: &'a Registry,
     /// 計算している文書。誤りの文でボディ・部品を名前で指すためだけに読む
     pub(crate) data: &'a crate::DocumentData,
+    /// 再計算をやめる・止める印([`EvalCtx::stopping`])
+    pub(crate) stops: crate::recompute::Stops<'a>,
+    /// 機能が印を見て、立っていた(途中でやめた結果かもしれないので、結果を残さない)
+    pub(crate) saw_stop: std::cell::Cell<bool>,
 }
 
 impl EvalCtx<'_> {
@@ -495,7 +499,23 @@ impl EvalCtx<'_> {
         &self,
         data: &crate::DocumentData,
     ) -> Result<crate::RecomputeReport, EvalError> {
-        crate::recompute::recompute_nested(data, self.registry, self.kernel)
+        let r = crate::recompute::nested_in(data, self.registry, self.kernel, self.stops);
+        if r.is_err() {
+            // 中の計算を印でやめた時は、この機能の結果も残さない
+            self.stopping();
+        }
+        r
+    }
+
+    /// 再計算をやめるか止めるよう頼まれたか。長い計算をする機能は、区切りごとにこれを見て、
+    /// 真なら誤りを返して早く終える。真を見た機能の結果は(誤りでも形でも)使わず、残さない
+    /// (再計算は、その機能を止めた状態にする)。
+    pub fn stopping(&self) -> bool {
+        let s = self.stops.any();
+        if s {
+            self.saw_stop.set(true);
+        }
+        s
     }
 
     /// ボディ `body`(そのボディのどれかの機能)の名前: 付けた名前か「ボディN」
