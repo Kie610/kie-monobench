@@ -1211,8 +1211,20 @@ impl Document {
     /// 変わった入力の下流だけを評価し直す。入力が同じ機能はキャッシュを使う。
     /// 先に寸法の名前をそろえる([`Document::settle_names`])。
     pub fn recompute(&mut self, registry: &Registry, kernel: &dyn Kernel) -> RecomputeReport {
+        self.recompute_stoppable(registry, kernel, &std::sync::atomic::AtomicBool::new(false))
+    }
+
+    /// [`Document::recompute`] と同じだが、別のスレッドが `halt` を立てたら、そこから後ろの機能を
+    /// 止めた状態にして、計算できた所までの結果を返す([`recompute::recompute_stoppable`])。
+    pub fn recompute_stoppable(
+        &mut self,
+        registry: &Registry,
+        kernel: &dyn Kernel,
+        halt: &std::sync::atomic::AtomicBool,
+    ) -> RecomputeReport {
         self.settle_names(registry);
-        let report = recompute::recompute_detached(&self.data, registry, kernel, &mut self.cache);
+        let report =
+            recompute::recompute_stoppable(&self.data, registry, kernel, &mut self.cache, halt);
         self.emit(DocEvent::Recomputed {
             errors: report.error_count(),
         });

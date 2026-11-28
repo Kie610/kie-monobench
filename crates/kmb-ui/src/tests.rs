@@ -163,6 +163,7 @@ fn outcome(ws: &Workspace) -> (Vec<String>, Vec<i64>) {
                 kmb_core::FeatureStatus::Blocked { .. } => "blocked",
                 kmb_core::FeatureStatus::Suppressed => "suppressed",
                 kmb_core::FeatureStatus::RolledBack => "rolled_back",
+                kmb_core::FeatureStatus::Stopped => "stopped",
             };
             format!("{}:{k}", f.name)
         })

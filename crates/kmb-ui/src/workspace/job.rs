@@ -190,6 +190,29 @@ impl Workspace {
         }
     }
 
+    /// 走っている再計算を止める(下の帯の「中止」・AI の `stop`)。計算していた機能とその後ろを
+    /// 止めた状態にし、計算できた所までの形を出す。文書は変えない。走っていなければ `false`。
+    /// 止めている間は「中止」を押せなくし、止まると下の帯に「再計算を止めました」を出す。
+    pub fn stop_recompute(&mut self) -> bool {
+        self.cur.work.stop_recompute()
+    }
+
+    /// 再計算を止めるよう頼んだ後で、まだ止まっていない。
+    pub fn recompute_stopping(&self) -> bool {
+        self.cur.work.is_stopping()
+    }
+
+    /// 止めた再計算の結果を出している(計算していない機能がある)。
+    pub fn recompute_stopped(&self) -> bool {
+        !self.cur.work.is_recomputing() && self.cur.work.report().stopped()
+    }
+
+    /// 止めた再計算をもう一度行う(下の帯の「再計算」・AI の `recompute`)。
+    pub fn recompute_again(&mut self) {
+        log::info!("止めた再計算をもう一度行う");
+        self.recompute();
+    }
+
     /// 再計算が走っているか。
     pub fn is_busy(&self) -> bool {
         self.cur.work.is_recomputing() && !self.only_measure_read_is_running()

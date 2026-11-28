@@ -35,6 +35,7 @@ pub(crate) fn status_mark(w: &Words, status: Option<&FeatureStatus>) -> (&'stati
         ),
         Some(FeatureStatus::Suppressed) => ("–", w.t("timeline-status-suppressed")),
         Some(FeatureStatus::RolledBack) => ("…", w.t("timeline-status-rolled-back")),
+        Some(FeatureStatus::Stopped) => ("⏹", w.t("timeline-status-stopped")),
         None => ("?", String::new()),
     }
 }

@@ -10,6 +10,8 @@ use kmb_core::{
 use serde_json::Value as Json;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// ボディごとの測定値。ソリッドには体積と質量、面のボディには面積と外形を返す。
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -116,7 +118,7 @@ mod status;
 mod unitless_number_tests;
 mod view;
 pub use active::Settled;
-pub use background::{After, Polled, Recomputed};
+pub use background::{After, Polled, Recomputed, Stopper};
 pub use open::OpenedDocument;
 pub use pack::{OpenedDesign, PackOptions, PackSkipped, Packed, load_design};
 
@@ -147,6 +149,9 @@ pub struct Headless {
     /// 開いた文書の参照に前の版の伸びた面の名前が残っているかもしれない(次の計算の結果で今の名前に
     /// 直す。[`Headless::rename_old_faces`])
     old_names: bool,
+    /// 利用者が再計算を止める印([`Headless::stop_recompute`]・[`Headless::stopper`])。計算を
+    /// 終えるたびに下ろす
+    halt: Arc<AtomicBool>,
 }
 
 /// 作り直しを後へ回す様子。
@@ -195,6 +200,7 @@ impl Headless {
             creating: None,
             just_hidden: BTreeSet::new(),
             old_names: true,
+            halt: Default::default(),
         }
     }
 
@@ -212,6 +218,33 @@ impl Headless {
     pub fn open(modules: Modules, path: &Path) -> Result<Self, kmb_core::Problem> {
         let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
         Ok(Self::with_document(modules, opened.document, opened.path))
+    }
+
+    /// 開いて計算する。`limit` を過ぎても計算が終わらなければ止める([`Self::stop_recompute`] と
+    /// 同じ止め方。止めた機能から後ろは計算していない状態になる)。CLI の `recompute --stop-after`。
+    pub fn open_within(
+        modules: Modules,
+        path: &Path,
+        limit: std::time::Duration,
+    ) -> Result<Self, kmb_core::Problem> {
+        let opened = Self::prepare_open(modules.clone(), path, Document::new())?;
+        let mut doc = opened.document;
+        doc.release_pins(&modules.registry);
+        let mut h = Self::uncomputed(modules, doc, opened.path);
+        let stopper = h.stopper();
+        let (done, wait) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            if wait.recv_timeout(limit) == Err(std::sync::mpsc::RecvTimeoutError::Timeout) {
+                log::info!(
+                    "再計算が {:.1} 秒で終わらないので止める",
+                    limit.as_secs_f64()
+                );
+                stopper.stop();
+            }
+        });
+        h.recompute();
+        drop(done);
+        Ok(h)
     }
 
     /// 文書を入れ替える(開く、見本)。裏で前の文書を計算している時は、その結果を使わない。
@@ -306,9 +339,13 @@ impl Headless {
         }
         self.doc.hold_shapes(self.keep.iter().copied());
         self.recomputes += 1;
-        self.report = self
-            .doc
-            .recompute(&self.modules.registry, self.modules.kernel.as_ref());
+        self.report = self.doc.recompute_stoppable(
+            &self.modules.registry,
+            self.modules.kernel.as_ref(),
+            &self.halt,
+        );
+        // 止める印は計算を終えてから下ろす(始める前に立てた印も、その計算を止める)
+        self.halt.store(false, Ordering::Relaxed);
         self.settle_active();
         if self.rename_old_faces() {
             self.recompute();

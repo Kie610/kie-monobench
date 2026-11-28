@@ -74,6 +74,10 @@ enum Command {
         /// 結果を JSON で出力する
         #[arg(long)]
         json: bool,
+        /// 再計算がこの秒数で終わらなければ止める。止めた機能から後ろは計算していない状態で出し、
+        /// 終了の番号は 2(文書は変えない)
+        #[arg(long, value_name = "秒")]
+        stop_after: Option<f64>,
     },
     /// STEP ファイルを読み、タイムラインの最後に足す(形だけのボディになる)
     Import {
@@ -773,8 +777,25 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             w.run(&id, None, None, &json!({ "position": position }))?;
             w.save(None)?;
         }
-        Command::Recompute { file, json } => {
-            let w = open(&file)?;
+        Command::Recompute {
+            file,
+            json,
+            stop_after,
+        } => {
+            let w = match stop_after {
+                None => open(&file)?,
+                Some(s) => {
+                    let limit = std::time::Duration::try_from_secs_f64(s).map_err(|_| {
+                        Problem::new(
+                            ProblemKind::Input,
+                            format!("--stop-after は 0 以上の秒数です: {s}"),
+                        )
+                    })?;
+                    let modules = kmb_bundle::modules();
+                    kmb_session::apply_user_settings(&modules);
+                    Headless::open_within(modules, &file, limit)?
+                }
+            };
             if json {
                 println!(
                     "{}",
@@ -783,7 +804,10 @@ fn run(cli: Cli) -> Result<ExitCode, Problem> {
             } else {
                 print!("{}", w.report_text());
             }
-            if w.report().error_count() > 0 {
+            if w.report().stopped() {
+                eprintln!("再計算を {}秒で止めました", stop_after.unwrap_or(0.0));
+            }
+            if w.report().error_count() > 0 || w.report().stopped() {
                 return Ok(ExitCode::from(ProblemKind::Compute.exit_code()));
             }
         }

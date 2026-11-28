@@ -624,7 +624,7 @@ impl Workspace {
             r.job.cmd,
             Cmd::Echo(_) | Cmd::Clear | Cmd::Help(_) | Cmd::Shot(_) | Cmd::Until(..)
         );
-        let busy = self.is_busy()
+        let busy = (self.is_busy() && !self.press_while_busy(ctx, &r.job.cmd))
             || self
                 .home
                 .page
@@ -703,6 +703,23 @@ impl Workspace {
 
     fn push_events(ctx: &egui::Context, ev: Vec<egui::Event>) {
         ctx.plugin::<UiDriver>().lock().push(ev);
+    }
+
+    /// 再計算の途中でも押せる部品(下の帯の「中止」)を押すコマンドか。人も計算の途中に押すので、
+    /// 計算が終わるのを待たない。
+    fn press_while_busy(&self, ctx: &egui::Context, cmd: &Cmd) -> bool {
+        let Cmd::Press(q, _) = cmd else {
+            return false;
+        };
+        let Some(rect) =
+            ctx.data(|d| d.get_temp::<egui::Rect>(egui::Id::new(PRESSABLE_WHILE_BUSY)))
+        else {
+            return false;
+        };
+        self.ui_nodes(ctx).is_some_and(|nodes| {
+            q.one(&nodes, ctx.content_rect())
+                .is_ok_and(|n| rect.contains(n.rect.center()))
+        })
     }
 
     /// コマンド 1 つの 1 段。
@@ -1365,6 +1382,22 @@ impl Workspace {
             }
         }
     }
+}
+
+/// 再計算の途中でも押せる部品の場所を覚える egui の記憶の鍵([`pressable_while_busy`])。
+const PRESSABLE_WHILE_BUSY: &str = "cmdline-pressable-while-busy";
+
+/// 再計算の途中でも押せる部品(下の帯の「中止」)の場所を、描くたびに知らせる(`None` で消す)。
+/// コマンド欄は、この部品を押すコマンドだけは再計算が終わるのを待たない。
+pub(crate) fn pressable_while_busy(ctx: &egui::Context, rect: Option<egui::Rect>) {
+    let id = egui::Id::new(PRESSABLE_WHILE_BUSY);
+    ctx.data_mut(|d| {
+        if let Some(r) = rect {
+            d.insert_temp(id, r);
+        } else {
+            d.remove::<egui::Rect>(id);
+        }
+    });
 }
 
 /// コマンドの部品の書き方の字。

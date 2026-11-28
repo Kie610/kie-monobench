@@ -959,6 +959,8 @@ mod mass_progress_tests;
 
 #[cfg(test)]
 mod mass_progress_live_tests;
+#[cfg(test)]
+mod recompute_stop_live_tests;
 
 #[cfg(test)]
 mod editor_settings_tests;

@@ -2911,3 +2911,91 @@ fn flow_arrows_toggle_through_mcp_ui_tools_without_changing_the_document() {
         screen.h.state_mut().live_disconnect();
     }
 }
+
+/// 再計算を止める写真の長い機能: [`STOP_ARMED`] の間は、止める印を見るまで計算を続ける。
+struct LongForShot;
+static STOP_ARMED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+impl kmb_core::Feature for LongForShot {
+    fn inputs(&self) -> Result<Vec<kmb_core::InputRef>, kmb_core::EvalError> {
+        Ok(vec![])
+    }
+    fn evaluate(
+        &self,
+        ctx: &mut kmb_core::EvalCtx<'_>,
+    ) -> Result<kmb_core::Outputs, kmb_core::EvalError> {
+        let began = std::time::Instant::now();
+        while STOP_ARMED.load(std::sync::atomic::Ordering::SeqCst) && !ctx.stopping() {
+            assert!(began.elapsed().as_secs() < 30, "止める印が届かない");
+            std::thread::yield_now();
+        }
+        if ctx.stopping() {
+            return Err(kmb_core::EvalError::Other("止めた".into()));
+        }
+        Ok(kmb_core::Outputs::new())
+    }
+}
+
+/// 確かめること: 時間のかかる再計算の下の帯(計算中の「中止」、止めた後の「再計算」)を、暗明で撮る。
+#[test]
+#[ignore = "道具: JC_SCREENS_OUT に再計算を止める下の帯の写真を書く"]
+fn write_recompute_stop_screens() {
+    use std::sync::atomic::Ordering;
+    let dir = std::env::var("JC_SCREENS_OUT").expect("写真の出力先");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (theme, brightness) in [
+        ("dark", kmb_ui::layout::Brightness::Dark),
+        ("light", kmb_ui::layout::Brightness::Light),
+    ] {
+        let mut modules = kmb_bundle::modules();
+        Arc::get_mut(&mut modules.registry)
+            .expect("作った直後の表")
+            .register("test.long_for_shot@1", |_| Ok(Box::new(LongForShot)));
+        let mut doc = kmb_samples::reference_document();
+        let id = doc.alloc_feature_id();
+        doc.apply(kmb_core::Transaction::new(
+            "長い計算",
+            vec![kmb_core::Op::InsertFeature {
+                index: None,
+                entry: kmb_core::FeatureEntry {
+                    id,
+                    type_id: "test.long_for_shot@1".into(),
+                    name: "長い計算".into(),
+                    data: serde_json::json!({}),
+                    suppressed: false,
+                    pin_bodies: false,
+                },
+            }],
+        ))
+        .unwrap();
+        let mut ws = Workspace::open(doc, None, true, modules);
+        ws.layout_mut().brightness = brightness;
+        // 開いた時の計算の最後の機能が長い計算になる。札が出るまで待つ
+        STOP_ARMED.store(true, Ordering::SeqCst);
+        let mut s = Screen::sized(ws, Some([1280.0, 800.0]));
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        s.settle();
+        s.write(&dir, &format!("recompute-stop-{theme}-1-running"));
+        // 押すのは画面の試験(recompute_stop_live_tests)が人と同じ入力で確かめる。ここは撮るだけ
+        assert!(
+            s.h.query_by_label("中止").is_some(),
+            "計算中の下の帯に中止が無い"
+        );
+        assert!(s.h.state_mut().stop_recompute());
+        while s.h.state().is_busy() {
+            s.settle();
+        }
+        STOP_ARMED.store(false, Ordering::SeqCst);
+        s.settle();
+        s.write(&dir, &format!("recompute-stop-{theme}-2-stopped"));
+        assert!(
+            s.h.query_by_label("再計算").is_some(),
+            "止めた後の下の帯に再計算が無い"
+        );
+        s.h.state_mut().recompute_again();
+        while s.h.state().is_busy() {
+            s.settle();
+        }
+        s.settle();
+        s.write(&dir, &format!("recompute-stop-{theme}-3-again"));
+    }
+}

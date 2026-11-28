@@ -206,6 +206,153 @@ fn a_cancelled_recompute_stops_before_the_next_feature_and_keeps_what_it_did() {
     assert_eq!(scalar(&r, c), Quantity::new(4.0, Dim::NONE));
 }
 
+thread_local! {
+    /// 利用者が止める印(試験ごとのスレッドに 1 つ。機能は同じスレッドで計算する)
+    static HALT: std::sync::atomic::AtomicBool = const { std::sync::atomic::AtomicBool::new(false) };
+    /// 立っていれば、次に評価する [`HaltFeature`] が [`HALT`] を立てる(1 回だけ)
+    static ARMED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// 評価の途中で止める印を立てる(止めるボタンを押した時の代わり)。`wait` なら長い機能の代わりで、
+/// 印を見たら途中の値 -1 を返す(見なければ 5 を出す)。
+struct HaltFeature {
+    wait: bool,
+}
+impl Feature for HaltFeature {
+    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+        Ok(vec![])
+    }
+    fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+        EVALS.with(|c| c.set(c.get() + 1));
+        if ARMED.with(|a| a.replace(false)) {
+            HALT.with(|h| h.store(true, std::sync::atomic::Ordering::Relaxed));
+        }
+        let v = if self.wait && ctx.stopping() {
+            -1.0
+        } else {
+            5.0
+        };
+        Ok([(
+            "value".to_string(),
+            Value::Scalar(Quantity::new(v, Dim::NONE)),
+        )]
+        .into())
+    }
+}
+
+/// 組み込んだ文書(止める機能と値の機能)を、この計算の中で計算する(リンクした部品の代わり)。
+struct NestFeature;
+impl Feature for NestFeature {
+    fn inputs(&self) -> Result<Vec<InputRef>, EvalError> {
+        Ok(vec![])
+    }
+    fn evaluate(&self, ctx: &mut EvalCtx<'_>) -> Result<Outputs, EvalError> {
+        let mut inner = Document::new();
+        add_feature(&mut inner, "test.halt@1", json!({"wait": false}));
+        add_feature(&mut inner, "test.value@1", json!({"expr": "3"}));
+        let r = ctx.recompute_nested(inner.data())?;
+        Ok([(
+            "count".to_string(),
+            Value::Scalar(Quantity::new(r.features.len() as f64, Dim::NONE)),
+        )]
+        .into())
+    }
+}
+
+fn halting_registry() -> Registry {
+    let mut reg = registry();
+    reg.register("test.halt@1", |d| {
+        Ok(Box::new(HaltFeature {
+            wait: d["wait"].as_bool().unwrap_or(false),
+        }))
+    });
+    reg.register("test.nest@1", |_| Ok(Box::new(NestFeature)));
+    reg
+}
+
+/// 止める印を立てて計算する(試験の前に印を下ろし、終わったら下ろす)。
+fn recompute_halting(doc: &mut Document, reg: &Registry) -> RecomputeReport {
+    ARMED.with(|a| a.set(true));
+    let r = HALT.with(|h| {
+        h.store(false, std::sync::atomic::Ordering::Relaxed);
+        doc.recompute_stoppable(reg, &NullKernel, h)
+    });
+    HALT.with(|h| h.store(false, std::sync::atomic::Ordering::Relaxed));
+    ARMED.with(|a| a.set(false));
+    r
+}
+
+/// 確かめること: 止めた再計算は、計算できた機能の結果を残し、その後ろの機能だけを「止めた」にする。
+/// 文書は変えず、もう一度計算すると止めた所から計算し、前の結果を使い回す。
+#[test]
+fn a_stopped_recompute_keeps_what_it_computed_and_stops_only_the_rest() {
+    let reg = halting_registry();
+    let mut doc = Document::new();
+    let a = add_feature(&mut doc, "test.value@1", json!({"expr": "1"}));
+    let h = add_feature(&mut doc, "test.halt@1", json!({}));
+    let b = add_feature(&mut doc, "test.value@1", json!({"expr": "2"}));
+    let c = add_feature(&mut doc, "test.double@1", json!({"source": b.0}));
+    let before = doc.to_json();
+    let r = recompute_halting(&mut doc, &reg);
+    assert!(matches!(r.feature(a), Some(FeatureStatus::Ok { .. })));
+    assert!(
+        matches!(r.feature(h), Some(FeatureStatus::Ok { .. })),
+        "止めた時に計算していた機能は、印を見ずに終えたので結果を残す"
+    );
+    assert_eq!(r.feature(b), Some(&FeatureStatus::Stopped));
+    assert_eq!(r.feature(c), Some(&FeatureStatus::Stopped));
+    assert!(r.stopped());
+    assert_eq!(r.error_count(), 0, "止めたのは誤りではない");
+    assert_eq!(doc.to_json(), before, "文書の中身は変えない");
+
+    let r = doc.recompute(&reg, &NullKernel);
+    assert!(!r.stopped());
+    assert_eq!((r.evaluated, r.reused), (2, 2), "止める前の結果を使い回す");
+    assert_eq!(scalar(&r, c), Quantity::new(4.0, Dim::NONE));
+}
+
+/// 確かめること: 長い機能が計算の途中で止める印を見たら、その機能とその後ろを「止めた」にし、
+/// 途中の結果を残さない(次の計算は、その機能を初めから計算する)。
+#[test]
+fn a_long_feature_that_sees_the_stop_leaves_nothing_behind() {
+    let reg = halting_registry();
+    let mut doc = Document::new();
+    let a = add_feature(&mut doc, "test.value@1", json!({"expr": "1"}));
+    let w = add_feature(&mut doc, "test.halt@1", json!({"wait": true}));
+    let d = add_feature(&mut doc, "test.double@1", json!({"source": w.0}));
+    let r = recompute_halting(&mut doc, &reg);
+    assert!(matches!(r.feature(a), Some(FeatureStatus::Ok { .. })));
+    assert_eq!(r.feature(w), Some(&FeatureStatus::Stopped));
+    assert_eq!(r.feature(d), Some(&FeatureStatus::Stopped));
+
+    EVALS.with(|e| e.set(0));
+    let r = doc.recompute(&reg, &NullKernel);
+    assert_eq!(EVALS.with(Cell::get), 1, "途中でやめた機能だけを計算し直す");
+    assert_eq!(
+        scalar(&r, d),
+        Quantity::new(10.0, Dim::NONE),
+        "途中の値 -1 は残っていない"
+    );
+}
+
+/// 確かめること: 組み込んだ文書の計算の途中で止めても、中の次の機能の前で止まり、組み込んだ
+/// 機能は途中の形を結果にせず「止めた」になる。
+#[test]
+fn stopping_inside_a_nested_document_stops_the_feature_that_holds_it() {
+    let reg = halting_registry();
+    let mut doc = Document::new();
+    let a = add_feature(&mut doc, "test.value@1", json!({"expr": "1"}));
+    let n = add_feature(&mut doc, "test.nest@1", json!({}));
+    let r = recompute_halting(&mut doc, &reg);
+    assert!(matches!(r.feature(a), Some(FeatureStatus::Ok { .. })));
+    assert_eq!(r.feature(n), Some(&FeatureStatus::Stopped));
+    let r = doc.recompute(&reg, &NullKernel);
+    assert!(
+        matches!(r.feature(n), Some(FeatureStatus::Ok { .. })),
+        "止めなければ組み込んだ文書を最後まで計算する"
+    );
+}
+
 #[test]
 fn undoing_a_change_reuses_the_previous_result() {
     let reg = registry();

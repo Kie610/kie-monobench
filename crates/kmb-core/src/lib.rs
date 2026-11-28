@@ -69,7 +69,8 @@ pub use recompute::{
     Cache, FeatureResult, FeatureStatus, MOVED, ModelParamResult, NESTED_DEPTH, ParamResult,
     ParamStatus, RecomputeReport, body_heir, body_labels, body_root, eval_exprs, model_params,
     moved_output_slot, moved_slot, reads_now, recompute_cancellable, recompute_detached,
-    recompute_nested, recompute_watched, visible_bodies, visible_bodies_before,
+    recompute_nested, recompute_stoppable, recompute_watched, recompute_watched_stoppable,
+    visible_bodies, visible_bodies_before,
 };
 pub use refs::{
     Ref, RefKind, VertexInfo, VertexPick, face_feature, one_or_many, vertices, vertices_of_edges,

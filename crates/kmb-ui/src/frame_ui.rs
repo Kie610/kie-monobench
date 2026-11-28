@@ -373,6 +373,7 @@ impl Workspace {
                     if let Some(w) = wait {
                         ui.ctx().request_repaint_after(w);
                     }
+                    crate::cmdline::pressable_while_busy(ui.ctx(), None);
                     if show {
                         ui.spinner();
                         // 長くかかる時は経った秒数も出す(画面は止めずに計算している)
@@ -389,6 +390,33 @@ impl Workspace {
                                 .color(l.pal.ink2),
                         )
                         .on_hover_text(self.win.t("frame-status-recalculating-tip"));
+                        // 時間のかかる再計算を止める(計算できた所までの形を出し、文書は変えない)
+                        let stop = ui
+                            .add_enabled(
+                                !self.recompute_stopping(),
+                                egui::Button::new(self.win.t("frame-status-stop")).small(),
+                            )
+                            .on_hover_text(self.win.t("frame-status-stop-recalc-tip"));
+                        // コマンド欄は再計算の間は次を待つが、このボタンは人と同じく押せる
+                        crate::cmdline::pressable_while_busy(ui.ctx(), Some(stop.rect));
+                        if stop.clicked() {
+                            self.stop_recompute();
+                        }
+                        ui.add_space(12.0);
+                    } else if self.recompute_stopped() {
+                        ui.label(
+                            egui::RichText::new(self.win.t("frame-status-recalc-stopped"))
+                                .size(crate::theme::fs(11.5))
+                                .color(l.pal.warn),
+                        )
+                        .on_hover_text(self.win.t("frame-status-recalc-stopped-tip"));
+                        if ui
+                            .add(egui::Button::new(self.win.t("frame-status-recalc")).small())
+                            .on_hover_text(self.win.t("frame-status-recalc-tip"))
+                            .clicked()
+                        {
+                            self.recompute_again();
+                        }
                         ui.add_space(12.0);
                     }
                     if self.is_running() {

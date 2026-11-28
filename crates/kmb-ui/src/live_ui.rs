@@ -492,6 +492,13 @@ impl Workspace {
             }
             "undo" => self.undo(),
             "redo" => self.redo(),
+            // 走っている再計算を止める(下の帯の「中止」と同じ口)。止まるのを待たずに答える
+            "stop" => {
+                let stopped = self.stop_recompute();
+                return Ok(Answer::Now(json!({ "stopped": stopped })));
+            }
+            // 止めた再計算をもう一度行う(下の帯の「再計算」と同じ)。終わってから答える
+            "recompute" => self.recompute_again(),
             // 操作の一覧(引数の宣言つき)と、操作を ID で実行する(画面のボタンと同じ道。CLI の
             // `kmb actions`・`kmb run` と同じ引数の形)
             "actions" => return Ok(Answer::Now(json!({ "actions": self.actions() }))),
@@ -522,7 +529,9 @@ impl Workspace {
                 ));
             }
         }
-        if !matches!(tool, "undo" | "redo") && self.cur.work.doc().undo_depth() == before {
+        if !matches!(tool, "undo" | "redo" | "recompute")
+            && self.cur.work.doc().undo_depth() == before
+        {
             return Err("文書は変わりませんでした".into());
         }
         Ok(Answer::AfterRecompute)
@@ -582,6 +591,10 @@ impl Workspace {
                     }
                     Some(kmb_core::FeatureStatus::Suppressed) => ("suppressed", None),
                     Some(kmb_core::FeatureStatus::RolledBack) => ("rolled_back", None),
+                    Some(kmb_core::FeatureStatus::Stopped) => (
+                        "stopped",
+                        Some("再計算を止めたので計算していません".to_string()),
+                    ),
                     None => ("unknown", None),
                 };
                 o["status"] = json!(state);

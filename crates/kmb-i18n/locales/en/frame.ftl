@@ -90,6 +90,11 @@ frame-status-progress-left = { $note } · Elapsed { $elapsed } · About { $left 
 frame-status-finish-tip = Finish the image with the passes so far and write the file (may still be noisy)
 frame-status-stop = Stop
 frame-status-stop-tip = Stop here. No file is written
+frame-status-stop-recalc-tip = Stop recalculating. Shows the shape calculated so far and leaves the document unchanged
+frame-status-recalc-stopped = Recalculation stopped
+frame-status-recalc-stopped-tip = Features from the stopped one onward are not calculated yet. Edit, undo or press Recalculate to calculate them
+frame-status-recalc = Recalculate
+frame-status-recalc-tip = Calculate again from where it stopped
 frame-status-dismiss-tip = Dismiss this notification (it stays in the bell list)
 # $count: number of selected items
 frame-status-selected = { $count ->

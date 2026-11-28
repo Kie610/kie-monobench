@@ -12,6 +12,7 @@ timeline-health-blocked-by = This feature was not calculated because { $by } fai
 timeline-status-blocked = { $by } failed
 timeline-status-suppressed = Suppressed
 timeline-status-rolled-back = After the rollback marker
+timeline-status-stopped = Not calculated because the recalculation was stopped. Press Recalculate to calculate it again
 
 ## Feature tooltips ($name: feature name, $title: kind of status, $message: the message)
 
