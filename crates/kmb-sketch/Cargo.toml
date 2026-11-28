@@ -19,6 +19,7 @@ i_overlay.workspace = true
 kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
 
 [dev-dependencies]
+kmb-bundle = { workspace = true, features = ["smlib"] }
 kmb-sketch-solver = { workspace = true, features = ["check"] }
 kmb-contract.workspace = true
 proptest.workspace = true
