@@ -2445,6 +2445,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kmb-cad-curvature"
+version = "0.2.0"
+dependencies = [
+ "kmb-core",
+ "kmb-workspace-hack",
+ "serde",
+]
+
+[[package]]
 name = "kmb-cad-datum"
 version = "0.2.0"
 dependencies = [

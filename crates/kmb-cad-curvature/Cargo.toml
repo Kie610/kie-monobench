@@ -1,0 +1,18 @@
+[package]
+name = "kmb-cad-curvature"
+description = "曲線の曲率のくしと、辺をまたぐ面のつながり(位置・接線・曲率がそろうか)を求める純関数"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[package.metadata.kmb]
+layer = "cad"
+
+[dependencies]
+kmb-core.workspace = true
+serde.workspace = true
+kmb-workspace-hack = { version = "0.1", path = "../kmb-workspace-hack" }
+
+[lints]
+workspace = true
